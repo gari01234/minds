@@ -1,0 +1,10 @@
+import {cpSync, mkdirSync, rmSync, writeFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
+const root = new URL('../', import.meta.url);
+const dist = new URL('dist/', root);
+rmSync(dist, {recursive:true, force:true});
+mkdirSync(dist, {recursive:true});
+for (const app of ['theory','isabella']) cpSync(new URL(`apps/${app}/`,root),new URL(`${app}/`,dist),{recursive:true});
+cpSync(new URL('shared/',root),new URL('shared/',dist),{recursive:true});
+writeFileSync(new URL('.nojekyll',dist),'');
+console.log(`Built ${fileURLToPath(dist)} with /theory/ and /isabella/`);
