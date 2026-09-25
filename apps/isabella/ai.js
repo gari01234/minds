@@ -3,11 +3,11 @@ const sb=window.MINDS_SUPABASE;
 function dateISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
 function compact(state){
   const td=dateISO();
-  const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({title:x.title,start:x.start,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId}));
-  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done).map(x=>({title:x.title,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null}));
+  const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId}));
+  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done).map(x=>({id:x.id,title:x.title,date:x.date,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null}));
   const upcoming=[
-    ...(state.events||[]).filter(x=>x.date>=td).slice(0,20).map(x=>({kind:'event',date:x.date,time:x.start,title:x.title})),
-    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done).slice(0,20).map(x=>({kind:'task',date:x.date,title:x.title}))
+    ...(state.events||[]).filter(x=>x.date>=td).slice(0,20).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId})),
+    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done).slice(0,20).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null}))
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,20);
   return {
     current_date:td,
