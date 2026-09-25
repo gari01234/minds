@@ -8,6 +8,15 @@ const fromIso=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const today=()=>iso(new Date());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const clone=x=>x==null?null:JSON.parse(JSON.stringify(x));
+const activeTask=t=>!t.done&&!t.archivedAt;
+const taskOrder=(a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))||String(a.title||'').localeCompare(String(b.title||''),'es');
+function nextTaskOrder(date){const xs=state.tasks.filter(t=>t.date===date&&!t.archivedAt);return xs.length?Math.max(...xs.map(t=>Number(t.sortOrder||0)))+10:10}
+function mutation(entityType,action,before,after,source='manual'){
+  const entityKey=(after||before)?.id;
+  if(!entityKey)return;
+  try{window.dispatchEvent(new CustomEvent('isabella:mutation',{detail:{entityType,entityKey,action,source,before:clone(before),after:clone(after)}}))}catch{}
+}
 const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[{id:'casa',name:'Casa'},{id:'trabajo',name:'Trabajo'},{id:'minds',name:'MINDS'},{id:'personal',name:'Personal'},{id:'architectures',name:'Architectures'}],projects:[{id:'bernried',categoryId:'trabajo',name:'Bernried'},{id:'schwarz',categoryId:'trabajo',name:'Schwarz'}],tasks:[],events:[],memory:[]};
 let state=load();
 function load(){try{return {...base,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return JSON.parse(JSON.stringify(base))}}
@@ -16,13 +25,13 @@ function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIs
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
-function init(){ $('#greeting').textContent=greet(); if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
+function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
 function renderMessages(){const box=$('#messages');box.innerHTML=state.messages.slice(-7).map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const sc=$('.assistant-scroll');if(sc)sc.scrollTop=sc.scrollHeight},20)}
-function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&!x.done);$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
-function orb(mode='idle',label='Aquí contigo'){const o=$('#orbButton');o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);$('#orbStatus').textContent=label}
-function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&!x.done);return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
+function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
+function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
+function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:m.kind||'context',content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
   const action=p.action||'create';
@@ -57,10 +66,12 @@ function applyProposal(p){
   if(action==='update'||action==='delete'){
     const target=findTarget(p);
     if(!target){closeModal();say('assistant','No pude identificar con seguridad cuál elemento quieres cambiar. Dime cuál y lo intento de nuevo.');return}
+    const before=clone(target);
     if(action==='delete'){
       const list=p.kind==='task'?state.tasks:state.events;
       const idx=list.findIndex(x=>x.id===target.id);
       if(idx>=0)list.splice(idx,1);
+      mutation(p.kind,'delete',before,null,'assistant');
       save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó eliminado.');return;
     }
     if(p.title!=null&&String(p.title).trim())target.title=String(p.title).trim();
@@ -69,22 +80,26 @@ function applyProposal(p){
       if(p.time)target.start=p.time;
       if(p.duration_minutes!=null)target.duration=Number(p.duration_minutes);
       if(p.all_day!=null)target.allDay=!!p.all_day;
-    }else if(Object.prototype.hasOwnProperty.call(p,'reminder_time')){
-      target.reminderTime=p.reminder_time||null;
+    }else{
+      if(Object.prototype.hasOwnProperty.call(p,'reminder_time'))target.reminderTime=p.reminder_time||null;
+      if(target.sortOrder==null)target.sortOrder=nextTaskOrder(target.date);
     }
     if(categoryId)target.categoryId=categoryId;
     if(projectId)target.projectId=projectId;
     if(p.project===null&&Object.prototype.hasOwnProperty.call(p,'project'))target.projectId=null;
     if(p.recurrence!==undefined&&p.recurrence!==null)target.recurrence=p.recurrence?{text:p.recurrence}:{};
     if(p.notes!==undefined&&p.notes!==null)target.notes=p.notes||'';
+    mutation(p.kind,'update',before,target,'assistant');
     save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó actualizado.');return;
   }
   const createCategoryId=categoryId||'personal';
   if(p.kind==='event'){
     if(!p.time){closeModal();say('assistant','Me falta una hora para crear ese evento.');return}
-    state.events.push({id:uid(),title:p.title||'Evento',date,start:p.time,duration:Number(p.duration_minutes||60),allDay:!!p.all_day,categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},notes:p.notes||'',metadata:{source:'isabella'}});
+    const item={id:uid(),title:p.title||'Evento',date,start:p.time,duration:Number(p.duration_minutes||60),allDay:!!p.all_day,categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},notes:p.notes||'',metadata:{source:'isabella'}};
+    state.events.push(item);mutation('event','create',null,item,'assistant');
   }else{
-    state.tasks.push({id:uid(),title:p.title||'Tarea',date,done:false,categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},reminderTime:p.reminder_time||null,notes:p.notes||'',metadata:{source:'isabella'}});
+    const item={id:uid(),title:p.title||'Tarea',date,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date),categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},reminderTime:p.reminder_time||null,notes:p.notes||'',metadata:{source:'isabella'}};
+    state.tasks.push(item);mutation('task','create',null,item,'assistant');
   }
   save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó agregado.');
 }
@@ -97,13 +112,176 @@ function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus'
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
 function move(dir){let d=fromIso(state.date);if(state.view==='day')d=addDays(d,dir);else if(state.view==='week')d=addDays(d,dir*7);else d=new Date(d.getFullYear(),d.getMonth()+dir,1);state.date=iso(d);save();renderCalendar()}
 function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
-function month(){const f=fromIso(state.date),first=new Date(f.getFullYear(),f.getMonth(),1),start=startWeek(first),wd=['L','M','X','J','V','S','D'];let h=`<div class="month-year">${f.getFullYear()}</div><div class="month-grid"><div class="mh"></div>${wd.map(x=>`<div class="mh">${x}</div>`).join('')}`;for(let r=0;r<6;r++){const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;for(let c=0;c<7;c++){const d=addDays(rs,c),di=iso(d),mut=d.getMonth()!==f.getMonth(),total=state.events.filter(x=>x.date===di).length+state.tasks.filter(x=>x.date===di&&!x.done).length;h+=`<button class="mc ${c>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dot ${total?'':'off'}"></span></button>`}}h+='</div>';const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===state.date&&!x.done);h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;if(!ev.length&&!ta.length)h+='<div class="meta" style="font-size:16px;padding:20px 0">No tienes nada previsto para este día.</div>';for(const e of ev)h+=`<div class="agenda-item"><span class="adot"></span><div><strong>${esc(e.title)}</strong><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></div><div class="atime">${esc(e.start)}</div></div>`;for(const t of ta)h+=`<div class="agenda-item"><span class="adot"></span><div><strong>${esc(t.title)}</strong><div class="meta">${esc(cat(t.categoryId))}${t.projectId?' · '+esc(project(t.projectId)):''}</div></div><div class="atime">Todo el día</div></div>`;h+='</div>';$('#calendarContent').innerHTML=h;$$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()})}
-function week(){const s=startWeek(fromIso(state.date));let h='<div class="week">';for(let i=0;i<7;i++){const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&!x.done);h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<div class="witem"><b>${esc(e.start)}</b><br>${esc(e.title)}</div>`).join('')}${ta.map(t=>`<div class="witem">○ ${esc(t.title)}</div>`).join('')}${!ev.length&&!ta.length?'<div class="meta" style="padding-top:10px">Libre</div>':''}</div>`}h+='</div>';$('#calendarContent').innerHTML=h}
-function day(){const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.done);let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<span class="pill">${esc(t.title)}</span>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<div class="event" style="top:${top}px;height:${height}px"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}</div></div>`}h+='</div>';$('#calendarContent').innerHTML=h}
+function agendaRow(kind,item){
+  const category=cat(item.categoryId),proj=item.projectId?' · '+project(item.projectId):'';
+  const time=kind==='event'?item.start:'Todo el día';
+  return `<div class="agenda-item ${kind}-item" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0">
+    <span class="adot"></span>
+    <div class="agenda-main"><strong>${esc(item.title)}</strong><div class="meta">${esc(category)}${esc(proj)}</div></div>
+    <div class="agenda-tail"><div class="atime">${esc(time)}</div>${kind==='task'?'<button class="drag-handle" aria-label="Reordenar">⋮⋮</button>':''}</div>
+  </div>`;
+}
+function month(){
+  const f=fromIso(state.date),first=new Date(f.getFullYear(),f.getMonth(),1),start=startWeek(first),wd=['L','M','X','J','V','S','D'];
+  let h=`<div class="month-year">${f.getFullYear()}</div><div class="month-grid"><div class="mh"></div>${wd.map(x=>`<div class="mh">${x}</div>`).join('')}`;
+  for(let r=0;r<6;r++){
+    const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
+    for(let col=0;col<7;col++){
+      const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
+      const total=state.events.filter(x=>x.date===di).length+state.tasks.filter(x=>x.date===di&&activeTask(x)).length;
+      h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dot ${total?'':'off'}"></span></button>`;
+    }
+  }
+  h+='</div>';
+  const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start));
+  const ta=state.tasks.filter(x=>x.date===state.date&&activeTask(x)).sort(taskOrder);
+  h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
+  if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
+  for(const e of ev)h+=agendaRow('event',e);
+  for(const t of ta)h+=agendaRow('task',t);
+  h+='</div>';
+  $('#calendarContent').innerHTML=h;
+  $$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()});
+  bindCalendarItems();
+}
+function week(){
+  const s=startWeek(fromIso(state.date));let h='<div class="week">';
+  for(let i=0;i<7;i++){
+    const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&activeTask(x)).sort(taskOrder);
+    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry" data-kind="event" data-id="${e.id}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry" data-kind="task" data-id="${t.id}">○ ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+  }
+  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
+}
+function day(){
+  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&activeTask(x)).sort(taskOrder);
+  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry" data-kind="task" data-id="${t.id}">${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
+  for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;
+  for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry" data-kind="event" data-id="${e.id}" style="top:${top}px;height:${height}px"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}</div></button>`}
+  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
+}
+function bindCalendarItems(){
+  $$('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
+    if(el.dataset.bound)return;el.dataset.bound='1';
+    let sx=0,sy=0,moved=false;
+    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
+    el.addEventListener('touchmove',e=>{const t=e.touches[0];if(Math.abs(t.clientX-sx)>12||Math.abs(t.clientY-sy)>12)moved=true;e.stopPropagation()},{passive:true});
+    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
+    el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle'))return;editItem(el.dataset.kind,el.dataset.id)});
+  });
+  initTaskDrag();
+}
+function itemBy(kind,id){return (kind==='task'?state.tasks:state.events).find(x=>x.id===id)}
+function itemActions(kind,id){
+  const item=itemBy(kind,id);if(!item)return;
+  const archive=kind==='task'?'<button id="quickArchive" class="sheet-action">Archivar</button>':'';
+  const complete=kind==='task'?'<button id="quickComplete" class="sheet-action">Marcar como hecha</button>':'';
+  modal(item.title,`<div class="sheet-actions">${complete}<button id="quickEdit" class="sheet-action">Editar</button>${archive}<button id="quickDelete" class="sheet-action danger">Eliminar</button></div>`);
+  $('#quickEdit').onclick=()=>editItem(kind,id);
+  if(kind==='task'){
+    $('#quickComplete').onclick=()=>completeTask(id);
+    $('#quickArchive').onclick=()=>archiveTask(id);
+  }
+  $('#quickDelete').onclick=()=>deleteItem(kind,id);
+}
+function editItem(kind,id){
+  const item=itemBy(kind,id);if(!item)return;
+  const cats=state.categories.map(x=>`<option value="${x.id}" ${x.id===item.categoryId?'selected':''}>${esc(x.name)}</option>`).join('');
+  const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${x.id}" ${x.id===item.projectId?'selected':''}>${esc(x.name)}</option>`).join('');
+  const specific=kind==='event'
+    ?`<label>Hora<input id="editTime" type="time" value="${esc(item.start||'09:00')}"></label><label>Duración (min)<input id="editDuration" type="number" min="5" step="5" value="${Number(item.duration||60)}"></label>`
+    :`<label>Recordatorio<input id="editReminder" type="time" value="${esc(item.reminderTime||'')}"></label>`;
+  modal(kind==='event'?'Editar evento':'Editar tarea',`<div class="form item-editor">
+    <label>Título<input id="editTitle" value="${esc(item.title)}"></label>
+    <label>Fecha<input id="editDate" type="date" value="${esc(item.date)}"></label>
+    ${specific}
+    <label>Categoría<select id="editCategory">${cats}</select></label>
+    <label>Proyecto<select id="editProject">${projects}</select></label>
+    <label>Notas<textarea id="editNotes" rows="3">${esc(item.notes||'')}</textarea></label>
+    <button id="editSave" class="primary">Guardar cambios</button>
+    <button id="editDelete" class="secondary danger-text">Eliminar</button>
+  </div>`);
+  $('#editSave').onclick=()=>{
+    const before=clone(item);
+    item.title=$('#editTitle').value.trim()||item.title;
+    item.date=$('#editDate').value||item.date;
+    item.categoryId=$('#editCategory').value||'personal';
+    item.projectId=$('#editProject').value||null;
+    item.notes=$('#editNotes').value||'';
+    if(kind==='event'){item.start=$('#editTime').value||item.start;item.duration=Math.max(5,Number($('#editDuration').value||item.duration||60))}
+    else {item.reminderTime=$('#editReminder').value||null;if(item.sortOrder==null)item.sortOrder=nextTaskOrder(item.date)}
+    mutation(kind,'update',before,item,'manual');save();renderCalendar();closeModal();
+  };
+  $('#editDelete').onclick=()=>deleteItem(kind,id);
+}
+function completeTask(id){
+  const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
+  t.done=true;t.completedAt=new Date().toISOString();
+  mutation('task','complete',before,t,'manual');save();renderCalendar();closeModal();
+}
+function archiveTask(id){
+  const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
+  t.archivedAt=new Date().toISOString();
+  mutation('task','archive',before,t,'manual');save();renderCalendar();closeModal();
+}
+function restoreTask(id){
+  const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
+  t.archivedAt=null;t.done=false;t.completedAt=null;
+  mutation('task','restore',before,t,'manual');save();tasksPanel();
+}
+function deleteItem(kind,id){
+  const item=itemBy(kind,id);if(!item)return;
+  const title=item.title;
+  modal('Eliminar',`<div class="confirm-copy">¿Eliminar “${esc(title)}”?</div><div class="confirm-actions"><button id="deleteCancel" class="secondary">Cancelar</button><button id="deleteConfirm" class="primary danger-button">Eliminar</button></div>`);
+  $('#deleteCancel').onclick=closeModal;
+  $('#deleteConfirm').onclick=()=>{
+    const before=clone(item),list=kind==='task'?state.tasks:state.events,idx=list.findIndex(x=>x.id===id);
+    if(idx>=0)list.splice(idx,1);
+    mutation(kind,'delete',before,null,'manual');save();renderCalendar();closeModal();
+  };
+}
+function initTaskDrag(){
+  $$('.drag-handle').forEach(handle=>{
+    handle.onpointerdown=e=>{
+      e.preventDefault();e.stopPropagation();
+      const row=handle.closest('.task-item');if(!row)return;
+      const date=row.dataset.date,beforeOrder=$$('.task-item[data-date="'+date+'"]').map(x=>x.dataset.id);
+      row.classList.add('dragging');handle.setPointerCapture?.(e.pointerId);
+      const move=ev=>{
+        ev.preventDefault();
+        const siblings=$$('.task-item[data-date="'+date+'"]').filter(x=>x!==row);
+        let before=null;
+        for(const el of siblings){const r=el.getBoundingClientRect();if(ev.clientY<r.top+r.height/2){before=el;break}}
+        if(before)row.parentNode.insertBefore(row,before);else{
+          const last=siblings[siblings.length-1];
+          if(last&&last.nextSibling)row.parentNode.insertBefore(row,last.nextSibling);else row.parentNode.appendChild(row);
+        }
+      };
+      const up=ev=>{
+        handle.releasePointerCapture?.(e.pointerId);row.classList.remove('dragging');
+        handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);
+        const ids=$$('.task-item[data-date="'+date+'"]').map(x=>x.dataset.id);
+        ids.forEach((id,i)=>{const t=state.tasks.find(x=>x.id===id);if(t)t.sortOrder=(i+1)*10});
+        if(ids.join('|')!==beforeOrder.join('|'))mutation('task','reorder',{id:row.dataset.id,date,order:beforeOrder},{id:row.dataset.id,date,order:ids},'manual');
+        save();renderCalendar();
+      };
+      handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+    };
+  });
+}
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='categories')categoriesPanel()}
-function tasksPanel(){modal('Tareas',state.tasks.length?state.tasks.map(t=>`<div class="row"><input type="checkbox" data-done="${t.id}" ${t.done?'checked':''}><div class="row-main"><div>${esc(t.title)}</div><div class="small">${esc(t.date)} · ${esc(cat(t.categoryId))}</div></div></div>`).join(''):'<div class="small">Todavía no hay tareas.</div>');$$('[data-done]').forEach(x=>x.onchange=()=>{const t=state.tasks.find(t=>t.id===x.dataset.done);t.done=x.checked;save();tasksPanel()})}
-function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task')state.tasks.push({id:uid(),title,date,categoryId,done:false});else state.events.push({id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60});save();closeModal();say('assistant',`He agregado “${title}”.`);renderCalendar()}}
+function tasksPanel(){
+  const active=state.tasks.filter(t=>!t.archivedAt).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
+  const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
+  let body='<div class="small section-label">Activas</div>';
+  body+=active.length?active.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>${esc(t.date)} · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas activas.</div>';
+  body+='<div class="small section-label archived-label">Archivadas</div>';
+  body+=archived.length?archived.map(t=>`<div class="task-panel-row archived"><span>${esc(t.title)}</span><button data-restore-task="${t.id}">Restaurar</button></div>`).join(''):'<div class="small empty-panel">No hay tareas archivadas.</div>';
+  modal('Tareas',body);
+  $$('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
+  $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
+}
+function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
 function memoryPanel(){modal('Lo que Isabella sabe de mí',state.memory.length?state.memory.map(m=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';return `<div class="row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal en esta staging.</div>')}
 function categoriesPanel(){modal('Categorías y proyectos',`<div class="small">Categorías</div>${state.categories.map(c=>`<div class="row"><div class="row-main">${esc(c.name)}</div></div>`).join('')}<div class="small" style="margin-top:18px">Proyectos de Trabajo</div>${state.projects.map(p=>`<div class="row"><div class="row-main">${esc(p.name)}</div></div>`).join('')}`)}
 window.ISABELLA_APP={
