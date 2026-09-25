@@ -1,7 +1,7 @@
 document.body.innerHTML = `
 <div class="app" id="app">
   <header class="topbar">
-    <div><div class="eyebrow">MINDS</div><div class="brand">Isabella</div></div>
+    <div><div class="eyebrow">MINDS</div></div>
     <div class="top-actions"><button id="calendarButton" class="text-btn">Calendario</button><button id="menuButton" class="dots" aria-label="Menú">•••</button></div>
   </header>
   <main id="swipeArea" class="swipe-area">
