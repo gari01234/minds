@@ -4,10 +4,10 @@ function dateISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d
 function compact(state){
   const td=dateISO();
   const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId}));
-  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done).map(x=>({id:x.id,title:x.title,date:x.date,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null}));
+  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}));
   const upcoming=[
     ...(state.events||[]).filter(x=>x.date>=td).slice(0,20).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId})),
-    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done).slice(0,20).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null}))
+    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,20).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,20);
   return {
     current_date:td,
