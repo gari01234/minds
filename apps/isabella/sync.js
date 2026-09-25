@@ -34,14 +34,46 @@ function paintAuth(){
   }
 }
 function openLogin(){
-  app.openModal('Conectar memoria',`<form id="isabellaLogin" class="form"><input id="isabellaEmail" type="email" autocomplete="email" required placeholder="tu@email.com"><button class="primary">Enviar enlace seguro</button><div id="isabellaAuthMsg" class="small">Usa el mismo correo de MINDS. No necesitas contraseña.</div></form>`);
-  $('#isabellaLogin').onsubmit=async e=>{
-    e.preventDefault();
+  app.openModal('Conectar memoria',`<div class="form">
+    <input id="isabellaEmail" type="email" autocomplete="email" inputmode="email" required placeholder="tu@email.com">
+    <button id="isabellaSendCode" class="primary">Enviar código</button>
+    <div id="isabellaCodeStep" class="hidden form">
+      <input id="isabellaCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código de 6 dígitos">
+      <button id="isabellaVerifyCode" class="primary">Entrar</button>
+    </div>
+    <div id="isabellaAuthMsg" class="small">Usa el mismo correo de MINDS. Te enviaremos un código para entrar sin salir de Isabella.</div>
+  </div>`);
+  $('#isabellaSendCode').onclick=async()=>{
     const email=$('#isabellaEmail').value.trim(),msg=$('#isabellaAuthMsg');
-    msg.textContent='Enviando…';
-    const redirectTo=location.origin+location.pathname;
-    const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:redirectTo}});
-    msg.textContent=error?apiError(error):'Revisa tu correo y abre el enlace de acceso.';
+    if(!email){msg.textContent='Escribe primero tu correo.';return}
+    $('#isabellaSendCode').disabled=true;
+    msg.textContent='Enviando código…';
+    const {error}=await sb.auth.signInWithOtp({email,options:{shouldCreateUser:true}});
+    if(error){
+      $('#isabellaSendCode').disabled=false;
+      msg.textContent=apiError(error);
+      return;
+    }
+    $('#isabellaCodeStep').classList.remove('hidden');
+    $('#isabellaEmail').disabled=true;
+    msg.textContent='Revisa tu correo e introduce aquí el código de 6 dígitos.';
+    setTimeout(()=>$('#isabellaCode')?.focus(),50);
+  };
+  $('#isabellaVerifyCode').onclick=async()=>{
+    const email=$('#isabellaEmail').value.trim(),token=$('#isabellaCode').value.trim(),msg=$('#isabellaAuthMsg');
+    if(!/^\d{6}$/.test(token)){msg.textContent='El código debe tener 6 dígitos.';return}
+    $('#isabellaVerifyCode').disabled=true;
+    msg.textContent='Verificando…';
+    const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
+    if(error){
+      $('#isabellaVerifyCode').disabled=false;
+      msg.textContent=apiError(error);
+      return;
+    }
+    user=data.user||data.session?.user||null;
+    paintAuth();
+    app.closeModal();
+    if(user) await syncNow({initial:true});
   };
 }
 async function ensureTaxonomy(state){
