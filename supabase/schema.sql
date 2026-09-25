@@ -1,0 +1,16 @@
+-- MINDS - Theory
+-- OBSOLETE REFERENCE FILE — DO NOT USE AS THE PRODUCTION SCHEMA.
+--
+-- The v0.1 prototype schema previously stored here predates the current
+-- longitudinal MINDS/conversation architecture.
+--
+-- Production is managed by Supabase migrations already applied to the project:
+--   20260925135208  minds_memory_architecture_v02
+--   20260925135248  minds_memory_hardening_v021
+--   20260925141744  minds_v010_persistence_support
+--   20260925141839  minds_v010_message_idempotency
+--
+-- See supabase/README.md.
+--
+-- This file is intentionally non-executable so an old prototype schema cannot
+-- accidentally recreate deprecated tables such as mind_dispatches.
