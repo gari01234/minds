@@ -38,7 +38,7 @@ function openLogin(){
     <input id="isabellaEmail" type="email" autocomplete="email" inputmode="email" required placeholder="tu@email.com">
     <button id="isabellaSendCode" class="primary">Enviar código</button>
     <div id="isabellaCodeStep" class="hidden form">
-      <input id="isabellaCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="Código de 6 dígitos">
+      <input id="isabellaCode" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Código de acceso">
       <button id="isabellaVerifyCode" class="primary">Entrar</button>
     </div>
     <div id="isabellaAuthMsg" class="small">Usa el mismo correo de MINDS. Te enviaremos un código para entrar sin salir de Isabella.</div>
@@ -61,7 +61,7 @@ function openLogin(){
   };
   $('#isabellaVerifyCode').onclick=async()=>{
     const email=$('#isabellaEmail').value.trim(),token=$('#isabellaCode').value.trim(),msg=$('#isabellaAuthMsg');
-    if(!/^\d{6}$/.test(token)){msg.textContent='El código debe tener 6 dígitos.';return}
+    if(!/^\d{6,10}$/.test(token)){msg.textContent='Introduce el código numérico completo que recibiste por correo.';return}
     $('#isabellaVerifyCode').disabled=true;
     msg.textContent='Verificando…';
     const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
