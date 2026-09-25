@@ -1,0 +1,31 @@
+/* THEORY//LAB v0.6 — MIND becomes the active cognitive surface. */
+body.mind-mode #app{grid-template-columns:minmax(0,1fr);grid-template-rows:68px minmax(0,1fr)}
+body.mind-mode header{grid-column:1/-1}
+body.mind-mode .left,body.mind-mode .right{display:none!important}
+body.mind-mode .center{grid-column:1;grid-row:2;background:#f3f2ed;overflow:auto}
+body.mind-mode #view-mind{padding:0;min-height:100%}
+body.mind-mode .nav{margin-left:auto}
+.mind-surface{max-width:980px;margin:0 auto;padding:54px 54px 120px}
+.mind-mast{padding:0 0 40px;border-bottom:1px solid var(--line);margin-bottom:42px}
+.mind-mast .mind-date{font:11px ui-monospace,monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);margin-bottom:16px}
+.mind-mast h1{font-family:Georgia,'Times New Roman',serif;font-size:54px;line-height:1.03;letter-spacing:-.045em;font-weight:400;margin:0 0 20px;max-width:850px}
+.mind-mast p{font-family:Georgia,'Times New Roman',serif;font-size:20px;line-height:1.7;color:#44433e;margin:0;max-width:780px}
+.mind-dispatch{max-width:780px;margin:0 auto 72px;padding-bottom:64px;border-bottom:1px solid var(--line)}
+.mind-dispatch:last-of-type{border-bottom:0}
+.mind-dispatch .dispatch-date{font:10px ui-monospace,monospace;letter-spacing:.16em;text-transform:uppercase;color:var(--green2);margin-bottom:18px}
+.mind-dispatch h2{font-family:Georgia,'Times New Roman',serif;font-size:38px;line-height:1.13;letter-spacing:-.035em;font-weight:400;margin:0 0 28px}
+.mind-dispatch p{font-family:Georgia,'Times New Roman',serif;font-size:19px;line-height:1.86;color:#252520;margin:0 0 24px}
+.mind-dispatch p:last-child{margin-bottom:0}
+.mind-dispatch em{font-style:italic}
+.mind-dispatch strong{font-weight:700}
+.mind-dispatch .turn{font-size:24px;line-height:1.65;margin:34px 0;padding-left:24px;border-left:2px solid var(--green);color:#171713}
+.mind-dispatch .caution{font-size:17px;color:#56554e;border-left:1px solid var(--amber);padding-left:18px;margin:30px 0}
+.mind-trace{margin-top:32px;padding-top:18px;border-top:1px solid #dad8d0;color:var(--muted);font:11px/1.7 ui-monospace,monospace}
+.mind-trace a,.mind-trace button{font:inherit;color:var(--green2);border:0;background:transparent;padding:0;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.mind-live-signal{max-width:780px;margin:0 auto 72px;padding:22px 26px;background:#e7e6e0;border-left:3px solid var(--green)}
+.mind-live-signal[hidden]{display:none}
+.mind-live-signal p{font-family:Georgia,'Times New Roman',serif;font-size:18px;line-height:1.78;margin:0;color:#2d2c28}
+.mind-live-signal .signal-meta{font:10px ui-monospace,monospace;letter-spacing:.13em;text-transform:uppercase;color:var(--green2);margin-bottom:10px}
+.mind-quiet{max-width:780px;margin:0 auto;color:var(--muted);font:12px/1.7 ui-monospace,monospace;padding-top:10px}
+body.mind-mode .sub{display:block}
+@media(max-width:840px){body.mind-mode #app{display:block}.mind-surface{padding:34px 22px 80px}.mind-mast h1{font-size:38px}.mind-mast p{font-size:18px}.mind-dispatch h2{font-size:30px}.mind-dispatch p{font-size:18px;line-height:1.78}.mind-dispatch .turn{font-size:21px}.mind-live-signal{padding:18px}.mind-live-signal p{font-size:17px}.mind-trace{font-size:10px}}

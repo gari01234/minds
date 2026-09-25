@@ -1,0 +1,143 @@
+{
+  "version": "0.3",
+  "name": "THEORY//LAB Epistemic Ontology",
+  "principles": {
+    "epistemic_separation": "Documentary, bridge and theoretical layers never silently collapse.",
+    "exegesis_firewall": "Theory is excluded when reconstructing an author.",
+    "non_destructive_time": "Feedback changes current status without deleting previous states.",
+    "ai_non_authority": "AI suggestions remain ghost relations until explicitly accepted.",
+    "structured_ignorance": "Questions, contradictions and epistemic debt are first-class entities.",
+    "semantic_zoom": "Different epistemic scales reveal different ontological granularity.",
+    "counterfactual_audit": "Any source or author can be temporarily removed to inspect theoretical dependence without mutating the graph.",
+    "research_chain": "reduction/operation → what intensifies → possible experience → possible human end is a query template, not an ontology imposed on authors."
+  },
+  "node_types": [
+    "author",
+    "claim",
+    "concept",
+    "contradiction",
+    "experience",
+    "feedback",
+    "finality",
+    "hypothesis",
+    "intensified_quality",
+    "operation",
+    "question",
+    "thesis",
+    "work"
+  ],
+  "edge_types": [
+    "ABOUT",
+    "ACCEPTS",
+    "AIMS_AT",
+    "ASSERTS",
+    "AUTHORED",
+    "CANDIDATE_RESPONSE",
+    "CONTRADICTS",
+    "DEPENDS_ON",
+    "DEPRIORITIZES",
+    "DOCUMENTS",
+    "ENABLES",
+    "FORMALIZES",
+    "INTENSIFIES",
+    "KEEPS_OPEN",
+    "KEEPS_PROVISIONAL",
+    "LEADS_TO",
+    "MAY_FAVOR",
+    "MAY_INTENSIFY",
+    "MOTIVATES",
+    "OPENS",
+    "PRIORITIZES",
+    "QUALIFIED_BY",
+    "QUALIFIES",
+    "REVEALS",
+    "SUGGESTS",
+    "SUPPORTS",
+    "TESTS"
+  ],
+  "territories": [
+    {
+      "id": "doc",
+      "label": "DOCUMENTARY\nARCHIPELAGO",
+      "x": 220,
+      "y": 365,
+      "rx": 190,
+      "ry": 330,
+      "types": "authors · works · claims",
+      "desc": "Lo que está documentado antes de que nuestra teoría intervenga."
+    },
+    {
+      "id": "concept",
+      "label": "CONCEPT\nCORE",
+      "x": 505,
+      "y": 320,
+      "rx": 145,
+      "ry": 150,
+      "types": "concepts",
+      "desc": "Vocabulario que se transforma al atravesar autores y feedback."
+    },
+    {
+      "id": "ops",
+      "label": "REDUCTION\nOPERATIONS",
+      "x": 515,
+      "y": 535,
+      "rx": 125,
+      "ry": 100,
+      "types": "operations",
+      "desc": "Qué se retira, limita, reorganiza, repite o vuelve latente."
+    },
+    {
+      "id": "int",
+      "label": "WHAT\nINTENSIFIES?",
+      "x": 700,
+      "y": 455,
+      "rx": 120,
+      "ry": 100,
+      "types": "intensified qualities",
+      "desc": "La positividad que una operación puede volver más perceptible."
+    },
+    {
+      "id": "theory",
+      "label": "THEORY\nCORE",
+      "x": 835,
+      "y": 370,
+      "rx": 160,
+      "ry": 145,
+      "types": "theses · hypotheses",
+      "desc": "Nuestro pensamiento: aceptado, provisional y siempre trazable."
+    },
+    {
+      "id": "human",
+      "label": "HUMAN\nHORIZON",
+      "x": 925,
+      "y": 610,
+      "rx": 180,
+      "ry": 90,
+      "types": "experience · possible ends",
+      "desc": "Experiencias y finalidades posibles; nunca efectos garantizados."
+    },
+    {
+      "id": "frontier",
+      "label": "ACTIVE\nFRONTIER",
+      "x": 1055,
+      "y": 370,
+      "rx": 145,
+      "ry": 230,
+      "types": "questions · contradictions · debt",
+      "desc": "Donde la teoría todavía no sabe, se contradice o debe investigar."
+    }
+  ],
+  "statuses": [
+    "accepted",
+    "deprioritized",
+    "documented",
+    "open",
+    "provisional"
+  ],
+  "layers": [
+    "bridge",
+    "documentary",
+    "theoretical"
+  ],
+  "ghost_relation_policy": "suggestions[] are visually rendered but excluded from evidence counts, genealogy, compiler and exegesis."
+}

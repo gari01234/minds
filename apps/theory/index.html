@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>MINDS - Readings · v0.10.1</title>
+<style>
+:root{
+  --bg:#efeee9; --paper:#faf9f5; --panel:#e7e6e0; --ink:#11110f; --muted:#72716b; --line:#c9c7bf;
+  --green:#15bd67; --green2:#0d8e4a; --amber:#e1a12e; --red:#d7504e; --blue:#4c67e8; --violet:#8363da;
+  --shadow:0 24px 90px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;background:var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;overflow:hidden}
+button,input,textarea{font:inherit}
+button{color:inherit}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+#app{height:100dvh;display:grid;grid-template-columns:210px minmax(0,1fr) 360px;grid-template-rows:68px minmax(0,1fr);min-height:680px}
+header{grid-column:1/4;display:flex;align-items:center;gap:16px;padding:0 18px;border-bottom:1px solid var(--line);background:rgba(239,238,233,.96);backdrop-filter:blur(14px);z-index:40}
+.brand{font-size:22px;font-weight:900;letter-spacing:-.055em}.brand i{font-style:normal;color:var(--green)}
+.sub{font:9px ui-monospace,monospace;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}.spacer{flex:1}
+.alive{display:flex;align-items:center;gap:7px;font:8px ui-monospace,monospace;color:var(--muted);letter-spacing:.11em}.pulse{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 0 rgba(21,189,103,.4);animation:pulse 1.8s infinite}@keyframes pulse{70%{box-shadow:0 0 0 8px rgba(21,189,103,0)}100%{box-shadow:0 0 0 0 rgba(21,189,103,0)}}
+.nav{display:flex;border:1px solid var(--line);border-radius:99px;overflow:hidden}.nav button{border:0;background:transparent;padding:9px 12px;font-size:9px;cursor:pointer}.nav button.active{background:var(--ink);color:white}
+.left{grid-column:1;grid-row:2;background:var(--panel);border-right:1px solid var(--line);padding:15px 12px;overflow:auto}.section{font-size:8px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin:10px 4px 8px}.sidebtn{width:100%;border:0;border-top:1px solid var(--line);background:transparent;padding:10px 5px;text-align:left;font-size:10px;cursor:pointer;display:flex;justify-content:space-between;align-items:center}.sidebtn.active{font-weight:800;padding-left:10px}.dot{width:6px;height:6px;border-radius:50%;background:#aaa9a2}.sidebtn.active .dot{background:var(--green)}
+.brainmeter{border:1px solid var(--ink);background:var(--paper);padding:11px;margin-top:14px}.brainmeter h4{font-size:9px;margin:0 0 8px}.meterrow{display:grid;grid-template-columns:1fr auto;gap:8px;font-size:8px;margin:6px 0}.bar{height:3px;background:#d9d7d0;margin-top:4px}.bar i{display:block;height:100%;background:var(--ink)}.bar.green i{background:var(--green)}.bar.amber i{background:var(--amber)}
+.smallnote{font-size:8px;line-height:1.5;color:var(--muted);border-top:1px solid var(--line);padding:10px 4px;margin-top:14px}
+.center{grid-column:2;grid-row:2;overflow:auto;position:relative;background:radial-gradient(circle at 54% 24%,rgba(255,255,255,.72),rgba(255,255,255,.22) 38%,transparent 68%)}
+.view{display:none;min-height:100%;padding:18px}.view.active{display:block}
+.hero{display:grid;grid-template-columns:minmax(0,1.45fr) minmax(260px,.8fr);gap:14px;margin-bottom:14px}.hero-main{background:var(--paper);border:1px solid var(--line);padding:18px;min-height:210px;position:relative;overflow:hidden}.hero-main:after{content:"";position:absolute;width:260px;height:260px;border-radius:50%;right:-80px;top:-80px;border:1px solid rgba(21,189,103,.35);box-shadow:0 0 0 28px rgba(21,189,103,.04),0 0 0 58px rgba(21,189,103,.025)}
+.kicker{font:8px ui-monospace,monospace;letter-spacing:.17em;color:var(--muted);text-transform:uppercase}.hero h1{font-size:38px;line-height:.98;letter-spacing:-.055em;margin:12px 0 10px;max-width:820px}.hero p{font-size:11px;line-height:1.62;max-width:720px;margin:0;color:#474641}
+.hero-side{background:var(--ink);color:white;padding:16px;display:flex;flex-direction:column;justify-content:space-between}.hero-side .big{font-size:42px;letter-spacing:-.06em;font-weight:800}.hero-side small{font-size:8px;color:#bdbdb8;line-height:1.5}.hero-side b{font-size:11px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.panel{background:var(--paper);border:1px solid var(--line);padding:14px}.panel h3{font-size:12px;margin:4px 0 10px}.panel p{font-size:9px;line-height:1.55;color:#4f4e48}
+.thoughtlist{display:grid;gap:8px}.thought{border:1px solid var(--line);background:#fffefa;padding:11px;cursor:pointer;transition:.15s;position:relative}.thought:hover{transform:translateY(-1px);box-shadow:0 8px 24px rgba(0,0,0,.06)}.thought.hot{border-color:var(--green)}.thought .top{display:flex;justify-content:space-between;gap:8px}.thought h4{font-size:12px;margin:0 0 4px}.thought p{font-size:9px;line-height:1.5;color:#4d4c47;margin:0}.thought .meta{font:7px ui-monospace,monospace;color:var(--muted);margin-top:8px;display:flex;gap:9px;flex-wrap:wrap}.heat{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 0 5px rgba(21,189,103,.09)}.heat.mid{background:var(--amber);box-shadow:0 0 0 5px rgba(225,161,46,.08)}.heat.low{background:#aaa;box-shadow:none}
+.reading{display:grid;grid-template-columns:112px 1fr;gap:12px;border-top:1px solid var(--line);padding:12px 0;cursor:pointer}.reading:first-child{border-top:0}.reading .who{font-size:11px;font-weight:800}.reading .date{font:7px ui-monospace,monospace;color:var(--muted);margin-top:4px}.reading h4{font-size:12px;margin:0 0 5px}.reading p{font-size:9px;line-height:1.5;color:#4b4a45;margin:0}.tag{display:inline-block;border:1px solid var(--line);padding:3px 5px;border-radius:99px;font-size:7px;margin:7px 3px 0 0}.tag.green{border-color:var(--green)}.tag.amber{border-color:var(--amber)}
+.memoryline{position:relative;padding-left:22px}.memoryline:before{content:"";position:absolute;left:6px;top:2px;bottom:4px;width:1px;background:var(--line)}.event{position:relative;padding:0 0 16px 12px}.event:before{content:"";position:absolute;left:-19px;top:5px;width:8px;height:8px;border-radius:50%;background:var(--paper);border:2px solid var(--green)}.event time{font:7px ui-monospace,monospace;color:var(--muted)}.event h4{font-size:11px;margin:3px 0 4px}.event p{font-size:9px;line-height:1.5;color:#4f4e49;margin:0}
+.askbox{background:var(--ink);color:white;padding:16px;margin-bottom:14px}.askhead{display:flex;gap:8px;align-items:center;justify-content:space-between}.asktabs{display:flex;border:1px solid #555;border-radius:99px;overflow:hidden}.asktabs button{border:0;background:transparent;color:#bbb;padding:7px 10px;font-size:8px;cursor:pointer}.asktabs button.active{background:white;color:#111}.askrow{display:grid;grid-template-columns:1fr auto;gap:8px;margin-top:12px}.askrow input{background:#20201e;color:white;border:1px solid #4b4b46;padding:12px;outline:none}.askrow button{border:0;background:var(--green);padding:0 16px;font-size:9px;font-weight:800;cursor:pointer}.askhint{font-size:8px;color:#aaa;margin-top:8px}.answer{background:var(--paper);border:1px solid var(--line);padding:14px;min-height:150px}.answer .label{font:7px ui-monospace,monospace;letter-spacing:.14em;color:var(--muted);text-transform:uppercase}.answer h3{font-size:16px;margin:7px 0}.answer p{font-size:10px;line-height:1.65}.evidencechip{display:inline-flex;gap:5px;align-items:center;border:1px solid var(--line);padding:4px 6px;font-size:7px;margin:4px 4px 0 0}.evidencechip i{width:5px;height:5px;border-radius:50%;background:var(--green)}
+.returnq .item{display:grid;grid-template-columns:50px 1fr auto;gap:10px;align-items:start;border-top:1px solid var(--line);padding:10px 0}.returnq .item:first-child{border-top:0}.score{font-size:20px;font-weight:800;letter-spacing:-.05em}.returnq h4{font-size:11px;margin:0 0 3px}.returnq p{font-size:8px;line-height:1.45;color:var(--muted);margin:0}.pin{border:1px solid var(--line);background:transparent;padding:5px 7px;font-size:7px;cursor:pointer}.pin.on{background:var(--ink);color:white}
+.graphwrap{height:calc(100dvh - 105px);background:var(--paper);border:1px solid var(--line);position:relative;overflow:hidden}.graphwrap svg{width:100%;height:100%}.gedge{stroke:#aaa8a0;stroke-width:.8;opacity:.38}.gedge.hot{stroke:var(--green);stroke-width:1.4;opacity:.68}.gnode circle{fill:#67665f;stroke:#f7f6f1;stroke-width:2}.gnode text{font-size:8px;fill:#2a2925;paint-order:stroke;stroke:var(--paper);stroke-width:3}.gnode.hot circle{fill:var(--green)}.gnode.user circle{fill:var(--blue)}.gnode.question circle{fill:var(--amber)}
+.right{grid-column:3;grid-row:2;border-left:1px solid var(--line);background:var(--paper);overflow:auto;padding:16px}.eyebrow{font:8px ui-monospace,monospace;color:var(--muted);letter-spacing:.16em;text-transform:uppercase}.right h2{font-size:26px;line-height:1.03;letter-spacing:-.045em;margin:8px 0 10px}.right .lead{font-size:10px;line-height:1.62;color:#4b4a45}.divider{height:1px;background:var(--line);margin:14px 0}.rblock h4{font-size:10px;margin:0 0 5px}.rblock p{font-size:9px;line-height:1.55;color:#50504b;margin:0 0 9px}.rmeta{display:grid;grid-template-columns:88px 1fr;gap:7px;font-size:8px;margin:6px 0}.rmeta b{font-weight:500;color:var(--muted)}
+.notearea{width:100%;min-height:94px;border:1px solid var(--line);background:#fffefa;padding:9px;font-size:9px;resize:vertical}.save{width:100%;border:0;background:var(--ink);color:white;padding:9px;font-size:8px;margin-top:7px;cursor:pointer}.saved{font-size:8px;color:var(--green2);display:none;margin-top:6px}.saved.show{display:block}
+.sourcecard{border-top:1px solid var(--line);padding:9px 0}.sourcecard b{font-size:9px}.sourcecard small{display:block;font-size:7px;color:var(--muted);margin-top:3px}
+.drawer{position:fixed;inset:68px 0 0 210px;background:rgba(239,238,233,.94);backdrop-filter:blur(16px);z-index:60;display:none;overflow:auto;padding:22px}.drawer.open{display:block}.drawer-inner{max-width:980px;margin:0 auto;background:var(--paper);border:1px solid var(--line);box-shadow:var(--shadow);padding:22px}.drawer-close{float:right;border:1px solid var(--line);background:transparent;padding:6px 9px;cursor:pointer}.drawer h1{font-size:34px;letter-spacing:-.05em;margin:8px 0 10px}.drawer h3{font-size:12px;margin:18px 0 7px}.drawer p{font-size:10px;line-height:1.68;color:#45443f}.drawer .quote{font-size:16px;line-height:1.45;border-left:2px solid var(--green);padding-left:12px;color:#222}.drawer .chain{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0}.drawer .chain span{border:1px solid var(--line);padding:6px 8px;font-size:8px;background:#fff}
+@media(max-width:1120px){#app{grid-template-columns:180px minmax(0,1fr) 300px}.hero{grid-template-columns:1fr}.grid3{grid-template-columns:1fr 1fr}.drawer{left:180px}}
+@media(max-width:840px){html,body{overflow:auto}#app{height:auto;min-height:100dvh;display:block}header{position:sticky;top:0}.left{display:none}.right{border-left:0;border-top:1px solid var(--line)}.center{overflow:visible}.grid2,.grid3{grid-template-columns:1fr}.drawer{inset:68px 0 0 0}.sub,.alive{display:none}.nav button{padding:8px 9px}.hero h1{font-size:31px}}
+</style>
+<link rel="stylesheet" href="v05.css"><link rel="stylesheet" href="v06.css"><link rel="stylesheet" href="v07.css"><link rel="stylesheet" href="v08.css"><link rel="stylesheet" href="v09.css"><link rel="stylesheet" href="v10.css?v=0103"></head>
+<body>
+<div id="app">
+<header>
+  <div class="brand">MINDS - Readings</div>
+  <div class="sub"></div>
+  <div class="spacer"></div>
+  <div class="alive"><span class="pulse"></span> COGNITIVE FIELD ACTIVE</div>
+  <div class="nav" id="topnav">
+    <button data-view="mind" class="active">MINDS</button>
+    <button data-view="readings">LECTURAS</button>
+    <button data-view="ask">PREGUNTAR</button>
+  </div>
+</header>
+
+<aside class="left">
+  <div class="section">Lentes cognitivas</div>
+  <button class="sidebtn active" data-filter="alive">Lo que está vivo ahora <span class="dot"></span></button>
+  <button class="sidebtn" data-filter="liked">Lo que permaneció conmigo <span class="dot"></span></button>
+  <button class="sidebtn" data-filter="unresolved">No resuelto <span class="dot"></span></button>
+  <button class="sidebtn" data-filter="return">Volver más tarde <span class="dot"></span></button>
+  <button class="sidebtn" data-filter="forgotten">Dormido / olvidado <span class="dot"></span></button>
+  <div class="section">Límite de memoria</div>
+  <button class="sidebtn" data-filter="mine">Mi corpus vivido <span class="dot"></span></button>
+  <button class="sidebtn" data-filter="outside">Más allá de mi corpus <span class="dot"></span></button>
+  <div class="brainmeter">
+    <h4>ESTADO DEL TERCER CEREBRO</h4>
+    <div class="meterrow"><span>recordado</span><b>100%</b></div><div class="bar green"><i style="width:100%"></i></div>
+    <div class="meterrow"><span>activamente vivo</span><b>42%</b></div><div class="bar"><i style="width:42%"></i></div>
+    <div class="meterrow"><span>no resuelto</span><b>31%</b></div><div class="bar amber"><i style="width:31%"></i></div>
+    <div class="meterrow"><span>frontera exterior</span><b>∞</b></div>
+  </div>
+  <div class="smallnote">Nothing is deleted because it stopped being central. The system distinguishes <b>memory</b> from <b>current vitality</b>. Dormant thought remains recoverable.</div>
+</aside>
+
+<main class="center">
+  <section id="view-mind" class="view active">
+    <div class="hero">
+      <div class="hero-main">
+        <div class="kicker">CURRENT MENTAL FIELD · 23 SEP 2026</div>
+        <h1>Not everything remembered is equally alive.</h1>
+        <p>This view does not show everything we know. It shows what is currently exerting pressure on the theory: ideas you returned to, corrections you made, questions that remain unresolved, and readings whose effects are still unfolding.</p>
+      </div>
+      <div class="hero-side">
+        <div><div class="kicker" style="color:#9f9f9a">MOST ALIVE THREAD</div><div class="big">WHY?</div></div>
+        <div><b>Reduction → intensification → possible human end</b><small>We know reduction is not the end. The unresolved question is what the intensified condition is ultimately for.</small></div>
+      </div>
+    </div>
+
+    <div class="grid2">
+      <div class="panel">
+        <div class="kicker">LIVING THOUGHTS</div>
+        <h3>Ideas that are still working inside the field</h3>
+        <div class="thoughtlist" id="thoughtlist"></div>
+      </div>
+      <div class="panel returnq">
+        <div class="kicker">RETURN QUEUE</div>
+        <h3>Things worth thinking with again</h3>
+        <div id="returnq"></div>
+      </div>
+    </div>
+
+    <div class="grid3" style="margin-top:14px">
+      <div class="panel"><div class="kicker">RECENT SHIFT</div><h3>Presence is too abstract</h3><p>The field changed when “presence” stopped being treated as a sufficient center. The sharper question became: <b>presence of what, intensified for what, and toward what kind of human condition?</b></p></div>
+      <div class="panel"><div class="kicker">CROSS-READING SIGNAL</div><h3>Silvestrin remains unusually fertile</h3><p>Not because he reduces more than others, but because reduction is connected to a diagnosis of contemporary life and to possible states such as calm, retreat and clarification.</p></div>
+      <div class="panel"><div class="kicker">UNRESOLVED HUMAN HORIZON</div><h3>Calm / tranquility?</h3><p>This has high personal resonance but is not yet a settled theoretical endpoint. The system keeps it hot without pretending it is proven.</p></div>
+    </div>
+  </section>
+
+  <section id="view-readings" class="view">
+    <div class="hero-main" style="margin-bottom:14px;min-height:auto">
+      <div class="kicker">READINGS AS LIVED MEMORY</div><h1 style="font-size:34px">A reading is not a note. It is what remained after reading.</h1><p>Every reading stores the source, the reconstructed argument, what resonated with you, what did not, what later changed, and the thoughts you may want to return to.</p>
+    </div>
+    <div class="panel" id="readinglist"></div>
+  </section>
+
+  <section id="view-memory" class="view">
+    <div class="grid2">
+      <div class="panel"><div class="kicker">AUTOBIOGRAPHICAL THEORY MEMORY</div><h3>Thought does not overwrite itself</h3><p>Each correction becomes an event. Earlier positions remain recoverable, so the system can answer not only “what do I think?” but “when did this change, and why?”</p><div class="memoryline" id="memoryline"></div></div>
+      <div class="panel"><div class="kicker">DORMANT MEMORY</div><h3>Not alive ≠ forgotten</h3><p>These ideas are currently peripheral but still retrievable. A future reading can reactivate them.</p><div class="thoughtlist" id="dormantlist"></div></div>
+    </div>
+  </section>
+
+  <section id="view-ask" class="view">
+    <div class="askbox">
+      <div class="askhead"><div><div class="kicker" style="color:#9b9b96">ASK THE SUPERBRAIN</div><h2 style="margin:5px 0 0;font-size:25px">Ask what you remember — or what you have never read.</h2></div><div class="asktabs"><button class="active" data-mode="memory">MY MEMORY</button><button data-mode="outside">BEYOND MY MEMORY</button></div></div>
+      <div class="askrow"><input id="askinput" placeholder="e.g. ¿Por qué Silvestrin sigue siendo más fértil que Morris para mi investigación?"/><button id="askbtn">THINK</button></div>
+      <div class="askhint">MY MEMORY answers only from your stored intellectual history. BEYOND MY MEMORY clearly marks external expansion so it never masquerades as something you already read.</div>
+    </div>
+    <div class="grid2">
+      <div class="answer" id="answer"><div class="label">SUPERBRAIN RESPONSE</div><h3>Try asking a real question.</h3><p>The prototype will retrieve relevant readings, living thoughts and feedback events, then assemble a provenance-aware answer. It will not silently promote outside material into your memory.</p></div>
+      <div class="panel"><div class="kicker">QUICK QUESTIONS</div><h3>Questions your ordinary memory should not have to reconstruct alone</h3><div class="thoughtlist" id="quickquestions"></div></div>
+    </div>
+  </section>
+
+  <section id="view-graph" class="view">
+    <div class="graphwrap"><svg id="graphsvg" viewBox="0 0 1200 760"></svg></div>
+  </section>
+</main>
+
+<aside class="right" id="inspector">
+  <div class="eyebrow">SELECTED MEMORY</div>
+  <h2 id="rtitle">Reduction is a means, not an end</h2>
+  <p class="lead" id="rlead">A currently living thought. Its importance comes from repeated return, not from being the most documented proposition in the corpus.</p>
+  <div class="divider"></div>
+  <div class="rblock"><h4>WHY IT IS ALIVE</h4><p id="rwhy">It reappeared across Silvestrin, Reinhardt and the latest methodological reflection. It changes what the research is actually trying to discover.</p></div>
+  <div class="rblock"><h4>CURRENT FORMULATION</h4><p id="rcurrent">Reduction is one operation among others. Its relevance depends on what it makes more perceptible or intense, what condition that may favor, and what human purpose that condition could serve.</p></div>
+  <div class="rblock"><h4>WHAT IT CAME FROM</h4><div id="rsources"></div></div>
+  <div class="divider"></div>
+  <div class="rmeta"><b>vitality</b><span id="rvitality">96 / 100</span></div>
+  <div class="rmeta"><b>evidence</b><span id="revidence">72 / 100</span></div>
+  <div class="rmeta"><b>status</b><span id="rstatus">active hypothesis</span></div>
+  <div class="rmeta"><b>last activated</b><span id="rlast">today</span></div>
+  <div class="divider"></div>
+  <div class="rblock"><h4>YOUR NEXT THOUGHT</h4><textarea id="notearea" class="notearea" placeholder="Write what this makes you think now. This local prototype remembers it in this browser."></textarea><button class="save" id="saveNote">SAVE INTO MEMORY</button><div class="saved" id="saved">Saved locally. This does not alter source evidence.</div></div>
+</aside>
+</div>
+
+<div class="drawer" id="drawer"><div class="drawer-inner"><button class="drawer-close" id="drawerClose">CLOSE</button><div id="drawerContent"></div></div></div>
+
+<script src="corpus.js"></script>
+<script>
+function readLegacy(k,f){try{return JSON.parse(localStorage.getItem(k))||f}catch{return f}}
+const thoughts=[
+ {id:'means',title:'Reduction is a means, not an end',summary:'The research should not worship reduction itself. We need to ask what it intensifies, what experience that can favor, and why that experience matters.',why:'You returned to this explicitly after Reinhardt. It reorganizes the entire project from an aesthetic category into a chain of consequences.',current:'Reduction is one operation among others. Its value depends on what becomes more perceptible or intense, what condition this may favor, and what possible human end is at stake.',v:96,e:72,status:'active hypothesis',last:'today',hot:'hot',sources:['Silvestrin feedback','Reinhardt reflection','23 Sep methodological correction'],tags:['alive','liked','unresolved','return'],kind:'thought'},
+ {id:'calm',title:'Could calm / tranquility be a human horizon?',summary:'Silvestrin keeps returning because his reduction is connected to what contemporary human beings may need: retreat, calm, silence and mental clarification.',why:'This has strong resonance for you, but you have deliberately refused to stabilize it as the answer too early.',current:'Treat calm and tranquility as a high-resonance research hypothesis, not as the final purpose of reduction.',v:94,e:48,status:'open human horizon',last:'today',hot:'hot',sources:['Claudio Silvestrin','Your feedback after Silvestrin','23 Sep clarification'],tags:['alive','liked','unresolved','return'],kind:'question'},
+ {id:'intensify',title:'Do not ask only what is reduced — ask what is intensified',summary:'A reductive operation becomes theoretically meaningful when we can say what gains perceptual force because of it.',why:'This formulation has survived several readings and became sharper in your most recent reflection.',current:'For every reduction: identify the removed interference, the intensified quality, the possible experience, and only then investigate a possible purpose.',v:93,e:76,status:'accepted research method',last:'today',hot:'hot',sources:['Silvestrin','Pawson','Your methodological feedback'],tags:['alive','liked','return'],kind:'method'},
+ {id:'presence',title:'“Presence” is not enough',summary:'Presence became too abstract. The theory must specify presence of what, under what perceptual conditions, and toward what end.',why:'You corrected the project when it started drifting toward a generic theory of presence.',current:'Use presence only as a relational descriptor, never as the center of the theory without an object and a purpose.',v:88,e:86,status:'accepted correction',last:'today',hot:'hot',sources:['23 Sep feedback'],tags:['alive','liked'],kind:'feedback'},
+ {id:'sensitivity',title:'Reduction may intensify sensitivity rather than the stimulus',summary:'Martin suggests a subtle alternative: instead of making a phenomenon stronger, reduction may make us more capable of perceiving weak differences.',why:'This opens a new mechanism that connects reduction to perception without equating intensity with loudness or visual force.',current:'Distinguish intensification of the phenomenon from intensification of sensitivity toward the phenomenon.',v:82,e:64,status:'provisional',last:'this week',hot:'mid',sources:['Agnes Martin reading','Reinhardt comparison'],tags:['alive','unresolved','return'],kind:'hypothesis'},
+ {id:'criteria',title:'Every reduction hides a criterion of relevance',summary:'Reinhardt made explicit that “interference” is never neutral. Something is removable only relative to a definition of what matters.',why:'This protects the theory from turning aesthetic preference into universal necessity.',current:'Whenever something is called noise, excess or nonessential, ask: according to which regime of relevance?',v:78,e:81,status:'provisional method',last:'this week',hot:'mid',sources:['Ad Reinhardt','Twelve Rules for a New Academy'],tags:['alive','return'],kind:'method'},
+ {id:'morris',title:'Redistribution of complexity',summary:'Morris showed that a simple object can shift complexity into relations among object, body and space.',why:'You understood and accepted the argument but said it has less potential for your theory than Silvestrin.',current:'Keep as a useful contrast and possible case limit; do not make it a central axis.',v:34,e:84,status:'deprioritized',last:'2 days ago',hot:'low',sources:['Robert Morris','Your feedback'],tags:['forgotten'],kind:'contrast'},
+ {id:'latency',title:'Latent qualities can remain without immediate availability',summary:'Reinhardt’s black paintings suggested that reduction may move color, form or time toward a threshold of appearance rather than eliminate them.',why:'Interesting but not yet proven central to your architectural theory.',current:'Keep “perceptual latency” localized until later readings show it has broader explanatory value.',v:51,e:67,status:'localized hypothesis',last:'2 days ago',hot:'low',sources:['Ad Reinhardt'],tags:['forgotten','unresolved'],kind:'hypothesis'}
+];
+
+const readings=[
+ {id:'sil',author:'Claudio Silvestrin',date:'re-read 2026',title:'Reduction as removal of interference toward calm, silence and intensified elemental conditions',summary:'The most fertile reading so far. Reduction is not the end; simplicity, clarity and void operate differently. The strong line is that certain removals may intensify matter, space, light, nature and silence, possibly contributing to retreat and mental clarification.',alive:['reduction as operation, not end','minimum configuration / maximum intensity','remove interference so what remains can gain presence','architecture need not reproduce the pathologies of its time','possible human horizon: calm / tranquility'],status:'high resonance',source:'Primary writings + project statements',color:'green'},
+ {id:'paw',author:'John Pawson',date:'20 Sep 2026',title:'How to decide when to stop reducing',summary:'Pawson introduced a qualitative stopping criterion: further subtraction can cease to improve what remains. The reading also distinguished visual restraint from construction difficulty, maintenance and lived appropriation.',alive:['minimum / sufficiency','clarity through reorganization as well as removal','precision must protect a relation, not just geometry','simple appearance can conceal complex production'],status:'feedback partially pending',source:'Interviews + studio documentation + Minimum presentation',color:'amber'},
+ {id:'mor',author:'Robert Morris',date:'surprise reading',title:'Simple form does not mean simple experience',summary:'Morris relocates complexity from internal composition toward relations among object, body, distance and space. Valuable as contrast, but you explicitly gave it lower theoretical priority.',alive:['simple form ≠ simple experience','keep relational complexity as secondary hypothesis'],status:'deprioritized by feedback',source:'Notes on Sculpture I & II',color:''},
+ {id:'rei',author:'Ad Reinhardt',date:'21–23 Sep 2026',title:'Reduction at the threshold of visibility',summary:'Reinhardt makes reduction normative: a field of prohibitions defines what is allowed to remain. His black paintings complicate absence because form, color and time become latent rather than simply disappear.',alive:['criterion of relevance behind every exclusion','few stimuli can still demand intense attention','perceptual latency','reduction can be constitutive, not only corrective'],status:'partly alive',source:'Twelve Rules, Art-as-Art, institutional documentation',color:'amber'},
+ {id:'martin',author:'Agnes Martin',date:'surprise reading',title:'Reduction as protection of sensitivity',summary:'Martin opened a distinct possibility: reduction may not intensify the object but the viewer’s sensitivity to subtle differences. She also supplies an explicit human end — happiness — which is useful precisely because we do not have to accept it.',alive:['intensification of sensitivity vs intensification of stimulus','distraction as an obstacle to subtle response','the chain must continue toward a human purpose'],status:'new / active',source:'Beauty Is the Mystery of Life + Skowhegan talk',color:'green'}
+];
+
+const events=[
+ {date:'Silvestrin re-read',title:'Reduction stops being an end',text:'You separated operations such as reduction, simplicity, clarity and void from states such as calm, silence and sensitivity.'},
+ {date:'Pawson',title:'A stopping criterion appears',text:'The field gains “sufficiency”: continuing to subtract can make the result worse. Reduction is not a competition to count fewer things.'},
+ {date:'Morris feedback',title:'Not every valid idea deserves equal theoretical weight',text:'You kept Morris as a useful contrast but explicitly lowered the priority of internal/external relational complexity.'},
+ {date:'Reinhardt',title:'Interference becomes normative',text:'The question changes from “what can be removed?” to “according to what criterion is something declared removable?”'},
+ {date:'23 Sep 2026',title:'Presence is rejected as an abstract center',text:'You decide to keep reading theories of reduction because they are the mechanism through which your real interests are being discovered.'},
+ {date:'23 Sep 2026',title:'The chain becomes explicit',text:'Reduction / operation → what intensifies → possible experience → possible human purpose. The final term remains intentionally unresolved.'}
+];
+
+const outside=[
+ {title:'A future reading on slowness / temporal autonomy',why:'Useful because your human question is moving toward what contemporary life may need, while your architecture essay already treats time as an architectural medium.',status:'UNREAD FRONTIER'},
+ {title:'A future reading on sensory deprivation vs perceptual refinement',why:'Would help test whether “less stimulation” actually supports calm or merely changes the type of attentional demand.',status:'UNREAD FRONTIER'},
+ {title:'A future reading on monastic / contemplative architectural regimes',why:'Could connect reduction to human ends without assuming that visual minimalism and tranquility are equivalent.',status:'UNREAD FRONTIER'}
+];
+
+const quick=[
+ '¿Qué ideas de Silvestrin siguen vivas después de Reinhardt y Martin?',
+ '¿Cuándo empezamos a pensar que reducción no era un fin?',
+ '¿Qué me interesó poco de Morris y por qué?',
+ '¿Qué hipótesis actuales tienen mucha resonancia pero poca evidencia?',
+ '¿Qué lecturas debería volver a leer ahora?',
+ '¿Qué todavía no he leído que podría cuestionar la idea de calma?'
+];
+
+const state={view:'mind',askMode:'memory',selected:'means',filter:'alive'};
+const savedNotes=readLegacy('theorylab_v04_notes',{});
+const pinned=new Set(readLegacy('theorylab_v04_pins',[]));
+
+function thoughtBy(id){return thoughts.find(x=>x.id===id)}
+function selectThought(id){const t=thoughtBy(id); if(!t)return; state.selected=id; document.getElementById('rtitle').textContent=t.title;document.getElementById('rlead').textContent=t.summary;document.getElementById('rwhy').textContent=t.why;document.getElementById('rcurrent').textContent=t.current;document.getElementById('rvitality').textContent=`${t.v} / 100`;document.getElementById('revidence').textContent=`${t.e} / 100`;document.getElementById('rstatus').textContent=t.status;document.getElementById('rlast').textContent=t.last;document.getElementById('rsources').innerHTML=t.sources.map(s=>`<div class="sourcecard"><b>${s}</b><small>part of this thought's provenance</small></div>`).join('');document.getElementById('notearea').value=savedNotes[id]||'';document.getElementById('saved').classList.remove('show')}
+
+function renderThoughts(){const box=document.getElementById('thoughtlist');let list=thoughts.filter(t=>t.tags.includes(state.filter)||state.filter==='alive'&&t.tags.includes('alive'));if(state.filter==='mine')list=thoughts;if(state.filter==='outside')list=[];box.innerHTML=list.map(t=>`<div class="thought ${t.hot==='hot'?'hot':''}" data-thought="${t.id}"><div class="top"><div><h4>${t.title}</h4><p>${t.summary}</p></div><span class="heat ${t.hot==='mid'?'mid':t.hot==='low'?'low':''}"></span></div><div class="meta"><span>VITALITY ${t.v}</span><span>EVIDENCE ${t.e}</span><span>${t.status.toUpperCase()}</span></div></div>`).join('')||`<div class="thought"><h4>This lens points outside your lived corpus.</h4><p>Use ASK → BEYOND MY MEMORY to expand beyond what you have already read.</p></div>`;document.querySelectorAll('[data-thought]').forEach(el=>el.onclick=()=>selectThought(el.dataset.thought))}
+
+function renderReturn(){const list=[...thoughts].filter(t=>t.tags.includes('return')).sort((a,b)=>(pinned.has(b.id)-pinned.has(a.id))||b.v-a.v);document.getElementById('returnq').innerHTML=list.map(t=>`<div class="item"><div class="score">${t.v}</div><div><h4>${t.title}</h4><p>${t.current}</p></div><button class="pin ${pinned.has(t.id)?'on':''}" data-pin="${t.id}">${pinned.has(t.id)?'PINNED':'PIN'}</button></div>`).join('');document.querySelectorAll('[data-pin]').forEach(b=>b.onclick=()=>{const id=b.dataset.pin;pinned.has(id)?pinned.delete(id):pinned.add(id);localStorage.setItem('theorylab_v04_pins',JSON.stringify([...pinned]));renderReturn()})}
+
+function renderReadings(){document.getElementById('readinglist').innerHTML=readings.map(r=>`<div class="reading" data-reading="${r.id}"><div><div class="who">${r.author}</div><div class="date">${r.date}</div></div><div><h4>${r.title}</h4><p>${r.summary}</p>${r.alive.slice(0,3).map(x=>`<span class="tag ${r.color}">${x}</span>`).join('')}</div></div>`).join('');document.querySelectorAll('[data-reading]').forEach(el=>el.onclick=()=>openReading(el.dataset.reading))}
+
+function openReading(id){const r=readings.find(x=>x.id===id);document.getElementById('drawerContent').innerHTML=`<div class="kicker">LIVED READING MEMORY</div><h1>${r.author}</h1><p class="quote">${r.title}</p><h3>What the reading contributed</h3><p>${r.summary}</p><h3>What stayed alive in your thinking</h3><div class="chain">${r.alive.map(x=>`<span>${x}</span>`).join('')}</div><h3>Current status in your theory</h3><p><b>${r.status}</b>. This is not a rating of the author; it is the current relevance of this reading to your own evolving theoretical project.</p><h3>Source basis</h3><p>${r.source}</p>`;document.getElementById('drawer').classList.add('open')}
+
+function renderMemory(){document.getElementById('memoryline').innerHTML=events.map(e=>`<div class="event"><time>${e.date}</time><h4>${e.title}</h4><p>${e.text}</p></div>`).join('');document.getElementById('dormantlist').innerHTML=thoughts.filter(t=>t.tags.includes('forgotten')).map(t=>`<div class="thought" data-thought="${t.id}"><h4>${t.title}</h4><p>${t.current}</p><div class="meta"><span>STILL REMEMBERED</span><span>VITALITY ${t.v}</span></div></div>`).join('');document.querySelectorAll('#dormantlist [data-thought]').forEach(el=>el.onclick=()=>selectThought(el.dataset.thought))}
+
+function renderQuick(){document.getElementById('quickquestions').innerHTML=quick.map(q=>`<div class="thought" data-q="${q}"><h4>${q}</h4></div>`).join('');document.querySelectorAll('[data-q]').forEach(el=>el.onclick=()=>{document.getElementById('askinput').value=el.dataset.q;answerQuery()})}
+
+function memoryAnswer(q){const l=q.toLowerCase();let body='',used=[];
+ if(l.includes('silvestrin')&&(l.includes('viva')||l.includes('reinhardt')||l.includes('martin'))){body='Lo que sigue vivo de Silvestrin no es una estética de pocos elementos, sino una estructura: la reducción tiene sentido cuando retira interferencias para que ciertas condiciones —materia, luz, espacio, silencio, naturaleza— puedan adquirir mayor intensidad. Después de Reinhardt, esta idea quedó corregida por la pregunta “¿interferencia según qué criterio?”. Después de Martin, apareció otra variante: quizá no siempre se intensifique el fenómeno; a veces se intensifica nuestra sensibilidad hacia diferencias débiles. Lo que permanece abierto es el último eslabón: para qué queremos esa intensificación.';used=['Silvestrin','Reinhardt','Agnes Martin','feedback 23 Sep'];}
+ else if(l.includes('morris')){body='Morris quedó en tu memoria como un contraste válido pero secundario. Su tesis de que una forma unitaria desplaza complejidad hacia las relaciones objeto–espacio–sujeto te pareció inteligible, pero con menor potencial para la teoría que la línea de Silvestrin. El sistema no lo borra: conserva su argumento y registra que su peso teórico fue explícitamente reducido por tu feedback.';used=['Robert Morris','your Morris feedback'];}
+ else if(l.includes('fin')||l.includes('medio')||l.includes('reducción no')){body='La idea de que la reducción es un medio y no un fin se consolidó tras Silvestrin y reapareció con fuerza después de Reinhardt. Tu corrección fue precisa: no basta preguntar qué se quita; hay que seguir la cadena hacia qué se intensifica, qué condición puede favorecer y, finalmente, para qué podría ser valiosa esa condición para una persona contemporánea. Esa finalidad todavía no está resuelta.';used=['Silvestrin feedback','Reinhardt reflection','23 Sep methodological feedback'];}
+ else if(l.includes('evidencia')||l.includes('resonancia')){body='La hipótesis con mayor tensión entre resonancia y evidencia es actualmente la posibilidad de que ciertas operaciones reductivas favorezcan calma o tranquilidad. Tiene una resonancia muy alta en tu investigación, especialmente por Silvestrin, pero todavía no contamos con base suficiente para convertirla en una relación causal estable. “Intensificación de sensibilidad” también está viva, aunque sigue provisional.';used=['calm/tranquility node','Agnes Martin','Silvestrin'];}
+ else if(l.includes('volver')||l.includes('releer')||l.includes('regresar')){body='Ahora mismo volvería primero a Silvestrin, pero no para releerlo completo: regresaría exactamente a sus formulaciones sobre retiro, calma, silencio, crítica de la aceleración y la relación entre mínima configuración y máxima intensidad. Después revisaría Martin para contrastar si la reducción intensifica el fenómeno o la sensibilidad. Reinhardt quedaría tercero, para mantener activa la pregunta normativa: quién decide qué cuenta como interferencia.';used=['return queue','Silvestrin','Martin','Reinhardt'];}
+ else {const hits=thoughts.filter(t=>(t.title+' '+t.summary+' '+t.current).toLowerCase().split(/\s+/).some(w=>w.length>4&&l.includes(w))).sort((a,b)=>b.v-a.v).slice(0,3);if(hits.length){body='Tu memoria contiene varias líneas relacionadas. '+hits.map(t=>`${t.title}: ${t.current}`).join(' ');used=hits.flatMap(h=>h.sources).slice(0,5)}else{body='No encuentro una coincidencia fuerte en tu corpus actual. Eso es útil: el sistema no debería fingir recuerdo. Puedes cambiar a BEYOND MY MEMORY para explorar material que aún no has leído.';used=[]}}
+ return {body,used};}
+
+function outsideAnswer(q){const l=q.toLowerCase();let candidates=outside;if(l.includes('calma')||l.includes('tranquil')||l.includes('contempor'))candidates=outside;const body='Esto está fuera de tu memoria leída. En lugar de presentarlo como algo que ya sabes, el súper cerebro abre una frontera de investigación. Tres direcciones potenciales parecen especialmente pertinentes para tu pregunta actual:';return {body,used:candidates.map(x=>x.title),outside:true,candidates}}
+
+function answerQuery(){const q=document.getElementById('askinput').value.trim();if(!q)return;const a=state.askMode==='memory'?memoryAnswer(q):outsideAnswer(q);let html=`<div class="label">${state.askMode==='memory'?'ANSWER FROM YOUR MEMORY':'EXPANSION BEYOND YOUR MEMORY'}</div><h3>${q.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}</h3><p>${a.body}</p>`;if(a.outside){html+=a.candidates.map(c=>`<div class="sourcecard"><b>${c.title}</b><small>${c.status} · ${c.why}</small></div>`).join('')}else{html+=`<div style="margin-top:10px"><div class="label">PROVENANCE</div>${a.used.map(u=>`<span class="evidencechip"><i></i>${u}</span>`).join('')||'<p style="font-size:8px;color:#777">No strong stored provenance match.</p>'}</div>`}document.getElementById('answer').innerHTML=html}
+
+function renderGraph(){const svg=document.getElementById('graphsvg');const nodes=[
+ {id:'sil',x:130,y:130,label:'Silvestrin',type:'hot'},{id:'paw',x:130,y:255,label:'Pawson'},{id:'mor',x:130,y:380,label:'Morris'},{id:'rei',x:130,y:505,label:'Reinhardt'},{id:'mar',x:130,y:630,label:'Martin'},
+ {id:'red',x:420,y:220,label:'Reduction',type:'hot'},{id:'int',x:620,y:245,label:'What intensifies?',type:'hot'},{id:'cal',x:845,y:205,label:'Calm?',type:'question'},{id:'why',x:1040,y:260,label:'For what?',type:'question'},
+ {id:'sens',x:655,y:430,label:'Sensitivity',type:'hot'},{id:'crit',x:420,y:480,label:'Criterion of relevance'},{id:'pres',x:850,y:450,label:'Presence is too abstract',type:'user'},{id:'me',x:1020,y:500,label:'Your feedback',type:'user'}
+ ];const edges=[['sil','red',1],['paw','red',0],['mor','red',0],['rei','red',0],['mar','red',0],['red','int',1],['int','cal',1],['cal','why',1],['mar','sens',1],['sens','int',1],['rei','crit',1],['crit','red',0],['pres','int',1],['me','pres',1],['me','cal',1],['sil','cal',1]];svg.innerHTML=`<g>${edges.map(e=>{const a=nodes.find(n=>n.id===e[0]),b=nodes.find(n=>n.id===e[1]);return `<line class="gedge ${e[2]?'hot':''}" x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}"/>`}).join('')}</g><g>${nodes.map(n=>`<g class="gnode ${n.type||''}" transform="translate(${n.x},${n.y})"><circle r="${n.type==='hot'?10:8}"></circle><text x="14" y="3">${n.label}</text></g>`).join('')}</g><text x="38" y="42" font-size="10" fill="#777" font-family="ui-monospace,monospace">NEURAL TOPOLOGY · CURRENTLY ALIVE CONNECTIONS, NOT THE WHOLE ARCHIVE</text>`}
+
+function setView(v){state.view=v;document.querySelectorAll('.view').forEach(x=>x.classList.remove('active'));document.getElementById('view-'+v).classList.add('active');document.querySelectorAll('#topnav button').forEach(b=>b.classList.toggle('active',b.dataset.view===v));if(v==='graph')renderGraph()}
+
+document.querySelectorAll('#topnav button').forEach(b=>b.onclick=()=>setView(b.dataset.view));
+document.querySelectorAll('.sidebtn').forEach(b=>b.onclick=()=>{document.querySelectorAll('.sidebtn').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.filter=b.dataset.filter;setView('mind');renderThoughts()});
+document.querySelectorAll('.asktabs button').forEach(b=>b.onclick=()=>{document.querySelectorAll('.asktabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');state.askMode=b.dataset.mode;document.getElementById('askinput').placeholder=state.askMode==='memory'?'e.g. ¿Qué me interesó de Silvestrin?':'e.g. ¿Qué debería leer para poner a prueba la relación entre reducción y calma?'});
+document.getElementById('askbtn').onclick=answerQuery;document.getElementById('askinput').addEventListener('keydown',e=>{if(e.key==='Enter')answerQuery()});
+document.getElementById('drawerClose').onclick=()=>document.getElementById('drawer').classList.remove('open');
+document.getElementById('saveNote').onclick=()=>{savedNotes[state.selected]=document.getElementById('notearea').value;localStorage.setItem('theorylab_v04_notes',JSON.stringify(savedNotes));document.getElementById('saved').classList.add('show')};
+
+renderThoughts();renderReturn();renderReadings();renderMemory();renderQuick();selectThought('means');
+</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script><script src="../shared/supabase-client.js"></script><script src="v05.js"></script><script src="v06.js"></script><script src="graph-data.js"></script><script src="../shared/conversation-scope.js"></script><script src="v09.js?v=scope1"></script><script src="v10.js?v=scope1"></script></body>
+</html>
