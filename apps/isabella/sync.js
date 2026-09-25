@@ -56,7 +56,7 @@ function openLogin(){
     }
     $('#isabellaCodeStep').classList.remove('hidden');
     $('#isabellaEmail').disabled=true;
-    msg.textContent='Revisa tu correo e introduce aquí el código de 6 dígitos.';
+    msg.textContent='Revisa tu correo e introduce aquí el código de acceso.';
     setTimeout(()=>$('#isabellaCode')?.focus(),50);
   };
   $('#isabellaVerifyCode').onclick=async()=>{
@@ -98,7 +98,7 @@ async function pushState(state,maps){
   const tasks=(state.tasks||[]).map(t=>{
     if(t.done&&!t.completedAt)t.completedAt=new Date().toISOString();
     if(!t.done)t.completedAt=null;
-    return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date,completed_at:t.completedAt||null,category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}};
+    return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}};
   });
   if(tasks.length){const {error}=await sb.from('isabella_tasks').upsert(tasks,{onConflict:'user_id,client_key'});if(error)throw error}
   const events=(state.events||[]).map(e=>{
@@ -133,7 +133,7 @@ async function pullState(local,maps){
   ]);
   if(te)throw te;if(ee)throw ee;if(me)throw me;
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
-  const remoteTasks=(tasks||[]).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date,done:!!t.completed_at,completedAt:t.completed_at||null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}}));
+  const remoteTasks=(tasks||[]).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}}));
   const remoteEvents=(events||[]).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
@@ -145,6 +145,26 @@ async function pullConversation(){
   const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
   if(me)throw me;
   return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at}));
+}
+async function recordActivity(detail){
+  try{
+    const row={
+      user_id:user.id,
+      entity_type:detail.entityType,
+      entity_key:detail.entityKey,
+      action:detail.action,
+      source:detail.source||'manual',
+      before_state:detail.before||null,
+      after_state:detail.after||null
+    };
+    if(detail.action==='delete'){
+      const table=detail.entityType==='task'?'isabella_tasks':'isabella_events';
+      await sb.from(table).delete().eq('user_id',user.id).eq('client_key',detail.entityKey);
+    }
+    await sb.from('isabella_activity_log').insert(row);
+  }catch(e){
+    setStatus('Cambio local guardado · historial pendiente');
+  }
 }
 async function syncNow(opts={}){
   if(!user||syncing)return;
