@@ -344,3 +344,78 @@ body[data-section="readings"] .topbar .eyebrow:after{content:" · READINGS";lett
 
 .readings-screen.sofia-chat-active .readings-topline{display:none!important}
 .readings-screen.sofia-chat-active .readings-frame{flex:1;min-height:0}
+
+
+/* Build 18 — true bubble interactions, compact Feed, full-screen Sofía */
+.message{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+  touch-action:pan-y;
+}
+.message.assistant{
+  width:max-content;
+  max-width:88%;
+  background:#f8f8f9!important;
+  padding:10px 14px!important;
+  border-radius:18px!important;
+}
+.message.system{
+  width:auto;
+  max-width:100%;
+  background:transparent!important;
+  padding:0!important;
+}
+.reaction-row-more.is-hidden{display:none!important}
+.reaction-row-more{
+  display:grid!important;
+  grid-template-columns:repeat(5,42px);
+  justify-content:center;
+}
+.reaction-popover.expanded{border-radius:20px}
+.surface-head{align-items:center;margin-bottom:5px}
+.surface-head h1{margin:0!important}
+.surface-source{
+  display:inline-block;
+  border:0;
+  background:transparent;
+  padding:11px 0 0;
+  color:#555;
+  font-size:12px;
+  font-weight:650;
+  text-decoration:none;
+}
+.surface-source:after{content:"  ↗";color:#aaa}
+.news-card .surface-icon{font-size:18px}
+.news-card .surface-card-agent{color:#777}
+
+body.sofia-chat-open{overflow:hidden}
+body.sofia-chat-open .topbar,
+body.sofia-chat-open .main-nav{display:none!important}
+body.sofia-chat-open .swipe-area{
+  position:fixed!important;
+  inset:0!important;
+  z-index:70!important;
+  background:#fff!important;
+}
+body.sofia-chat-open #readingsScreen{
+  position:fixed!important;
+  inset:0!important;
+  z-index:71!important;
+  display:flex!important;
+  background:#fff!important;
+}
+body.sofia-chat-open #readingsScreen .readings-topline{display:none!important}
+body.sofia-chat-open #readingsScreen .readings-frame{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+  min-height:100dvh!important;
+  background:#fff!important;
+}
+
+@media(max-width:520px){
+  .message.assistant{max-width:90%}
+  .reaction-row-more{grid-template-columns:repeat(5,40px)}
+}
