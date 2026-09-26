@@ -129,3 +129,23 @@ html,body,#app,.center,#view-mind,#view-readings{background:#fff!important}
 .v10-auth-button{
   font-weight:500;
 }
+
+
+/* Embedded Readings mode inside the unified MINDS shell */
+html.embedded,html.embedded body{background:#fff}
+html.embedded body{overflow:hidden}
+html.embedded #app{height:100dvh;min-height:0;grid-template-rows:0 minmax(0,1fr);background:#fff}
+html.embedded header{display:none!important}
+html.embedded .center{background:#fff}
+html.embedded .view{padding:14px 16px 28px}
+html.embedded .drawer{inset:0}
+html.embedded .v09-sheet{top:0}
+html.embedded .v10-auth-dialog{max-width:100vw}
+@media(max-width:840px){
+  html.embedded body{overflow:hidden}
+  html.embedded #app{height:100dvh;min-height:0}
+  html.embedded .center{height:100dvh;overflow:auto;-webkit-overflow-scrolling:touch}
+  html.embedded .right{display:none}
+  html.embedded .view{min-height:auto}
+  html.embedded .v09-readings-head{padding-top:6px}
+}
