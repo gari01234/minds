@@ -37,6 +37,20 @@ function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function 
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
 function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} setOrbPalette();bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
+async function maybeDailyBrief(){
+  try{
+    const now=new Date(),d=today();
+    if(now.getHours()<8)return;
+    const key='isabella-daily-brief-date';
+    if(localStorage.getItem(key)===d)return;
+    if(!window.ISABELLA_AI?.brief)return;
+    const result=await window.ISABELLA_AI.brief(state);
+    if(result?.reply){
+      localStorage.setItem(key,d);
+      say('assistant',result.reply);
+    }
+  }catch{}
+}
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
 function renderMessages(){const box=$('#messages'),sc=$('.assistant-scroll');const nearBottom=!sc||sc.scrollHeight-sc.scrollTop-sc.clientHeight<140;box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const s=$('.assistant-scroll');if(s&&(nearBottom||!s.dataset.initialScroll)){s.scrollTop=s.scrollHeight;s.dataset.initialScroll='1'}},20)}
