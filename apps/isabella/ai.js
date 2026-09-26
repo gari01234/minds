@@ -44,6 +44,17 @@ async function brief(state){
 async function nudge(state){
   return ask("Evalúa si existe exactamente un seguimiento personal u operativo que valga la pena traerme ahora: algo pendiente, una respuesta esperada, una tarea que estoy dejando atrás, una cita cercana o algo significativo que te conté y que razonablemente merezca seguimiento. Si no hay nada suficientemente útil, responde exactamente NO_NUDGE. Si sí lo hay, escribe solo un mensaje breve y natural, sin crear ni modificar nada.",state,{background:true});
 }
+async function listSkills(){
+  if(!sb)return [];
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)return [];
+  const {data,error}=await sb.from('isabella_skills')
+    .select('slug,name,description,preferred_tools,version')
+    .eq('enabled',true)
+    .order('name',{ascending:true});
+  if(error)return [];
+  return data||[];
+}
 async function transcribe(blob){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
@@ -66,5 +77,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,transcribe};
+window.ISABELLA_AI={ask,brief,nudge,transcribe,listSkills};
 })();
