@@ -265,7 +265,7 @@ function bindCalendarItems(){
     let sx=0,sy=0,moved=false;
     el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
     el.addEventListener('touchmove',e=>{const t=e.touches[0];if(Math.abs(t.clientX-sx)>12||Math.abs(t.clientY-sy)>12)moved=true;e.stopPropagation()},{passive:true});
-    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
+    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
     el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle'))return;editItem(el.dataset.kind,el.dataset.id)});
   });
   initTaskDrag();
@@ -349,32 +349,52 @@ function deleteItem(kind,id){
   };
 }
 function initTaskDrag(){
-  $$('.drag-handle').forEach(handle=>{
-    handle.onpointerdown=e=>{
-      e.preventDefault();e.stopPropagation();
-      const row=handle.closest('.task-item');if(!row)return;
-      const date=row.dataset.date,beforeOrder=$$('.task-item[data-date="'+date+'"]').map(x=>x.dataset.id);
-      row.classList.add('dragging');handle.setPointerCapture?.(e.pointerId);
-      const move=ev=>{
-        ev.preventDefault();
-        const siblings=$$('.task-item[data-date="'+date+'"]').filter(x=>x!==row);
-        let before=null;
-        for(const el of siblings){const r=el.getBoundingClientRect();if(ev.clientY<r.top+r.height/2){before=el;break}}
-        if(before)row.parentNode.insertBefore(row,before);else{
-          const last=siblings[siblings.length-1];
-          if(last&&last.nextSibling)row.parentNode.insertBefore(row,last.nextSibling);else row.parentNode.appendChild(row);
-        }
-      };
-      const up=ev=>{
-        handle.releasePointerCapture?.(e.pointerId);row.classList.remove('dragging');
-        handle.removeEventListener('pointermove',move);handle.removeEventListener('pointerup',up);handle.removeEventListener('pointercancel',up);
-        const ids=$$('.task-item[data-date="'+date+'"]').map(x=>x.dataset.id);
-        ids.forEach((id,i)=>{const t=state.tasks.find(x=>x.id===id);if(t)t.sortOrder=(i+1)*10});
-        if(ids.join('|')!==beforeOrder.join('|'))mutation('task','reorder',{id:row.dataset.id,date,order:beforeOrder},{id:row.dataset.id,date,order:ids},'manual');
-        save();renderCalendar();
-      };
-      handle.addEventListener('pointermove',move);handle.addEventListener('pointerup',up);handle.addEventListener('pointercancel',up);
+  $$('.task-item[data-date]').forEach(row=>{
+    if(row.dataset.dragBound)return;
+    row.dataset.dragBound='1';
+    let timer=null,active=false,startY=0,lastY=0,beforeOrder=[];
+    const taskSiblings=()=>$$('.task-item[data-date="'+row.dataset.date+'"]').filter(x=>x.parentNode===row.parentNode);
+    const finish=()=>{
+      clearTimeout(timer);timer=null;
+      if(!active)return;
+      active=false;
+      row.classList.remove('dragging');
+      row.dataset.justDragged='1';
+      setTimeout(()=>{row.dataset.justDragged='0'},180);
+      const ids=taskSiblings().map(x=>x.dataset.id);
+      ids.forEach((id,i)=>{const t=state.tasks.find(x=>x.id===id);if(t)t.sortOrder=(i+1)*10});
+      if(ids.join('|')!==beforeOrder.join('|'))mutation('task','reorder',{id:row.dataset.id,date:row.dataset.date,order:beforeOrder},{id:row.dataset.id,date:row.dataset.date,order:ids},'manual');
+      save();renderCalendar();
     };
+    row.addEventListener('touchstart',ev=>{
+      if(ev.touches.length!==1)return;
+      if(ev.target.closest('input,select,textarea'))return;
+      const t=ev.touches[0];startY=lastY=t.clientY;active=false;
+      beforeOrder=taskSiblings().map(x=>x.dataset.id);
+      timer=setTimeout(()=>{
+        active=true;row.classList.add('dragging');
+        try{navigator.vibrate?.(8)}catch{}
+      },260);
+    },{passive:true});
+    row.addEventListener('touchmove',ev=>{
+      if(ev.touches.length!==1)return;
+      const t=ev.touches[0];lastY=t.clientY;
+      if(!active){
+        if(Math.abs(lastY-startY)>10){clearTimeout(timer);timer=null}
+        return;
+      }
+      ev.preventDefault();ev.stopPropagation();
+      const siblings=taskSiblings().filter(x=>x!==row);
+      let before=null;
+      for(const el of siblings){const r=el.getBoundingClientRect();if(lastY<r.top+r.height/2){before=el;break}}
+      if(before)row.parentNode.insertBefore(row,before);
+      else{
+        const last=siblings[siblings.length-1];
+        if(last&&last.nextSibling)row.parentNode.insertBefore(row,last.nextSibling);else row.parentNode.appendChild(row);
+      }
+    },{passive:false});
+    row.addEventListener('touchend',finish,{passive:true});
+    row.addEventListener('touchcancel',finish,{passive:true});
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
