@@ -208,14 +208,17 @@ test('Build 22 adds an explicit personal follow graph',()=>{
   assert.ok(ai.includes('constelación personal'));
 });
 
-test('Build 22 allows short-tap reactions and native long-press text selection',()=>{
+test('Build 24 uses a long-press message context with reactions and text actions',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes('duration>280'));
-  assert.ok(app.includes('openReactionPicker(el.dataset.messageId)'));
-  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(app.includes("setTimeout(()=>{timer=null;if(!moved)openReactionPicker"));
+  assert.ok(app.includes('Seleccionar texto'));
+  assert.ok(app.includes('Copiar'));
+  assert.ok(app.includes('selectMessageText'));
+  assert.ok(app.includes('copyMessageText'));
+  assert.ok(css.includes('.reaction-backdrop'));
+  assert.ok(css.includes('.message-action-menu'));
   assert.ok(css.includes('overflow-wrap:anywhere!important'));
-  assert.ok(app.includes('class="message-link"'));
 });
 
 
@@ -223,4 +226,35 @@ test('browser entry scripts are syntactically valid JavaScript',()=>{
   for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
   }
+});
+
+
+test('Build 24 refresh requests a genuinely new Feed edition',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes("feed?.(state,{force,currentItems:previous})"));
+  assert.ok(ai.includes('currentItems=[]'));
+  assert.ok(ai.includes('ACTUALIZACIÓN MANUAL DEL FEED'));
+  assert.ok(ai.includes('Evita repetir estos titulares o ángulos'));
+});
+
+test('Build 24 news detail can render immediate context and optional verified media',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(shell.includes('id="feedDetailMedia"'));
+  assert.ok(shell.includes('id="feedDetailArticle"'));
+  assert.ok(app.includes('image_url'));
+  assert.ok(app.includes('feed-detail-copy'));
+  assert.ok(ai.includes('"detail":"..."'));
+  assert.ok(ai.includes('"image_url":""'));
+  assert.ok(ai.includes('100–180 palabras'));
+});
+
+test('Build 24 gives Isabella a warmer conversational voice without changing surface prompts',()=>{
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes('VOZ DE ISABELLA'));
+  assert.ok(ai.includes('humor suave'));
+  assert.ok(ai.includes('no sacrifiques rigor por cercanía'));
+  assert.ok(ai.includes('options.surface'));
 });

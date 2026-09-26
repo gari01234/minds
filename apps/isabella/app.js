@@ -265,7 +265,7 @@ async function renderFeed(force=false){
   const box=$('#feedList');if(!box||feedBusy)return;feedBusy=true;
   const previous=[...feedItems];if(!previous.length)box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
   try{
-    const [a,b]=await Promise.all([window.ISABELLA_AI?.feed?.(state,{force})||[],window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]]);
+    const [a,b]=await Promise.all([window.ISABELLA_AI?.feed?.(state,{force,currentItems:previous})||[],window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]]);
     const fresh=dedupeFeedItems([...(a||[]),...(b||[])]);
     if(fresh.length>=3)renderFeedItems(fresh);
     else if(previous.length)renderFeedItems(dedupeFeedItems([...fresh,...previous]));
@@ -312,10 +312,14 @@ function openFeedStory(key){
   const item=feedItems.find(x=>feedStoryKey(x)===key);if(!item)return;
   activeFeedStory=item;recordFeedSignal('opened',item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
   const kind=String(item.kind||item.metadata?.kind||'news').toLowerCase(),sourceUrl=String(item.source_url||item.metadata?.source_url||'').trim(),sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
+  const detail=String(item.detail||item.metadata?.detail||'').trim(),imageUrl=String(item.image_url||item.metadata?.image_url||'').trim(),imageAlt=String(item.image_alt||item.metadata?.image_alt||item.title||'').trim();
   $('#feedDetailMeta').innerHTML=`<span>${kind==='news'?'NOTICIA':'FEED'}</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
+  const media=$('#feedDetailMedia');media.innerHTML=/^https?:\/\//i.test(imageUrl)?`<figure><img src="${esc(imageUrl)}" alt="${esc(imageAlt)}"><figcaption>${esc(sourceTitle)}</figcaption></figure>`:'';
+  media.querySelector('img')?.addEventListener('error',()=>{media.innerHTML=''});
+  $('#feedDetailArticle').innerHTML=detail?`<div class="feed-detail-copy">${formatMessageText(detail)}</div>`:'';
   const entities=feedEntities(item);$('#feedDetailFollow').innerHTML=entities.length?entities.map(feedFollowChip).join(''):'';
   $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedThread(item);bindFeedFollowChips();
-  const thread=feedThreadFor(item);if(kind==='news'&&!(thread.messages||[]).length)expandFeedStory(item);
+  const thread=feedThreadFor(item);if(kind==='news'&&!detail&&!(thread.messages||[]).length)expandFeedStory(item);
 }
 function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
 async function submitFeedStoryQuestion(text){
@@ -382,45 +386,66 @@ function renderMessages(forceBottom=false){
 }
 function closeReactionPicker(){
   document.querySelector('.reaction-popover')?.remove();
+  document.querySelector('.reaction-backdrop')?.remove();
+  document.querySelector('.message-action-menu')?.remove();
   $$('.message.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
 }
 function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
   m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
 }
-function positionReactionPopover(pop,el){
-  const r=el.getBoundingClientRect(),w=Math.min(pop.offsetWidth||330,innerWidth-20);
-  const left=Math.max(10,Math.min(innerWidth-w-10,el.classList.contains('user')?r.right-w:r.left));
-  let top=r.top-(pop.offsetHeight||58)-10;
-  if(top<8)top=Math.min(innerHeight-(pop.offsetHeight||58)-8,r.bottom+10);
+function selectMessageText(id){
+  const el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"] .message-text`);if(!el)return;
+  closeReactionPicker();
+  setTimeout(()=>{
+    const range=document.createRange();range.selectNodeContents(el);
+    const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
+  },40);
+}
+async function copyMessageText(id){
+  const m=state.messages.find(x=>x.id===id);if(!m)return;
+  try{await navigator.clipboard.writeText(String(m.text||''))}
+  catch{
+    const ta=document.createElement('textarea');ta.value=String(m.text||'');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch{}ta.remove();
+  }
+  closeReactionPicker();
+}
+function positionReactionPopover(pop,menu,el){
+  const r=el.getBoundingClientRect(),vw=innerWidth,vh=innerHeight;
+  const w=Math.min(pop.offsetWidth||350,vw-24),left=Math.max(12,Math.min(vw-w-12,r.left+(r.width-w)/2));
+  let top=r.top-(pop.offsetHeight||66)-14;if(top<12)top=Math.min(vh-(pop.offsetHeight||66)-12,r.bottom+12);
   pop.style.left=left+'px';pop.style.top=top+'px';
+  const mw=Math.min(menu.offsetWidth||290,vw-32),mleft=Math.max(16,Math.min(vw-mw-16,el.classList.contains('user')?r.right-mw:r.left));
+  let mtop=r.bottom+14;if(mtop+(menu.offsetHeight||110)>vh-16)mtop=Math.max(16,r.top-(menu.offsetHeight||110)-14);
+  menu.style.left=mleft+'px';menu.style.top=mtop+'px';
 }
 function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
-  closeReactionPicker();try{navigator.vibrate?.(8)}catch{}
-  el.classList.add('reaction-target');
-  const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🙈','🤝','💪','🎉','⭐','🌟','🚀','📌','🧠','☀️','🌧️','⚽','🏗️','📚'];
-  const pop=document.createElement('div');pop.className='reaction-popover';
-  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-inline-reaction="" class="reaction-remove" aria-label="Quitar reacción">×</button></div>`;
-  document.body.appendChild(pop);requestAnimationFrame(()=>positionReactionPopover(pop,el));
+  closeReactionPicker();try{navigator.vibrate?.(10)}catch{}el.classList.add('reaction-target');
+  const quick=['❤️','👍','👎','😂','‼️','❓'],more=['😮','😢','👏','🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🤝','💪','🎉','⭐','🚀','📌','🧠','🏗️','📚'];
+  const backdrop=document.createElement('div');backdrop.className='reaction-backdrop';
+  const pop=document.createElement('div');pop.className='reaction-popover imessage-reactions';
+  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}</div>`;
+  const menu=document.createElement('div');menu.className='message-action-menu';
+  menu.innerHTML=`<button data-message-action="copy">Copiar</button><button data-message-action="select">Seleccionar texto</button>${m.reaction?'<button data-message-action="remove">Quitar reacción</button>':''}`;
+  document.body.append(backdrop,pop,menu);requestAnimationFrame(()=>positionReactionPopover(pop,menu,el));
+  backdrop.onclick=closeReactionPicker;
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
-  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{
-    e.stopPropagation();
-    const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');
-    row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);
-    requestAnimationFrame(()=>positionReactionPopover(pop,el));
-  });
-  setTimeout(()=>document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true}),0);
-  function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
+  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);requestAnimationFrame(()=>positionReactionPopover(pop,menu,el))});
+  menu.querySelector('[data-message-action="copy"]')?.addEventListener('click',()=>copyMessageText(id));
+  menu.querySelector('[data-message-action="select"]')?.addEventListener('click',()=>selectMessageText(id));
+  menu.querySelector('[data-message-action="remove"]')?.addEventListener('click',()=>applyReaction(id,null));
 }
 function bindMessageReactions(){
   $$('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
-    let sx=0,sy=0,moved=false,started=0;
-    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;started=performance.now()},{passive:true});
-    el.addEventListener('touchmove',e=>{if(e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)moved=true},{passive:true});
-    el.addEventListener('touchend',()=>{const duration=performance.now()-started;if(moved||duration>280)return;const selection=getSelection();if(selection&&!selection.isCollapsed)return;openReactionPicker(el.dataset.messageId)},{passive:true});
-    el.addEventListener('touchcancel',()=>{moved=true},{passive:true});
+    let timer=null,sx=0,sy=0,moved=false;
+    const cancel=()=>{if(timer){clearTimeout(timer);timer=null}};
+    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;cancel();timer=setTimeout(()=>{timer=null;if(!moved)openReactionPicker(el.dataset.messageId)},430)},{passive:true});
+    el.addEventListener('touchmove',e=>{if(e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>10||Math.abs(t.clientY-sy)>10){moved=true;cancel()}},{passive:true});
+    el.addEventListener('touchend',cancel,{passive:true});
+    el.addEventListener('touchcancel',cancel,{passive:true});
+    el.addEventListener('contextmenu',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.addEventListener('dblclick',e=>{if(getSelection()?.toString())return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });

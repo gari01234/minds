@@ -40,11 +40,17 @@ async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message,context:compact(state),background:!!options.background}});
+  const personalVoice=options.surface?String(message):`VOZ DE ISABELLA:
+Responde como una asistente personal que conoce el contexto de Gari y mantiene continuidad entre conversaciones. Conserva la profundidad y precisión factual, pero evita sonar como informe por defecto. En conversación casual, responde primero a la persona y luego al contenido: puedes usar una observación breve, una complicidad ligera o humor suave cuando surja de forma natural. Habla en primera persona cuando corresponda, usa lenguaje cotidiano y cálido, y deja que la respuesta tenga ritmo conversacional. No adules, no finjas sentimientos o experiencias, no fuerces bromas, no uses el nombre de Gari repetidamente y no sacrifiques rigor por cercanía. Si el tema exige precisión, seguridad o una explicación extensa, mantén toda la información necesaria pero con una voz humana y directa.
+
+MENSAJE DE GARI:
+${message}`;
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:personalVoice,context:compact(state),background:!!options.background}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};
 }
+
 async function brief(state){
   return ask("Prepara mi resumen de hoy. Sé breve y práctico: dime mis eventos y tareas pendientes de hoy y, solo si aporta valor, señala el siguiente compromiso o una prioridad clara. No propongas cambios ni crees tareas en este resumen.",state,{background:true});
 }
@@ -87,6 +93,9 @@ async function saveSurface(surface,agent,items){
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
       entities:Array.isArray(x.entities)?x.entities.slice(0,4):[],
+      detail:String(x.detail||'').trim()||null,
+      image_url:/^https?:\/\//i.test(String(x.image_url||'').trim())?String(x.image_url).trim():null,
+      image_alt:String(x.image_alt||'').trim()||null,
       weather_location:String(x.weather_location||'').trim()||null,
       source_title:String(x.source_title||'').trim()||null,
       source_url:/^https?:\/\//i.test(String(x.source_url||'').trim())?String(x.source_url).trim():null
@@ -107,20 +116,23 @@ async function loadSurface(surface,agent=null){
   const rows=data||[],generation=rows.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id;
   return generation?rows.filter(x=>x?.metadata?.generation_id===generation):rows;
 }
-async function feed(state,{force=false}={}){
+async function feed(state,{force=false,currentItems=[]}={}){
   const cached=await loadSurface('feed','isabella');
   if(!force&&cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=5))return cached;
   const weakSignals=(state.feedSignals||[]).slice(-30).map(x=>({kind:x.kind,title:x.title,entities:x.entities||[],at:x.at}));
-  const prompt=`Construye mi Feed personal de MINDS. No es un resumen genérico ni una lista de consejos. Selecciona únicamente información que tenga valor para mí ahora y ordénala en tres capas posibles: "Hoy", "Noticias" y "Para mí".
+  const avoidTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
+  const refreshDirective=force?`ACTUALIZACIÓN MANUAL DEL FEED: genera una edición realmente nueva. Evita repetir estos titulares o ángulos salvo que exista un desarrollo material nuevo: ${JSON.stringify(avoidTitles)}. Busca otras historias relevantes dentro de mis intereses y mi constelación. Momento de actualización: ${new Date().toISOString()}.`:'';
+  const prompt=`Construye mi Feed personal de MINDS.
+${refreshDirective} No es un resumen genérico ni una lista de consejos. Selecciona únicamente información que tenga valor para mí ahora y ordénala en tres capas posibles: "Hoy", "Noticias" y "Para mí".
 
 Devuelve EXCLUSIVAMENTE JSON válido: un array de 7 a 12 objetos con esta forma exacta:
-{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"art"|"design"|"culture"|"ai"|"science"|"technology"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":"","entities":[{"name":"...","type":"architecture_studio|artist|architect|institution|publication|gallery|person|topic|other","focus":"..."}]}
+{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"art"|"design"|"culture"|"ai"|"science"|"technology"|"family"|"personal"|"project"|"other","title":"...","body":"...","detail":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":"","image_url":"","image_alt":"","entities":[{"name":"...","type":"architecture_studio|artist|architect|institution|publication|gallery|person|topic|other","focus":"..."}]}
 
 Para weather, title debe funcionar como vistazo inmediato y details debe contener hasta 7 objetos {"label":"Lun 28","value":"26° / 11° · nublado"} para desplegar la semana. Para los demás tipos details debe ser [].
 
 HOY puede incluir clima, próximos compromisos, tareas urgentes, seguimientos que vencen o cambios temporales importantes. Si preferences.feed_topics contiene "Clima" y puedes establecer una localización fiable, incluye exactamente una tarjeta weather como vistazo básico del día aunque el tiempo sea normal. Si preferences.weather_location está definido, úsalo como lugar habitual. Si está vacío, usa clima solo cuando una localización fiable aparezca en memoria, contexto o conversación reciente. No inventes una ciudad. Para weather, consulta información actual.
 
-NOTICIAS: si preferences.feed_topics contiene "Noticias", incluye normalmente entre 4 y 6 noticias actuales que realmente merezcan atención. Usa web_search y prioriza fuentes fiables, información reciente y diversidad geográfica/temática. Resume hechos, no opinión ni persuasión. No hagas rankings políticos ni presentes una interpretación partidista como hecho. Cada tarjeta de noticias debe usar section:"news", incluir source_title y source_url verificables, y explicar en una o dos frases qué ocurrió y por qué importa. No inventes URLs ni fuentes.
+NOTICIAS: si preferences.feed_topics contiene "Noticias", incluye normalmente entre 4 y 6 noticias actuales que realmente merezcan atención. Usa web_search y prioriza fuentes fiables, información reciente y diversidad geográfica/temática. Resume hechos, no opinión ni persuasión. No hagas rankings políticos ni presentes una interpretación partidista como hecho. Cada tarjeta de noticias debe usar section:"news", incluir source_title y source_url verificables, y explicar en body en una o dos frases qué ocurrió y por qué importa. Además escribe detail con aproximadamente 100–180 palabras de contexto adicional: antecedentes, actores, qué cambia y qué conviene observar. Para noticias de arquitectura, arte, diseño o cultura, detail puede incluir proyecto/exposición/obra, lugar, autores y contexto crítico cuando esté sustentado. image_url es opcional: úsalo SOLO si la búsqueda aporta una URL https directa y verificable de una imagen representativa procedente de la fuente, la institución o el autor oficial; si no puedes verificarla, devuelve "". image_alt debe describir la imagen sin especular. No inventes URLs ni fuentes.
 
 TRATA EL FEED COMO UNA PORTADA PERSONAL CURADA, NO COMO UN FIREHOSE. preferences.feed_custom_topics son intereses libres elegidos explícitamente. preferences.feed_follow_graph es la fuente de verdad para la constelación personal: cada nodo dice qué entidad sigue el usuario, de qué tipo es y, cuando exista, qué clase de señales le interesan. Busca novedades pertinentes a ese focus: por ejemplo proyectos y concursos para un estudio; exposiciones y catálogos para un artista; programas para una institución; publicaciones para una revista. preferences.feed_following existe solo por compatibilidad. Cuando haya novedades reales, busca señales recientes como nuevos proyectos, exposiciones, publicaciones, entrevistas, concursos, conferencias, premios, adquisiciones o cambios relevantes. Si Arquitectura, Arte, Diseño o Cultura están entre los temas —o aparecen entidades relacionadas en feed_follow_graph— procura que una parte significativa de Noticias provenga de esos campos cuando existan novedades suficientes. No inventes actividad para rellenar huecos. Para cada noticia incluye entities con hasta 4 entidades realmente centrales; focus debe describir brevemente qué aspecto de esa entidad está relacionado con la noticia.
 
@@ -129,7 +141,7 @@ PARA MÍ puede incluir temas que yo haya pedido seguir, arquitectura, arte, dise
 Las siguientes señales de uso son evidencia débil, no preferencias confirmadas: ${JSON.stringify(weakSignals)}. Pueden ayudarte a ordenar, pero NO añadas ni elimines nodos de la constelación ni asumas que un clic equivale a un interés permanente.
 
 No intentes cubrir todas las categorías. No inventes datos, preferencias, familiares, proyectos, fuentes ni seguimientos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase natural para continuar el tema, pero las noticias se desarrollarán dentro del Feed y no en el chat personal de Isabella.`;
-  const result=await ask(prompt,state,{background:true});
+  const result=await ask(prompt,state,{background:true,surface:true});
   const items=parseSurface(result?.reply).map(x=>({
     ...x,
     section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})()
@@ -154,12 +166,12 @@ ${transcript?'Conversación de esta tarjeta:\n'+transcript:''}
 ${task}
 
 Investiga con web_search cuando haga falta información actual. Distingue hechos confirmados de interpretación. Incluye fuentes verificables. No conviertas esta conversación en una tarea, memoria personal o mensaje del chat de Isabella.`;
-  return ask(prompt,state,{background:true});
+  return ask(prompt,state,{background:true,surface:true});
 }
 async function ideas(state,{force=false}={}){
   if(!force){const cached=await loadSurface('idea','isabella');if(cached.length)return cached}
   const prompt='Genera máximo 3 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. No son tareas obligatorias: son propuestas útiles que él quizá no haya pensado pedir. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Evita consejos genéricos y evita transacciones. Cada idea debe explicar por qué aparece ahora.';
-  const result=await ask(prompt,state,{background:true});
+  const result=await ask(prompt,state,{background:true,surface:true});
   const items=parseSurface(result?.reply);
   return saveSurface('idea','isabella',items);
 }
