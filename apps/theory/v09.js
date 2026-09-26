@@ -9,7 +9,8 @@
   const short=(s,n=74)=>String(s||'').trim().replace(/\s+/g,' ').slice(0,n)+(String(s||'').trim().replace(/\s+/g,' ').length>n?'…':'');
   const fmtDate=iso=>{try{return new Intl.DateTimeFormat('es',{day:'numeric',month:'short',year:'numeric'}).format(new Date(iso))}catch{return ''}};
 
-  document.title='MINDS - Readings · v0.10.1';
+  document.title='MINDS - Readings · Sofía';
+  if(new URLSearchParams(location.search).get('embedded')==='1')document.documentElement.classList.add('embedded');
   document.querySelector('.brand')?.replaceChildren(document.createTextNode('MINDS - Readings'));
   if(document.querySelector('.sub')) document.querySelector('.sub').textContent='';
 
@@ -199,6 +200,20 @@
     };
   }
   function askFromOrigin(origin,opts={}){const c=newConversation(origin,opts.mode||'memory',!!opts.reuseGeneral);openConversation(c);setTimeout(()=>sheetBody.querySelector('.v09-chat-form textarea')?.focus(),80);}
+  window.addEventListener('message',e=>{
+    if(e.origin!==location.origin)return;
+    const type=e.data?.type;
+    if(type!=='minds:sofia-open'&&type!=='minds:sofia-prompt')return;
+    const conv=newConversation({type:'global',id:'sofia',label:'Sofía'},'memory',true);
+    openConversation(conv);
+    setTimeout(()=>{
+      const ta=sheetBody.querySelector('.v09-chat-form textarea');
+      if(!ta)return;
+      if(type==='minds:sofia-prompt'&&e.data?.prompt)ta.value=String(e.data.prompt);
+      ta.focus();
+      try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch{}
+    },100);
+  });
 
   // ---------- history / search ----------
   let historyFilter='all';
