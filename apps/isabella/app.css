@@ -564,3 +564,50 @@ body.sofia-chat-open #readingsScreen .readings-frame{
 .message-action-menu button+button{border-top:1px solid #e7e7e9;border-radius:0}
 .message-action-menu button:active{background:#ececef}
 @media(max-width:520px){.feed-detail-media img{max-height:280px;border-radius:18px}.reaction-popover.imessage-reactions button{min-width:39px;height:39px;font-size:22px}}
+
+
+/* Build 25 — stable news expansion, Safari-safe selection mode, persistent Isabella ORB */
+body.isabella-orb-docked #orbButton{
+  position:fixed!important;
+  top:calc(72px + env(safe-area-inset-top,0px))!important;
+  left:50%!important;
+  z-index:17!important;
+  width:72px!important;height:72px!important;
+  margin:0!important;transform:translateX(-50%)!important;
+  display:grid!important;opacity:1!important;pointer-events:auto!important;
+}
+body.isabella-orb-docked #orbButton .orb-core{width:50px!important;height:50px!important;filter:blur(8px) saturate(.98)!important}
+body.isabella-orb-docked #orbButton .orb-haze{width:62px!important;height:62px!important;filter:blur(12px)!important;opacity:.6!important}
+body.isabella-orb-docked #orbButton .orb-haze-b{width:70px!important;height:70px!important;opacity:.3!important}
+body.isabella-orb-docked .assistant-scroll{padding-top:76px!important}
+
+.feed-detail-loading{font-size:14px;line-height:1.5;color:#999;padding:8px 0 18px}
+.feed-detail-sources{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0 22px}
+.feed-detail-sources a{font-size:11px;color:#666;text-decoration:none;border:1px solid #e9e9eb;border-radius:999px;padding:6px 9px;background:#fff}
+
+/* Safari: custom reaction menu by default, native selection only after explicit Select text. */
+.message:not(.selection-mode),.message:not(.selection-mode) .message-text{
+  -webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important;
+}
+body.message-selection-active *{
+  -webkit-user-select:none!important;user-select:none!important;
+}
+body.message-selection-active .message.selection-mode,
+body.message-selection-active .message.selection-mode .message-text,
+body.message-selection-active .message.selection-mode .message-text *{
+  -webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important;
+}
+.message.selection-mode{outline:1px solid #d8d8dc;outline-offset:4px}
+.selection-hint{
+  position:fixed;left:50%;bottom:calc(112px + env(safe-area-inset-bottom,0px));z-index:118;
+  transform:translate(-50%,10px);opacity:0;transition:.18s ease;
+  width:min(360px,calc(100% - 32px));display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:rgba(32,32,34,.94);color:#fff;border-radius:18px;padding:10px 12px 10px 14px;
+  font-size:12px;line-height:1.3;box-shadow:0 14px 40px rgba(0,0,0,.2)
+}
+.selection-hint.visible{opacity:1;transform:translate(-50%,0)}
+.selection-hint button{flex:none;width:28px;height:28px;border:0;border-radius:50%;background:rgba(255,255,255,.14);color:#fff;font-size:18px}
+@media(max-width:520px){
+  body.isabella-orb-docked #orbButton{top:calc(68px + env(safe-area-inset-top,0px))!important;width:66px!important;height:66px!important}
+  body.isabella-orb-docked .assistant-scroll{padding-top:70px!important}
+}

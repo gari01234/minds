@@ -89,7 +89,7 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?5:1,
+      surface_version:surface==='feed'?6:1,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
       entities:Array.isArray(x.entities)?x.entities.slice(0,4):[],
@@ -118,7 +118,7 @@ async function loadSurface(surface,agent=null){
 }
 async function feed(state,{force=false,currentItems=[]}={}){
   const cached=await loadSurface('feed','isabella');
-  if(!force&&cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=5))return cached;
+  if(!force&&cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=6))return cached;
   const weakSignals=(state.feedSignals||[]).slice(-30).map(x=>({kind:x.kind,title:x.title,entities:x.entities||[],at:x.at}));
   const avoidTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
   const refreshDirective=force?`ACTUALIZACIÓN MANUAL DEL FEED: genera una edición realmente nueva. Evita repetir estos titulares o ángulos salvo que exista un desarrollo material nuevo: ${JSON.stringify(avoidTitles)}. Busca otras historias relevantes dentro de mis intereses y mi constelación. Momento de actualización: ${new Date().toISOString()}.`:'';
@@ -141,11 +141,13 @@ PARA MÍ puede incluir temas que yo haya pedido seguir, arquitectura, arte, dise
 Las siguientes señales de uso son evidencia débil, no preferencias confirmadas: ${JSON.stringify(weakSignals)}. Pueden ayudarte a ordenar, pero NO añadas ni elimines nodos de la constelación ni asumas que un clic equivale a un interés permanente.
 
 No intentes cubrir todas las categorías. No inventes datos, preferencias, familiares, proyectos, fuentes ni seguimientos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase natural para continuar el tema, pero las noticias se desarrollarán dentro del Feed y no en el chat personal de Isabella.`;
-  const result=await ask(prompt,state,{background:true,surface:true});
-  const items=parseSurface(result?.reply).map(x=>({
-    ...x,
-    section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})()
-  }));
+  let result=await ask(prompt,state,{background:true,surface:true});
+  let items=parseSurface(result?.reply).map(x=>({...x,section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})()}));
+  if(force&&items.length<3){
+    const retryPrompt=prompt+'\n\nSEGUNDO INTENTO OBLIGATORIO: devuelve entre 7 y 12 tarjetas válidas. Prioriza nuevas noticias verificadas y señales de mi constelación; no repitas la edición anterior.';
+    result=await ask(retryPrompt,state,{background:true,surface:true});
+    items=parseSurface(result?.reply).map(x=>({...x,section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})()}));
+  }
   if(items.length<3)return cached.length?cached:items;
   return saveSurface('feed','isabella',items);
 }

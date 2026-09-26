@@ -186,6 +186,7 @@ function show(name){
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
   $$('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
   document.body.dataset.section=name;
+  document.body.classList.toggle('isabella-orb-docked',name==='assistant'&&$('.assistant-scroll')?.classList.contains('orb-compact'));
   save();
   if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
   if(name==='calendar')renderCalendar();
@@ -279,14 +280,39 @@ async function renderFeed(force=false){
 }
 function feedThreadFor(item){
   const key=feedStoryKey(item);if(!key)return null;
-  if(!state.feedThreads[key])state.feedThreads[key]={key,title:String(item.title||''),source_url:String(item.source_url||item.metadata?.source_url||''),created:new Date().toISOString(),updated:new Date().toISOString(),messages:[]};
-  return state.feedThreads[key];
+  if(!state.feedThreads[key])state.feedThreads[key]={key,title:String(item.title||''),source_url:String(item.source_url||item.metadata?.source_url||''),created:new Date().toISOString(),updated:new Date().toISOString(),overview:'',messages:[]};
+  const thread=state.feedThreads[key];
+  if(typeof thread.overview!=='string')thread.overview='';
+  if(!thread.overview&&Array.isArray(thread.messages)&&thread.messages.length&&thread.messages[0]?.role==='assistant'){
+    const firstUser=thread.messages.findIndex(m=>m.role==='user');
+    if(firstUser!==0){thread.overview=String(thread.messages[0].text||'');thread.overviewSources=thread.messages[0].sources||[];thread.messages=thread.messages.slice(1);save()}
+  }
+  return thread;
+}
+function renderFeedOverview(item){
+  const thread=feedThreadFor(item),article=$('#feedDetailArticle');if(!article||!thread)return;
+  const itemDetail=String(item.detail||item.metadata?.detail||'').trim();
+  const detail=itemDetail||String(thread.overview||'').trim();
+  if(thread.overviewLoading&&!detail){article.innerHTML='<div class="feed-detail-loading">Buscando contexto y antecedentes…</div>';return}
+  article.innerHTML=detail?`<div class="feed-detail-copy">${formatMessageText(detail)}</div>${Array.isArray(thread.overviewSources)&&thread.overviewSources.length?`<div class="feed-detail-sources">${thread.overviewSources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}`:'';
 }
 function renderFeedThread(item){
   const thread=feedThreadFor(item),log=$('#feedThreadLog');if(!thread||!log)return;
   log.innerHTML=(thread.messages||[]).map(m=>`<div class="feed-thread-message ${m.role}"><div class="feed-thread-text">${formatMessageText(m.text||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
-  requestAnimationFrame(()=>{const sc=$('#feedDetailScroll');if(sc)sc.scrollTop=sc.scrollHeight});
+  requestAnimationFrame(()=>{const sc=$('#feedDetailScroll');if(sc&&thread.messages?.length)sc.scrollTop=sc.scrollHeight});
 }
+async function hydrateFeedStory(item){
+  const thread=feedThreadFor(item);if(!thread||thread.overviewLoading)return;
+  const existing=String(item.detail||item.metadata?.detail||thread.overview||'').trim();if(existing){renderFeedOverview(item);return}
+  thread.overviewLoading=true;renderFeedOverview(item);
+  try{
+    const result=await window.ISABELLA_AI?.feedStory?.(item,state,'',[]);
+    if(result?.reply){thread.overview=String(result.reply);thread.overviewSources=result.sources||[];thread.updated=new Date().toISOString();recordFeedSignal('expanded',item);save()}
+  }catch(e){
+    thread.overview='No pude ampliar esta noticia ahora mismo. Puedes abrir la fuente original o intentarlo de nuevo más tarde.';
+  }finally{thread.overviewLoading=false;renderFeedOverview(item)}
+}
+
 function feedFollowChip(entity){
   const name=String(entity?.name||'').trim();if(!name)return '';
   const followed=(state.feedPreferences?.followGraph||[]).some(x=>String(x.name||'').toLowerCase()===name.toLowerCase());
@@ -302,12 +328,6 @@ function bindFeedFollowChips(){
     b.textContent='Siguiendo · '+name;b.classList.add('following');
   });
 }
-async function expandFeedStory(item){
-  const thread=feedThreadFor(item);if(!thread||thread.loading)return;thread.loading=true;
-  try{const result=await window.ISABELLA_AI?.feedStory?.(item,state,'',thread.messages||[]);if(result?.reply)thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()});thread.updated=new Date().toISOString();recordFeedSignal('expanded',item);save()}
-  catch(e){thread.messages.push({id:uid(),role:'assistant',text:'No pude ampliar esta noticia ahora mismo. La fuente original sigue disponible arriba.',at:new Date().toISOString()});save()}
-  finally{thread.loading=false;renderFeedThread(item)}
-}
 function openFeedStory(key){
   const item=feedItems.find(x=>feedStoryKey(x)===key);if(!item)return;
   activeFeedStory=item;recordFeedSignal('opened',item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
@@ -316,10 +336,9 @@ function openFeedStory(key){
   $('#feedDetailMeta').innerHTML=`<span>${kind==='news'?'NOTICIA':'FEED'}</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
   const media=$('#feedDetailMedia');media.innerHTML=/^https?:\/\//i.test(imageUrl)?`<figure><img src="${esc(imageUrl)}" alt="${esc(imageAlt)}"><figcaption>${esc(sourceTitle)}</figcaption></figure>`:'';
   media.querySelector('img')?.addEventListener('error',()=>{media.innerHTML=''});
-  $('#feedDetailArticle').innerHTML=detail?`<div class="feed-detail-copy">${formatMessageText(detail)}</div>`:'';
   const entities=feedEntities(item);$('#feedDetailFollow').innerHTML=entities.length?entities.map(feedFollowChip).join(''):'';
-  $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedThread(item);bindFeedFollowChips();
-  const thread=feedThreadFor(item);if(kind==='news'&&!detail&&!(thread.messages||[]).length)expandFeedStory(item);
+  $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedOverview(item);renderFeedThread(item);bindFeedFollowChips();
+  if(kind==='news'&&!detail)hydrateFeedStory(item);
 }
 function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
 async function submitFeedStoryQuestion(text){
@@ -365,7 +384,9 @@ function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new D
 function syncOrbCompact(force=null){
   const scroller=$('.assistant-scroll');if(!scroller)return;
   const hasUserConversation=state.messages.some(m=>m.role==='user'&&String(m.text||'').trim());
-  scroller.classList.toggle('orb-compact',force===null?hasUserConversation:!!force);
+  const compact=force===null?hasUserConversation:!!force;
+  scroller.classList.toggle('orb-compact',compact);
+  document.body.classList.toggle('isabella-orb-docked',compact&&state.screen==='assistant');
 }
 function scrollAssistantToLatest(force=false,wasNearBottom=null){
   const scroller=$('.assistant-scroll');if(!scroller)return;
@@ -394,13 +415,18 @@ function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
   m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
 }
+function clearMessageSelectionMode(){
+  document.body.classList.remove('message-selection-active');
+  $('.message.selection-mode').forEach(el=>{el.classList.remove('selection-mode');delete el.dataset.selectionMode});
+  document.querySelector('.selection-hint')?.remove();
+}
 function selectMessageText(id){
-  const el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"] .message-text`);if(!el)return;
-  closeReactionPicker();
-  setTimeout(()=>{
-    const range=document.createRange();range.selectNodeContents(el);
-    const selection=window.getSelection();selection.removeAllRanges();selection.addRange(range);
-  },40);
+  const el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!el)return;
+  closeReactionPicker();clearMessageSelectionMode();
+  el.classList.add('selection-mode');el.dataset.selectionMode='1';document.body.classList.add('message-selection-active');
+  const hint=document.createElement('div');hint.className='selection-hint';hint.innerHTML='<span>Mantén pulsado sobre una palabra para seleccionar</span><button aria-label="Cerrar">×</button>';
+  document.body.appendChild(hint);hint.querySelector('button').onclick=clearMessageSelectionMode;
+  setTimeout(()=>hint.classList.add('visible'),20);
 }
 async function copyMessageText(id){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
@@ -441,11 +467,11 @@ function bindMessageReactions(){
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
     let timer=null,sx=0,sy=0,moved=false;
     const cancel=()=>{if(timer){clearTimeout(timer);timer=null}};
-    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;cancel();timer=setTimeout(()=>{timer=null;if(!moved)openReactionPicker(el.dataset.messageId)},430)},{passive:true});
+    el.addEventListener('touchstart',e=>{if(el.dataset.selectionMode==='1'||e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;cancel();timer=setTimeout(()=>{timer=null;if(!moved)openReactionPicker(el.dataset.messageId)},430)},{passive:true});
     el.addEventListener('touchmove',e=>{if(e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>10||Math.abs(t.clientY-sy)>10){moved=true;cancel()}},{passive:true});
     el.addEventListener('touchend',cancel,{passive:true});
     el.addEventListener('touchcancel',cancel,{passive:true});
-    el.addEventListener('contextmenu',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
+    el.addEventListener('contextmenu',e=>{if(el.dataset.selectionMode==='1')return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.addEventListener('dblclick',e=>{if(getSelection()?.toString())return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });

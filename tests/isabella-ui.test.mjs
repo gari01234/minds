@@ -258,3 +258,33 @@ test('Build 24 gives Isabella a warmer conversational voice without changing sur
   assert.ok(ai.includes('no sacrifiques rigor por cercanía'));
   assert.ok(ai.includes('options.surface'));
 });
+
+
+test('Build 25 invalidates old Feed editions and hydrates news detail into the article',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes("surface_version:surface==='feed'?6:1"));
+  assert.ok(ai.includes('SEGUNDO INTENTO OBLIGATORIO'));
+  assert.ok(app.includes('function hydrateFeedStory'));
+  assert.ok(app.includes('function renderFeedOverview'));
+  assert.ok(app.includes('Buscando contexto y antecedentes'));
+});
+
+test('Build 25 uses an explicit Safari text-selection mode instead of programmatic Range selection',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('function clearMessageSelectionMode'));
+  assert.ok(app.includes('Mantén pulsado sobre una palabra para seleccionar'));
+  assert.ok(!app.includes('range.selectNodeContents'));
+  assert.ok(app.includes("el.dataset.selectionMode==='1'"));
+  assert.ok(css.includes('body.message-selection-active .message.selection-mode'));
+  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+});
+
+test('Build 25 keeps Isabella ORB docked while the conversation opens at the latest message',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('isabella-orb-docked'));
+  assert.ok(css.includes('body.isabella-orb-docked #orbButton'));
+  assert.ok(css.includes('position:fixed!important'));
+});

@@ -34,3 +34,8 @@ No se guarda ninguna API key en GitHub ni en el navegador.
 Sin sesión, Isabella sigue funcionando localmente. Con una sesión de MINDS/Supabase, sincroniza la agenda, tareas, memoria y conversación entre dispositivos.
 
 Las categorías iniciales son Casa, Trabajo, MINDS, Personal y Architectures. Trabajo incluye Bernried y Schwarz como proyectos iniciales.
+
+
+## Automatizaciones / rutinas
+
+La dirección de producto acordada es que las rutinas recurrentes de Isabella (por ejemplo, un resumen diario a las 08:00) se ejecuten server-side y puedan enviar notificaciones aunque la web esté cerrada. El chequeo local de `maybeDailyBrief()` es solo una compatibilidad provisional, no la arquitectura final. La implementación final requiere scheduler + persistencia de rutinas + Web Push en el proyecto Supabase de producción.
