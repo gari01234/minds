@@ -1,0 +1,31 @@
+name: Validate MINDS iOS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/isabella-ios/**"
+      - ".github/workflows/ios-native.yml"
+  pull_request:
+    paths:
+      - "apps/isabella-ios/**"
+      - ".github/workflows/ios-native.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode project
+        working-directory: apps/isabella-ios
+        run: xcodegen generate
+
+      - name: Build for iOS Simulator
+        working-directory: apps/isabella-ios
+        run: |
+          xcodebuild             -project MINDS.xcodeproj             -scheme MINDS             -configuration Debug             -sdk iphonesimulator             -destination 'generic/platform=iOS Simulator'             CODE_SIGNING_ALLOWED=NO             build
