@@ -27,7 +27,7 @@
   if(!globalActions&&header){
     globalActions=document.createElement('div');
     globalActions.className='v09-global-actions';
-    globalActions.innerHTML='<button class="v09-ask-button" data-v09-ask><span>Preguntar a MINDS</span></button><button class="v09-history-button" data-v09-history aria-label="Historial y búsqueda" title="Historial y búsqueda">⌕</button>';
+    globalActions.innerHTML='<button class="v09-ask-button" data-v09-ask><span>Sofía</span></button><button class="v09-history-button" data-v09-history aria-label="Historial y búsqueda" title="Historial y búsqueda">⌕</button>';
     header.appendChild(globalActions);
   }
 
@@ -174,12 +174,29 @@
   function openConversation(cOrId){
     const c=typeof cOrId==='string'?conversations.find(x=>x.id===cOrId):cOrId;if(!c)return;openConvId=c.id;
     const context=c.origin?.quote?`<div class="v09-conv-context"><b>Fragmento de origen</b><div>“${esc(c.origin.quote)}”</div>${c.origin?.type==='reading'&&c.origin?.readingId?'<button data-open-origin-reading>Abrir lectura</button>':''}</div>`:'';
-    const msgs=c.messages.length?c.messages.map(m=>`<div class="v09-msg ${m.role}"><span>${m.role==='user'?'TÚ':m.provisional?'MINDS · PROVISIONAL':'MINDS'}</span>${esc(m.text)}</div>`).join(''):'<div class="v09-msg assistant"><span>MINDS</span>Esta conversación queda guardada con su contexto. Puedes retomarla cuando quieras sin volver a formular la pregunta desde cero.</div>';
-    openSheet('CONVERSACIÓN',conversationHeader(c),`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea placeholder="Pregunta, objeta o continúa este hilo..."></textarea><button>Enviar</button></form><div class="v09-conv-foot">La conversación se conserva como memoria autobiográfica. No se convierte automáticamente en una tesis de MINDS.</div>`);
+    const msgs=c.messages.length?c.messages.map(m=>`<div class="v09-msg ${m.role}"><span>${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span>${esc(m.text)}</div>`).join(''):'<div class="v09-msg assistant"><span>SOFÍA</span>Esta conversación queda guardada con su contexto de lectura. Puedes retomarla cuando quieras.</div>';
+    openSheet('CONVERSACIÓN',conversationHeader(c),`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea placeholder="Pregunta, objeta o continúa este hilo..."></textarea><button>Enviar</button></form><div class="v09-conv-foot">Hablas con Sofía. La conversación se conserva como memoria intelectual y no se convierte automáticamente en una tesis aceptada.</div>`);
     sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     const form=sheetBody.querySelector('.v09-chat-form');
-    form.onsubmit=e=>{e.preventDefault();const ta=form.querySelector('textarea'),q=ta.value.trim();if(!q)return;c.messages.push({role:'user',text:q,at:now(),quote:c.origin?.quote||''});if(c.title==='Nueva conversación')c.title=short(q,72);c.messages.push({role:'assistant',text:localReply(c,q),at:now(),provisional:true});c.updated=now();saveConversations();openConversation(c.id);setTimeout(()=>{const log=sheetBody.querySelector('.v09-chat-log');if(log)log.scrollTop=log.scrollHeight;},0);};
+    form.onsubmit=async e=>{
+      e.preventDefault();
+      const ta=form.querySelector('textarea'),q=ta.value.trim();if(!q)return;
+      c.messages.push({role:'user',text:q,at:now(),quote:c.origin?.quote||''});
+      if(c.title==='Nueva conversación')c.title=short(q,72);
+      const pending={role:'assistant',text:'Pensando…',at:now(),pending:true};
+      c.messages.push(pending);c.updated=now();saveConversations();openConversation(c.id);
+      try{
+        const result=await askSofia(c,q);
+        pending.text=String(result?.reply||'').trim()||'No encontré una respuesta suficiente.';
+        pending.pending=false;pending.provisional=false;pending.sources=result?.sources||[];
+      }catch(err){
+        pending.text=localReply(c,q);
+        pending.pending=false;pending.provisional=true;
+      }
+      c.updated=now();saveConversations();openConversation(c.id);
+      setTimeout(()=>{const log=sheetBody.querySelector('.v09-chat-log');if(log)log.scrollTop=log.scrollHeight;},0);
+    };
   }
   function askFromOrigin(origin,opts={}){const c=newConversation(origin,opts.mode||'memory',!!opts.reuseGeneral);openConversation(c);setTimeout(()=>sheetBody.querySelector('.v09-chat-form textarea')?.focus(),80);}
 
