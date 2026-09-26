@@ -52,7 +52,7 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
   {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
 ],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedPreferences:{
   instructions:'',
-  topics:['Clima','Arquitectura','Inteligencia artificial','Proyectos','Familia'],
+  topics:['Clima','Noticias','Arquitectura','Inteligencia artificial','Proyectos','Familia'],
   weatherLocation:''
 }};
 function normalizeMessages(items){
@@ -78,6 +78,13 @@ function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
   const x={...base,...raw,feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
   x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
+  if(x.feedPreferences.topics.includes('Noticias que sigo')&&!x.feedPreferences.topics.includes('Noticias')){
+    x.feedPreferences.topics=x.feedPreferences.topics.map(t=>t==='Noticias que sigo'?'Noticias':t);
+  }
+  if(localStorage.getItem('isabella-feed-news-v1')!=='1'){
+    if(!x.feedPreferences.topics.includes('Noticias'))x.feedPreferences.topics.push('Noticias');
+    localStorage.setItem('isabella-feed-news-v1','1');
+  }
   x.messages=normalizeMessages(x.messages);return x
 }catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
@@ -161,6 +168,7 @@ function show(name){
   if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
     $('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-close'},location.origin);
     $('#readingsScreen')?.classList.remove('sofia-chat-active');
+    document.body.classList.remove('sofia-chat-open');
   }
   state.screen=name;
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
@@ -180,14 +188,19 @@ function surfaceCard(item,surface){
   const kind=String(item.kind||item.metadata?.kind||'').toLowerCase();
   const details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
   const weather=kind==='weather';
+  const news=kind==='news';
+  const rawSource=String(item.source_url||item.metadata?.source_url||'').trim();
+  const sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
+  const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
-  return `<article class="surface-card ${weather?'weather-card':''}" data-agent="${esc(agent)}">
-    <div class="surface-card-top"><span class="surface-icon">${esc(icon|| (agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
+  return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
+    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
     <h2>${esc(item.title||'')}</h2>
     <p>${esc(item.body||'')}</p>
     ${detailHtml}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
+      ${news&&sourceUrl?`<a class="surface-source" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
       ${prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
     </div>
   </article>`;
@@ -217,15 +230,17 @@ async function renderFeed(force=false){
       window.ISABELLA_AI?.feed?.(state,{force})||[],
       window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]
     ]);
-    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
+    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,8);
     if(!items.length){
       box.innerHTML='<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
     }else{
-      const sectionOf=x=>String(x?.section||x?.metadata?.section||'for_me').toLowerCase()==='today'?'today':'for_me';
+      const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'};
       const todayItems=items.filter(x=>sectionOf(x)==='today');
+      const newsItems=items.filter(x=>sectionOf(x)==='news');
       const forMeItems=items.filter(x=>sectionOf(x)==='for_me');
       box.innerHTML=
         (todayItems.length?'<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+        (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
         (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
     }
     bindSurfaceActions();
@@ -259,7 +274,9 @@ function openSofia(prompt=''){
 }
 window.addEventListener('message',e=>{
   if(e.origin!==location.origin||e.data?.type!=='minds:sofia-state')return;
-  $('#readingsScreen')?.classList.toggle('sofia-chat-active',!!e.data.open);
+  const open=!!e.data.open;
+  $('#readingsScreen')?.classList.toggle('sofia-chat-active',open);
+  document.body.classList.toggle('sofia-chat-open',open);
 });
 function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
 function syncOrbCompact(force=null){
@@ -297,16 +314,21 @@ function positionReactionPopover(pop,el){
   if(top<8)top=Math.min(innerHeight-(pop.offsetHeight||58)-8,r.bottom+10);
   pop.style.left=left+'px';pop.style.top=top+'px';
 }
-function openReactionPicker(id,expand=false){
+function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
   closeReactionPicker();try{navigator.vibrate?.(8)}catch{}
   el.classList.add('reaction-target');
   const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
-  const pop=document.createElement('div');pop.className='reaction-popover'+(expand?' expanded':'');
-  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div>${expand?`<div class="reaction-row reaction-row-more">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-inline-reaction="" class="reaction-remove">×</button></div>`:''}`;
+  const pop=document.createElement('div');pop.className='reaction-popover';
+  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-inline-reaction="" class="reaction-remove" aria-label="Quitar reacción">×</button></div>`;
   document.body.appendChild(pop);requestAnimationFrame(()=>positionReactionPopover(pop,el));
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
-  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(id,true)});
+  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{
+    e.stopPropagation();
+    const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');
+    row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);
+    requestAnimationFrame(()=>positionReactionPopover(pop,el));
+  });
   setTimeout(()=>document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true}),0);
   function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
 }
@@ -327,7 +349,8 @@ function bindMessageReactions(){
     },{passive:true});
     el.addEventListener('touchend',cancel,{passive:true});
     el.addEventListener('touchcancel',cancel,{passive:true});
-    el.addEventListener('dblclick',()=>openReactionPicker(el.dataset.messageId));
+    el.addEventListener('dblclick',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
+    el.addEventListener('contextmenu',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });
 }
@@ -498,7 +521,7 @@ function bind(){
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
  $('#refreshIdeas').onclick=()=>renderIdeas(true);
  $('#openSofiaButton').onclick=()=>openSofia();
- $('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
+ $('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -862,7 +885,7 @@ function deleteMemory(id){
 }
 function feedPreferencesPanel(){
   const prefs=state.feedPreferences||base.feedPreferences;
-  const standard=['Clima','Arquitectura','Inteligencia artificial','Proyectos','Familia','Readings','Noticias que sigo'];
+  const standard=['Clima','Noticias','Arquitectura','Inteligencia artificial','Proyectos','Familia','Readings'];
   const selected=new Set(prefs.topics||[]);
   modal('Feed y clima',`<div class="form feed-preferences">
     <label>Qué quieres que Isabella tenga especialmente en cuenta
