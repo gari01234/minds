@@ -207,3 +207,44 @@ body[data-section="readings"] .topbar .eyebrow:after{content:" · READINGS";lett
   .assistant-scroll{padding-bottom:128px}
   .composer-wrap{padding-bottom:10px}
 }
+
+
+/* Conversation state: once chat is in use, the ORB becomes a compact presence */
+.assistant-scroll.orb-compact .orb-button{
+  width:96px!important;
+  height:96px!important;
+  margin:-4px auto 2px!important;
+  position:sticky;
+  top:0;
+  z-index:6;
+}
+.assistant-scroll.orb-compact .orb-core{
+  width:68px!important;
+  height:68px!important;
+  filter:blur(9px) saturate(.98)!important;
+}
+.assistant-scroll.orb-compact .orb-haze{
+  width:82px!important;
+  height:82px!important;
+  filter:blur(14px)!important;
+  opacity:.58;
+}
+.assistant-scroll.orb-compact .orb-haze-b{
+  width:94px!important;
+  height:94px!important;
+  opacity:.28;
+}
+.assistant-scroll.orb-compact .today-card{margin-top:2px}
+
+/* Feed is intentionally split into immediate context and slower personal relevance */
+.feed-section{margin-top:8px}
+.feed-section+.feed-section{margin-top:24px}
+.feed-section-title{
+  font-family:"Iowan Old Style",Georgia,serif;
+  font-size:27px;
+  font-weight:500;
+  letter-spacing:-.025em;
+  margin:0;
+  padding:8px 0 9px;
+  border-bottom:1px solid #ececef;
+}
