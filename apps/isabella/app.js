@@ -39,7 +39,7 @@ function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?
 function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} setOrbPalette();bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
-function renderMessages(){const box=$('#messages');box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const sc=$('.assistant-scroll');if(sc&&!sc.dataset.initialScroll){sc.scrollTop=sc.scrollHeight;sc.dataset.initialScroll='1'}},20)}
+function renderMessages(){const box=$('#messages'),sc=$('.assistant-scroll');const nearBottom=!sc||sc.scrollHeight-sc.scrollTop-sc.clientHeight<140;box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const s=$('.assistant-scroll');if(s&&(nearBottom||!s.dataset.initialScroll)){s.scrollTop=s.scrollHeight;s.dataset.initialScroll='1'}},20)}
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
@@ -57,6 +57,17 @@ function proposalLabel(p){
   return bits.filter(Boolean).join(' · ');
 }
 function confirmProposal(p){modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">Isabella no hará el cambio hasta que lo confirmes.</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px"><button id="proposalCancel" class="primary" style="background:#f2f2f3;color:#111">Cancelar</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);$('#proposalCancel').onclick=()=>{closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};$('#proposalConfirm').onclick=()=>applyProposal(p)}
+function confirmProposals(list){
+  const items=(list||[]).filter(Boolean);
+  if(!items.length)return;
+  if(items.length===1){confirmProposal(items[0]);return}
+  modal('Confirmar cambios',`<div class="proposal-list">${items.map(p=>`<div class="proposal-row">${esc(proposalLabel(p))}</div>`).join('')}</div><div class="small" style="margin-top:10px">Se aplicarán los ${items.length} cambios solamente después de tu confirmación.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
+  $('#proposalBatchCancel').onclick=()=>{closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
+  $('#proposalBatchConfirm').onclick=()=>{
+    closeModal();
+    for(const p of items)applyProposal(p);
+  };
+}
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
   if(p.target_id){const exact=list.find(x=>x.id===p.target_id);if(exact)return exact}
@@ -115,7 +126,7 @@ function applyProposal(p){
   }
   save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó agregado.');
 }
-async function handle(text){say('user',text);orb('thinking','Pensando…');try{if(window.ISABELLA_AI?.ask){const result=await window.ISABELLA_AI.ask(text,state);if(result?.reply)say('assistant',result.reply);if(result?.question&&result.question!==result.reply)say('assistant',result.question);if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);if(result?.proposal)confirmProposal(result.proposal)}else say('assistant',localFallback(text))}catch(e){say('assistant',e?.message||localFallback(text))}finally{orb()}}
+async function handle(text){say('user',text);orb('thinking','Pensando…');try{if(window.ISABELLA_AI?.ask){const result=await window.ISABELLA_AI.ask(text,state);if(result?.reply)say('assistant',result.reply);if(result?.question&&result.question!==result.reply)say('assistant',result.question);if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);if(Array.isArray(result?.proposals)&&result.proposals.length)confirmProposals(result.proposals);else if(result?.proposal)confirmProposal(result.proposal)}else say('assistant',localFallback(text))}catch(e){say('assistant',e?.message||localFallback(text))}finally{orb()}}
 function bind(){
  const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();$('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
