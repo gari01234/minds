@@ -158,6 +158,10 @@ async function afterSync(){
 function show(name){
   const allowed=['assistant','feed','ideas','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
+  if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
+    $('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-close'},location.origin);
+    $('#readingsScreen')?.classList.remove('sofia-chat-active');
+  }
   state.screen=name;
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
   $$('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
