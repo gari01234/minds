@@ -41,7 +41,16 @@ function setOrbPalette(){
   const h=new Date().getHours();
   o.dataset.period=h<7?'dawn':h<12?'morning':h<18?'day':h<22?'evening':'night';
 }
-const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[{id:'casa',name:'Casa'},{id:'trabajo',name:'Trabajo'},{id:'minds',name:'MINDS'},{id:'personal',name:'Personal'},{id:'architectures',name:'Architectures'}],projects:[{id:'bernried',categoryId:'trabajo',name:'Bernried'},{id:'schwarz',categoryId:'trabajo',name:'Schwarz'}],tasks:[],events:[],memory:[],deletedTaskIds:[],deletedEventIds:[]};
+const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[
+  {id:'casa',name:'Casa',color:'#5A9EC1'},
+  {id:'trabajo',name:'Trabajo',color:'#6D7278'},
+  {id:'minds',name:'MINDS',color:'#8A72C7'},
+  {id:'personal',name:'Personal',color:'#D08A6A'},
+  {id:'architectures',name:'Architectures',color:'#9A9466'}
+],projects:[
+  {id:'bernried',categoryId:'trabajo',name:'Bernried',color:'#2F6FB0'},
+  {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
+],tasks:[],events:[],memory:[],deletedTaskIds:[],deletedEventIds:[]};
 function normalizeMessages(items){
   const out=[];
   let greetingSeen=false;
