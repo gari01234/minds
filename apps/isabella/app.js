@@ -50,7 +50,11 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
 ],projects:[
   {id:'bernried',categoryId:'trabajo',name:'Bernried',color:'#2F6FB0'},
   {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
-],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[]};
+],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedPreferences:{
+  instructions:'',
+  topics:['Clima','Arquitectura','Inteligencia artificial','Proyectos','Familia'],
+  weatherLocation:''
+}};
 function normalizeMessages(items){
   const out=[];
   let greetingSeen=false;
@@ -70,7 +74,12 @@ function normalizeMessages(items){
   return out;
 }
 let state=load();
-function load(){try{const x={...base,...JSON.parse(localStorage.getItem(KEY)||'{}')};x.messages=normalizeMessages(x.messages);return x}catch{return JSON.parse(JSON.stringify(base))}}
+function load(){try{
+  const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
+  const x={...base,...raw,feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
+  x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
+  x.messages=normalizeMessages(x.messages);return x
+}catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
 function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIso(s).toLocaleDateString('es-ES',opt)}
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
@@ -164,15 +173,23 @@ function surfaceCard(item,surface){
   const agent=String(item.agent||'isabella');
   const prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim();
   const icon=String(item.icon||'').trim();
-  return `<article class="surface-card" data-agent="${esc(agent)}">
+  const kind=String(item.kind||item.metadata?.kind||'').toLowerCase();
+  const details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
+  const weather=kind==='weather';
+  const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
+  return `<article class="surface-card ${weather?'weather-card':''}" data-agent="${esc(agent)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon|| (agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
     <h2>${esc(item.title||'')}</h2>
     <p>${esc(item.body||'')}</p>
-    ${prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
+    ${detailHtml}
+    <div class="surface-card-actions">
+      ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
+      ${prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
+    </div>
   </article>`;
 }
 function bindSurfaceActions(){
-  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -181,6 +198,10 @@ function bindSurfaceActions(){
       show('assistant');
       setTimeout(()=>handle(prompt),80);
     }
+  });
+  $('.weather-toggle').forEach(b=>b.onclick=()=>{
+    const card=b.closest('.weather-card'),week=card?.querySelector('.weather-week');if(!week)return;
+    const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
 }
 let feedBusy=false,ideasBusy=false;
@@ -253,15 +274,44 @@ function renderMessages(forceBottom=false){
     }
   },20);
 }
+function closeReactionPicker(){
+  document.querySelector('.reaction-popover')?.remove();
+  $('.message.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
+}
+function applyReaction(id,reaction){
+  const m=state.messages.find(x=>x.id===id);if(!m)return;
+  m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
+}
+function positionReactionPopover(pop,el){
+  const r=el.getBoundingClientRect(),w=Math.min(pop.offsetWidth||330,innerWidth-20);
+  const left=Math.max(10,Math.min(innerWidth-w-10,el.classList.contains('user')?r.right-w:r.left));
+  let top=r.top-(pop.offsetHeight||58)-10;
+  if(top<8)top=Math.min(innerHeight-(pop.offsetHeight||58)-8,r.bottom+10);
+  pop.style.left=left+'px';pop.style.top=top+'px';
+}
+function openReactionPicker(id,expand=false){
+  const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
+  closeReactionPicker();try{navigator.vibrate?.(8)}catch{}
+  el.classList.add('reaction-target');
+  const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
+  const pop=document.createElement('div');pop.className='reaction-popover'+(expand?' expanded':'');
+  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div>${expand?`<div class="reaction-row reaction-row-more">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-inline-reaction="" class="reaction-remove">×</button></div>`:''}`;
+  document.body.appendChild(pop);requestAnimationFrame(()=>positionReactionPopover(pop,el));
+  pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
+  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(id,true)});
+  setTimeout(()=>document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true}),0);
+  function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
+}
 function bindMessageReactions(){
-  $$('#messages .message[data-message-id]').forEach(el=>{
+  $('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
-    let timer=null,sx=0,sy=0;
+    let timer=null,sx=0,sy=0,lastTap=0;
     const cancel=()=>{clearTimeout(timer);timer=null};
     el.addEventListener('touchstart',e=>{
       if(e.touches.length!==1)return;
-      const t=e.touches[0];sx=t.clientX;sy=t.clientY;
-      timer=setTimeout(()=>openReactionPicker(el.dataset.messageId),520);
+      const t=e.touches[0],now=Date.now();sx=t.clientX;sy=t.clientY;
+      if(now-lastTap<330){cancel();openReactionPicker(el.dataset.messageId);lastTap=0;return}
+      lastTap=now;timer=setTimeout(()=>openReactionPicker(el.dataset.messageId),470);
     },{passive:true});
     el.addEventListener('touchmove',e=>{
       if(!timer||e.touches.length!==1)return;
@@ -269,13 +319,9 @@ function bindMessageReactions(){
     },{passive:true});
     el.addEventListener('touchend',cancel,{passive:true});
     el.addEventListener('touchcancel',cancel,{passive:true});
+    el.addEventListener('dblclick',()=>openReactionPicker(el.dataset.messageId));
+    el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });
-}
-function openReactionPicker(id){
-  const m=state.messages.find(x=>x.id===id);if(!m)return;
-  try{navigator.vibrate?.(8)}catch{}
-  modal('Reaccionar',`<div class="emoji-picker">${['👍','❤️','😂','👏','🙌','💡','😊','❌'].map(x=>`<button data-reaction="${x}">${x}</button>`).join('')}<button data-reaction="" class="emoji-remove">Quitar</button></div>`);
-  $$('[data-reaction]').forEach(b=>b.onclick=()=>{m.reaction=b.dataset.reaction||null;save();closeModal();renderMessages()});
 }
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
@@ -441,6 +487,7 @@ function bind(){
  const i=$('#chatInput');i.addEventListener('focus',()=>syncOrbCompact(true));const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
  $$('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  $('#refreshFeed').onclick=()=>renderFeed(true);
+ $('#feedSettings').onclick=()=>feedPreferencesPanel();
  $('#refreshIdeas').onclick=()=>renderIdeas(true);
  $('#openSofiaButton').onclick=()=>openSofia();
  $('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
@@ -752,7 +799,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='skills')skillsPanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
 function tasksPanel(){
   const active=state.tasks.filter(t=>!t.archivedAt).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
   const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
@@ -804,6 +851,31 @@ function deleteMemory(id){
   const m=memoryById(id);if(!m)return;
   if(typeof m==='object'){m.status='deleted'}else{const idx=state.memory.indexOf(m);state.memory[idx]={id:uid(),kind:'context',content:String(m),status:'deleted',confidence:1,source:'manual'}}
   save();memoryPanel();
+}
+function feedPreferencesPanel(){
+  const prefs=state.feedPreferences||base.feedPreferences;
+  const standard=['Clima','Arquitectura','Inteligencia artificial','Proyectos','Familia','Readings','Noticias que sigo'];
+  const selected=new Set(prefs.topics||[]);
+  modal('Feed y clima',`<div class="form feed-preferences">
+    <label>Qué quieres que Isabella tenga especialmente en cuenta
+      <div class="topic-grid">${standard.map(t=>`<label class="topic-choice"><input type="checkbox" value="${esc(t)}" ${selected.has(t)?'checked':''}><span>${esc(t)}</span></label>`).join('')}</div>
+    </label>
+    <label>Instrucciones para tu Feed
+      <textarea id="feedInstructions" rows="4" placeholder="Ej. arquitectura e IA por la mañana; evita noticias repetidas.">${esc(prefs.instructions||'')}</textarea>
+    </label>
+    <label>Lugar habitual para el clima <span class="small">(opcional; si queda vacío Isabella usa solo contexto que ya conozca)</span>
+      <input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad">
+    </label>
+    <button id="saveFeedPreferences" class="primary">Guardar</button>
+  </div>`);
+  $('#saveFeedPreferences').onclick=()=>{
+    state.feedPreferences={
+      instructions:$('#feedInstructions').value.trim(),
+      weatherLocation:$('#weatherLocation').value.trim(),
+      topics:$('.topic-choice input:checked').map(x=>x.value)
+    };
+    save();closeModal();renderFeed(true);
+  };
 }
 function categoriesPanel(){
   const rows=state.categories.map(x=>`<div class="settings-row color-row"><input type="color" data-cat-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-cat-name="${x.id}" value="${esc(x.name)}"><button data-cat-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
