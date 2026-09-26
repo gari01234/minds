@@ -214,10 +214,11 @@ function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('activ
 function agendaRow(kind,item){
   const category=cat(item.categoryId),proj=item.projectId?' · '+project(item.projectId):'';
   const time=kind==='event'?item.start:'Todo el día';
-  return `<div class="agenda-item ${kind}-item" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0">
+  const color=itemColor(item);
+  return `<div class="agenda-item ${kind}-item ${kind==='task'?'task-item':''}" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0" style="--item-color:${color}">
     <span class="adot"></span>
     <div class="agenda-main"><strong>${esc(item.title)}</strong><div class="meta">${esc(category)}${esc(proj)}</div></div>
-    <div class="agenda-tail"><div class="atime">${esc(time)}</div>${kind==='task'?'<button class="drag-handle" aria-label="Reordenar">⋮⋮</button>':''}</div>
+    <div class="agenda-tail"><div class="atime">${esc(time)}</div>${kind==='task'?'<button class="drag-handle" aria-label="Mantén y arrastra para reordenar">⋮⋮</button>':''}</div>
   </div>`;
 }
 function month(){
@@ -227,8 +228,8 @@ function month(){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
       const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
-      const total=state.events.filter(x=>x.date===di).length+state.tasks.filter(x=>x.date===di&&activeTask(x)).length;
-      h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dot ${total?'':'off'}"></span></button>`;
+      const colors=dayColors(di);
+      h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span></button>`;
     }
   }
   h+='</div>';
@@ -247,15 +248,15 @@ function week(){
   const s=startWeek(fromIso(state.date));let h='<div class="week">';
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&activeTask(x)).sort(taskOrder);
-    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry" data-kind="event" data-id="${e.id}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry" data-kind="task" data-id="${t.id}">○ ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">○ ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function day(){
   const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&activeTask(x)).sort(taskOrder);
-  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry" data-kind="task" data-id="${t.id}">${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
+  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry task-item" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
   for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;
-  for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry" data-kind="event" data-id="${e.id}" style="top:${top}px;height:${height}px"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}</div></button>`}
+  for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="top:${top}px;height:${height}px;--item-color:${itemColor(e)}"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></button>`}
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function bindCalendarItems(){
