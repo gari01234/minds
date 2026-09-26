@@ -249,6 +249,14 @@ async function syncNow(opts={}){
       deletedTaskIds:[...new Set([...(local.deletedTaskIds||[]),...deletedTasks])],
       deletedEventIds:[...new Set([...(local.deletedEventIds||[]),...deletedEvents])]
     };
+    if(opts.initial){
+      const [{data:feedPref},{data:assistantPref}]=await Promise.all([
+        sb.from('isabella_preferences').select('value,status').eq('user_id',user.id).eq('preference_key','feed').maybeSingle(),
+        sb.from('isabella_preferences').select('value,status').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle()
+      ]);
+      if(feedPref?.status!=='rejected'&&feedPref?.value&&typeof feedPref.value==='object')local.feedPreferences={...(local.feedPreferences||{}),...feedPref.value};
+      if(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')local.assistantPreferences={...(local.assistantPreferences||{}),...assistantPref.value};
+    }
     hydrating=true;app.replaceState(local);hydrating=false;
     const maps=await ensureTaxonomy(local);
     await pushState(local,maps);
