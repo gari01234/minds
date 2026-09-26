@@ -222,8 +222,9 @@ function itemActions(kind,id){
   const item=itemBy(kind,id);if(!item)return;
   const archive=kind==='task'?'<button id="quickArchive" class="sheet-action">Archivar</button>':'';
   const complete=kind==='task'?'<button id="quickComplete" class="sheet-action">Marcar como hecha</button>':'';
-  modal(item.title,`<div class="sheet-actions">${complete}<button id="quickEdit" class="sheet-action">Editar</button>${archive}<button id="quickDelete" class="sheet-action danger">Eliminar</button></div>`);
+  modal(item.title,`<div class="sheet-actions">${complete}<button id="quickEdit" class="sheet-action">Editar / mover</button><button id="quickDuplicate" class="sheet-action">Duplicar</button>${archive}<button id="quickDelete" class="sheet-action danger">Eliminar</button></div>`);
   $('#quickEdit').onclick=()=>editItem(kind,id);
+  $('#quickDuplicate').onclick=()=>duplicateItem(kind,id);
   if(kind==='task'){
     $('#quickComplete').onclick=()=>completeTask(id);
     $('#quickArchive').onclick=()=>archiveTask(id);
@@ -259,6 +260,13 @@ function editItem(kind,id){
     mutation(kind,'update',before,item,'manual');save();renderCalendar();closeModal();
   };
   $('#editDelete').onclick=()=>deleteItem(kind,id);
+}
+function duplicateItem(kind,id){
+  const item=itemBy(kind,id);if(!item)return;
+  const copy=clone(item);copy.id=uid();copy.title=item.title;copy.metadata={...(copy.metadata||{}),source:'manual-duplicate'};
+  if(kind==='task'){copy.done=false;copy.completedAt=null;copy.archivedAt=null;copy.sortOrder=nextTaskOrder(copy.date);state.tasks.push(copy)}
+  else state.events.push(copy);
+  mutation(kind,'create',null,copy,'manual');save();renderCalendar();closeModal();
 }
 function completeTask(id){
   const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
