@@ -12,19 +12,24 @@
 <link rel="manifest" href="./manifest.webmanifest">
 <link rel="icon" href="./icon.svg" type="image/svg+xml">
 <title>Isabella · MINDS</title>
-<link rel="stylesheet" href="./app.css?v=9">
+<link rel="stylesheet" href="./app.css?v=10">
 </head>
 <body>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../shared/supabase-client.js"></script>
-<script src="./shell.js?v=8"></script>
-<script src="./app.js?v=9"></script>
-<script src="./sync.js?v=pwa3"></script>
-<script src="./ai.js?v=9"></script>
+<script src="./shell.js?v=9"></script>
+<script src="./app.js?v=10"></script>
+<script src="./sync.js?v=pwa4"></script>
+<script src="./ai.js?v=10"></script>
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (sessionStorage.getItem('isabella-sw-reloaded') === '1') return;
+      sessionStorage.setItem('isabella-sw-reloaded','1');
+      location.reload();
+    });
   });
 }
 </script>
