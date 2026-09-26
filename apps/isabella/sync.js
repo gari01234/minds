@@ -173,6 +173,15 @@ async function pullConversation(){
   if(me)throw me;
   return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at}));
 }
+async function recordProposalFeedback(detail){
+  try{
+    await sb.from('isabella_proposal_feedback').insert({
+      user_id:user.id,
+      outcome:detail.outcome,
+      proposal:detail.proposal||{}
+    });
+  }catch{}
+}
 async function recordActivity(detail){
   try{
     const row={
