@@ -227,9 +227,9 @@ function surfaceCard(item,surface){
 }
 
 function bindSurfaceActions(){
-  $('[data-news-key]').forEach(b=>b.onclick=()=>openFeedStory(b.dataset.newsKey||''));
-  $('[data-feed-source]').forEach(a=>a.onclick=()=>{const item=feedItems.find(x=>feedStoryKey(x)===(a.dataset.feedSource||''));if(item)recordFeedSignal('source_opened',item)});
-  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('[data-news-key]').forEach(b=>b.onclick=()=>openFeedStory(b.dataset.newsKey||''));
+  document.querySelectorAll('[data-feed-source]').forEach(a=>a.onclick=()=>{const item=feedItems.find(x=>feedStoryKey(x)===(a.dataset.feedSource||''));if(item)recordFeedSignal('source_opened',item)});
+  document.querySelectorAll('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
