@@ -173,7 +173,7 @@ async function pullConversation(){
   if(error||!data?.length)return[];
   const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,metadata,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
   if(me)throw me;
-  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null}));
+  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null,sources:Array.isArray(m.metadata?.sources)?m.metadata.sources:[]}));
 }
 async function recordProposalFeedback(detail){
   try{
