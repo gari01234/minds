@@ -419,3 +419,12 @@ body.sofia-chat-open #readingsScreen .readings-frame{
   .message.assistant{max-width:90%}
   .reaction-row-more{grid-template-columns:repeat(5,40px)}
 }
+
+.reaction-row-more{
+  grid-template-columns:repeat(6,40px)!important;
+  max-height:210px;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  padding:5px 2px 2px!important;
+}
