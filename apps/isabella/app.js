@@ -318,7 +318,7 @@ function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
   closeReactionPicker();try{navigator.vibrate?.(8)}catch{}
   el.classList.add('reaction-target');
-  const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
+  const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🙈','🤝','💪','🎉','⭐','🌟','🚀','📌','🧠','☀️','🌧️','⚽','🏗️','📚'];
   const pop=document.createElement('div');pop.className='reaction-popover';
   pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-inline-reaction="" class="reaction-remove" aria-label="Quitar reacción">×</button></div>`;
   document.body.appendChild(pop);requestAnimationFrame(()=>positionReactionPopover(pop,el));
