@@ -39,3 +39,44 @@ test('Feed keeps Hoy and Para mí as explicit information layers',()=>{
     assert.ok(ai.includes('"'+kind+'"'),`missing Feed kind: ${kind}`);
   }
 });
+
+
+test('message reactions stay attached to messages instead of opening a large modal',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('reaction-popover'));
+  assert.ok(app.includes("const quick=['❤️','👍','😂','😮','😢','👏']"));
+  assert.ok(!app.includes("modal('Reaccionar'"));
+  assert.ok(css.includes('.reaction-chip'));
+});
+
+test('Feed exposes preferences and expandable weather',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(shell.includes('id="feedSettings"'));
+  assert.ok(shell.includes('data-action="feedprefs"'));
+  assert.ok(app.includes('function feedPreferencesPanel'));
+  assert.ok(app.includes('weather-toggle'));
+  assert.ok(app.includes('weather-week'));
+  assert.ok(ai.includes('weather_location'));
+  assert.ok(ai.includes('"details":[]'));
+});
+
+test('Sofia chat is a first-class messaging surface inside Readings',()=>{
+  const js=read('apps/theory/v09.js');
+  const css=read('apps/theory/v10.css');
+  assert.ok(js.includes("openSheet('SOFÍA'"));
+  assert.ok(js.includes('Escríbele a Sofía...'));
+  assert.ok(js.includes('minds:sofia-state'));
+  assert.ok(js.includes('v09-reaction-popover'));
+  assert.ok(css.includes('html.embedded .v09-sheet[data-kind="chat"]'));
+  assert.ok(css.includes('html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form'));
+});
+
+test('embedded Readings keeps annotations contextual instead of over the reading',()=>{
+  const css=read('apps/theory/v10.css');
+  assert.ok(css.includes('html.embedded .reader-tools'));
+  assert.ok(css.includes('.reader-tools.mobile-open'));
+  assert.ok(css.includes('transform:translateY(calc(100% + 40px))'));
+});
