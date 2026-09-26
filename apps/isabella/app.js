@@ -132,17 +132,61 @@ function proposalLabel(p){
   if(p.recurrence)bits.push(p.recurrence);
   return bits.filter(Boolean).join(' · ');
 }
-function confirmProposal(p){modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">Isabella no hará el cambio hasta que lo confirmes.</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px"><button id="proposalCancel" class="primary" style="background:#f2f2f3;color:#111">Cancelar</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);$('#proposalCancel').onclick=()=>{proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};$('#proposalConfirm').onclick=()=>{proposalFeedback('accepted',p);applyProposal(p)}}
+function proposalEditor(p,onDone){
+  const target=(p.action==='update'||p.action==='delete')?findTarget(p):null;
+  const title=(p.title??target?.title??'');
+  const date=(p.date??target?.date??today());
+  const time=(p.time??(p.kind==='event'?target?.start:'')??'');
+  const duration=(p.duration_minutes??(p.kind==='event'?target?.duration:60)??60);
+  const reminder=(p.reminder_time??(p.kind==='task'?target?.reminderTime:'')??'');
+  const categoryName=(p.category??cat(target?.categoryId)??'Personal')||'Personal';
+  const projectName=(p.project??project(target?.projectId)??'')||'';
+  const cats=state.categories.map(x=>`<option value="${esc(x.name)}" ${x.name===categoryName?'selected':''}>${esc(x.name)}</option>`).join('');
+  const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${esc(x.name)}" ${x.name===projectName?'selected':''}>${esc(x.name)}</option>`).join('');
+  const specific=p.kind==='event'
+    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>`
+    :`<label>Recordatorio<input id="proposalReminder" type="time" value="${esc(reminder||'')}"></label>`;
+  modal('Revisar antes de confirmar',`<div class="form proposal-editor">
+    <label>Nombre<input id="proposalTitle" value="${esc(title)}"></label>
+    <label>Fecha<input id="proposalDate" type="date" value="${esc(date)}"></label>
+    ${specific}
+    <label>Categoría<select id="proposalCategory">${cats}</select></label>
+    <label>Proyecto<select id="proposalProject">${projects}</select></label>
+    <label>Notas<textarea id="proposalNotes" rows="2">${esc(p.notes??target?.notes??'')}</textarea></label>
+    <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos datos</button></div>
+  </div>`);
+  $('#proposalEditCancel').onclick=()=>onDone?.(null);
+  $('#proposalEditSave').onclick=()=>{
+    const q={...p,
+      title:$('#proposalTitle').value.trim()||title,
+      date:$('#proposalDate').value||date,
+      category:$('#proposalCategory').value||null,
+      project:$('#proposalProject').value||null,
+      notes:$('#proposalNotes').value||null
+    };
+    if(q.kind==='event'){
+      q.time=$('#proposalTime').value||time||null;
+      q.duration_minutes=Math.max(5,Number($('#proposalDuration').value||duration||60));
+    }else{
+      q.reminder_time=$('#proposalReminder').value||null;
+    }
+    onDone?.(q);
+  };
+}
+function confirmProposal(p){
+  modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.</div></div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
+  $('#proposalCancel').onclick=()=>{proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
+  $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(q);else confirmProposal(p)});
+  $('#proposalConfirm').onclick=()=>{proposalFeedback('accepted',p);applyProposal(p)};
+}
 function confirmProposals(list){
   const items=(list||[]).filter(Boolean);
   if(!items.length)return;
   if(items.length===1){confirmProposal(items[0]);return}
-  modal('Confirmar cambios',`<div class="proposal-list">${items.map(p=>`<div class="proposal-row">${esc(proposalLabel(p))}</div>`).join('')}</div><div class="small" style="margin-top:10px">Se aplicarán los ${items.length} cambios solamente después de tu confirmación.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
+  modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
+  $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=q;confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{for(const p of items)proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=()=>{
-    closeModal();
-    for(const p of items){proposalFeedback('accepted',p);applyProposal(p)}
-  };
+  $('#proposalBatchConfirm').onclick=()=>{closeModal();for(const p of items){proposalFeedback('accepted',p);applyProposal(p)}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
