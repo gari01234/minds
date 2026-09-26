@@ -146,3 +146,37 @@ test('Sofia routes automatically and mirrors Isabella message typography with an
   assert.ok(css.includes('.sofia-orb-core'));
   assert.ok(css.includes('font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Arial,sans-serif!important'));
 });
+
+
+test('Build 21 Feed supports free interests, followed entities and deeper news',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('feedCustomTopics'));
+  assert.ok(app.includes('feedFollowing'));
+  assert.ok(app.includes('data-news-more'));
+  assert.ok(app.includes('Leer más'));
+  assert.ok(ai.includes('feed_custom_topics'));
+  assert.ok(ai.includes('feed_following'));
+  assert.ok(ai.includes('entre 4 y 6 noticias actuales'));
+  assert.ok(ai.includes('PORTADA PERSONAL CURADA'));
+});
+
+test('Build 21 removes redundant surface headings and Readings explainer',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const theory=read('apps/theory/v09.js');
+  assert.ok(!shell.includes('<h1>Feed</h1>'));
+  assert.ok(!shell.includes('<h1>Ideas</h1>'));
+  assert.ok(!theory.includes('Leer, marcar, preguntar, volver.'));
+  assert.ok(!theory.includes('La memoria de lectura vive aquí'));
+});
+
+test('Build 21 Isabella opens at the latest message while preserving text selection',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('function scrollAssistantToLatest'));
+  assert.ok(app.includes("if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
+  assert.ok(!app.includes("timer=setTimeout(()=>openReactionPicker"));
+  assert.ok(!app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
+  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+});

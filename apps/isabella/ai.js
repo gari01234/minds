@@ -29,6 +29,8 @@ function compact(state){
     preferences:{
       feed_instructions:String(state.feedPreferences?.instructions||'').trim(),
       feed_topics:Array.isArray(state.feedPreferences?.topics)?state.feedPreferences.topics:[],
+      feed_custom_topics:Array.isArray(state.feedPreferences?.customTopics)?state.feedPreferences.customTopics:[],
+      feed_following:Array.isArray(state.feedPreferences?.following)?state.feedPreferences.following:[],
       weather_location:String(state.feedPreferences?.weatherLocation||'').trim()
     }
   };
@@ -70,7 +72,7 @@ async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
   const {data:{session}}=await sb.auth.getSession();if(!session)return items;
   await sb.from('minds_surface_items').update({status:'dismissed'}).eq('surface',surface).eq('agent',agent).eq('status','active');
-  const rows=items.slice(0,8).map(x=>({
+  const rows=items.slice(0,12).map(x=>({
     user_id:session.user.id,surface,agent,
     title:String(x.title||'').trim()||'Idea',
     body:String(x.body||'').trim(),
@@ -97,7 +99,7 @@ async function loadSurface(surface,agent=null){
   let q=sb.from('minds_surface_items').select('*')
     .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString());
   if(agent)q=q.eq('agent',agent);
-  const {data,error}=await q.order('generated_at',{ascending:false}).limit(12);
+  const {data,error}=await q.order('generated_at',{ascending:false}).limit(16);
   return error?[]:(data||[]);
 }
 async function feed(state,{force=false}={}){
@@ -107,16 +109,18 @@ async function feed(state,{force=false}={}){
   }
   const prompt=`Construye mi Feed personal de MINDS. No es un resumen genérico ni una lista de consejos. Selecciona únicamente información que tenga valor para mí ahora y ordénala en tres capas posibles: "Hoy", "Noticias" y "Para mí".
 
-Devuelve EXCLUSIVAMENTE JSON válido: un array de 3 a 7 objetos con esta forma exacta:
-{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"ai"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":""}
+Devuelve EXCLUSIVAMENTE JSON válido: un array de 7 a 12 objetos con esta forma exacta:
+{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"art"|"design"|"culture"|"ai"|"science"|"technology"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":""}
 
 Para weather, title debe funcionar como vistazo inmediato y details debe contener hasta 7 objetos {"label":"Lun 28","value":"26° / 11° · nublado"} para desplegar la semana. Para los demás tipos details debe ser [].
 
 HOY puede incluir clima, próximos compromisos, tareas urgentes, seguimientos que vencen o cambios temporales importantes. Si preferences.feed_topics contiene "Clima" y puedes establecer una localización fiable, incluye exactamente una tarjeta weather como vistazo básico del día aunque el tiempo sea normal. Si preferences.weather_location está definido, úsalo como lugar habitual. Si está vacío, usa clima solo cuando una localización fiable aparezca en memoria, contexto o conversación reciente. No inventes una ciudad. Para weather, consulta información actual.
 
-NOTICIAS: si preferences.feed_topics contiene "Noticias", incluye entre 1 y 2 noticias actuales que realmente merezcan atención. Usa web_search y prioriza fuentes periodísticas fiables, información reciente y diversidad geográfica/temática. Resume hechos, no opinión ni persuasión. No hagas rankings políticos ni presentes una interpretación partidista como hecho. Cada tarjeta de noticias debe usar section:"news", kind:"news", incluir source_title y source_url verificables, y explicar en una o dos frases qué ocurrió y por qué importa. No inventes URLs ni fuentes.
+NOTICIAS: si preferences.feed_topics contiene "Noticias", incluye normalmente entre 4 y 6 noticias actuales que realmente merezcan atención. Usa web_search y prioriza fuentes fiables, información reciente y diversidad geográfica/temática. Resume hechos, no opinión ni persuasión. No hagas rankings políticos ni presentes una interpretación partidista como hecho. Cada tarjeta de noticias debe usar section:"news", incluir source_title y source_url verificables, y explicar en una o dos frases qué ocurrió y por qué importa. No inventes URLs ni fuentes.
 
-PARA MÍ puede incluir temas que yo haya pedido seguir, arquitectura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, Readings o algún contexto mío que merezca reaparecer. Usa preferences.feed_topics y preferences.feed_instructions como preferencias explícitas sin convertirlas en obligación de rellenar categorías. Usa search_memory o search_calendar si hace falta recuperar contexto.
+TRATA EL FEED COMO UNA PORTADA PERSONAL CURADA, NO COMO UN FIREHOSE. preferences.feed_custom_topics son intereses libres elegidos explícitamente. preferences.feed_following contiene nombres concretos que el usuario quiere seguir: pueden ser estudios de arquitectura, artistas, museos, galerías, revistas, autores, instituciones u otras entidades. Cuando haya novedades reales sobre ellos, busca señales recientes como nuevos proyectos, exposiciones, publicaciones, entrevistas, concursos, conferencias, premios, adquisiciones o cambios relevantes. Si Arquitectura, Arte, Diseño o Cultura están entre los temas —o aparecen entidades relacionadas en feed_following— procura que una parte significativa de Noticias provenga de esos campos cuando existan novedades suficientes. No inventes actividad para rellenar huecos.
+
+PARA MÍ puede incluir temas que yo haya pedido seguir, arquitectura, arte, diseño, cultura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, Readings o algún contexto mío que merezca reaparecer. Usa preferences.feed_topics, preferences.feed_custom_topics, preferences.feed_following y preferences.feed_instructions como preferencias explícitas sin convertirlas en obligación de rellenar categorías. Usa search_memory o search_calendar si hace falta recuperar contexto.
 
 No intentes cubrir todas las categorías. No inventes datos, preferencias, familiares, proyectos, fuentes ni seguimientos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase natural que yo pueda enviar a Isabella para continuar el tema.`;
   const result=await ask(prompt,state,{background:true});

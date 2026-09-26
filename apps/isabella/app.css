@@ -489,3 +489,25 @@ body.sofia-chat-open #readingsScreen .readings-frame{
     margin:0 auto -16px!important;
   }
 }
+
+
+/* Build 21 — compact surfaces, richer Feed, selectable chat text */
+.surface-head.surface-head-compact{
+  justify-content:flex-end!important;
+  min-height:44px!important;
+  margin-bottom:0!important;
+}
+.surface-head.surface-head-compact .surface-head-actions{margin-left:auto}
+.surface-readmore{
+  border:0;background:transparent;padding:11px 0 0;color:#111;font-size:12px;font-weight:700;cursor:pointer
+}
+.surface-readmore:after{content:"  ›";color:#aaa}
+.feed-preferences input,.feed-preferences textarea{font-size:14px}
+.feed-preferences textarea#feedFollowing{min-height:86px}
+.message,
+.message-text{
+  -webkit-user-select:text!important;
+  user-select:text!important;
+  -webkit-touch-callout:default!important;
+}
+.message-text{touch-action:auto!important}

@@ -52,7 +52,9 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
   {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
 ],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedPreferences:{
   instructions:'',
-  topics:['Clima','Noticias','Arquitectura','Inteligencia artificial','Proyectos','Familia'],
+  topics:['Clima','Noticias','Arquitectura','Arte','Inteligencia artificial','Proyectos','Familia'],
+  customTopics:[],
+  following:[],
   weatherLocation:''
 }};
 function normalizeMessages(items){
@@ -78,6 +80,8 @@ function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
   const x={...base,...raw,feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
   x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
+  x.feedPreferences.customTopics=Array.isArray(x.feedPreferences.customTopics)?x.feedPreferences.customTopics:[];
+  x.feedPreferences.following=Array.isArray(x.feedPreferences.following)?x.feedPreferences.following:[];
   if(x.feedPreferences.topics.includes('Noticias que sigo')&&!x.feedPreferences.topics.includes('Noticias')){
     x.feedPreferences.topics=x.feedPreferences.topics.map(t=>t==='Noticias que sigo'?'Noticias':t);
   }
@@ -175,6 +179,7 @@ function show(name){
   $$('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
   document.body.dataset.section=name;
   save();
+  if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
   if(name==='calendar')renderCalendar();
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
@@ -193,6 +198,7 @@ function surfaceCard(item,surface){
   const sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
+  const newsMorePrompt=news?`Cuéntame más sobre esta noticia: "${String(item.title||'').trim()}". ${sourceUrl?`Usa también esta fuente como punto de partida: ${sourceUrl}. `:''}Busca contexto actualizado, explica qué ocurrió, qué antecedentes importan y qué conviene seguir observando. Distingue hechos confirmados de interpretación.`:'';
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
     <h2>${esc(item.title||'')}</h2>
@@ -200,13 +206,18 @@ function surfaceCard(item,surface){
     ${detailHtml}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
+      ${news?`<button class="surface-readmore" data-news-more="${esc(newsMorePrompt)}">Leer más</button>`:''}
       ${news&&sourceUrl?`<a class="surface-source" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
+      ${!news&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
     </div>
   </article>`;
 }
 function bindSurfaceActions(){
-  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $('[data-news-more]').forEach(b=>b.onclick=()=>{
+    const prompt=b.dataset.newsMore||'';if(!prompt)return;
+    show('assistant');setTimeout(()=>handle(prompt),80);
+  });
+  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -230,7 +241,7 @@ async function renderFeed(force=false){
       window.ISABELLA_AI?.feed?.(state,{force})||[],
       window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]
     ]);
-    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,8);
+    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,12);
     if(!items.length){
       box.innerHTML='<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
     }else{
@@ -284,20 +295,22 @@ function syncOrbCompact(force=null){
   const hasUserConversation=state.messages.some(m=>m.role==='user'&&String(m.text||'').trim());
   scroller.classList.toggle('orb-compact',force===null?hasUserConversation:!!force);
 }
+function scrollAssistantToLatest(force=false,wasNearBottom=null){
+  const scroller=$('.assistant-scroll');if(!scroller)return;
+  const near=wasNearBottom===null?(scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140):wasNearBottom;
+  if(force||near||!scroller.dataset.initialScroll){
+    scroller.scrollTop=scroller.scrollHeight;
+    scroller.dataset.initialScroll='1';
+  }
+}
 function renderMessages(forceBottom=false){
-  const box=$('#messages');
+  const box=$('#messages'),scroller=$('.assistant-scroll');
   state.messages=normalizeMessages(state.messages);
   syncOrbCompact();
-  const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
+  const nearBottom=scroller?scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140:true;
   box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
-  setTimeout(()=>{
-    const b=$('#messages');
-    if(b&&(forceBottom||nearBottom||!b.dataset.initialScroll)){
-      b.scrollTop=b.scrollHeight;
-      b.dataset.initialScroll='1';
-    }
-  },20);
+  setTimeout(()=>scrollAssistantToLatest(forceBottom,nearBottom),20);
 }
 function closeReactionPicker(){
   document.querySelector('.reaction-popover')?.remove();
@@ -333,24 +346,26 @@ function openReactionPicker(id){
   function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
 }
 function bindMessageReactions(){
-  $$('#messages .message[data-message-id]').forEach(el=>{
+  $('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
-    let timer=null,sx=0,sy=0,lastTap=0;
-    const cancel=()=>{clearTimeout(timer);timer=null};
+    let sx=0,sy=0,moved=false,lastTap=0;
     el.addEventListener('touchstart',e=>{
       if(e.touches.length!==1)return;
-      const t=e.touches[0],now=Date.now();sx=t.clientX;sy=t.clientY;
-      if(now-lastTap<330){cancel();openReactionPicker(el.dataset.messageId);lastTap=0;return}
-      lastTap=now;timer=setTimeout(()=>openReactionPicker(el.dataset.messageId),470);
+      const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;
     },{passive:true});
     el.addEventListener('touchmove',e=>{
-      if(!timer||e.touches.length!==1)return;
-      const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)cancel();
+      if(e.touches.length!==1)return;
+      const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)moved=true;
     },{passive:true});
-    el.addEventListener('touchend',cancel,{passive:true});
-    el.addEventListener('touchcancel',cancel,{passive:true});
-    el.addEventListener('dblclick',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
-    el.addEventListener('contextmenu',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
+    el.addEventListener('touchend',()=>{
+      if(moved)return;
+      const selection=getSelection();if(selection&&!selection.isCollapsed)return;
+      const now=Date.now();
+      if(now-lastTap<320){lastTap=0;openReactionPicker(el.dataset.messageId);return}
+      lastTap=now;
+    },{passive:true});
+    el.addEventListener('touchcancel',()=>{moved=true},{passive:true});
+    el.addEventListener('dblclick',e=>{if(getSelection()?.toString())return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });
 }
@@ -885,14 +900,20 @@ function deleteMemory(id){
 }
 function feedPreferencesPanel(){
   const prefs=state.feedPreferences||base.feedPreferences;
-  const standard=['Clima','Noticias','Arquitectura','Inteligencia artificial','Proyectos','Familia','Readings'];
+  const standard=['Clima','Noticias','Arquitectura','Arte','Diseño','Cultura','Inteligencia artificial','Ciencia','Tecnología','Mundo','Alemania','Proyectos','Familia','Readings'];
   const selected=new Set(prefs.topics||[]);
-  modal('Feed y clima',`<div class="form feed-preferences">
-    <label>Qué quieres que Isabella tenga especialmente en cuenta
+  modal('Curar mi Feed',`<div class="form feed-preferences">
+    <label>Temas base
       <div class="topic-grid">${standard.map(t=>`<label class="topic-choice"><input type="checkbox" value="${esc(t)}" ${selected.has(t)?'checked':''}><span>${esc(t)}</span></label>`).join('')}</div>
     </label>
+    <label>Otros temas que quieres seguir
+      <input id="feedCustomTopics" value="${esc((prefs.customTopics||[]).join(', '))}" placeholder="Ej. vivienda colectiva, fotografía, literatura japonesa">
+    </label>
+    <label>Nombres concretos que quieres seguir
+      <textarea id="feedFollowing" rows="3" placeholder="Estudios, artistas, museos, galerías, revistas, autores… Uno por línea o separados por comas.">${esc((prefs.following||[]).join('\n'))}</textarea>
+    </label>
     <label>Instrucciones para tu Feed
-      <textarea id="feedInstructions" rows="4" placeholder="Ej. arquitectura e IA por la mañana; evita noticias repetidas.">${esc(prefs.instructions||'')}</textarea>
+      <textarea id="feedInstructions" rows="4" placeholder="Ej. prioriza arquitectura y arte; evita noticias repetidas; dame contexto, no titulares.">${esc(prefs.instructions||'')}</textarea>
     </label>
     <label>Lugar habitual para el clima <span class="small">(opcional; si queda vacío Isabella usa solo contexto que ya conozca)</span>
       <input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad">
@@ -900,10 +921,13 @@ function feedPreferencesPanel(){
     <button id="saveFeedPreferences" class="primary">Guardar</button>
   </div>`);
   $('#saveFeedPreferences').onclick=()=>{
+    const split=v=>String(v||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).slice(0,40);
     state.feedPreferences={
       instructions:$('#feedInstructions').value.trim(),
       weatherLocation:$('#weatherLocation').value.trim(),
-      topics:$('.topic-choice input:checked').map(x=>x.value)
+      topics:$('.topic-choice input:checked').map(x=>x.value),
+      customTopics:split($('#feedCustomTopics').value),
+      following:split($('#feedFollowing').value)
     };
     save();closeModal();renderFeed(true);
   };
