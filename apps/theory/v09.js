@@ -172,20 +172,67 @@
     const typeLabel=c.origin?.type==='mind'?'MINDS':c.origin?.type==='reading'?'LECTURA':'GLOBAL';
     return `${typeLabel} · ${c.origin?.label||'Conversación'}`;
   }
+  function formatSofiaText(text){
+    let html=esc(String(text||''));
+    html=html.replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>');
+    html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
+    return html;
+  }
+  function closeSofiaReactionPicker(){
+    document.querySelector('.v09-reaction-popover')?.remove();
+    document.querySelectorAll('.v09-msg.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
+  }
+  function openSofiaReactionPicker(conv,id,expand=false){
+    const m=conv.messages.find(x=>String(x.id)===String(id));
+    const el=document.querySelector(`.v09-msg[data-sofia-msg="${CSS.escape(String(id))}"]`);
+    if(!m||!el)return;
+    closeSofiaReactionPicker();try{navigator.vibrate?.(8)}catch{}
+    el.classList.add('reaction-target');
+    const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
+    const pop=document.createElement('div');pop.className='v09-reaction-popover'+(expand?' expanded':'');
+    pop.innerHTML=`<div class="v09-reaction-row">${quick.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="v09-reaction-more">＋</button></div>${expand?`<div class="v09-reaction-row more">${more.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-sofia-reaction="" class="remove">×</button></div>`:''}`;
+    document.body.appendChild(pop);
+    requestAnimationFrame(()=>{
+      const r=el.getBoundingClientRect(),w=Math.min(pop.offsetWidth||330,innerWidth-20);
+      pop.style.left=Math.max(10,Math.min(innerWidth-w-10,el.classList.contains('user')?r.right-w:r.left))+'px';
+      let top=r.top-(pop.offsetHeight||58)-10;if(top<8)top=Math.min(innerHeight-(pop.offsetHeight||58)-8,r.bottom+10);pop.style.top=top+'px';
+    });
+    pop.querySelectorAll('[data-sofia-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();const v=b.dataset.sofiaReaction||null;m.reaction=m.reaction===v?null:v;saveConversations();closeSofiaReactionPicker();openConversation(conv.id)});
+    pop.querySelector('.v09-reaction-more')?.addEventListener('click',e=>{e.stopPropagation();openSofiaReactionPicker(conv,id,true)});
+    setTimeout(()=>document.addEventListener('pointerdown',function outside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',outside,{capture:true,once:true});return}closeSofiaReactionPicker()},{capture:true,once:true}),0);
+  }
+  function bindSofiaReactions(conv){
+    sheetBody.querySelectorAll('.v09-msg[data-sofia-msg]').forEach(el=>{
+      let timer=null,sx=0,sy=0,lastTap=0;
+      const cancel=()=>{clearTimeout(timer);timer=null};
+      el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0],now=Date.now();sx=t.clientX;sy=t.clientY;if(now-lastTap<330){cancel();openSofiaReactionPicker(conv,el.dataset.sofiaMsg);lastTap=0;return}lastTap=now;timer=setTimeout(()=>openSofiaReactionPicker(conv,el.dataset.sofiaMsg),470)},{passive:true});
+      el.addEventListener('touchmove',e=>{if(!timer||e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)cancel()},{passive:true});
+      el.addEventListener('touchend',cancel,{passive:true});el.addEventListener('touchcancel',cancel,{passive:true});
+      el.addEventListener('dblclick',()=>openSofiaReactionPicker(conv,el.dataset.sofiaMsg));
+      el.querySelector('.v09-reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openSofiaReactionPicker(conv,el.dataset.sofiaMsg)});
+    });
+  }
   function openConversation(cOrId){
     const c=typeof cOrId==='string'?conversations.find(x=>x.id===cOrId):cOrId;if(!c)return;openConvId=c.id;
+    let idsChanged=false;c.messages.forEach(m=>{if(!m.id){m.id=uid();idsChanged=true}});if(idsChanged)saveConversations();
     const context=c.origin?.quote?`<div class="v09-conv-context"><b>Fragmento de origen</b><div>“${esc(c.origin.quote)}”</div>${c.origin?.type==='reading'&&c.origin?.readingId?'<button data-open-origin-reading>Abrir lectura</button>':''}</div>`:'';
-    const msgs=c.messages.length?c.messages.map(m=>`<div class="v09-msg ${m.role}"><span>${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span>${esc(m.text)}</div>`).join(''):'<div class="v09-msg assistant"><span>SOFÍA</span>Esta conversación queda guardada con su contexto de lectura. Puedes retomarla cuando quieras.</div>';
-    openSheet('CONVERSACIÓN',conversationHeader(c),`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea placeholder="Pregunta, objeta o continúa este hilo..."></textarea><button>Enviar</button></form><div class="v09-conv-foot">Hablas con Sofía. La conversación se conserva como memoria intelectual y no se convierte automáticamente en una tesis aceptada.</div>`);
+    const msgs=c.messages.length
+      ?c.messages.map(m=>`<div class="v09-msg ${m.role}" data-sofia-msg="${esc(m.id)}"><span class="v09-msg-label">${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span><span class="v09-msg-text">${formatSofiaText(m.text)}</span>${m.reaction?`<button class="v09-reaction-chip">${esc(m.reaction)}</button>`:''}</div>`).join('')
+      :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
+    const title=c.origin?.type==='reading'?(c.origin?.label||'Lectura'):'Sofía';
+    openSheet('SOFÍA',title,`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button aria-label="Enviar">↑</button></form>`,'chat');
     sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
-    const form=sheetBody.querySelector('.v09-chat-form');
+    bindSofiaReactions(c);
+    const form=sheetBody.querySelector('.v09-chat-form'),ta=form.querySelector('textarea');
+    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();
+    ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
     form.onsubmit=async e=>{
       e.preventDefault();
-      const ta=form.querySelector('textarea'),q=ta.value.trim();if(!q)return;
-      c.messages.push({role:'user',text:q,at:now(),quote:c.origin?.quote||''});
+      const q=ta.value.trim();if(!q)return;
+      c.messages.push({id:uid(),role:'user',text:q,at:now(),quote:c.origin?.quote||''});
       if(c.title==='Nueva conversación')c.title=short(q,72);
-      const pending={role:'assistant',text:'Pensando…',at:now(),pending:true};
+      const pending={id:uid(),role:'assistant',text:'Pensando…',at:now(),pending:true};
       c.messages.push(pending);c.updated=now();saveConversations();openConversation(c.id);
       try{
         const result=await askSofia(c,q);
@@ -198,6 +245,7 @@
       c.updated=now();saveConversations();openConversation(c.id);
       setTimeout(()=>{const log=sheetBody.querySelector('.v09-chat-log');if(log)log.scrollTop=log.scrollHeight;},0);
     };
+    setTimeout(()=>{const log=sheetBody.querySelector('.v09-chat-log');if(log)log.scrollTop=log.scrollHeight;},0);
   }
   function askFromOrigin(origin,opts={}){const c=newConversation(origin,opts.mode||'memory',!!opts.reuseGeneral);openConversation(c);setTimeout(()=>sheetBody.querySelector('.v09-chat-form textarea')?.focus(),80);}
   window.addEventListener('message',e=>{
