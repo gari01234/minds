@@ -39,8 +39,25 @@ function setOrbPalette(){
   o.dataset.period=h<7?'dawn':h<12?'morning':h<18?'day':h<22?'evening':'night';
 }
 const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[{id:'casa',name:'Casa'},{id:'trabajo',name:'Trabajo'},{id:'minds',name:'MINDS'},{id:'personal',name:'Personal'},{id:'architectures',name:'Architectures'}],projects:[{id:'bernried',categoryId:'trabajo',name:'Bernried'},{id:'schwarz',categoryId:'trabajo',name:'Schwarz'}],tasks:[],events:[],memory:[],deletedTaskIds:[],deletedEventIds:[]};
+function normalizeMessages(items){
+  const out=[];
+  let greetingSeen=false;
+  for(const m of items||[]){
+    const text=String(m?.text||'').trim();
+    if(!text)continue;
+    if(/^Edge Function returned a non-2xx status code$/i.test(text))continue;
+    if(m.role==='assistant'&&text==='Hola. Soy Isabella.'){
+      if(greetingSeen)continue;
+      greetingSeen=true;
+    }
+    const prev=out[out.length-1];
+    if(prev&&prev.role===m.role&&prev.text===text)continue;
+    out.push({...m,text});
+  }
+  return out;
+}
 let state=load();
-function load(){try{return {...base,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return JSON.parse(JSON.stringify(base))}}
+function load(){try{const x={...base,...JSON.parse(localStorage.getItem(KEY)||'{}')};x.messages=normalizeMessages(x.messages);return x}catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
 function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIso(s).toLocaleDateString('es-ES',opt)}
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
@@ -48,18 +65,15 @@ function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
 function init(){
   repairKnownDuplicate();
-  const greeting='Hola. Soy Isabella.';
-  let keptGreeting=false;
-  state.messages=(state.messages||[]).filter(m=>{
-    if(m.role==='assistant'&&m.text===greeting){
-      if(keptGreeting)return false;
-      keptGreeting=true;
-    }
-    return true;
-  });
-  if(!state.messages.length)state.messages=[{id:uid(),role:'assistant',text:greeting}];
+  state.messages=normalizeMessages(state.messages);
+  if(!state.messages.length)state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];
   save();
-  setOrbPalette();bind();renderMessages();renderToday();renderCalendar();show(state.screen);
+  setOrbPalette();
+  bind();
+  renderMessages(true);
+  renderToday();
+  renderCalendar();
+  show(state.screen);
 }
 async function maybeDailyBrief(){
   try{
@@ -77,7 +91,19 @@ async function maybeDailyBrief(){
 }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
-function renderMessages(){const box=$('#messages'),sc=$('.assistant-scroll');const nearBottom=!sc||sc.scrollHeight-sc.scrollTop-sc.clientHeight<140;box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const s=$('.assistant-scroll');if(s&&(nearBottom||!s.dataset.initialScroll)){s.scrollTop=s.scrollHeight;s.dataset.initialScroll='1'}},20)}
+function renderMessages(forceBottom=false){
+  const box=$('#messages');
+  state.messages=normalizeMessages(state.messages);
+  const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');
+  setTimeout(()=>{
+    const b=$('#messages');
+    if(b&&(forceBottom||nearBottom||!b.dataset.initialScroll)){
+      b.scrollTop=b.scrollHeight;
+      b.dataset.initialScroll='1';
+    }
+  },20);
+}
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
@@ -370,7 +396,7 @@ function categoriesPanel(){
 }
 window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
-  replaceState:(next)=>{state={...base,...next};save();renderMessages();renderToday();renderCalendar();show(state.screen||'assistant')},
+  replaceState:(next)=>{state={...base,...next};state.messages=normalizeMessages(state.messages);save();renderMessages(true);renderToday();renderCalendar();show(state.screen||'assistant')},
   addAssistantMessage:(text)=>say('assistant',text),
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},
