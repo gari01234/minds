@@ -213,11 +213,11 @@ function surfaceCard(item,surface){
   </article>`;
 }
 function bindSurfaceActions(){
-  $('[data-news-more]').forEach(b=>b.onclick=()=>{
+  $$('[data-news-more]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.newsMore||'';if(!prompt)return;
     show('assistant');setTimeout(()=>handle(prompt),80);
   });
-  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -346,7 +346,7 @@ function openReactionPicker(id){
   function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
 }
 function bindMessageReactions(){
-  $('#messages .message[data-message-id]').forEach(el=>{
+  $$('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
     let sx=0,sy=0,moved=false,lastTap=0;
     el.addEventListener('touchstart',e=>{
