@@ -17,7 +17,7 @@ document.body.innerHTML = `
 
     <section id="feedScreen" class="screen surface-screen" data-screen="feed">
       <div class="surface-scroll">
-        <div class="surface-head"><div><div class="surface-agent">ISABELLA</div><h1>Feed</h1><p>Hoy y para ti: lo importante sin tener que pedirlo.</p></div><div class="surface-head-actions"><button id="feedSettings" class="surface-text-action">Ajustar</button><button id="refreshFeed" class="round surface-refresh" aria-label="Actualizar Feed">↻</button></div></div>
+        <div class="surface-head"><div><h1>Feed</h1></div><div class="surface-head-actions"><button id="feedSettings" class="surface-text-action">Ajustar</button><button id="refreshFeed" class="round surface-refresh" aria-label="Actualizar Feed">↻</button></div></div>
         <div id="feedList" class="surface-list"><div class="surface-loading">Preparando tu Feed…</div></div>
       </div>
     </section>
@@ -50,7 +50,7 @@ document.body.innerHTML = `
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
-  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.26.17</div></aside>
+  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.26.18</div></aside>
   <div id="focusMode" class="focus hidden" role="dialog" aria-modal="true"><div class="focus-head"><div class="focus-name">Isabella</div><button id="focusClose" class="round">×</button></div><div class="focus-center"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="focusStatus" class="focus-status">Escuchando…</div><textarea id="focusTranscript" class="focus-transcript" rows="5" readonly placeholder="Tu transcripción aparecerá aquí."></textarea></div><div class="focus-actions"><button id="focusKeyboard">Cancelar</button><button id="focusStop" class="dark">Detener</button></div></div>
   <div id="modalBackdrop" class="backdrop hidden"></div><div id="modal" class="modal hidden"><div class="modal-head"><div id="modalTitle" class="modal-title"></div><button id="closeModal" class="round">×</button></div><div id="modalBody"></div></div>
 </div>`;
