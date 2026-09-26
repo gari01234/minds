@@ -3,19 +3,29 @@ const sb=window.MINDS_SUPABASE;
 function dateISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
 function compact(state){
   const td=dateISO();
-  const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId}));
-  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}));
+  const catName=id=>(state.categories||[]).find(x=>x.id===id)?.name||id||null;
+  const projectName=id=>(state.projects||[]).find(x=>x.id===id)?.name||id||null;
+  const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)}));
+  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}));
   const upcoming=[
-    ...(state.events||[]).filter(x=>x.date>=td).slice(0,20).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:x.categoryId,project:x.projectId})),
-    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,20).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:x.categoryId,project:x.projectId,reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
-  ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,20);
+    ...(state.events||[]).filter(x=>x.date>=td).slice(0,30).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)})),
+    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,30).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
+  ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,30);
+  const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null})).filter(m=>m.content);
   return {
     current_date:td,
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
     today_events:todayEvents,
     today_tasks:todayTasks,
     upcoming,
-    memories:(state.memory||[]).slice(-30).map(m=>typeof m==='object'?{kind:m.kind,content:m.content,confidence:m.confidence}:m),
+    recent_local_conversation:recentLocal,
+    pending_intent:state.pendingIntent||null,
+    memories:(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted').slice(-40).map(m=>typeof m==='object'?{kind:m.kind,content:m.content,confidence:m.confidence}:m),
+    taxonomy:{
+      categories:(state.categories||[]).map(x=>({name:x.name})),
+      projects:(state.projects||[]).map(x=>({name:x.name,category:catName(x.categoryId)}))
+    },
+    locale:navigator.language||'es-ES',
     preferences:[]
   };
 }
