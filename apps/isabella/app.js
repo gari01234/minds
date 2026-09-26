@@ -573,7 +573,7 @@ function proposalEditor(p,onDone){
       <label>Instrucción adicional para el Feed<textarea id="proposalFeedInstructions" rows="3">${esc(p.instructions_append||'')}</textarea></label>
       <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos cambios</button></div>
     </div>`);
-    $('#proposalFeedRows [data-follow-remove]').forEach(b=>b.onclick=()=>b.closest('.feed-follow-row')?.remove());
+    document.querySelectorAll('#proposalFeedRows [data-follow-remove]').forEach(b=>b.onclick=()=>b.closest('.feed-follow-row')?.remove());
     const split=v=>String(v||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter((x,i,a)=>a.findIndex(y=>y.toLowerCase()===x.toLowerCase())===i);
     $('#proposalEditCancel').onclick=()=>onDone?.(null);
     $('#proposalEditSave').onclick=()=>{
