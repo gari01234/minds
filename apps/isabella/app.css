@@ -511,3 +511,32 @@ body.sofia-chat-open #readingsScreen .readings-frame{
   -webkit-touch-callout:default!important;
 }
 .message-text{touch-action:auto!important}
+
+
+/* Build 22 — stable curated Feed, separate story threads and dual message interaction */
+.message,.message.assistant,.message.user{min-width:0!important;max-width:90%!important;overflow-wrap:anywhere!important;word-break:break-word!important}
+.message.assistant{width:fit-content!important}
+.message-text,.message-link,.message-sources a{overflow-wrap:anywhere!important;word-break:break-word!important}
+.message-link{color:inherit;text-decoration:underline;text-decoration-color:#c9c9cc;text-underline-offset:2px}
+.feed-detail{position:fixed;inset:0;z-index:95;background:#fff;width:min(100%,820px);margin:auto;display:flex;flex-direction:column}
+.feed-detail.hidden{display:none!important}body.feed-detail-open{overflow:hidden}
+.feed-detail-head{flex:none;display:flex;align-items:center;justify-content:space-between;padding:calc(18px + env(safe-area-inset-top,0px)) 28px 12px;background:#fff}
+.feed-detail-scroll{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:22px 30px 150px}
+.feed-detail-meta{display:flex;gap:12px;align-items:center;flex-wrap:wrap;font-size:10px;letter-spacing:.12em;color:#999;text-transform:uppercase}
+.feed-detail-meta a{color:#777;text-decoration:none;text-transform:none;letter-spacing:0}
+.feed-detail h1{font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;font-size:38px;line-height:1.03;letter-spacing:-.035em;margin:18px 0 14px}
+.feed-detail-summary{font-size:17px;line-height:1.55;color:#555;margin:0 0 18px}
+.feed-detail-follow{display:flex;gap:7px;flex-wrap:wrap;margin:0 0 22px}
+.feed-follow-chip{border:1px solid #e1e1e4;background:#fff;border-radius:99px;padding:8px 10px;font-size:11px}
+.feed-follow-chip.following{background:#111;color:#fff;border-color:#111}
+.feed-thread-log{width:min(100%,650px);margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.feed-thread-message{width:fit-content;max-width:90%;font-size:15px;line-height:1.5;overflow-wrap:anywhere;word-break:break-word}
+.feed-thread-message.assistant{align-self:flex-start;background:#f8f8f9;border-radius:18px;padding:12px 14px}
+.feed-thread-message.user{align-self:flex-end;background:#f4f4f5;border-radius:18px;padding:10px 14px}
+.feed-thread-sources{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px}.feed-thread-sources a{font-size:11px;color:#777;overflow-wrap:anywhere}
+.feed-thread-form{position:absolute;left:0;right:0;bottom:0;margin:0 auto;width:min(100%,820px);display:flex;align-items:flex-end;gap:8px;padding:18px 28px calc(10px + var(--safe));background:linear-gradient(to top,#fff 78%,rgba(255,255,255,0))}
+.feed-thread-form textarea{flex:1;border:1px solid #e7e7e9;border-radius:26px;background:#fff;box-shadow:0 10px 32px rgba(0,0,0,.04);outline:0;resize:none;min-height:52px;max-height:132px;padding:15px 18px;font-size:16px;line-height:1.35}
+.feed-follow-editor{display:grid;gap:8px;margin:4px 0 8px}.feed-follow-editor-title{font-size:14px;color:#333;font-weight:650}
+.feed-follow-row{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,.9fr) 1.4fr 34px;gap:7px;align-items:center}
+.feed-follow-row input,.feed-follow-row select{min-width:0!important}.feed-follow-row button{width:34px;height:34px;border:0;border-radius:50%;background:#f4f4f5}
+@media(max-width:620px){.feed-detail-scroll{padding-left:28px;padding-right:28px}.feed-detail h1{font-size:34px}.feed-follow-row{grid-template-columns:1fr 1fr 34px}.feed-follow-row [data-follow-focus]{grid-column:1/4}}

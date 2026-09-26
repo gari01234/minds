@@ -180,3 +180,40 @@ test('Build 21 Isabella opens at the latest message while preserving text select
   assert.ok(css.includes('-webkit-user-select:text!important'));
   assert.ok(css.includes('-webkit-touch-callout:default!important'));
 });
+
+
+test('Build 22 keeps Feed generations stable and conversations inside Feed',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  const shell=read('apps/isabella/shell.js');
+  assert.ok(app.includes('function openFeedStory'));
+  assert.ok(app.includes('function submitFeedStoryQuestion'));
+  assert.ok(app.includes('feedThreads'));
+  assert.ok(!app.includes('data-news-more'));
+  assert.ok(ai.includes('generation_id:generationId'));
+  assert.ok(ai.includes("if(items.length<3)return cached.length?cached:items"));
+  assert.ok(ai.includes('async function feedStory'));
+  assert.ok(shell.includes('id="feedDetail"'));
+  assert.ok(shell.includes('Preguntar sobre esto...'));
+});
+
+test('Build 22 adds an explicit personal follow graph',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('followGraph'));
+  assert.ok(app.includes('Tu constelación'));
+  assert.ok(app.includes('data-follow-focus'));
+  assert.ok(app.includes('data-feed-follow-name'));
+  assert.ok(ai.includes('feed_follow_graph'));
+  assert.ok(ai.includes('constelación personal'));
+});
+
+test('Build 22 allows short-tap reactions and native long-press text selection',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('duration>280'));
+  assert.ok(app.includes('openReactionPicker(el.dataset.messageId)'));
+  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(css.includes('overflow-wrap:anywhere!important'));
+  assert.ok(app.includes('class="message-link"'));
+});

@@ -31,6 +31,7 @@ function compact(state){
       feed_topics:Array.isArray(state.feedPreferences?.topics)?state.feedPreferences.topics:[],
       feed_custom_topics:Array.isArray(state.feedPreferences?.customTopics)?state.feedPreferences.customTopics:[],
       feed_following:Array.isArray(state.feedPreferences?.following)?state.feedPreferences.following:[],
+      feed_follow_graph:Array.isArray(state.feedPreferences?.followGraph)?state.feedPreferences.followGraph.map(x=>({name:x.name,type:x.type||'other',focus:x.focus||''})):[],
       weather_location:String(state.feedPreferences?.weatherLocation||'').trim()
     }
   };
@@ -71,7 +72,7 @@ function parseSurface(raw){
 async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
   const {data:{session}}=await sb.auth.getSession();if(!session)return items;
-  await sb.from('minds_surface_items').update({status:'dismissed'}).eq('surface',surface).eq('agent',agent).eq('status','active');
+  const generationId=globalThis.crypto?.randomUUID?.()||String(Date.now())+'-'+Math.random().toString(16).slice(2);
   const rows=items.slice(0,12).map(x=>({
     user_id:session.user.id,surface,agent,
     title:String(x.title||'').trim()||'Idea',
@@ -82,8 +83,10 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?4:1,
+      surface_version:surface==='feed'?5:1,
+      generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
+      entities:Array.isArray(x.entities)?x.entities.slice(0,4):[],
       weather_location:String(x.weather_location||'').trim()||null,
       source_title:String(x.source_title||'').trim()||null,
       source_url:/^https?:\/\//i.test(String(x.source_url||'').trim())?String(x.source_url).trim():null
@@ -99,18 +102,19 @@ async function loadSurface(surface,agent=null){
   let q=sb.from('minds_surface_items').select('*')
     .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString());
   if(agent)q=q.eq('agent',agent);
-  const {data,error}=await q.order('generated_at',{ascending:false}).limit(16);
-  return error?[]:(data||[]);
+  const {data,error}=await q.order('generated_at',{ascending:false}).limit(40);
+  if(error)return [];
+  const rows=data||[],generation=rows.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id;
+  return generation?rows.filter(x=>x?.metadata?.generation_id===generation):rows;
 }
 async function feed(state,{force=false}={}){
-  if(!force){
-    const cached=await loadSurface('feed','isabella');
-    if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=4))return cached;
-  }
+  const cached=await loadSurface('feed','isabella');
+  if(!force&&cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=5))return cached;
+  const weakSignals=(state.feedSignals||[]).slice(-30).map(x=>({kind:x.kind,title:x.title,entities:x.entities||[],at:x.at}));
   const prompt=`Construye mi Feed personal de MINDS. No es un resumen genérico ni una lista de consejos. Selecciona únicamente información que tenga valor para mí ahora y ordénala en tres capas posibles: "Hoy", "Noticias" y "Para mí".
 
 Devuelve EXCLUSIVAMENTE JSON válido: un array de 7 a 12 objetos con esta forma exacta:
-{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"art"|"design"|"culture"|"ai"|"science"|"technology"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":""}
+{"section":"today"|"news"|"for_me","kind":"weather"|"news"|"commitment"|"pending"|"followed_topic"|"architecture"|"art"|"design"|"culture"|"ai"|"science"|"technology"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[],"source_title":"","source_url":"","entities":[{"name":"...","type":"architecture_studio|artist|architect|institution|publication|gallery|person|topic|other","focus":"..."}]}
 
 Para weather, title debe funcionar como vistazo inmediato y details debe contener hasta 7 objetos {"label":"Lun 28","value":"26° / 11° · nublado"} para desplegar la semana. Para los demás tipos details debe ser [].
 
@@ -118,17 +122,39 @@ HOY puede incluir clima, próximos compromisos, tareas urgentes, seguimientos qu
 
 NOTICIAS: si preferences.feed_topics contiene "Noticias", incluye normalmente entre 4 y 6 noticias actuales que realmente merezcan atención. Usa web_search y prioriza fuentes fiables, información reciente y diversidad geográfica/temática. Resume hechos, no opinión ni persuasión. No hagas rankings políticos ni presentes una interpretación partidista como hecho. Cada tarjeta de noticias debe usar section:"news", incluir source_title y source_url verificables, y explicar en una o dos frases qué ocurrió y por qué importa. No inventes URLs ni fuentes.
 
-TRATA EL FEED COMO UNA PORTADA PERSONAL CURADA, NO COMO UN FIREHOSE. preferences.feed_custom_topics son intereses libres elegidos explícitamente. preferences.feed_following contiene nombres concretos que el usuario quiere seguir: pueden ser estudios de arquitectura, artistas, museos, galerías, revistas, autores, instituciones u otras entidades. Cuando haya novedades reales sobre ellos, busca señales recientes como nuevos proyectos, exposiciones, publicaciones, entrevistas, concursos, conferencias, premios, adquisiciones o cambios relevantes. Si Arquitectura, Arte, Diseño o Cultura están entre los temas —o aparecen entidades relacionadas en feed_following— procura que una parte significativa de Noticias provenga de esos campos cuando existan novedades suficientes. No inventes actividad para rellenar huecos.
+TRATA EL FEED COMO UNA PORTADA PERSONAL CURADA, NO COMO UN FIREHOSE. preferences.feed_custom_topics son intereses libres elegidos explícitamente. preferences.feed_follow_graph es la fuente de verdad para la constelación personal: cada nodo dice qué entidad sigue el usuario, de qué tipo es y, cuando exista, qué clase de señales le interesan. Busca novedades pertinentes a ese focus: por ejemplo proyectos y concursos para un estudio; exposiciones y catálogos para un artista; programas para una institución; publicaciones para una revista. preferences.feed_following existe solo por compatibilidad. Cuando haya novedades reales, busca señales recientes como nuevos proyectos, exposiciones, publicaciones, entrevistas, concursos, conferencias, premios, adquisiciones o cambios relevantes. Si Arquitectura, Arte, Diseño o Cultura están entre los temas —o aparecen entidades relacionadas en feed_follow_graph— procura que una parte significativa de Noticias provenga de esos campos cuando existan novedades suficientes. No inventes actividad para rellenar huecos. Para cada noticia incluye entities con hasta 4 entidades realmente centrales; focus debe describir brevemente qué aspecto de esa entidad está relacionado con la noticia.
 
 PARA MÍ puede incluir temas que yo haya pedido seguir, arquitectura, arte, diseño, cultura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, Readings o algún contexto mío que merezca reaparecer. Usa preferences.feed_topics, preferences.feed_custom_topics, preferences.feed_following y preferences.feed_instructions como preferencias explícitas sin convertirlas en obligación de rellenar categorías. Usa search_memory o search_calendar si hace falta recuperar contexto.
 
-No intentes cubrir todas las categorías. No inventes datos, preferencias, familiares, proyectos, fuentes ni seguimientos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase natural que yo pueda enviar a Isabella para continuar el tema.`;
+Las siguientes señales de uso son evidencia débil, no preferencias confirmadas: ${JSON.stringify(weakSignals)}. Pueden ayudarte a ordenar, pero NO añadas ni elimines nodos de la constelación ni asumas que un clic equivale a un interés permanente.
+
+No intentes cubrir todas las categorías. No inventes datos, preferencias, familiares, proyectos, fuentes ni seguimientos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase natural para continuar el tema, pero las noticias se desarrollarán dentro del Feed y no en el chat personal de Isabella.`;
   const result=await ask(prompt,state,{background:true});
   const items=parseSurface(result?.reply).map(x=>({
     ...x,
     section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})()
   }));
+  if(items.length<3)return cached.length?cached:items;
   return saveSurface('feed','isabella',items);
+}
+async function feedStory(item,state,question='',history=[]){
+  const sourceUrl=String(item?.source_url||item?.metadata?.source_url||'').trim();
+  const sourceTitle=String(item?.source_title||item?.metadata?.source_title||'').trim();
+  const entities=Array.isArray(item?.entities)?item.entities:(Array.isArray(item?.metadata?.entities)?item.metadata.entities:[]);
+  const transcript=(history||[]).slice(-10).map(m=>(m.role==='user'?'Gari':'MINDS')+': '+String(m.text||'')).join('\n\n');
+  const task=question?`Responde la pregunta del usuario sobre esta noticia: ${question}`:'Amplía esta noticia con contexto actualizado: qué ocurrió, antecedentes relevantes, actores, por qué importa y qué conviene observar después.';
+  const prompt=`Estás dentro del detalle de una tarjeta del Feed de MINDS. Esta conversación está SEPARADA del chat personal de Isabella y no debe presentarse como una conversación privada con ella.
+
+Título: ${String(item?.title||'')}
+Resumen de la tarjeta: ${String(item?.body||'')}
+Fuente inicial: ${sourceTitle}${sourceUrl?' — '+sourceUrl:''}
+Entidades: ${JSON.stringify(entities)}
+${transcript?'Conversación de esta tarjeta:\n'+transcript:''}
+
+${task}
+
+Investiga con web_search cuando haga falta información actual. Distingue hechos confirmados de interpretación. Incluye fuentes verificables. No conviertas esta conversación en una tarea, memoria personal o mensaje del chat de Isabella.`;
+  return ask(prompt,state,{background:true});
 }
 async function ideas(state,{force=false}={}){
   if(!force){const cached=await loadSurface('idea','isabella');if(cached.length)return cached}
@@ -175,5 +201,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,transcribe,listSkills,feed,ideas,sofiaSurface,loadSurface};
+window.ISABELLA_AI={ask,brief,nudge,transcribe,listSkills,feed,feedStory,ideas,sofiaSurface,loadSurface};
 })();
