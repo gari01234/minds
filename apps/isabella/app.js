@@ -17,7 +17,18 @@ function mutation(entityType,action,before,after,source='manual'){
   if(!entityKey)return;
   try{window.dispatchEvent(new CustomEvent('isabella:mutation',{detail:{entityType,entityKey,action,source,before:clone(before),after:clone(after)}}))}catch{}
 }
-const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[{id:'casa',name:'Casa'},{id:'trabajo',name:'Trabajo'},{id:'minds',name:'MINDS'},{id:'personal',name:'Personal'},{id:'architectures',name:'Architectures'}],projects:[{id:'bernried',categoryId:'trabajo',name:'Bernried'},{id:'schwarz',categoryId:'trabajo',name:'Schwarz'}],tasks:[],events:[],memory:[]};
+function tombstone(kind,id){
+  const key=kind==='task'?'deletedTaskIds':'deletedEventIds';
+  state[key]=Array.isArray(state[key])?state[key]:[];
+  if(!state[key].includes(id))state[key].push(id);
+  if(state[key].length>300)state[key]=state[key].slice(-300);
+}
+function setOrbPalette(){
+  const o=$('#orbButton');if(!o)return;
+  const h=new Date().getHours();
+  o.dataset.period=h<7?'dawn':h<12?'morning':h<18?'day':h<22?'evening':'night';
+}
+const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[{id:'casa',name:'Casa'},{id:'trabajo',name:'Trabajo'},{id:'minds',name:'MINDS'},{id:'personal',name:'Personal'},{id:'architectures',name:'Architectures'}],projects:[{id:'bernried',categoryId:'trabajo',name:'Bernried'},{id:'schwarz',categoryId:'trabajo',name:'Schwarz'}],tasks:[],events:[],memory:[],deletedTaskIds:[],deletedEventIds:[]};
 let state=load();
 function load(){try{return {...base,...JSON.parse(localStorage.getItem(KEY)||'{}')}}catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
@@ -25,10 +36,10 @@ function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIs
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
-function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
+function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} setOrbPalette();bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
-function renderMessages(){const box=$('#messages');box.innerHTML=state.messages.slice(-7).map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const sc=$('.assistant-scroll');if(sc)sc.scrollTop=sc.scrollHeight},20)}
+function renderMessages(){const box=$('#messages');box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}">${esc(m.text)}</div>`).join('');setTimeout(()=>{const sc=$('.assistant-scroll');if(sc&&!sc.dataset.initialScroll){sc.scrollTop=sc.scrollHeight;sc.dataset.initialScroll='1'}},20)}
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
@@ -71,6 +82,7 @@ function applyProposal(p){
       const list=p.kind==='task'?state.tasks:state.events;
       const idx=list.findIndex(x=>x.id===target.id);
       if(idx>=0)list.splice(idx,1);
+      tombstone(p.kind,target.id);
       mutation(p.kind,'delete',before,null,'assistant');
       save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó eliminado.');return;
     }
@@ -236,6 +248,7 @@ function deleteItem(kind,id){
   $('#deleteConfirm').onclick=()=>{
     const before=clone(item),list=kind==='task'?state.tasks:state.events,idx=list.findIndex(x=>x.id===id);
     if(idx>=0)list.splice(idx,1);
+    tombstone(kind,id);
     mutation(kind,'delete',before,null,'manual');save();renderCalendar();closeModal();
   };
 }
@@ -283,7 +296,21 @@ function tasksPanel(){
 }
 function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
 function memoryPanel(){modal('Lo que Isabella sabe de mí',state.memory.length?state.memory.map(m=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';return `<div class="row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal en esta staging.</div>')}
-function categoriesPanel(){modal('Categorías y proyectos',`<div class="small">Categorías</div>${state.categories.map(c=>`<div class="row"><div class="row-main">${esc(c.name)}</div></div>`).join('')}<div class="small" style="margin-top:18px">Proyectos de Trabajo</div>${state.projects.map(p=>`<div class="row"><div class="row-main">${esc(p.name)}</div></div>`).join('')}`)}
+function categoriesPanel(){
+  const rows=state.categories.map(x=>`<div class="settings-row"><input data-cat-name="${x.id}" value="${esc(x.name)}"><button data-cat-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
+  const prows=state.projects.map(x=>`<div class="settings-row"><input data-project-name="${x.id}" value="${esc(x.name)}"><select data-project-cat="${x.id}">${state.categories.map(cat=>`<option value="${cat.id}" ${cat.id===x.categoryId?'selected':''}>${esc(cat.name)}</option>`).join('')}</select><button data-project-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
+  modal('Categorías y proyectos',`<div class="small section-label">Categorías</div><div id="categoryRows">${rows}</div><button id="addCategory" class="secondary settings-add">+ Categoría</button><div class="small section-label settings-projects-title">Proyectos</div><div id="projectRows">${prows}</div><button id="addProject" class="secondary settings-add">+ Proyecto</button><button id="saveTaxonomy" class="primary settings-save">Guardar cambios</button>`);
+  $('#addCategory').onclick=()=>{state.categories.push({id:uid(),name:'Nueva categoría'});save();categoriesPanel()};
+  $('#addProject').onclick=()=>{state.projects.push({id:uid(),categoryId:state.categories[0]?.id||'personal',name:'Nuevo proyecto'});save();categoriesPanel()};
+  $$('[data-cat-delete]').forEach(b=>b.onclick=()=>{const id=b.dataset.catDelete;if(state.categories.length<=1)return;state.categories=state.categories.filter(x=>x.id!==id);state.projects.forEach(p=>{if(p.categoryId===id)p.categoryId=state.categories[0]?.id||'personal'});state.tasks.forEach(t=>{if(t.categoryId===id)t.categoryId='personal'});state.events.forEach(e=>{if(e.categoryId===id)e.categoryId='personal'});save();categoriesPanel()});
+  $$('[data-project-delete]').forEach(b=>b.onclick=()=>{const id=b.dataset.projectDelete;state.projects=state.projects.filter(x=>x.id!==id);state.tasks.forEach(t=>{if(t.projectId===id)t.projectId=null});state.events.forEach(e=>{if(e.projectId===id)e.projectId=null});save();categoriesPanel()});
+  $('#saveTaxonomy').onclick=()=>{
+    $$('[data-cat-name]').forEach(i=>{const x=state.categories.find(c=>c.id===i.dataset.catName);if(x&&i.value.trim())x.name=i.value.trim()});
+    $$('[data-project-name]').forEach(i=>{const x=state.projects.find(p=>p.id===i.dataset.projectName);if(x&&i.value.trim())x.name=i.value.trim()});
+    $$('[data-project-cat]').forEach(i=>{const x=state.projects.find(p=>p.id===i.dataset.projectCat);if(x)x.categoryId=i.value});
+    save();closeModal();
+  };
+}
 window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
   replaceState:(next)=>{state={...base,...next};save();renderMessages();renderToday();renderCalendar();show(state.screen||'assistant')},
