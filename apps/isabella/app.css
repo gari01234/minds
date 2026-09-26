@@ -93,3 +93,6 @@
 
 .memory-row{display:grid;grid-template-columns:1fr auto auto;gap:8px;align-items:center;padding:13px 0;border-bottom:1px solid var(--line)}
 .memory-row>button{border:0;background:#f5f5f6;border-radius:10px;padding:8px 10px}
+
+.task-item{touch-action:auto;-webkit-touch-callout:none}
+.hours .event-item{touch-action:auto;-webkit-touch-callout:none}
