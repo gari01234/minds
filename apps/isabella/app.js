@@ -58,6 +58,7 @@ function normalizeMessages(items){
     const text=String(m?.text||'').trim();
     if(!text)continue;
     if(/^Edge Function returned a non-2xx status code$/i.test(text))continue;
+    if(/^Conecta la memoria de Isabella para activar la IA\.?$/i.test(text))continue;
     if(m.role==='assistant'&&text==='Hola. Soy Isabella.'){
       if(greetingSeen)continue;
       greetingSeen=true;
@@ -126,7 +127,7 @@ function renderMessages(forceBottom=false){
   state.messages=normalizeMessages(state.messages);
   const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
   box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${esc(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
-  bindMessageReactions();
+  try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   setTimeout(()=>{
     const b=$('#messages');
     if(b&&(forceBottom||nearBottom||!b.dataset.initialScroll)){
