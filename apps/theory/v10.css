@@ -295,3 +295,56 @@ html.embedded .drawer-inner{padding-bottom:90px!important}
 
 /* Remove any old chat/footer reservation that created the blank band */
 html.embedded .v09-conv-foot{display:none!important}
+
+
+/* Build 18 — Sofía is a real chat surface, never a reading overlay */
+html.embedded.sofia-chat-open,
+html.embedded.sofia-chat-open body{
+  overflow:hidden!important;
+  background:#fff!important;
+}
+html.embedded.sofia-chat-open #app,
+html.embedded.sofia-chat-open .center{
+  overflow:hidden!important;
+}
+html.embedded .v09-sheet[data-kind="chat"]:not(.open){
+  transform:translateY(calc(100% + 140px))!important;
+  pointer-events:none!important;
+}
+html.embedded.sofia-chat-open .v09-sheet[data-kind="chat"].open{
+  position:fixed!important;
+  inset:0!important;
+  z-index:1200!important;
+  width:100vw!important;
+  height:100dvh!important;
+  max-width:none!important;
+  max-height:none!important;
+  transform:none!important;
+  border-radius:0!important;
+}
+html.embedded.sofia-chat-open .v09-sheet[data-kind="chat"] .v09-sheet-body{
+  height:calc(100dvh - 72px)!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+  touch-action:pan-y;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg.assistant{
+  width:max-content!important;
+  max-width:88%!important;
+  padding:10px 14px!important;
+  border-radius:18px!important;
+  background:#f8f8f9!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg.user{
+  max-width:88%!important;
+}
+.v09-reaction-row.more.is-hidden{display:none!important}
+.v09-reaction-row.more{
+  display:grid!important;
+  grid-template-columns:repeat(5,42px)!important;
+  justify-content:center!important;
+}
+.v09-reaction-popover.expanded{border-radius:20px!important}
