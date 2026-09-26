@@ -39,3 +39,8 @@ Las categorías iniciales son Casa, Trabajo, MINDS, Personal y Architectures. Tr
 ## Automatizaciones / rutinas
 
 Las rutinas recurrentes y los recordatorios únicos de Isabella ya se persisten en Supabase y se ejecutan server-side mediante Supabase Cron + pg_net + la Edge Function `isabella-routine-runner`. Isabella puede proponer una rutina o un mensaje futuro en el chat y la interfaz exige confirmación antes de crearlos. El resultado se escribe en la conversación aunque la web esté cerrada. Web Push sigue siendo una capa separada: no es necesario para que Isabella escriba en el chat, pero sí para mostrar un aviso del sistema operativo fuera de MINDS.
+
+
+### Feed control desde el chat
+
+Desde Build 28, la constelación e intereses del Feed dejan de ser solo ajustes manuales del navegador. Isabella puede proponer cambios explícitos en bloque —por ejemplo seguir una lista de arquitectos, artistas o estudios que acaba de investigar— y la interfaz pide confirmación antes de aplicarlos. Las preferencias del Feed se sincronizan en `isabella_preferences` con `preference_key='feed'`, de modo que el futuro cliente nativo comparte la misma curaduría.

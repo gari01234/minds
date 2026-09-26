@@ -542,6 +542,14 @@ function proposalLabel(p){
     if(p.schedule_kind==='once')return ['Programar recordatorio',p.title,p.date,p.time||'09:00'].filter(Boolean).join(' · ');
     return ['Programar rutina',p.title,p.schedule_kind==='weekly'?'Semanal':'Todos los días',(p.time||'08:00')+days].filter(Boolean).join(' · ');
   }
+  if(p.kind==='feed_preferences'){
+    const add=(p.add_entities||[]).length,remove=(p.remove_entities||[]).length,topics=(p.add_topics||[]).length+(p.add_custom_topics||[]).length;
+    const bits=['Actualizar Feed'];
+    if(add)bits.push('seguir '+add+(add===1?' entidad':' entidades'));
+    if(remove)bits.push('dejar de seguir '+remove);
+    if(topics)bits.push('añadir '+topics+(topics===1?' tema':' temas'));
+    return bits.join(' · ');
+  }
   const action=p.action||'create';
   const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
@@ -554,6 +562,26 @@ function proposalLabel(p){
   return bits.filter(Boolean).join(' · ');
 }
 function proposalEditor(p,onDone){
+  if(p.kind==='feed_preferences'){
+    const additions=Array.isArray(p.add_entities)?p.add_entities:[];
+    modal('Revisar cambios del Feed',`<div class="form proposal-editor feed-proposal-editor">
+      <div class="small">Isabella modificará tu constelación solo después de que confirmes.</div>
+      <div class="feed-follow-editor"><div class="feed-follow-editor-title">Añadir a tu constelación</div><div id="proposalFeedRows">${additions.map(x=>feedFollowRow({...x,id:uid()})).join('')||'<div class="small empty-panel">Sin nuevas entidades.</div>'}</div></div>
+      <label>Dejar de seguir <span class="small">(separado por comas)</span><input id="proposalFeedRemove" value="${esc((p.remove_entities||[]).join(', '))}"></label>
+      <label>Añadir temas base <span class="small">(separado por comas)</span><input id="proposalFeedTopics" value="${esc((p.add_topics||[]).join(', '))}"></label>
+      <label>Añadir otros temas <span class="small">(separado por comas)</span><input id="proposalFeedCustom" value="${esc((p.add_custom_topics||[]).join(', '))}"></label>
+      <label>Instrucción adicional para el Feed<textarea id="proposalFeedInstructions" rows="3">${esc(p.instructions_append||'')}</textarea></label>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos cambios</button></div>
+    </div>`);
+    $('#proposalFeedRows [data-follow-remove]').forEach(b=>b.onclick=()=>b.closest('.feed-follow-row')?.remove());
+    const split=v=>String(v||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter((x,i,a)=>a.findIndex(y=>y.toLowerCase()===x.toLowerCase())===i);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>{
+      const add_entities=$('#proposalFeedRows .feed-follow-row').map(row=>({name:row.querySelector('[data-follow-name]')?.value.trim()||'',type:row.querySelector('[data-follow-type]')?.value||'other',focus:row.querySelector('[data-follow-focus]')?.value.trim()||''})).filter(x=>x.name);
+      onDone?.({...p,add_entities,remove_entities:split($('#proposalFeedRemove').value),add_topics:split($('#proposalFeedTopics').value),add_custom_topics:split($('#proposalFeedCustom').value),instructions_append:$('#proposalFeedInstructions').value.trim()});
+    };
+    return;
+  }
   if(p.kind==='routine'){
     const weekdays=new Set((p.weekdays||[]).map(Number));
     const dayLabels=[['0','Dom'],['1','Lun'],['2','Mar'],['3','Mié'],['4','Jue'],['5','Vie'],['6','Sáb']];
@@ -623,7 +651,7 @@ function proposalEditor(p,onDone){
   };
 }
 function confirmProposal(p){
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div></div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(q);else confirmProposal(p)});
@@ -674,8 +702,43 @@ async function createRoutineProposal(p){
   const once=schedule.kind==='once';
   say('assistant',`Listo. ${once?'Programé el recordatorio':'Programé la rutina'} “${data.title}”. Isabella escribirá aquí desde el servidor aunque MINDS esté cerrado; la próxima ejecución quedó prevista para ${new Date(data.next_run_at).toLocaleString('es-ES')}. Las notificaciones del sistema son opcionales y solo hacen falta si quieres además un aviso fuera del chat.`);
 }
+function applyFeedPreferencesProposal(p){
+  const prefs={...base.feedPreferences,...(state.feedPreferences||{})};
+  const key=s=>String(s||'').trim().toLocaleLowerCase();
+  let graph=Array.isArray(prefs.followGraph)?prefs.followGraph.map(x=>({...x})):[];
+  const removals=new Set((p.remove_entities||[]).map(key).filter(Boolean));
+  if(removals.size)graph=graph.filter(x=>!removals.has(key(x.name)));
+  for(const raw of p.add_entities||[]){
+    const name=String(raw?.name||'').trim();if(!name)continue;
+    const existing=graph.find(x=>key(x.name)===key(name));
+    if(existing){
+      existing.name=name;
+      if(raw.type&&raw.type!=='other')existing.type=raw.type;
+      if(String(raw.focus||'').trim())existing.focus=String(raw.focus).trim();
+      existing.active=true;
+    }else{
+      graph.push({id:uid(),name,type:String(raw.type||'other'),focus:String(raw.focus||'').trim(),active:true});
+    }
+  }
+  const mergeList=(current,adds,removes=[])=>{
+    const rm=new Set((removes||[]).map(key));
+    const out=(current||[]).filter(x=>!rm.has(key(x)));
+    for(const x of adds||[]){const v=String(x||'').trim();if(v&&!out.some(y=>key(y)===key(v)))out.push(v)}
+    return out;
+  };
+  const topics=mergeList(prefs.topics,p.add_topics,p.remove_topics).slice(0,40);
+  const customTopics=mergeList(prefs.customTopics,p.add_custom_topics,p.remove_custom_topics).slice(0,40);
+  let instructions=String(prefs.instructions||'').trim(),extra=String(p.instructions_append||'').trim();
+  if(extra&&!instructions.toLowerCase().includes(extra.toLowerCase()))instructions=[instructions,extra].filter(Boolean).join('\n');
+  graph=graph.filter(x=>x.name).slice(0,120);
+  state.feedPreferences={...prefs,topics,customTopics,followGraph:graph,following:graph.map(x=>x.name),instructions};
+  save();closeModal();renderFeed(true);
+  const added=(p.add_entities||[]).length,removed=(p.remove_entities||[]).length;
+  say('assistant',`Listo. Actualicé tu Feed${added?' y añadí '+added+(added===1?' seguimiento':' seguimientos'):''}${removed?'; quité '+removed:''}. La próxima edición ya usará esta constelación.`);
+}
 function applyProposal(p){
   if(p.kind==='routine'){createRoutineProposal(p);return}
+  if(p.kind==='feed_preferences'){applyFeedPreferencesProposal(p);return}
   const action=p.action||'create';
   const categoryId=p.category?state.categories.find(c=>c.name.toLowerCase()===String(p.category).toLowerCase())?.id:null;
   const projectId=p.project?state.projects.find(x=>x.name.toLowerCase()===String(p.project).toLowerCase())?.id:null;

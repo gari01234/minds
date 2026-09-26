@@ -313,3 +313,16 @@ test('Build 27 supports one-time server chat reminders without requiring push pe
   assert.ok(app.includes("notificaciones del sistema son opcionales"));
   assert.ok(app.includes("sch.kind==='once'"));
 });
+
+
+test('Build 28 lets Isabella propose and persist Feed curation changes',()=>{
+  const app=read('apps/isabella/app.js');
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(app.includes("p.kind==='feed_preferences'"));
+  assert.ok(app.includes('function applyFeedPreferencesProposal'));
+  assert.ok(app.includes('add_entities'));
+  assert.ok(app.includes('followGraph:graph'));
+  assert.ok(sync.includes("preference_key:'feed'"));
+  assert.ok(sync.includes("from('isabella_preferences').upsert"));
+  assert.ok(sync.includes("eq('preference_key','feed')"));
+});
