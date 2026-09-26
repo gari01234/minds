@@ -38,4 +38,4 @@ Las categorías iniciales son Casa, Trabajo, MINDS, Personal y Architectures. Tr
 
 ## Automatizaciones / rutinas
 
-La dirección de producto acordada es que las rutinas recurrentes de Isabella (por ejemplo, un resumen diario a las 08:00) se ejecuten server-side y puedan enviar notificaciones aunque la web esté cerrada. El chequeo local de `maybeDailyBrief()` es solo una compatibilidad provisional, no la arquitectura final. La implementación final requiere scheduler + persistencia de rutinas + Web Push en el proyecto Supabase de producción.
+Las rutinas recurrentes de Isabella ya se persisten en Supabase y se ejecutan server-side mediante Supabase Cron + pg_net + la Edge Function `isabella-routine-runner`. Isabella puede proponer una rutina recurrente y la interfaz exige confirmación antes de crearla. El resultado se escribe en la conversación de Isabella aunque la web esté cerrada. Web Push todavía es una capa separada: la ejecución exacta ya es server-side, pero la notificación del sistema operativo requiere que MINDS se instale como web app y que el usuario conceda permiso de notificaciones.

@@ -171,8 +171,7 @@ async function maybeProactiveNudge(){
   }catch{}
 }
 async function afterSync(){
-  const briefed=await maybeDailyBrief();
-  if(!briefed)await maybeProactiveNudge();
+  await maybeProactiveNudge();
 }
 function show(name){
   const allowed=['assistant','feed','ideas','calendar','readings'];
@@ -482,6 +481,10 @@ function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classL
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:m.kind||'context',content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
+  if(p.kind==='routine'){
+    const days=p.schedule_kind==='weekly'&&Array.isArray(p.weekdays)&&p.weekdays.length?(' · '+p.weekdays.map(d=>['dom','lun','mar','mié','jue','vie','sáb'][Number(d)]||d).join(', ')):'';
+    return ['Programar rutina',p.title,p.schedule_kind==='weekly'?'Semanal':'Todos los días',(p.time||'08:00')+days].filter(Boolean).join(' · ');
+  }
   const action=p.action||'create';
   const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
@@ -494,6 +497,30 @@ function proposalLabel(p){
   return bits.filter(Boolean).join(' · ');
 }
 function proposalEditor(p,onDone){
+  if(p.kind==='routine'){
+    const weekdays=new Set((p.weekdays||[]).map(Number));
+    const dayLabels=[['0','Dom'],['1','Lun'],['2','Mar'],['3','Mié'],['4','Jue'],['5','Vie'],['6','Sáb']];
+    modal('Revisar rutina',`<div class="form proposal-editor routine-editor">
+      <label>Nombre<input id="routineTitle" value="${esc(p.title||'Rutina')}"></label>
+      <label>Qué hará Isabella<textarea id="routineInstruction" rows="4">${esc(p.instruction||'')}</textarea></label>
+      <label>Frecuencia<select id="routineKind"><option value="daily" ${p.schedule_kind!=='weekly'?'selected':''}>Todos los días</option><option value="weekly" ${p.schedule_kind==='weekly'?'selected':''}>Semanal</option></select></label>
+      <label>Hora<input id="routineTime" type="time" value="${esc(p.time||'08:00')}"></label>
+      <div id="routineWeekdays" class="routine-weekdays">${dayLabels.map(([v,l])=>`<label><input type="checkbox" value="${v}" ${weekdays.has(Number(v))?'checked':''}><span>${l}</span></label>`).join('')}</div>
+      <label>Zona horaria<input id="routineTimezone" value="${esc(p.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin')}"></label>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos datos</button></div>
+    </div>`);
+    const syncDays=()=>$('#routineWeekdays').classList.toggle('hidden',$('#routineKind').value!=='weekly');$('#routineKind').onchange=syncDays;syncDays();
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,
+      title:$('#routineTitle').value.trim()||p.title||'Rutina',
+      instruction:$('#routineInstruction').value.trim()||p.instruction||'',
+      schedule_kind:$('#routineKind').value,
+      time:$('#routineTime').value||'08:00',
+      weekdays:$('#routineWeekdays input:checked').map(x=>Number(x.value)),
+      timezone:$('#routineTimezone').value.trim()||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin'
+    });
+    return;
+  }
   const target=(p.action&&p.action!=='create')?findTarget(p):null;
   const title=(p.title??target?.title??'');
   const date=(p.date??target?.date??today());
@@ -561,7 +588,29 @@ function findTarget(p){
   if(title)matches=matches.filter(x=>String(x.title||'').trim().toLowerCase()===title);
   return matches.length===1?matches[0]:null;
 }
+async function createRoutineProposal(p){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb){closeModal();say('assistant','Necesito la memoria conectada para programar una rutina que funcione aunque cierres MINDS.');return}
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){closeModal();say('assistant','Conecta la memoria primero y entonces puedo programarla en el servidor.');return}
+  const schedule={kind:p.schedule_kind==='weekly'?'weekly':'daily',time:p.time||'08:00',weekdays:Array.isArray(p.weekdays)?p.weekdays.map(Number):[]};
+  if(schedule.kind==='weekly'&&!schedule.weekdays.length){closeModal();say('assistant','Me faltan los días de la semana para esa rutina.');return}
+  const row={
+    user_id:session.user.id,
+    title:p.title||'Rutina',
+    instruction:p.instruction||p.title||'',
+    schedule,
+    timezone:p.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
+    enabled:true,
+    metadata:{source:'isabella_chat'}
+  };
+  const {data,error}=await sb.from('isabella_routines').insert(row).select('id,title,next_run_at').single();
+  closeModal();
+  if(error){say('assistant','No pude programarla todavía: '+error.message);return}
+  say('assistant',`Listo. Programé “${data.title}”. Se ejecutará en el servidor aunque MINDS esté cerrado; la próxima ejecución quedó prevista para ${new Date(data.next_run_at).toLocaleString('es-ES')}. `);
+}
 function applyProposal(p){
+  if(p.kind==='routine'){createRoutineProposal(p);return}
   const action=p.action||'create';
   const categoryId=p.category?state.categories.find(c=>c.name.toLowerCase()===String(p.category).toLowerCase())?.id:null;
   const projectId=p.project?state.projects.find(x=>x.name.toLowerCase()===String(p.project).toLowerCase())?.id:null;
@@ -959,7 +1008,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
 function tasksPanel(){
   const active=state.tasks.filter(t=>!t.archivedAt).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
   const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
@@ -972,6 +1021,24 @@ function tasksPanel(){
   $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
 }
 function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
+async function routinesPanel(){
+  modal('Rutinas','<div class="small">Cargando rutinas…</div>');
+  try{
+    const sb=window.MINDS_SUPABASE;if(!sb)throw new Error('Supabase no disponible');
+    const {data:{session}}=await sb.auth.getSession();if(!session){modal('Rutinas','<div class="small">Conecta la memoria para gestionar rutinas.</div>');return}
+    const {data,error}=await sb.from('isabella_routines').select('id,title,instruction,schedule,timezone,enabled,next_run_at,last_run_at,last_error').order('created_at',{ascending:false});
+    if(error)throw error;
+    const rows=data||[];
+    const body=rows.length?rows.map(r=>{
+      const sch=r.schedule||{},days=sch.kind==='weekly'&&Array.isArray(sch.weekdays)?' · '+sch.weekdays.map(d=>['dom','lun','mar','mié','jue','vie','sáb'][Number(d)]||d).join(', '):'';
+      const next=r.next_run_at?new Date(r.next_run_at).toLocaleString('es-ES'):'Sin próxima ejecución';
+      return `<div class="routine-row"><div class="row-main"><b>${esc(r.title)}</b><div class="small routine-schedule">${sch.kind==='weekly'?'Semanal':'Todos los días'} · ${esc(sch.time||'08:00')}${esc(days)} · ${esc(r.timezone||'')}</div><div class="small">${esc(r.instruction||'')}</div><div class="small routine-next">Próxima: ${esc(next)}</div>${r.last_error?`<div class="small danger-text">${esc(r.last_error)}</div>`:''}</div><label class="routine-toggle"><input type="checkbox" data-routine-enabled="${r.id}" ${r.enabled?'checked':''}><span></span></label><button data-routine-delete="${r.id}" aria-label="Eliminar">×</button></div>`;
+    }).join(''):'<div class="small">Todavía no has programado ninguna rutina.</div>';
+    modal('Rutinas',body);
+    $('[data-routine-enabled]').forEach(x=>x.onchange=async()=>{await sb.from('isabella_routines').update({enabled:x.checked}).eq('id',x.dataset.routineEnabled);routinesPanel()});
+    $('[data-routine-delete]').forEach(x=>x.onclick=async()=>{await sb.from('isabella_routines').delete().eq('id',x.dataset.routineDelete);routinesPanel()});
+  }catch(e){modal('Rutinas','<div class="small">No pude cargar las rutinas ahora mismo.</div>')}
+}
 async function skillsPanel(){
   modal('Habilidades','<div class="small">Cargando habilidades…</div>');
   try{

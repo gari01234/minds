@@ -288,3 +288,15 @@ test('Build 25 keeps Isabella ORB docked while the conversation opens at the lat
   assert.ok(css.includes('body.isabella-orb-docked #orbButton'));
   assert.ok(css.includes('position:fixed!important'));
 });
+
+
+test('Build 26 supports confirmed server-side Isabella routines',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  assert.ok(shell.includes('data-action="routines"'));
+  assert.ok(app.includes("p.kind==='routine'"));
+  assert.ok(app.includes("from('isabella_routines').insert"));
+  assert.ok(app.includes('async function routinesPanel'));
+  assert.ok(app.includes("await maybeProactiveNudge()"));
+  assert.ok(!app.includes("const briefed=await maybeDailyBrief()"));
+});
