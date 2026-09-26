@@ -248,3 +248,95 @@ body[data-section="readings"] .topbar .eyebrow:after{content:" · READINGS";lett
   padding:8px 0 9px;
   border-bottom:1px solid #ececef;
 }
+
+
+/* Build 17 — messaging reactions, tighter ORB, Feed controls */
+.assistant-scroll.orb-compact .orb-button{
+  width:78px!important;
+  height:78px!important;
+  margin:-30px auto -10px!important;
+  top:-8px!important;
+}
+.assistant-scroll.orb-compact .orb-core{
+  width:54px!important;
+  height:54px!important;
+  filter:blur(8px) saturate(.98)!important;
+}
+.assistant-scroll.orb-compact .orb-haze{
+  width:66px!important;
+  height:66px!important;
+  filter:blur(12px)!important;
+  opacity:.54!important;
+}
+.assistant-scroll.orb-compact .orb-haze-b{
+  width:76px!important;
+  height:76px!important;
+  opacity:.23!important;
+}
+.assistant-scroll.orb-compact .today-card{margin-top:0!important}
+.assistant-scroll.orb-compact .messages{padding-top:8px}
+
+.message{position:relative}
+.message.reaction-target{z-index:12}
+.reaction-chip{
+  position:absolute;
+  bottom:-10px;
+  left:8px;
+  min-width:29px;
+  height:23px;
+  padding:1px 7px;
+  display:grid;
+  place-items:center;
+  border-radius:99px;
+  background:#fff;
+  border:2px solid #fff;
+  box-shadow:0 1px 5px rgba(0,0,0,.16);
+  font-size:14px;
+  line-height:1;
+  cursor:pointer
+}
+.message.user .reaction-chip{left:auto;right:8px}
+.message:has(.reaction-chip){margin-bottom:22px}
+.reaction-popover{
+  position:fixed;
+  z-index:80;
+  width:max-content;
+  max-width:calc(100vw - 20px);
+  padding:5px;
+  border-radius:24px;
+  background:rgba(250,250,251,.96);
+  box-shadow:0 12px 38px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.04);
+  backdrop-filter:blur(22px);
+  -webkit-backdrop-filter:blur(22px)
+}
+.reaction-row{display:flex;align-items:center;gap:2px}
+.reaction-row-more{padding-top:4px;margin-top:3px;border-top:1px solid rgba(0,0,0,.06)}
+.reaction-popover button{
+  width:42px;height:42px;border:0;border-radius:50%;background:transparent;
+  font-size:24px;display:grid;place-items:center;padding:0;cursor:pointer
+}
+.reaction-popover button.selected{background:#e9e9ed;transform:scale(1.06)}
+.reaction-popover .reaction-more{font-size:24px;color:#666;background:#efeff2}
+.reaction-popover .reaction-remove{font-size:24px;color:#888}
+
+.surface-head-actions{display:flex;align-items:center;gap:8px;flex:none}
+.surface-text-action{border:0;background:transparent;color:#777;font-size:12px;padding:10px 8px;cursor:pointer}
+.surface-card-actions{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+.weather-toggle,.surface-discuss{
+  border:0;background:transparent;padding:11px 0 0;color:#555;font-size:12px;font-weight:650;cursor:pointer
+}
+.weather-toggle:after{content:"  ↓";color:#aaa}
+.weather-week{margin-top:14px;border-top:1px solid #ececef}
+.weather-row{display:flex;justify-content:space-between;gap:18px;padding:10px 0;border-bottom:1px solid #f1f1f3;font-size:12px}
+.weather-row span{color:#888}.weather-row b{font-weight:600;text-align:right}
+.topic-grid{display:flex;flex-wrap:wrap;gap:7px;margin-top:8px}
+.topic-choice{display:block!important}
+.topic-choice input{position:absolute;opacity:0;pointer-events:none}
+.topic-choice span{display:inline-block;padding:8px 10px;border:1px solid #e3e3e6;border-radius:99px;color:#666;background:#fff;font-size:12px}
+.topic-choice input:checked+span{background:#111;color:#fff;border-color:#111}
+.feed-preferences textarea{min-height:100px}
+
+@media(max-width:520px){
+  .assistant-scroll.orb-compact .orb-button{margin:-34px auto -12px!important}
+  .reaction-popover button{width:40px;height:40px;font-size:23px}
+}
