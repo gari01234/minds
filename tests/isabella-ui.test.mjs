@@ -61,7 +61,7 @@ test('Feed exposes preferences and expandable weather',()=>{
   assert.ok(app.includes('weather-toggle'));
   assert.ok(app.includes('weather-week'));
   assert.ok(ai.includes('weather_location'));
-  assert.ok(ai.includes('"details":[]'));
+  assert.ok(ai.includes("functions.invoke('isabella-feed'"));
 });
 
 test('Sofia chat is a first-class messaging surface inside Readings',()=>{
@@ -188,7 +188,7 @@ test('Build 22 keeps Feed generations stable and conversations inside Feed',()=>
   assert.ok(app.includes('feedThreads'));
   assert.ok(!app.includes('data-news-more'));
   assert.ok(ai.includes('generation_id:generationId'));
-  assert.ok(ai.includes("if(items.length<3)return cached.length?cached:items"));
+  assert.ok(ai.includes("if(items.length<3){"));
   assert.ok(ai.includes('async function feedStory'));
   assert.ok(shell.includes('id="feedDetail"'));
   assert.ok(shell.includes('Preguntar sobre esto...'));
@@ -202,7 +202,7 @@ test('Build 22 adds an explicit personal follow graph',()=>{
   assert.ok(app.includes('data-follow-focus'));
   assert.ok(app.includes('data-feed-follow-name'));
   assert.ok(ai.includes('feed_follow_graph'));
-  assert.ok(ai.includes('constelación personal'));
+  assert.ok(ai.includes('feedPreferenceSignature'));
 });
 
 test('Build 24 uses a long-press message context with reactions and text actions',()=>{
