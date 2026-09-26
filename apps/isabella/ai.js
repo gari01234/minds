@@ -55,6 +55,67 @@ async function listSkills(){
   if(error)return [];
   return data||[];
 }
+function parseSurface(raw){
+  const text=String(raw||'').trim().replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/i,'').trim();
+  try{const v=JSON.parse(text);return Array.isArray(v)?v:(Array.isArray(v?.items)?v.items:[])}catch{}
+  const a=text.indexOf('['),b=text.lastIndexOf(']');
+  if(a>=0&&b>a){try{const v=JSON.parse(text.slice(a,b+1));return Array.isArray(v)?v:[]}catch{}}
+  return [];
+}
+async function saveSurface(surface,agent,items){
+  if(!sb||!Array.isArray(items)||!items.length)return items||[];
+  const {data:{session}}=await sb.auth.getSession();if(!session)return items;
+  await sb.from('minds_surface_items').update({status:'dismissed'}).eq('surface',surface).eq('agent',agent).eq('status','active');
+  const rows=items.slice(0,6).map(x=>({
+    user_id:session.user.id,surface,agent,
+    title:String(x.title||'').trim()||'Idea',
+    body:String(x.body||'').trim(),
+    action_prompt:String(x.action_prompt||x.prompt||'').trim()||null,
+    icon:String(x.icon||'').trim()||null,
+    metadata:{source:x.source||null},
+    expires_at:new Date(Date.now()+12*60*60*1000).toISOString()
+  }));
+  const {data,error}=await sb.from('minds_surface_items').insert(rows).select('*');
+  return error?items:(data||items);
+}
+async function loadSurface(surface){
+  if(!sb)return [];
+  const {data:{session}}=await sb.auth.getSession();if(!session)return [];
+  const {data,error}=await sb.from('minds_surface_items').select('*')
+    .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString())
+    .order('generated_at',{ascending:false}).limit(12);
+  return error?[]:(data||[]);
+}
+async function feed(state,{force=false}={}){
+  if(!force){const cached=await loadSurface('feed');if(cached.length)return cached}
+  const prompt='Crea un Feed personal de máximo 4 elementos para Gari usando su agenda, tareas, memoria y, solo cuando aporte valor, información actual. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Cada elemento debe ser concreto, breve y útil ahora. No inventes compromisos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase que yo pueda enviar a Isabella para continuar ese elemento. Los iconos pueden ser emojis sobrios.';
+  const result=await ask(prompt,state,{background:true});
+  const items=parseSurface(result?.reply);
+  return saveSurface('feed','isabella',items);
+}
+async function ideas(state,{force=false}={}){
+  if(!force){const cached=await loadSurface('idea');if(cached.length)return cached}
+  const prompt='Genera máximo 3 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. No son tareas obligatorias: son propuestas útiles que él quizá no haya pensado pedir. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Evita consejos genéricos y evita transacciones. Cada idea debe explicar por qué aparece ahora.';
+  const result=await ask(prompt,state,{background:true});
+  const items=parseSurface(result?.reply);
+  return saveSurface('idea','isabella',items);
+}
+async function sofiaSurface(kind,{force=false}={}){
+  if(!sb)return [];
+  if(!force){
+    const cached=(await loadSurface(kind)).filter(x=>x.agent==='sofia');
+    if(cached.length)return cached;
+  }
+  const {data:{session}}=await sb.auth.getSession();if(!session)return [];
+  const request=kind==='idea'
+    ?'Analiza mis Readings, subrayados, notas e hilos activos y genera máximo 3 descubrimientos o ideas que merezcan conversación ahora. Deben ser específicos, provisionales y trazables a mi memoria intelectual. Devuelve EXCLUSIVAMENTE JSON válido como array de {"title":"...","body":"...","action_prompt":"...","icon":"..."}. action_prompt debe formular cómo continuar la conversación contigo, Sofía.'
+    :'Genera máximo 2 señales para mi Feed desde Readings: algo que haya quedado vivo, una pregunta abierta o una lectura/hilo que merezca volver a mirar ahora. Devuelve EXCLUSIVAMENTE JSON válido como array de {"title":"...","body":"...","action_prompt":"...","icon":"..."}.';
+  const {data,error}=await sb.functions.invoke('sofia-chat',{body:{message:request,background:true,structured:true}});
+  if(error)return [];
+  const items=Array.isArray(data?.structured)?data.structured:parseSurface(data?.reply);
+  return saveSurface(kind,'sofia',items);
+}
+
 async function transcribe(blob){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
@@ -77,5 +138,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,transcribe,listSkills};
+window.ISABELLA_AI={ask,brief,nudge,transcribe,listSkills,feed,ideas,sofiaSurface,loadSurface};
 })();
