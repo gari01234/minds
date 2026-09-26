@@ -221,6 +221,7 @@
       :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
     const title=c.origin?.type==='reading'?(c.origin?.label||'Lectura'):'Sofía';
     openSheet('SOFÍA',title,`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button aria-label="Enviar">↑</button></form>`,'chat');
+    if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:true},location.origin);
     sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     bindSofiaReactions(c);
