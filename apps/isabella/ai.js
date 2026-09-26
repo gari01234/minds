@@ -34,5 +34,27 @@ async function brief(state){
 async function nudge(state){
   return ask("Evalúa si existe exactamente un seguimiento personal u operativo que valga la pena traerme ahora: algo pendiente, una respuesta esperada, una tarea que estoy dejando atrás, una cita cercana o algo significativo que te conté y que razonablemente merezca seguimiento. Si no hay nada suficientemente útil, responde exactamente NO_NUDGE. Si sí lo hay, escribe solo un mensaje breve y natural, sin crear ni modificar nada.",state);
 }
-window.ISABELLA_AI={ask,brief,nudge};
+async function transcribe(blob){
+  if(!sb)throw new Error('Supabase no está disponible.');
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw new Error('Conecta la memoria de Isabella para usar voz multilingüe.');
+  const cfg=window.MINDS_SUPABASE_CONFIG;
+  if(!cfg?.url||!cfg?.publishableKey)throw new Error('Falta la configuración de Supabase.');
+  const form=new FormData();
+  const type=blob?.type||'audio/webm';
+  const ext=type.includes('mp4')||type.includes('m4a')?'m4a':type.includes('ogg')?'ogg':type.includes('wav')?'wav':'webm';
+  form.append('file',blob,'isabella-voice.'+ext);
+  const response=await fetch(cfg.url+'/functions/v1/isabella-transcribe',{
+    method:'POST',
+    headers:{
+      apikey:cfg.publishableKey,
+      Authorization:'Bearer '+session.access_token
+    },
+    body:form
+  });
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
+  return String(data?.text||'').trim();
+}
+window.ISABELLA_AI={ask,brief,nudge,transcribe};
 })();
