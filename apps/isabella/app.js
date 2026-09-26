@@ -550,7 +550,35 @@ function tasksPanel(){
   $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
 }
 function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
-function memoryPanel(){modal('Lo que Isabella sabe de mí',state.memory.length?state.memory.map(m=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';return `<div class="row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal en esta staging.</div>')}
+function memoryPanel(){
+  const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
+  const body=items.length?items.map((m,i)=>{
+    const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';
+    const id=typeof m==='object'?(m.id||String(i)):String(i);
+    return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`;
+  }).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
+  modal('Lo que Isabella sabe de mí',body);
+  $$('[data-memory-edit]').forEach(b=>b.onclick=()=>editMemory(b.dataset.memoryEdit));
+  $$('[data-memory-delete]').forEach(b=>b.onclick=()=>deleteMemory(b.dataset.memoryDelete));
+}
+function memoryById(id){
+  return (state.memory||[]).find((m,i)=>String(typeof m==='object'?(m.id||i):i)===String(id));
+}
+function editMemory(id){
+  const m=memoryById(id);if(!m)return;
+  const obj=typeof m==='object'?m:{id,kind:'context',content:String(m),status:'active',confidence:1,source:'manual'};
+  modal('Editar recuerdo',`<div class="form"><label>Contenido<textarea id="memoryText" rows="5">${esc(obj.content||'')}</textarea></label><label>Tipo<select id="memoryKind">${['fact','person','routine','episodic','preference','context'].map(k=>`<option value="${k}" ${k===obj.kind?'selected':''}>${k}</option>`).join('')}</select></label><button id="memorySave" class="primary">Guardar</button><button id="memoryDeleteFromEdit" class="secondary danger-text">Eliminar recuerdo</button></div>`);
+  $('#memorySave').onclick=()=>{
+    if(typeof m!=='object'){const idx=state.memory.indexOf(m);state.memory[idx]=obj}
+    obj.content=$('#memoryText').value.trim()||obj.content;obj.kind=$('#memoryKind').value;obj.status='active';obj.source=obj.source||'manual';save();memoryPanel();
+  };
+  $('#memoryDeleteFromEdit').onclick=()=>deleteMemory(id);
+}
+function deleteMemory(id){
+  const m=memoryById(id);if(!m)return;
+  if(typeof m==='object'){m.status='deleted'}else{const idx=state.memory.indexOf(m);state.memory[idx]={id:uid(),kind:'context',content:String(m),status:'deleted',confidence:1,source:'manual'}}
+  save();memoryPanel();
+}
 function categoriesPanel(){
   const rows=state.categories.map(x=>`<div class="settings-row color-row"><input type="color" data-cat-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-cat-name="${x.id}" value="${esc(x.name)}"><button data-cat-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
   const prows=state.projects.map(x=>`<div class="settings-row project-color-row"><input type="color" data-project-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-project-name="${x.id}" value="${esc(x.name)}"><select data-project-cat="${x.id}">${state.categories.map(cat=>`<option value="${cat.id}" ${cat.id===x.categoryId?'selected':''}>${esc(cat.name)}</option>`).join('')}</select><button data-project-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
