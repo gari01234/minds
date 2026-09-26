@@ -95,6 +95,14 @@ async function ensureTaxonomy(state){
   return {cats:cats||[],projs:projs||[],catByKey,projByKey:new Map((projs||[]).map(p=>[p.client_key,p]))};
 }
 async function pushState(state,maps){
+  const tombstones=[
+    ...(state.deletedTaskIds||[]).map(client_key=>({user_id:user.id,entity_type:'task',client_key,deleted_at:new Date().toISOString()})),
+    ...(state.deletedEventIds||[]).map(client_key=>({user_id:user.id,entity_type:'event',client_key,deleted_at:new Date().toISOString()}))
+  ];
+  if(tombstones.length){
+    const {error}=await sb.from('isabella_deleted_items').upsert(tombstones,{onConflict:'user_id,entity_type,client_key'});
+    if(error)throw error;
+  }
   const tasks=(state.tasks||[]).map(t=>{
     if(t.done&&!t.completedAt)t.completedAt=new Date().toISOString();
     if(!t.done)t.completedAt=null;
@@ -177,6 +185,7 @@ async function recordActivity(detail){
       after_state:detail.after||null
     };
     if(detail.action==='delete'){
+      await sb.from('isabella_deleted_items').upsert({user_id:user.id,entity_type:detail.entityType,client_key:detail.entityKey,deleted_at:new Date().toISOString()},{onConflict:'user_id,entity_type,client_key'});
       const table=detail.entityType==='task'?'isabella_tasks':'isabella_events';
       await sb.from(table).delete().eq('user_id',user.id).eq('client_key',detail.entityKey);
     }
