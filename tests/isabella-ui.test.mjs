@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL(p,root),'utf8');
 
 test('Isabella collection selectors use querySelectorAll before forEach',()=>{
   const source=read('apps/isabella/app.js');
-  const singular=/(?<!\\$)\\$\\(([^)\\n]+)\\)\\.forEach/g;
+  const singular=/(?<!\$)\$\(([^)\n]+)\)\.forEach/g;
   assert.deepEqual([...source.matchAll(singular)].map(m=>m[0]),[]);
 });
 
@@ -35,9 +35,7 @@ test('Feed keeps Hoy and Para mí as explicit information layers',()=>{
   assert.ok(app.includes('feed-section-title">Hoy'));
   assert.ok(app.includes('feed-section-title">Para mí'));
   assert.ok(ai.includes('"section":"today"|"for_me"'));
-  assert.ok(ai.includes('"kind":"weather"'));
-  assert.ok(ai.includes('"kind":"architecture"'));
-  assert.ok(ai.includes('"kind":"ai"'));
-  assert.ok(ai.includes('"kind":"family"'));
-  assert.ok(ai.includes('"kind":"project"'));
+  for(const kind of ['weather','architecture','ai','family','project']){
+    assert.ok(ai.includes('"'+kind+'"'),`missing Feed kind: ${kind}`);
+  }
 });
