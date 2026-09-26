@@ -29,15 +29,18 @@ test('ORB compact mode is driven by conversation state',()=>{
   assert.ok(css.includes('.assistant-scroll.orb-compact .orb-button'));
 });
 
-test('Feed keeps Hoy and Para mí as explicit information layers',()=>{
+test('Feed keeps Hoy, Noticias and Para mí as explicit information layers',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('feed-section-title">Hoy'));
+  assert.ok(app.includes('feed-section-title">Noticias'));
   assert.ok(app.includes('feed-section-title">Para mí'));
-  assert.ok(ai.includes('"section":"today"|"for_me"'));
-  for(const kind of ['weather','architecture','ai','family','project']){
+  assert.ok(ai.includes('"section":"today"|"news"|"for_me"'));
+  for(const kind of ['weather','news','architecture','ai','family','project']){
     assert.ok(ai.includes('"'+kind+'"'),`missing Feed kind: ${kind}`);
   }
+  assert.ok(ai.includes('source_url'));
+  assert.ok(ai.includes('web_search'));
 });
 
 
@@ -79,4 +82,20 @@ test('embedded Readings keeps annotations contextual instead of over the reading
   assert.ok(css.includes('html.embedded .reader-tools'));
   assert.ok(css.includes('.reader-tools.mobile-open'));
   assert.ok(css.includes('transform:translateY(calc(100% + 40px))'));
+});
+
+
+test('legacy assistant-calendar swipe navigation is disabled',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(!app.includes(';initSwipe();initVoice();'));
+  assert.ok(app.includes(';initVoice();'));
+});
+
+test('Sofia chat informs the parent when opened and closed',()=>{
+  const js=read('apps/theory/v09.js');
+  const css=read('apps/theory/v10.css');
+  assert.ok(js.includes("sheet.dataset.kind=kind"));
+  assert.ok(js.includes("classList.add('sofia-chat-open')"));
+  assert.ok(js.includes("open:false"));
+  assert.ok(css.includes('html.embedded.sofia-chat-open .v09-sheet[data-kind="chat"].open'));
 });
