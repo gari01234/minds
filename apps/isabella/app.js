@@ -120,7 +120,7 @@ async function afterSync(){
   if(!briefed)await maybeProactiveNudge();
 }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
-function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
+function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
@@ -294,7 +294,7 @@ async function handle(text){
   try{
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text,state);
-      if(Object.prototype.hasOwnProperty.call(result||{},'pending_intent'))state.pendingIntent=result.pending_intent||null;
+      state.pendingIntent=null;
       if(result?.reply)say('assistant',result.reply,{sources:result.sources||[]});
       if(result?.question&&result.question!==result.reply)say('assistant',result.question);
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
