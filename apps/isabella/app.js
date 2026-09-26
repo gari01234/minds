@@ -193,7 +193,7 @@ function surfaceCard(item,surface){
   </article>`;
 }
 function bindSurfaceActions(){
-  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -203,7 +203,7 @@ function bindSurfaceActions(){
       setTimeout(()=>handle(prompt),80);
     }
   });
-  $('.weather-toggle').forEach(b=>b.onclick=()=>{
+  $$('.weather-toggle').forEach(b=>b.onclick=()=>{
     const card=b.closest('.weather-card'),week=card?.querySelector('.weather-week');if(!week)return;
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
@@ -284,7 +284,7 @@ function renderMessages(forceBottom=false){
 }
 function closeReactionPicker(){
   document.querySelector('.reaction-popover')?.remove();
-  $('.message.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
+  $$('.message.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
 }
 function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
@@ -311,7 +311,7 @@ function openReactionPicker(id,expand=false){
   function reactionOutside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',reactionOutside,{capture:true,once:true});return}closeReactionPicker()}
 }
 function bindMessageReactions(){
-  $('#messages .message[data-message-id]').forEach(el=>{
+  $$('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
     let timer=null,sx=0,sy=0,lastTap=0;
     const cancel=()=>{clearTimeout(timer);timer=null};
