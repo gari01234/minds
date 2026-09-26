@@ -196,6 +196,7 @@ async function syncNow(opts={}){
       hydrating=true;app.replaceState(next);hydrating=false;
     }
     setStatus('Memoria sincronizada · Supabase');
+    try{window.dispatchEvent(new CustomEvent('isabella:synced',{detail:{initial:!!opts.initial}}))}catch{}
   }catch(e){setStatus('Error de sincronización: '+apiError(e))}
   finally{syncing=false}
 }
