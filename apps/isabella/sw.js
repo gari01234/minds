@@ -1,12 +1,12 @@
-const CACHE_NAME = 'isabella-shell-v12';
+const CACHE_NAME = 'isabella-shell-v13';
 const SHELL = [
   './',
   './index.html',
-  './app.css?v=12',
-  './shell.js?v=13',
-  './app.js?v=15',
-  './sync.js?v=pwa8',
-  './ai.js?v=11',
+  './app.css?v=13',
+  './shell.js?v=14',
+  './app.js?v=16',
+  './sync.js?v=pwa9',
+  './ai.js?v=12',
   './manifest.webmanifest',
   './icon.svg',
   '../shared/supabase-client.js'
