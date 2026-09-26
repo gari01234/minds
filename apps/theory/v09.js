@@ -252,6 +252,7 @@
   window.addEventListener('message',e=>{
     if(e.origin!==location.origin)return;
     const type=e.data?.type;
+    if(type==='minds:sofia-close'){closeSofiaReactionPicker();sheet.classList.remove('open');return}
     if(type!=='minds:sofia-open'&&type!=='minds:sofia-prompt')return;
     const conv=newConversation({type:'global',id:'sofia',label:'Sofía'},'memory',true);
     openConversation(conv);
