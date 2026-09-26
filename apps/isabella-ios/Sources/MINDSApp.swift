@@ -1,6 +1,7 @@
 import SwiftUI
 
 @main
+@MainActor
 struct MINDSApp: App {
     @State private var model = AppModel()
 
