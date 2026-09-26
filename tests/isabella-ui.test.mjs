@@ -176,7 +176,7 @@ test('Build 21 Isabella opens at the latest message while preserving text select
   assert.ok(app.includes('function scrollAssistantToLatest'));
   assert.ok(app.includes("if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
   assert.ok(!app.includes("timer=setTimeout(()=>openReactionPicker"));
-  assert.ok(app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
+  assert.ok(app.includes("contextmenu',e=>{if(el.dataset.selectionMode==='1')return;e.preventDefault();openReactionPicker"));
   assert.ok(css.includes('-webkit-user-select:text!important'));
   assert.ok(css.includes('-webkit-touch-callout:default!important'));
 });
