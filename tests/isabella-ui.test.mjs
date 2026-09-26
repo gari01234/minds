@@ -152,8 +152,8 @@ test('Build 21 Feed supports free interests, followed entities and deeper news',
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('feedCustomTopics'));
-  assert.ok(app.includes('feedFollowing'));
-  assert.ok(app.includes('data-news-more'));
+  assert.ok(app.includes('followGraph'));
+  assert.ok(app.includes('data-news-key'));
   assert.ok(app.includes('Leer más'));
   assert.ok(ai.includes('feed_custom_topics'));
   assert.ok(ai.includes('feed_following'));
