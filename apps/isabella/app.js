@@ -146,7 +146,83 @@ async function afterSync(){
   const briefed=await maybeDailyBrief();
   if(!briefed)await maybeProactiveNudge();
 }
-function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
+function show(name){
+  const allowed=['assistant','feed','ideas','calendar','readings'];
+  if(!allowed.includes(name))name='assistant';
+  state.screen=name;
+  $('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
+  $('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
+  document.body.dataset.section=name;
+  save();
+  if(name==='calendar')renderCalendar();
+  if(name==='feed')renderFeed();
+  if(name==='ideas')renderIdeas();
+  if(name==='readings')ensureReadings();
+}
+function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':'ISABELLA'}
+function surfaceCard(item,surface){
+  const agent=String(item.agent||'isabella');
+  const prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim();
+  const icon=String(item.icon||'').trim();
+  return `<article class="surface-card" data-agent="${esc(agent)}">
+    <div class="surface-card-top"><span class="surface-icon">${esc(icon|| (agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
+    <h2>${esc(item.title||'')}</h2>
+    <p>${esc(item.body||'')}</p>
+    ${prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
+  </article>`;
+}
+function bindSurfaceActions(){
+  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+    const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
+    if(agent==='sofia'){
+      show('readings');
+      setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-prompt',prompt},location.origin),220);
+    }else{
+      show('assistant');
+      setTimeout(()=>handle(prompt),80);
+    }
+  });
+}
+let feedBusy=false,ideasBusy=false;
+async function renderFeed(force=false){
+  const box=$('#feedList');if(!box||feedBusy)return;feedBusy=true;
+  box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
+  try{
+    const [a,b]=await Promise.all([
+      window.ISABELLA_AI?.feed?.(state,{force})||[],
+      window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]
+    ]);
+    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
+    box.innerHTML=items.length?items.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
+    bindSurfaceActions();
+  }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo.</div>'}
+  finally{feedBusy=false}
+}
+async function renderIdeas(force=false){
+  const box=$('#ideasList');if(!box||ideasBusy)return;ideasBusy=true;
+  box.innerHTML='<div class="surface-loading">Buscando conexiones útiles…</div>';
+  try{
+    const [a,b]=await Promise.all([
+      window.ISABELLA_AI?.ideas?.(state,{force})||[],
+      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[]
+    ]);
+    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
+    box.innerHTML=items.length?items.map(x=>surfaceCard(x,'idea')).join(''):'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
+    bindSurfaceActions();
+  }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
+  finally{ideasBusy=false}
+}
+function readingsUrl(){
+  return location.pathname.includes('/isabella/')?'../theory/?embedded=1':'./theory/?embedded=1';
+}
+function ensureReadings(){
+  const frame=$('#readingsFrame');if(!frame)return;
+  if(!frame.dataset.loaded){frame.src=readingsUrl();frame.dataset.loaded='1'}
+}
+function openSofia(prompt=''){
+  show('readings');ensureReadings();
+  setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:prompt?'minds:sofia-prompt':'minds:sofia-open',prompt},location.origin),260);
+}
 function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
@@ -347,7 +423,12 @@ function bind(){
  const updateOrbCompact=()=>assistantScroll?.classList.toggle('orb-compact',assistantScroll.scrollTop>48);
  assistantScroll?.addEventListener('scroll',updateOrbCompact,{passive:true});
  updateOrbCompact();
- const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();$('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
+ const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
+ $('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
+ $('#refreshFeed').onclick=()=>renderFeed(true);
+ $('#refreshIdeas').onclick=()=>renderIdeas(true);
+ $('#openSofiaButton').onclick=()=>openSofia();
+ $('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
