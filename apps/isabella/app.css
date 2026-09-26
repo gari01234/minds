@@ -136,3 +136,7 @@
 
 .message-sources{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
 .message-sources a{font-size:11px;color:#666;text-decoration:none;border:1px solid #e9e9eb;border-radius:999px;padding:5px 8px;background:#fff}
+
+.skill-row{padding:14px 2px;border-bottom:1px solid #ececef}
+.skill-row:last-child{border-bottom:0}
+.skill-meta{margin-top:7px;font-size:11px;line-height:1.35;color:#aaa;overflow-wrap:anywhere}
