@@ -327,10 +327,11 @@ function bindCalendarItems(){
     let sx=0,sy=0,moved=false;
     el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
     el.addEventListener('touchmove',e=>{const t=e.touches[0];if(Math.abs(t.clientX-sx)>12||Math.abs(t.clientY-sy)>12)moved=true;e.stopPropagation()},{passive:true});
-    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
+    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.dragActive==='1'||el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
     el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle'))return;editItem(el.dataset.kind,el.dataset.id)});
   });
   initTaskDrag();
+  initEventDrag();
 }
 function itemBy(kind,id){return (kind==='task'?state.tasks:state.events).find(x=>x.id===id)}
 function itemActions(kind,id){
@@ -420,6 +421,7 @@ function initTaskDrag(){
       clearTimeout(timer);timer=null;
       if(!active)return;
       active=false;
+      row.dataset.dragActive='0';
       row.classList.remove('dragging');
       row.dataset.justDragged='1';
       setTimeout(()=>{row.dataset.justDragged='0'},180);
@@ -434,7 +436,7 @@ function initTaskDrag(){
       const t=ev.touches[0];startY=lastY=t.clientY;active=false;
       beforeOrder=taskSiblings().map(x=>x.dataset.id);
       timer=setTimeout(()=>{
-        active=true;row.classList.add('dragging');
+        active=true;row.dataset.dragActive='1';row.classList.add('dragging');
         try{navigator.vibrate?.(8)}catch{}
       },260);
     },{passive:true});
@@ -454,6 +456,47 @@ function initTaskDrag(){
         const last=siblings[siblings.length-1];
         if(last&&last.nextSibling)row.parentNode.insertBefore(row,last.nextSibling);else row.parentNode.appendChild(row);
       }
+    },{passive:false});
+    row.addEventListener('touchend',finish,{passive:true});
+    row.addEventListener('touchcancel',finish,{passive:true});
+  });
+}
+function initEventDrag(){
+  $$('.hours .event-item[data-kind="event"]').forEach(row=>{
+    if(row.dataset.eventDragBound)return;
+    row.dataset.eventDragBound='1';
+    let timer=null,active=false,startY=0,startTop=0,before=null;
+    const hours=row.closest('.hours');
+    const finish=()=>{
+      clearTimeout(timer);timer=null;
+      if(!active)return;
+      active=false;row.dataset.dragActive='0';row.classList.remove('dragging');
+      const top=Math.max(0,Math.min(945,parseFloat(row.style.top)||0));
+      const mins=Math.round((420+top)/15)*15;
+      const hr=Math.floor(mins/60),mn=mins%60;
+      const item=itemBy('event',row.dataset.id);
+      if(item){
+        const next=`${pad(hr)}:${pad(mn)}`;
+        if(next!==item.start){
+          const old=before||clone(item);item.start=next;
+          mutation('event','update',old,item,'manual');save();
+        }
+      }
+      row.dataset.justDragged='1';setTimeout(()=>{row.dataset.justDragged='0'},180);
+      renderCalendar();
+    };
+    row.addEventListener('touchstart',ev=>{
+      if(ev.touches.length!==1)return;
+      const t=ev.touches[0];startY=t.clientY;startTop=parseFloat(row.style.top)||0;before=clone(itemBy('event',row.dataset.id));
+      timer=setTimeout(()=>{active=true;row.dataset.dragActive='1';row.classList.add('dragging');try{navigator.vibrate?.(8)}catch{}},260);
+    },{passive:true});
+    row.addEventListener('touchmove',ev=>{
+      if(ev.touches.length!==1)return;
+      const t=ev.touches[0],dy=t.clientY-startY;
+      if(!active){if(Math.abs(dy)>10){clearTimeout(timer);timer=null}return}
+      ev.preventDefault();ev.stopPropagation();
+      const top=Math.max(0,Math.min(945,startTop+dy));
+      row.style.top=Math.round(top/15)*15+'px';
     },{passive:false});
     row.addEventListener('touchend',finish,{passive:true});
     row.addEventListener('touchcancel',finish,{passive:true});
