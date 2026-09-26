@@ -163,8 +163,21 @@
   sheet.innerHTML='<div class="v09-sheet-head"><div><div class="v09-sheet-kicker"></div><h2></h2></div><button class="v09-sheet-close" aria-label="Cerrar">×</button></div><div class="v09-sheet-body"></div>';
   document.body.appendChild(sheet);
   const sheetK=sheet.querySelector('.v09-sheet-kicker'),sheetTitle=sheet.querySelector('h2'),sheetBody=sheet.querySelector('.v09-sheet-body');
-  sheet.querySelector('.v09-sheet-close').onclick=()=>sheet.classList.remove('open');
-  function openSheet(kicker,title,html){sheetK.textContent=kicker;sheetTitle.textContent=title;sheetBody.innerHTML=html;sheet.classList.add('open');}
+  sheet.querySelector('.v09-sheet-close').onclick=()=>{
+    const wasChat=sheet.dataset.kind==='chat';
+    closeSofiaReactionPicker();
+    sheet.classList.remove('open');
+    sheet.dataset.kind='default';
+    document.documentElement.classList.remove('sofia-chat-open');
+    if(wasChat&&new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);
+  };
+  function openSheet(kicker,title,html,kind='default'){
+    sheetK.textContent=kicker;
+    sheetTitle.textContent=title;
+    sheetBody.innerHTML=html;
+    sheet.dataset.kind=kind;
+    sheet.classList.add('open');
+  }
 
   // ---------- conversation UI ----------
   let openConvId=null;
