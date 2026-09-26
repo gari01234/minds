@@ -26,7 +26,11 @@ function compact(state){
       projects:(state.projects||[]).map(x=>({name:x.name,category:catName(x.categoryId)}))
     },
     locale:navigator.language||'es-ES',
-    preferences:[]
+    preferences:{
+      feed_instructions:String(state.feedPreferences?.instructions||'').trim(),
+      feed_topics:Array.isArray(state.feedPreferences?.topics)?state.feedPreferences.topics:[],
+      weather_location:String(state.feedPreferences?.weatherLocation||'').trim()
+    }
   };
 }
 async function ask(message,state,options={}){
@@ -76,7 +80,9 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:String(x.section||'').toLowerCase()==='today'?'today':'for_me',
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?2:1
+      surface_version:surface==='feed'?3:1,
+      details:Array.isArray(x.details)?x.details.slice(0,8):[],
+      weather_location:String(x.weather_location||'').trim()||null
     },
     expires_at:new Date(Date.now()+12*60*60*1000).toISOString()
   }));
@@ -95,16 +101,18 @@ async function loadSurface(surface,agent=null){
 async function feed(state,{force=false}={}){
   if(!force){
     const cached=await loadSurface('feed','isabella');
-    if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=2))return cached;
+    if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=3))return cached;
   }
   const prompt=`Construye mi Feed personal de MINDS. No es un resumen genérico ni una lista de consejos. Debe seleccionar únicamente información que tenga valor para mí ahora y dividirla conceptualmente entre "Hoy" y "Para mí".
 
 Devuelve EXCLUSIVAMENTE JSON válido: un array de 2 a 5 objetos con esta forma exacta:
-{"section":"today"|"for_me","kind":"weather"|"commitment"|"pending"|"followed_topic"|"architecture"|"ai"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"..."}
+{"section":"today"|"for_me","kind":"weather"|"commitment"|"pending"|"followed_topic"|"architecture"|"ai"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"...","details":[]}
 
-HOY puede incluir, solo si es relevante: clima que afecte el día o próximos días, próximos compromisos, tareas/pendientes urgentes, seguimientos que vencen o cambios temporales importantes. Para clima, úsalo solo si conoces una localización suficientemente fiable a partir de mi memoria/contexto o de una conversación reciente; no inventes una ciudad. Si hace falta actualidad, usa web_search.
+Para weather, title debe funcionar como vistazo inmediato (por ejemplo localidad + temperatura/condición si está verificado) y details debe contener hasta 7 objetos {"label":"Lun 28","value":"26° / 11° · nublado"} para poder desplegar la semana. Para los demás tipos details debe ser [].
 
-PARA MÍ puede incluir, solo cuando haya una razón concreta para mostrarlo: noticias o temas que yo haya pedido seguir, arquitectura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, cosas relacionadas con mis hijos, o algún contexto mío que razonablemente merezca reaparecer. Usa search_memory o search_calendar si necesitas recuperar algo que no esté en el resumen inmediato.
+HOY puede incluir, solo si es relevante: clima que afecte el día o próximos días, próximos compromisos, tareas/pendientes urgentes, seguimientos que vencen o cambios temporales importantes. Si preferences.weather_location está definido, úsalo como lugar habitual del clima. Si está vacío, usa clima solo cuando una localización suficientemente fiable aparezca en mi memoria/contexto o conversación reciente; no inventes una ciudad. Cuando incluyas clima, consulta información actual y proporciona también details para la semana. Si hace falta actualidad, usa web_search.
+
+PARA MÍ puede incluir, solo cuando haya una razón concreta para mostrarlo: noticias o temas que yo haya pedido seguir, arquitectura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, cosas relacionadas con mis hijos, o algún contexto mío que razonablemente merezca reaparecer. Usa preferences.feed_topics y preferences.feed_instructions como preferencias explícitas, sin convertirlas en obligación de rellenar categorías. Usa search_memory o search_calendar si necesitas recuperar algo que no esté en el resumen inmediato.
 
 No intentes cubrir todas las categorías. Si algo no tiene valor ahora, omítelo. No inventes datos, preferencias, familiares, proyectos ni seguimientos. No incluyas compras, pagos ni transacciones. Cada body debe explicar en una o dos frases por qué esto aparece ahora. action_prompt debe ser una frase natural que yo pueda enviar a Isabella para continuar el tema.`;
   const result=await ask(prompt,state,{background:true});
