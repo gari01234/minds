@@ -23,6 +23,16 @@ function tombstone(kind,id){
   if(!state[key].includes(id))state[key].push(id);
   if(state[key].length>300)state[key]=state[key].slice(-300);
 }
+function repairKnownDuplicate(){
+  const old=state.events.find(e=>String(e.title||'').trim().toLowerCase()==='juego de béisbol de mi hijo'&&e.date==='2026-09-26'&&e.start==='14:00');
+  const named=state.events.find(e=>String(e.title||'').trim().toLowerCase()==='juego de béisbol de ezequiel'&&e.date==='2026-09-26'&&e.start==='14:00');
+  if(old&&named){
+    state.events=state.events.filter(e=>e.id!==old.id);
+    tombstone('event',old.id);
+    mutation('event','delete',old,null,'manual');
+    save();
+  }
+}
 function setOrbPalette(){
   const o=$('#orbButton');if(!o)return;
   const h=new Date().getHours();
@@ -36,7 +46,7 @@ function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIs
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
-function init(){ if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} setOrbPalette();bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
+function init(){ repairKnownDuplicate();if(!state.messages.length){state.messages=[{id:uid(),role:'assistant',text:'Hola. Soy Isabella.'}];save()} setOrbPalette();bind(); renderMessages(); renderToday(); renderCalendar(); show(state.screen); }
 async function maybeDailyBrief(){
   try{
     const now=new Date(),d=today();
