@@ -17,6 +17,9 @@ function mutation(entityType,action,before,after,source='manual'){
   if(!entityKey)return;
   try{window.dispatchEvent(new CustomEvent('isabella:mutation',{detail:{entityType,entityKey,action,source,before:clone(before),after:clone(after)}}))}catch{}
 }
+function proposalFeedback(outcome,proposal){
+  try{window.dispatchEvent(new CustomEvent('isabella:proposal-feedback',{detail:{outcome,proposal:clone(proposal)}}))}catch{}
+}
 function tombstone(kind,id){
   const key=kind==='task'?'deletedTaskIds':'deletedEventIds';
   state[key]=Array.isArray(state[key])?state[key]:[];
@@ -120,16 +123,16 @@ function proposalLabel(p){
   if(p.recurrence)bits.push(p.recurrence);
   return bits.filter(Boolean).join(' · ');
 }
-function confirmProposal(p){modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">Isabella no hará el cambio hasta que lo confirmes.</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px"><button id="proposalCancel" class="primary" style="background:#f2f2f3;color:#111">Cancelar</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);$('#proposalCancel').onclick=()=>{closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};$('#proposalConfirm').onclick=()=>applyProposal(p)}
+function confirmProposal(p){modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">Isabella no hará el cambio hasta que lo confirmes.</div></div></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px"><button id="proposalCancel" class="primary" style="background:#f2f2f3;color:#111">Cancelar</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);$('#proposalCancel').onclick=()=>{proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};$('#proposalConfirm').onclick=()=>{proposalFeedback('accepted',p);applyProposal(p)}}
 function confirmProposals(list){
   const items=(list||[]).filter(Boolean);
   if(!items.length)return;
   if(items.length===1){confirmProposal(items[0]);return}
   modal('Confirmar cambios',`<div class="proposal-list">${items.map(p=>`<div class="proposal-row">${esc(proposalLabel(p))}</div>`).join('')}</div><div class="small" style="margin-top:10px">Se aplicarán los ${items.length} cambios solamente después de tu confirmación.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
-  $('#proposalBatchCancel').onclick=()=>{closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
+  $('#proposalBatchCancel').onclick=()=>{for(const p of items)proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalBatchConfirm').onclick=()=>{
     closeModal();
-    for(const p of items)applyProposal(p);
+    for(const p of items){proposalFeedback('accepted',p);applyProposal(p)}
   };
 }
 function findTarget(p){
