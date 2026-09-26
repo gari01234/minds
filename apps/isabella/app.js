@@ -272,7 +272,7 @@ async function renderFeed(force=false){
     else if(fresh.length)renderFeedItems(fresh);
     else{
       const [cachedA,cachedB]=await Promise.all([window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]]);
-      renderFeedItems(dedupeFeedItems([...(cachedA||[]),...(cachedB||[]]));
+      renderFeedItems(dedupeFeedItems([...(cachedA||[]),...(cachedB||[])]));
     }
   }catch(err){if(previous.length)renderFeedItems(previous);else box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo. Tu edición anterior no se ha borrado.</div>'}
   finally{feedBusy=false}

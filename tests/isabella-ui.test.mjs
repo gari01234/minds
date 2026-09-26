@@ -217,3 +217,10 @@ test('Build 22 allows short-tap reactions and native long-press text selection',
   assert.ok(css.includes('overflow-wrap:anywhere!important'));
   assert.ok(app.includes('class="message-link"'));
 });
+
+
+test('browser entry scripts are syntactically valid JavaScript',()=>{
+  for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
+    assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
+  }
+});
