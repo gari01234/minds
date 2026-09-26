@@ -416,7 +416,7 @@ function applyReaction(id,reaction){
 }
 function clearMessageSelectionMode(){
   document.body.classList.remove('message-selection-active');
-  $('.message.selection-mode').forEach(el=>{el.classList.remove('selection-mode');delete el.dataset.selectionMode});
+  document.querySelectorAll('.message.selection-mode').forEach(el=>{el.classList.remove('selection-mode');delete el.dataset.selectionMode});
   document.querySelector('.selection-hint')?.remove();
 }
 function selectMessageText(id){
@@ -1035,8 +1035,8 @@ async function routinesPanel(){
       return `<div class="routine-row"><div class="row-main"><b>${esc(r.title)}</b><div class="small routine-schedule">${sch.kind==='weekly'?'Semanal':'Todos los días'} · ${esc(sch.time||'08:00')}${esc(days)} · ${esc(r.timezone||'')}</div><div class="small">${esc(r.instruction||'')}</div><div class="small routine-next">Próxima: ${esc(next)}</div>${r.last_error?`<div class="small danger-text">${esc(r.last_error)}</div>`:''}</div><label class="routine-toggle"><input type="checkbox" data-routine-enabled="${r.id}" ${r.enabled?'checked':''}><span></span></label><button data-routine-delete="${r.id}" aria-label="Eliminar">×</button></div>`;
     }).join(''):'<div class="small">Todavía no has programado ninguna rutina.</div>';
     modal('Rutinas',body);
-    $('[data-routine-enabled]').forEach(x=>x.onchange=async()=>{await sb.from('isabella_routines').update({enabled:x.checked}).eq('id',x.dataset.routineEnabled);routinesPanel()});
-    $('[data-routine-delete]').forEach(x=>x.onclick=async()=>{await sb.from('isabella_routines').delete().eq('id',x.dataset.routineDelete);routinesPanel()});
+    document.querySelectorAll('[data-routine-enabled]').forEach(x=>x.onchange=async()=>{await sb.from('isabella_routines').update({enabled:x.checked}).eq('id',x.dataset.routineEnabled);routinesPanel()});
+    document.querySelectorAll('[data-routine-delete]').forEach(x=>x.onclick=async()=>{await sb.from('isabella_routines').delete().eq('id',x.dataset.routineDelete);routinesPanel()});
   }catch(e){modal('Rutinas','<div class="small">No pude cargar las rutinas ahora mismo.</div>')}
 }
 async function skillsPanel(){
