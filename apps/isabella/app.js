@@ -50,11 +50,12 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
 ],projects:[
   {id:'bernried',categoryId:'trabajo',name:'Bernried',color:'#2F6FB0'},
   {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
-],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedPreferences:{
+],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedThreads:{},feedSignals:[],feedPreferences:{
   instructions:'',
   topics:['Clima','Noticias','Arquitectura','Arte','Inteligencia artificial','Proyectos','Familia'],
   customTopics:[],
   following:[],
+  followGraph:[],
   weatherLocation:''
 }};
 function normalizeMessages(items){
@@ -82,6 +83,12 @@ function load(){try{
   x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
   x.feedPreferences.customTopics=Array.isArray(x.feedPreferences.customTopics)?x.feedPreferences.customTopics:[];
   x.feedPreferences.following=Array.isArray(x.feedPreferences.following)?x.feedPreferences.following:[];
+  x.feedPreferences.followGraph=Array.isArray(x.feedPreferences.followGraph)?x.feedPreferences.followGraph:[];
+  if(!x.feedPreferences.followGraph.length&&x.feedPreferences.following.length){
+    x.feedPreferences.followGraph=x.feedPreferences.following.map(name=>({id:uid(),name:String(name),type:'other',focus:'',active:true}));
+  }
+  x.feedThreads=x.feedThreads&&typeof x.feedThreads==='object'&&!Array.isArray(x.feedThreads)?x.feedThreads:{};
+  x.feedSignals=Array.isArray(x.feedSignals)?x.feedSignals:[];
   if(x.feedPreferences.topics.includes('Noticias que sigo')&&!x.feedPreferences.topics.includes('Noticias')){
     x.feedPreferences.topics=x.feedPreferences.topics.map(t=>t==='Noticias que sigo'?'Noticias':t);
   }
@@ -116,6 +123,7 @@ function dayColors(date){
 }
 function formatMessageText(text){
   let html=esc(text);
+  html=html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a class="message-link" href="$2" target="_blank" rel="noopener">$1</a>');
   html=html.replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>');
   html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
   return html;
@@ -186,38 +194,42 @@ function show(name){
   if(name==='readings')ensureReadings();
 }
 function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':'ISABELLA'}
+function feedStoryKey(item){
+  const source=String(item?.source_url||item?.metadata?.source_url||'').trim();
+  const title=String(item?.title||'').trim().toLowerCase();
+  return source||title;
+}
+function feedEntities(item){
+  const raw=Array.isArray(item?.entities)?item.entities:(Array.isArray(item?.metadata?.entities)?item.metadata.entities:[]);
+  return raw.map(x=>typeof x==='string'?{name:x,type:'other',focus:''}:x).filter(x=>String(x?.name||'').trim()).slice(0,4);
+}
+function recordFeedSignal(kind,item,extra={}){
+  const signal={id:uid(),kind,at:new Date().toISOString(),title:String(item?.title||''),source_url:String(item?.source_url||item?.metadata?.source_url||''),entities:feedEntities(item).map(x=>x.name),...extra};
+  state.feedSignals=[...(state.feedSignals||[]),signal].slice(-80);save();
+}
 function surfaceCard(item,surface){
-  const agent=String(item.agent||'isabella');
-  const prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim();
-  const icon=String(item.icon||'').trim();
-  const kind=String(item.kind||item.metadata?.kind||'').toLowerCase();
-  const details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
-  const weather=kind==='weather';
-  const news=kind==='news';
-  const rawSource=String(item.source_url||item.metadata?.source_url||'').trim();
-  const sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
+  const agent=String(item.agent||'isabella'),prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim(),icon=String(item.icon||'').trim();
+  const kind=String(item.kind||item.metadata?.kind||'').toLowerCase(),details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
+  const weather=kind==='weather',news=kind==='news',rawSource=String(item.source_url||item.metadata?.source_url||'').trim(),sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
-  const newsMorePrompt=news?`Cuéntame más sobre esta noticia: "${String(item.title||'').trim()}". ${sourceUrl?`Usa también esta fuente como punto de partida: ${sourceUrl}. `:''}Busca contexto actualizado, explica qué ocurrió, qué antecedentes importan y qué conviene seguir observando. Distingue hechos confirmados de interpretación.`:'';
+  const storyKey=feedStoryKey(item);
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
-    <h2>${esc(item.title||'')}</h2>
-    <p>${esc(item.body||'')}</p>
-    ${detailHtml}
+    <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
-      ${news?`<button class="surface-readmore" data-news-more="${esc(newsMorePrompt)}">Leer más</button>`:''}
-      ${news&&sourceUrl?`<a class="surface-source" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
+      ${news?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
+      ${news&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
       ${!news&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
     </div>
   </article>`;
 }
+
 function bindSurfaceActions(){
-  $$('[data-news-more]').forEach(b=>b.onclick=()=>{
-    const prompt=b.dataset.newsMore||'';if(!prompt)return;
-    show('assistant');setTimeout(()=>handle(prompt),80);
-  });
-  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $('[data-news-key]').forEach(b=>b.onclick=()=>openFeedStory(b.dataset.newsKey||''));
+  $('[data-feed-source]').forEach(a=>a.onclick=()=>{const item=feedItems.find(x=>feedStoryKey(x)===(a.dataset.feedSource||''));if(item)recordFeedSignal('source_opened',item)});
+  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -232,32 +244,88 @@ function bindSurfaceActions(){
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
 }
-let feedBusy=false,ideasBusy=false;
+let feedBusy=false,ideasBusy=false,feedItems=[],activeFeedStory=null;
+function dedupeFeedItems(items){
+  return (items||[]).filter(Boolean).filter((x,i,arr)=>{
+    const key=feedStoryKey(x)||String(x.id||x.title||'');
+    return arr.findIndex(y=>(feedStoryKey(y)||String(y.id||y.title||''))===key)===i;
+  }).slice(0,12);
+}
+function renderFeedItems(items){
+  const box=$('#feedList');if(!box)return;feedItems=dedupeFeedItems(items);
+  if(!feedItems.length){box.innerHTML='<div class="surface-empty">No pude construir una edición estable del Feed ahora mismo. Puedes actualizarla sin perder la edición anterior.</div>';return}
+  const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'};
+  const todayItems=feedItems.filter(x=>sectionOf(x)==='today'),newsItems=feedItems.filter(x=>sectionOf(x)==='news'),forMeItems=feedItems.filter(x=>sectionOf(x)==='for_me');
+  box.innerHTML=(todayItems.length?'<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+    (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+    (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
+  bindSurfaceActions();
+}
 async function renderFeed(force=false){
   const box=$('#feedList');if(!box||feedBusy)return;feedBusy=true;
-  box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
+  const previous=[...feedItems];if(!previous.length)box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
   try{
-    const [a,b]=await Promise.all([
-      window.ISABELLA_AI?.feed?.(state,{force})||[],
-      window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]
-    ]);
-    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,12);
-    if(!items.length){
-      box.innerHTML='<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
-    }else{
-      const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'};
-      const todayItems=items.filter(x=>sectionOf(x)==='today');
-      const newsItems=items.filter(x=>sectionOf(x)==='news');
-      const forMeItems=items.filter(x=>sectionOf(x)==='for_me');
-      box.innerHTML=
-        (todayItems.length?'<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
-        (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
-        (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
+    const [a,b]=await Promise.all([window.ISABELLA_AI?.feed?.(state,{force})||[],window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]]);
+    const fresh=dedupeFeedItems([...(a||[]),...(b||[])]);
+    if(fresh.length>=3)renderFeedItems(fresh);
+    else if(previous.length)renderFeedItems(dedupeFeedItems([...fresh,...previous]));
+    else if(fresh.length)renderFeedItems(fresh);
+    else{
+      const [cachedA,cachedB]=await Promise.all([window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]]);
+      renderFeedItems(dedupeFeedItems([...(cachedA||[]),...(cachedB||[]]));
     }
-    bindSurfaceActions();
-  }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo.</div>'}
+  }catch(err){if(previous.length)renderFeedItems(previous);else box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo. Tu edición anterior no se ha borrado.</div>'}
   finally{feedBusy=false}
 }
+function feedThreadFor(item){
+  const key=feedStoryKey(item);if(!key)return null;
+  if(!state.feedThreads[key])state.feedThreads[key]={key,title:String(item.title||''),source_url:String(item.source_url||item.metadata?.source_url||''),created:new Date().toISOString(),updated:new Date().toISOString(),messages:[]};
+  return state.feedThreads[key];
+}
+function renderFeedThread(item){
+  const thread=feedThreadFor(item),log=$('#feedThreadLog');if(!thread||!log)return;
+  log.innerHTML=(thread.messages||[]).map(m=>`<div class="feed-thread-message ${m.role}"><div class="feed-thread-text">${formatMessageText(m.text||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
+  requestAnimationFrame(()=>{const sc=$('#feedDetailScroll');if(sc)sc.scrollTop=sc.scrollHeight});
+}
+function feedFollowChip(entity){
+  const name=String(entity?.name||'').trim();if(!name)return '';
+  const followed=(state.feedPreferences?.followGraph||[]).some(x=>String(x.name||'').toLowerCase()===name.toLowerCase());
+  return `<button class="feed-follow-chip ${followed?'following':''}" data-feed-follow-name="${esc(name)}" data-feed-follow-type="${esc(entity.type||'other')}" data-feed-follow-focus="${esc(entity.focus||'')}">${followed?'Siguiendo':'Seguir'} · ${esc(name)}</button>`;
+}
+function bindFeedFollowChips(){
+  $$('#feedDetail [data-feed-follow-name]').forEach(b=>b.onclick=()=>{
+    const name=b.dataset.feedFollowName||'',type=b.dataset.feedFollowType||'other',focus=b.dataset.feedFollowFocus||'';if(!name)return;
+    const graph=state.feedPreferences.followGraph||[];
+    if(!graph.some(x=>String(x.name||'').toLowerCase()===name.toLowerCase())){
+      graph.push({id:uid(),name,type,focus,active:true});state.feedPreferences.followGraph=graph;state.feedPreferences.following=graph.map(x=>x.name);recordFeedSignal('followed',activeFeedStory,{entity:name});save();
+    }
+    b.textContent='Siguiendo · '+name;b.classList.add('following');
+  });
+}
+async function expandFeedStory(item){
+  const thread=feedThreadFor(item);if(!thread||thread.loading)return;thread.loading=true;
+  try{const result=await window.ISABELLA_AI?.feedStory?.(item,state,'',thread.messages||[]);if(result?.reply)thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()});thread.updated=new Date().toISOString();recordFeedSignal('expanded',item);save()}
+  catch(e){thread.messages.push({id:uid(),role:'assistant',text:'No pude ampliar esta noticia ahora mismo. La fuente original sigue disponible arriba.',at:new Date().toISOString()});save()}
+  finally{thread.loading=false;renderFeedThread(item)}
+}
+function openFeedStory(key){
+  const item=feedItems.find(x=>feedStoryKey(x)===key);if(!item)return;
+  activeFeedStory=item;recordFeedSignal('opened',item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
+  const kind=String(item.kind||item.metadata?.kind||'news').toLowerCase(),sourceUrl=String(item.source_url||item.metadata?.source_url||'').trim(),sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
+  $('#feedDetailMeta').innerHTML=`<span>${kind==='news'?'NOTICIA':'FEED'}</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
+  const entities=feedEntities(item);$('#feedDetailFollow').innerHTML=entities.length?entities.map(feedFollowChip).join(''):'';
+  $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedThread(item);bindFeedFollowChips();
+  const thread=feedThreadFor(item);if(kind==='news'&&!(thread.messages||[]).length)expandFeedStory(item);
+}
+function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
+async function submitFeedStoryQuestion(text){
+  const item=activeFeedStory,thread=item?feedThreadFor(item):null;if(!item||!thread)return;
+  const q=String(text||'').trim();if(!q)return;thread.messages.push({id:uid(),role:'user',text:q,at:new Date().toISOString()});thread.updated=new Date().toISOString();save();renderFeedThread(item);recordFeedSignal('questioned',item);
+  try{const result=await window.ISABELLA_AI?.feedStory?.(item,state,q,thread.messages||[]);if(result?.reply)thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()})}
+  catch(e){thread.messages.push({id:uid(),role:'assistant',text:'No pude responder sobre esta noticia ahora mismo.',at:new Date().toISOString()})}
+  thread.updated=new Date().toISOString();save();renderFeedThread(item);
+}
+
 async function renderIdeas(force=false){
   const box=$('#ideasList');if(!box||ideasBusy)return;ideasBusy=true;
   box.innerHTML='<div class="surface-loading">Buscando conexiones útiles…</div>';
@@ -348,27 +416,16 @@ function openReactionPicker(id){
 function bindMessageReactions(){
   $$('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
-    let sx=0,sy=0,moved=false,lastTap=0;
-    el.addEventListener('touchstart',e=>{
-      if(e.touches.length!==1)return;
-      const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;
-    },{passive:true});
-    el.addEventListener('touchmove',e=>{
-      if(e.touches.length!==1)return;
-      const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)moved=true;
-    },{passive:true});
-    el.addEventListener('touchend',()=>{
-      if(moved)return;
-      const selection=getSelection();if(selection&&!selection.isCollapsed)return;
-      const now=Date.now();
-      if(now-lastTap<320){lastTap=0;openReactionPicker(el.dataset.messageId);return}
-      lastTap=now;
-    },{passive:true});
+    let sx=0,sy=0,moved=false,started=0;
+    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;started=performance.now()},{passive:true});
+    el.addEventListener('touchmove',e=>{if(e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)moved=true},{passive:true});
+    el.addEventListener('touchend',()=>{const duration=performance.now()-started;if(moved||duration>280)return;const selection=getSelection();if(selection&&!selection.isCollapsed)return;openReactionPicker(el.dataset.messageId)},{passive:true});
     el.addEventListener('touchcancel',()=>{moved=true},{passive:true});
     el.addEventListener('dblclick',e=>{if(getSelection()?.toString())return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
     el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
   });
 }
+
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
@@ -535,6 +592,12 @@ function bind(){
  $('#refreshFeed').onclick=()=>renderFeed(true);
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
  $('#refreshIdeas').onclick=()=>renderIdeas(true);
+ $('#closeFeedDetail').onclick=closeFeedStory;
+ const feedThreadInput=$('#feedThreadInput'),feedThreadForm=$('#feedThreadForm');
+ const autosizeFeedThread=()=>{feedThreadInput.style.height='auto';feedThreadInput.style.height=Math.min(feedThreadInput.scrollHeight,132)+'px'};
+ feedThreadInput.addEventListener('input',autosizeFeedThread);autosizeFeedThread();
+ feedThreadInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();feedThreadForm.requestSubmit()}});
+ feedThreadForm.onsubmit=e=>{e.preventDefault();const q=feedThreadInput.value.trim();if(!q)return;feedThreadInput.value='';autosizeFeedThread();submitFeedStoryQuestion(q)};
  $('#openSofiaButton').onclick=()=>openSofia();
  $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
@@ -898,40 +961,37 @@ function deleteMemory(id){
   if(typeof m==='object'){m.status='deleted'}else{const idx=state.memory.indexOf(m);state.memory[idx]={id:uid(),kind:'context',content:String(m),status:'deleted',confidence:1,source:'manual'}}
   save();memoryPanel();
 }
+function feedFollowRow(node={}){
+  const types=[['architecture_studio','Estudio de arquitectura'],['artist','Artista'],['architect','Arquitecto/a'],['institution','Museo / institución'],['publication','Revista / publicación'],['gallery','Galería'],['person','Persona'],['topic','Tema'],['other','Otro']];
+  return `<div class="feed-follow-row" data-follow-id="${esc(node.id||uid())}">
+    <input data-follow-name value="${esc(node.name||'')}" placeholder="Nombre">
+    <select data-follow-type>${types.map(([v,l])=>`<option value="${v}" ${String(node.type||'other')===v?'selected':''}>${l}</option>`).join('')}</select>
+    <input data-follow-focus value="${esc(node.focus||'')}" placeholder="Qué te interesa: proyectos, exposiciones, textos…">
+    <button type="button" data-follow-remove aria-label="Eliminar">×</button>
+  </div>`;
+}
 function feedPreferencesPanel(){
   const prefs=state.feedPreferences||base.feedPreferences;
   const standard=['Clima','Noticias','Arquitectura','Arte','Diseño','Cultura','Inteligencia artificial','Ciencia','Tecnología','Mundo','Alemania','Proyectos','Familia','Readings'];
-  const selected=new Set(prefs.topics||[]);
+  const selected=new Set(prefs.topics||[]),graph=Array.isArray(prefs.followGraph)?prefs.followGraph:[];
   modal('Curar mi Feed',`<div class="form feed-preferences">
-    <label>Temas base
-      <div class="topic-grid">${standard.map(t=>`<label class="topic-choice"><input type="checkbox" value="${esc(t)}" ${selected.has(t)?'checked':''}><span>${esc(t)}</span></label>`).join('')}</div>
-    </label>
-    <label>Otros temas que quieres seguir
-      <input id="feedCustomTopics" value="${esc((prefs.customTopics||[]).join(', '))}" placeholder="Ej. vivienda colectiva, fotografía, literatura japonesa">
-    </label>
-    <label>Nombres concretos que quieres seguir
-      <textarea id="feedFollowing" rows="3" placeholder="Estudios, artistas, museos, galerías, revistas, autores… Uno por línea o separados por comas.">${esc((prefs.following||[]).join('\n'))}</textarea>
-    </label>
-    <label>Instrucciones para tu Feed
-      <textarea id="feedInstructions" rows="4" placeholder="Ej. prioriza arquitectura y arte; evita noticias repetidas; dame contexto, no titulares.">${esc(prefs.instructions||'')}</textarea>
-    </label>
-    <label>Lugar habitual para el clima <span class="small">(opcional; si queda vacío Isabella usa solo contexto que ya conozca)</span>
-      <input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad">
-    </label>
+    <label>Temas base<div class="topic-grid">${standard.map(t=>`<label class="topic-choice"><input type="checkbox" value="${esc(t)}" ${selected.has(t)?'checked':''}><span>${esc(t)}</span></label>`).join('')}</div></label>
+    <label>Otros temas que quieres seguir<input id="feedCustomTopics" value="${esc((prefs.customTopics||[]).join(', '))}" placeholder="Ej. vivienda colectiva, fotografía, literatura japonesa"></label>
+    <div class="feed-follow-editor"><div class="feed-follow-editor-title">Tu constelación</div><div class="small">No solo a quién sigues, sino qué te interesa de cada uno.</div><div id="feedFollowRows">${graph.map(feedFollowRow).join('')}</div><button id="addFeedFollow" type="button" class="secondary">+ Seguir algo</button></div>
+    <label>Instrucciones para tu Feed<textarea id="feedInstructions" rows="4" placeholder="Ej. prioriza arquitectura y arte; evita noticias repetidas; dame contexto, no titulares.">${esc(prefs.instructions||'')}</textarea></label>
+    <label>Lugar habitual para el clima <span class="small">(opcional; si queda vacío Isabella usa solo contexto que ya conozca)</span><input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad"></label>
     <button id="saveFeedPreferences" class="primary">Guardar</button>
   </div>`);
+  const bindRemove=()=>$$('#feedFollowRows [data-follow-remove]').forEach(b=>b.onclick=()=>b.closest('.feed-follow-row')?.remove());bindRemove();
+  $('#addFeedFollow').onclick=()=>{$('#feedFollowRows').insertAdjacentHTML('beforeend',feedFollowRow({}));bindRemove()};
   $('#saveFeedPreferences').onclick=()=>{
     const split=v=>String(v||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).slice(0,40);
-    state.feedPreferences={
-      instructions:$('#feedInstructions').value.trim(),
-      weatherLocation:$('#weatherLocation').value.trim(),
-      topics:$('.topic-choice input:checked').map(x=>x.value),
-      customTopics:split($('#feedCustomTopics').value),
-      following:split($('#feedFollowing').value)
-    };
+    const followGraph=$$('#feedFollowRows .feed-follow-row').map(row=>({id:row.dataset.followId||uid(),name:row.querySelector('[data-follow-name]')?.value.trim()||'',type:row.querySelector('[data-follow-type]')?.value||'other',focus:row.querySelector('[data-follow-focus]')?.value.trim()||'',active:true})).filter(x=>x.name).slice(0,60);
+    state.feedPreferences={instructions:$('#feedInstructions').value.trim(),weatherLocation:$('#weatherLocation').value.trim(),topics:$$('.topic-choice input:checked').map(x=>x.value),customTopics:split($('#feedCustomTopics').value),followGraph,following:followGraph.map(x=>x.name)};
     save();closeModal();renderFeed(true);
   };
 }
+
 function categoriesPanel(){
   const rows=state.categories.map(x=>`<div class="settings-row color-row"><input type="color" data-cat-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-cat-name="${x.id}" value="${esc(x.name)}"><button data-cat-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
   const prows=state.projects.map(x=>`<div class="settings-row project-color-row"><input type="color" data-project-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-project-name="${x.id}" value="${esc(x.name)}"><select data-project-cat="${x.id}">${state.categories.map(cat=>`<option value="${cat.id}" ${cat.id===x.categoryId?'selected':''}>${esc(cat.name)}</option>`).join('')}</select><button data-project-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');
