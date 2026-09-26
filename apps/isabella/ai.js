@@ -72,7 +72,12 @@ async function saveSurface(surface,agent,items){
     body:String(x.body||'').trim(),
     action_prompt:String(x.action_prompt||x.prompt||'').trim()||null,
     icon:String(x.icon||'').trim()||null,
-    metadata:{source:x.source||null},
+    metadata:{
+      source:x.source||null,
+      section:String(x.section||'').toLowerCase()==='today'?'today':'for_me',
+      kind:String(x.kind||'').trim()||null,
+      surface_version:surface==='feed'?2:1
+    },
     expires_at:new Date(Date.now()+12*60*60*1000).toISOString()
   }));
   const {data,error}=await sb.from('minds_surface_items').insert(rows).select('*');
@@ -88,10 +93,25 @@ async function loadSurface(surface,agent=null){
   return error?[]:(data||[]);
 }
 async function feed(state,{force=false}={}){
-  if(!force){const cached=await loadSurface('feed','isabella');if(cached.length)return cached}
-  const prompt='Crea un Feed personal de máximo 4 elementos para Gari usando su agenda, tareas, memoria y, solo cuando aporte valor, información actual. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Cada elemento debe ser concreto, breve y útil ahora. No inventes compromisos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase que yo pueda enviar a Isabella para continuar ese elemento. Los iconos pueden ser emojis sobrios.';
+  if(!force){
+    const cached=await loadSurface('feed','isabella');
+    if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=2))return cached;
+  }
+  const prompt=`Construye mi Feed personal de MINDS. No es un resumen genérico ni una lista de consejos. Debe seleccionar únicamente información que tenga valor para mí ahora y dividirla conceptualmente entre "Hoy" y "Para mí".
+
+Devuelve EXCLUSIVAMENTE JSON válido: un array de 2 a 5 objetos con esta forma exacta:
+{"section":"today"|"for_me","kind":"weather"|"commitment"|"pending"|"followed_topic"|"architecture"|"ai"|"family"|"personal"|"project"|"other","title":"...","body":"...","action_prompt":"...","icon":"..."}
+
+HOY puede incluir, solo si es relevante: clima que afecte el día o próximos días, próximos compromisos, tareas/pendientes urgentes, seguimientos que vencen o cambios temporales importantes. Para clima, úsalo solo si conoces una localización suficientemente fiable a partir de mi memoria/contexto o de una conversación reciente; no inventes una ciudad. Si hace falta actualidad, usa web_search.
+
+PARA MÍ puede incluir, solo cuando haya una razón concreta para mostrarlo: noticias o temas que yo haya pedido seguir, arquitectura, inteligencia artificial, información relacionada con mis proyectos, recordatorios personales o familiares, cosas relacionadas con mis hijos, o algún contexto mío que razonablemente merezca reaparecer. Usa search_memory o search_calendar si necesitas recuperar algo que no esté en el resumen inmediato.
+
+No intentes cubrir todas las categorías. Si algo no tiene valor ahora, omítelo. No inventes datos, preferencias, familiares, proyectos ni seguimientos. No incluyas compras, pagos ni transacciones. Cada body debe explicar en una o dos frases por qué esto aparece ahora. action_prompt debe ser una frase natural que yo pueda enviar a Isabella para continuar el tema.`;
   const result=await ask(prompt,state,{background:true});
-  const items=parseSurface(result?.reply);
+  const items=parseSurface(result?.reply).map(x=>({
+    ...x,
+    section:String(x?.section||'').toLowerCase()==='today'?'today':'for_me'
+  }));
   return saveSurface('feed','isabella',items);
 }
 async function ideas(state,{force=false}={}){
@@ -110,7 +130,7 @@ async function sofiaSurface(kind,{force=false}={}){
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
   const request=kind==='idea'
     ?'Analiza mis Readings, subrayados, notas e hilos activos y genera máximo 3 descubrimientos o ideas que merezcan conversación ahora. Deben ser específicos, provisionales y trazables a mi memoria intelectual. Devuelve EXCLUSIVAMENTE JSON válido como array de {"title":"...","body":"...","action_prompt":"...","icon":"..."}. action_prompt debe formular cómo continuar la conversación contigo, Sofía.'
-    :'Genera máximo 2 señales para mi Feed desde Readings: algo que haya quedado vivo, una pregunta abierta o una lectura/hilo que merezca volver a mirar ahora. Devuelve EXCLUSIVAMENTE JSON válido como array de {"title":"...","body":"...","action_prompt":"...","icon":"..."}.';
+    :'Genera como máximo 1 señal para mi Feed desde Readings, y solo si realmente merece reaparecer ahora: algo que haya quedado vivo, una pregunta abierta o una lectura/hilo que convenga retomar. Devuelve EXCLUSIVAMENTE JSON válido como array de {"section":"for_me","kind":"reading","title":"...","body":"...","action_prompt":"...","icon":"..."}. Si no hay una señal suficientemente fuerte, devuelve [].';
   const {data,error}=await sb.functions.invoke('sofia-chat',{body:{message:request,background:true,structured:true}});
   if(error)return [];
   const items=Array.isArray(data?.structured)?data.structured:parseSurface(data?.reply);
