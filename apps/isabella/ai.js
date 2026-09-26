@@ -28,5 +28,8 @@ async function ask(message,state){
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};
 }
-window.ISABELLA_AI={ask};
+async function brief(state){
+  return ask("Prepara mi resumen de hoy. Sé breve y práctico: dime mis eventos y tareas pendientes de hoy y, solo si aporta valor, señala el siguiente compromiso o una prioridad clara. No propongas cambios ni crees tareas en este resumen.",state);
+}
+window.ISABELLA_AI={ask,brief};
 })();
