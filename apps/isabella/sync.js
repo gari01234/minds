@@ -100,14 +100,31 @@ async function pushState(state,maps){
     if(!t.done)t.completedAt=null;
     return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}};
   });
-  if(tasks.length){const {error}=await sb.from('isabella_tasks').upsert(tasks,{onConflict:'user_id,client_key'});if(error)throw error}
+  if(tasks.length){
+    const {error}=await sb.from('isabella_tasks').upsert(tasks,{onConflict:'user_id,client_key'});
+    if(error)throw error;
+  }
+  if((state.deletedTaskIds||[]).length){
+    const {error}=await sb.from('isabella_tasks').delete().eq('user_id',user.id).in('client_key',state.deletedTaskIds);
+    if(error)throw error;
+  }
   const events=(state.events||[]).map(e=>{
     const start=localDateTime(e.date,e.start),end=new Date(start.getTime()+((e.duration||60)*60000));
     return {user_id:user.id,client_key:e.id,title:e.title,starts_at:start.toISOString(),ends_at:end.toISOString(),all_day:!!e.allDay,category_id:maps.catByKey.get(e.categoryId)?.id||null,project_id:maps.projByKey.get(e.projectId)?.id||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}};
   });
-  if(events.length){const {error}=await sb.from('isabella_events').upsert(events,{onConflict:'user_id,client_key'});if(error)throw error}
+  if(events.length){
+    const {error}=await sb.from('isabella_events').upsert(events,{onConflict:'user_id,client_key'});
+    if(error)throw error;
+  }
+  if((state.deletedEventIds||[]).length){
+    const {error}=await sb.from('isabella_events').delete().eq('user_id',user.id).in('client_key',state.deletedEventIds);
+    if(error)throw error;
+  }
   const memories=(state.memory||[]).map((m,i)=>({user_id:user.id,client_key:typeof m==='object'?(m.id||'memory-'+i):'memory-'+i,kind:typeof m==='object'?(m.kind||'context'):'context',subject:typeof m==='object'?(m.subject||null):null,content:typeof m==='object'?(m.content||''):String(m),status:typeof m==='object'?(m.status||'active'):'active',confidence:typeof m==='object'?(m.confidence??1):1,source:typeof m==='object'?(m.source||'conversation'):'conversation',metadata:typeof m==='object'?(m.metadata||{}):{}})).filter(x=>x.content);
-  if(memories.length){const {error}=await sb.from('isabella_memories').upsert(memories,{onConflict:'user_id,client_key'});if(error)throw error}
+  if(memories.length){
+    const {error}=await sb.from('isabella_memories').upsert(memories,{onConflict:'user_id,client_key'});
+    if(error)throw error;
+  }
   await pushConversation(state.messages||[]);
 }
 async function conversationId(){
@@ -133,8 +150,10 @@ async function pullState(local,maps){
   ]);
   if(te)throw te;if(ee)throw ee;if(me)throw me;
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
-  const remoteTasks=(tasks||[]).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}}));
-  const remoteEvents=(events||[]).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}}});
+  const deletedTaskIds=new Set(local.deletedTaskIds||[]);
+  const deletedEventIds=new Set(local.deletedEventIds||[]);
+  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}}));
+  const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
   return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,messages:remoteMessages.length?remoteMessages:local.messages};
