@@ -1,0 +1,33 @@
+name: Package MINDS for iPad
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/isabella-ios/**"
+      - ".github/workflows/ios-playground.yml"
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble Swift Playground app
+        run: |
+          rm -rf build-playground
+          mkdir -p build-playground/MINDS.swiftpm
+          cp apps/isabella-ios/Playground.Package.swift build-playground/MINDS.swiftpm/Package.swift
+          cp -R apps/isabella-ios/Sources build-playground/MINDS.swiftpm/Sources
+
+      - name: Create iPad archive
+        working-directory: build-playground
+        run: ditto -c -k --sequesterRsrc --keepParent MINDS.swiftpm MINDS-iPad-Playground.zip
+
+      - name: Upload iPad Playground
+        uses: actions/upload-artifact@v4
+        with:
+          name: MINDS-iPad-Playground
+          path: build-playground/MINDS-iPad-Playground.zip
+          if-no-files-found: error
