@@ -182,23 +182,28 @@
     document.querySelector('.v09-reaction-popover')?.remove();
     document.querySelectorAll('.v09-msg.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
   }
-  function openSofiaReactionPicker(conv,id,expand=false){
+  function openSofiaReactionPicker(conv,id){
     const m=conv.messages.find(x=>String(x.id)===String(id));
     const el=document.querySelector(`.v09-msg[data-sofia-msg="${CSS.escape(String(id))}"]`);
     if(!m||!el)return;
     closeSofiaReactionPicker();try{navigator.vibrate?.(8)}catch{}
     el.classList.add('reaction-target');
     const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
-    const pop=document.createElement('div');pop.className='v09-reaction-popover'+(expand?' expanded':'');
-    pop.innerHTML=`<div class="v09-reaction-row">${quick.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="v09-reaction-more">＋</button></div>${expand?`<div class="v09-reaction-row more">${more.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-sofia-reaction="" class="remove">×</button></div>`:''}`;
+    const pop=document.createElement('div');pop.className='v09-reaction-popover';
+    pop.innerHTML=`<div class="v09-reaction-row">${quick.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="v09-reaction-more">＋</button></div><div class="v09-reaction-row more is-hidden">${more.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-sofia-reaction="" class="remove">×</button></div>`;
     document.body.appendChild(pop);
-    requestAnimationFrame(()=>{
+    const position=()=>{
       const r=el.getBoundingClientRect(),w=Math.min(pop.offsetWidth||330,innerWidth-20);
       pop.style.left=Math.max(10,Math.min(innerWidth-w-10,el.classList.contains('user')?r.right-w:r.left))+'px';
       let top=r.top-(pop.offsetHeight||58)-10;if(top<8)top=Math.min(innerHeight-(pop.offsetHeight||58)-8,r.bottom+10);pop.style.top=top+'px';
-    });
+    };
+    requestAnimationFrame(position);
     pop.querySelectorAll('[data-sofia-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();const v=b.dataset.sofiaReaction||null;m.reaction=m.reaction===v?null:v;saveConversations();closeSofiaReactionPicker();openConversation(conv.id)});
-    pop.querySelector('.v09-reaction-more')?.addEventListener('click',e=>{e.stopPropagation();openSofiaReactionPicker(conv,id,true)});
+    pop.querySelector('.v09-reaction-more')?.addEventListener('click',e=>{
+      e.stopPropagation();
+      const row=pop.querySelector('.v09-reaction-row.more'),opening=row.classList.contains('is-hidden');
+      row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);requestAnimationFrame(position);
+    });
     setTimeout(()=>document.addEventListener('pointerdown',function outside(e){if(pop.contains(e.target)||el.contains(e.target)){document.addEventListener('pointerdown',outside,{capture:true,once:true});return}closeSofiaReactionPicker()},{capture:true,once:true}),0);
   }
   function bindSofiaReactions(conv){
@@ -208,7 +213,8 @@
       el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0],now=Date.now();sx=t.clientX;sy=t.clientY;if(now-lastTap<330){cancel();openSofiaReactionPicker(conv,el.dataset.sofiaMsg);lastTap=0;return}lastTap=now;timer=setTimeout(()=>openSofiaReactionPicker(conv,el.dataset.sofiaMsg),470)},{passive:true});
       el.addEventListener('touchmove',e=>{if(!timer||e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>9||Math.abs(t.clientY-sy)>9)cancel()},{passive:true});
       el.addEventListener('touchend',cancel,{passive:true});el.addEventListener('touchcancel',cancel,{passive:true});
-      el.addEventListener('dblclick',()=>openSofiaReactionPicker(conv,el.dataset.sofiaMsg));
+      el.addEventListener('dblclick',e=>{e.preventDefault();openSofiaReactionPicker(conv,el.dataset.sofiaMsg)});
+      el.addEventListener('contextmenu',e=>{e.preventDefault();openSofiaReactionPicker(conv,el.dataset.sofiaMsg)});
       el.querySelector('.v09-reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openSofiaReactionPicker(conv,el.dataset.sofiaMsg)});
     });
   }
@@ -221,9 +227,10 @@
       :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
     const title=c.origin?.type==='reading'?(c.origin?.label||'Lectura'):'Sofía';
     openSheet('SOFÍA',title,`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button aria-label="Enviar">↑</button></form>`,'chat');
+    document.documentElement.classList.add('sofia-chat-open');
     if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:true},location.origin);
     sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
-    sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
+    sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     bindSofiaReactions(c);
     const form=sheetBody.querySelector('.v09-chat-form'),ta=form.querySelector('textarea');
     const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();
@@ -252,7 +259,7 @@
   window.addEventListener('message',e=>{
     if(e.origin!==location.origin)return;
     const type=e.data?.type;
-    if(type==='minds:sofia-close'){closeSofiaReactionPicker();sheet.classList.remove('open');return}
+    if(type==='minds:sofia-close'){closeSofiaReactionPicker();sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');return}
     if(type!=='minds:sofia-open'&&type!=='minds:sofia-prompt')return;
     const conv=newConversation({type:'global',id:'sofia',label:'Sofía'},'memory',true);
     openConversation(conv);
