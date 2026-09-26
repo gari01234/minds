@@ -120,12 +120,12 @@ async function afterSync(){
   if(!briefed)await maybeProactiveNudge();
 }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
-function say(role,text){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
+function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
   const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${esc(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${esc(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
   bindMessageReactions();
   setTimeout(()=>{
     const b=$('#messages');
@@ -295,7 +295,7 @@ async function handle(text){
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text,state);
       if(Object.prototype.hasOwnProperty.call(result||{},'pending_intent'))state.pendingIntent=result.pending_intent||null;
-      if(result?.reply)say('assistant',result.reply);
+      if(result?.reply)say('assistant',result.reply,{sources:result.sources||[]});
       if(result?.question&&result.question!==result.reply)say('assistant',result.question);
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
