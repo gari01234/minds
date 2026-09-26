@@ -20,6 +20,8 @@ async function init(){
   if(user) await syncNow({initial:true});
   sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;paintAuth();if(user)setTimeout(()=>syncNow({initial:true}),0)});
   window.addEventListener('isabella:state',()=>{if(hydrating||!user)return;clearTimeout(timer);timer=setTimeout(()=>syncNow({pushOnly:true}),900)});
+  window.addEventListener('isabella:mutation',e=>{if(!user||!e.detail)return;recordActivity(e.detail)});
+  window.addEventListener('isabella:proposal-feedback',e=>{if(!user||!e.detail)return;recordProposalFeedback(e.detail)});
 }
 function paintAuth(){
   if(!authButton)return;
@@ -207,7 +209,20 @@ async function syncNow(opts={}){
   if(!user||syncing)return;
   syncing=true;setStatus('Sincronizando…');
   try{
-    const local=app.getState(),maps=await ensureTaxonomy(local);
+    let local=app.getState();
+    const {data:deleted,error:de}=await sb.from('isabella_deleted_items').select('entity_type,client_key').eq('user_id',user.id);
+    if(de)throw de;
+    const deletedTasks=new Set((deleted||[]).filter(x=>x.entity_type==='task').map(x=>x.client_key));
+    const deletedEvents=new Set((deleted||[]).filter(x=>x.entity_type==='event').map(x=>x.client_key));
+    local={
+      ...local,
+      tasks:(local.tasks||[]).filter(x=>!deletedTasks.has(x.id)),
+      events:(local.events||[]).filter(x=>!deletedEvents.has(x.id)),
+      deletedTaskIds:[...new Set([...(local.deletedTaskIds||[]),...deletedTasks])],
+      deletedEventIds:[...new Set([...(local.deletedEventIds||[]),...deletedEvents])]
+    };
+    hydrating=true;app.replaceState(local);hydrating=false;
+    const maps=await ensureTaxonomy(local);
     await pushState(local,maps);
     if(!opts.pushOnly){
       const next=await pullState(local,maps);
