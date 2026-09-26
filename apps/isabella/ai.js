@@ -78,23 +78,24 @@ async function saveSurface(surface,agent,items){
   const {data,error}=await sb.from('minds_surface_items').insert(rows).select('*');
   return error?items:(data||items);
 }
-async function loadSurface(surface){
+async function loadSurface(surface,agent=null){
   if(!sb)return [];
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
-  const {data,error}=await sb.from('minds_surface_items').select('*')
-    .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString())
-    .order('generated_at',{ascending:false}).limit(12);
+  let q=sb.from('minds_surface_items').select('*')
+    .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString());
+  if(agent)q=q.eq('agent',agent);
+  const {data,error}=await q.order('generated_at',{ascending:false}).limit(12);
   return error?[]:(data||[]);
 }
 async function feed(state,{force=false}={}){
-  if(!force){const cached=await loadSurface('feed');if(cached.length)return cached}
+  if(!force){const cached=await loadSurface('feed','isabella');if(cached.length)return cached}
   const prompt='Crea un Feed personal de máximo 4 elementos para Gari usando su agenda, tareas, memoria y, solo cuando aporte valor, información actual. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Cada elemento debe ser concreto, breve y útil ahora. No inventes compromisos. No incluyas compras, pagos ni transacciones. action_prompt debe ser una frase que yo pueda enviar a Isabella para continuar ese elemento. Los iconos pueden ser emojis sobrios.';
   const result=await ask(prompt,state,{background:true});
   const items=parseSurface(result?.reply);
   return saveSurface('feed','isabella',items);
 }
 async function ideas(state,{force=false}={}){
-  if(!force){const cached=await loadSurface('idea');if(cached.length)return cached}
+  if(!force){const cached=await loadSurface('idea','isabella');if(cached.length)return cached}
   const prompt='Genera máximo 3 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. No son tareas obligatorias: son propuestas útiles que él quizá no haya pensado pedir. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"title":"...","body":"...","action_prompt":"...","icon":"..."}. Evita consejos genéricos y evita transacciones. Cada idea debe explicar por qué aparece ahora.';
   const result=await ask(prompt,state,{background:true});
   const items=parseSurface(result?.reply);
@@ -103,7 +104,7 @@ async function ideas(state,{force=false}={}){
 async function sofiaSurface(kind,{force=false}={}){
   if(!sb)return [];
   if(!force){
-    const cached=(await loadSurface(kind)).filter(x=>x.agent==='sofia');
+    const cached=await loadSurface(kind,'sofia');
     if(cached.length)return cached;
   }
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
