@@ -79,20 +79,20 @@ function openLogin(){
   };
 }
 async function ensureTaxonomy(state){
-  const categories=(state.categories||[]).map((c,i)=>({user_id:user.id,client_key:c.id,name:c.name,sort_order:i}));
+  const categories=(state.categories||[]).map((c,i)=>({user_id:user.id,client_key:c.id,name:c.name,color:c.color||null,sort_order:i}));
   if(categories.length){
     const {error}=await sb.from('isabella_categories').upsert(categories,{onConflict:'user_id,client_key'});
     if(error)throw error;
   }
-  const {data:cats,error:ce}=await sb.from('isabella_categories').select('id,client_key,name').eq('user_id',user.id);
+  const {data:cats,error:ce}=await sb.from('isabella_categories').select('id,client_key,name,color').eq('user_id',user.id);
   if(ce)throw ce;
   const catByKey=new Map((cats||[]).map(c=>[c.client_key,c]));
-  const projects=(state.projects||[]).map(p=>({user_id:user.id,client_key:p.id,name:p.name,category_id:catByKey.get(p.categoryId)?.id||null})).filter(p=>p.category_id);
+  const projects=(state.projects||[]).map(p=>({user_id:user.id,client_key:p.id,name:p.name,color:p.color||null,category_id:catByKey.get(p.categoryId)?.id||null})).filter(p=>p.category_id);
   if(projects.length){
     const {error}=await sb.from('isabella_projects').upsert(projects,{onConflict:'user_id,client_key'});
     if(error)throw error;
   }
-  const {data:projs,error:pe}=await sb.from('isabella_projects').select('id,client_key,name,category_id').eq('user_id',user.id);
+  const {data:projs,error:pe}=await sb.from('isabella_projects').select('id,client_key,name,color,category_id').eq('user_id',user.id);
   if(pe)throw pe;
   return {cats:cats||[],projs:projs||[],catByKey,projByKey:new Map((projs||[]).map(p=>[p.client_key,p]))};
 }
