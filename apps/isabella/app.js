@@ -165,7 +165,7 @@ function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que t
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:m.kind||'context',content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
   const action=p.action||'create';
-  const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':'Agregar';
+  const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
   if(p.time)bits.push(p.time);
   if(p.duration_minutes)bits.push(p.duration_minutes+' min');
@@ -176,7 +176,7 @@ function proposalLabel(p){
   return bits.filter(Boolean).join(' · ');
 }
 function proposalEditor(p,onDone){
-  const target=(p.action==='update'||p.action==='delete')?findTarget(p):null;
+  const target=(p.action&&p.action!=='create')?findTarget(p):null;
   const title=(p.title??target?.title??'');
   const date=(p.date??target?.date??today());
   const time=(p.time??(p.kind==='event'?target?.start:'')??'');
@@ -248,10 +248,20 @@ function applyProposal(p){
   const categoryId=p.category?state.categories.find(c=>c.name.toLowerCase()===String(p.category).toLowerCase())?.id:null;
   const projectId=p.project?state.projects.find(x=>x.name.toLowerCase()===String(p.project).toLowerCase())?.id:null;
   const date=p.date||today();
-  if(action==='update'||action==='delete'){
+  if(action==='update'||action==='delete'||action==='complete'||action==='archive'){
     const target=findTarget(p);
     if(!target){closeModal();say('assistant','No pude identificar con seguridad cuál elemento quieres cambiar. Dime cuál y lo intento de nuevo.');return}
     const before=clone(target);
+    if(action==='complete'&&p.kind==='task'){
+      target.done=true;target.completedAt=new Date().toISOString();
+      mutation('task','complete',before,target,'assistant');
+      save();renderCalendar();closeModal();say('assistant','Listo. La marqué como completada.');return;
+    }
+    if(action==='archive'&&p.kind==='task'){
+      target.archivedAt=new Date().toISOString();
+      mutation('task','archive',before,target,'assistant');
+      save();renderCalendar();closeModal();say('assistant','Listo. La archivé.');return;
+    }
     if(action==='delete'){
       const list=p.kind==='task'?state.tasks:state.events;
       const idx=list.findIndex(x=>x.id===target.id);
