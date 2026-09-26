@@ -201,7 +201,7 @@
     if(!m||!el)return;
     closeSofiaReactionPicker();try{navigator.vibrate?.(8)}catch{}
     el.classList.add('reaction-target');
-    const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','💡','🔥','🥳','🤔','✅','❌'];
+    const quick=['❤️','👍','😂','😮','😢','👏'],more=['🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🙈','🤝','💪','🎉','⭐','🌟','🚀','📌','🧠','☀️','🌧️','⚽','🏗️','📚'];
     const pop=document.createElement('div');pop.className='v09-reaction-popover';
     pop.innerHTML=`<div class="v09-reaction-row">${quick.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="v09-reaction-more">＋</button></div><div class="v09-reaction-row more is-hidden">${more.map(x=>`<button data-sofia-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button data-sofia-reaction="" class="remove">×</button></div>`;
     document.body.appendChild(pop);
