@@ -363,7 +363,7 @@
   });
 
   // Boot.
-  setViewV091('mind');
+  setViewV091(new URLSearchParams(location.search).get('embedded')==='1'?'readings':'mind');
 
   window.MINDS_V09={
     get conversations(){return conversations},
