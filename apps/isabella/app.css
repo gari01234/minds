@@ -628,3 +628,38 @@ body.message-selection-active .message.selection-mode .message-text *{
 .routine-toggle span:after{content:"";position:absolute;width:22px;height:22px;left:3px;top:3px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.18);transition:.18s}
 .routine-toggle input:checked+span{background:#111}
 .routine-toggle input:checked+span:after{transform:translateX(18px)}
+
+
+/* Build 27 — Muse-style identity dock and deterministic message selection */
+.topbar{position:relative;display:grid!important;grid-template-columns:1fr auto 1fr!important;align-items:center!important}
+.topbar-brand{justify-self:start}.top-actions{justify-self:end}
+.orb-home{display:grid;place-items:center}
+.orb-dock{width:48px;height:48px;display:grid;place-items:center;align-self:center}
+.orb-dock[aria-hidden="true"]{visibility:hidden;pointer-events:none}
+body.isabella-orb-docked #orbButton{
+  position:relative!important;inset:auto!important;left:auto!important;top:auto!important;
+  width:48px!important;height:48px!important;margin:0!important;transform:none!important;z-index:auto!important
+}
+body.isabella-orb-docked #orbButton .orb-core{width:32px!important;height:32px!important;filter:blur(6px) saturate(.98)!important}
+body.isabella-orb-docked #orbButton .orb-haze{width:40px!important;height:40px!important;filter:blur(9px)!important;opacity:.58!important}
+body.isabella-orb-docked #orbButton .orb-haze-b{width:46px!important;height:46px!important;opacity:.28!important}
+body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
+@media(max-width:520px){
+  body.isabella-orb-docked #orbButton{width:44px!important;height:44px!important}
+  body.isabella-orb-docked #orbButton .orb-core{width:30px!important;height:30px!important}
+  body.isabella-orb-docked #orbButton .orb-haze{width:38px!important;height:38px!important}
+  body.isabella-orb-docked #orbButton .orb-haze-b{width:43px!important;height:43px!important}
+  body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
+}
+.message,.message .message-text,.message .message-text *{-webkit-user-select:none!important;user-select:none!important;-webkit-touch-callout:none!important}
+.message-text-picker-open{overflow:hidden}
+.message-text-picker-backdrop{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.18);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
+.message-text-picker{position:fixed;z-index:132;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,820px);max-height:72dvh;overflow:auto;background:#fff;border-radius:28px 28px 0 0;padding:18px 22px calc(22px + var(--safe));box-shadow:0 -18px 70px rgba(0,0,0,.16)}
+.message-text-picker-head{display:flex;align-items:center;justify-content:space-between}
+.message-text-picker-title{font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;font-size:30px;margin-top:3px}
+.message-text-picker-help{font-size:12px;line-height:1.4;color:#999;margin:10px 0 16px}
+.message-token-area{font-size:20px;line-height:1.65;padding:16px 14px;border-radius:18px;background:#f7f7f8;white-space:pre-wrap;overflow-wrap:anywhere;touch-action:none;-webkit-user-select:none;user-select:none}
+.message-token{border-radius:5px;padding:1px 0;transition:background .08s,color .08s}
+.message-token.selected{background:#111;color:#fff}
+.message-text-picker-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:16px}
+.message-text-picker-actions button:disabled{opacity:.38}

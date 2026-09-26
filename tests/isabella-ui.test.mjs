@@ -170,15 +170,14 @@ test('Build 21 removes redundant surface headings and Readings explainer',()=>{
   assert.ok(!theory.includes('La memoria de lectura vive aquí'));
 });
 
-test('Build 21 Isabella opens at the latest message while preserving text selection',()=>{
+test('Build 27 opens at the latest message without relying on Safari native selection',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('function scrollAssistantToLatest'));
   assert.ok(app.includes("if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
-  assert.ok(!app.includes("timer=setTimeout(()=>openReactionPicker"));
-  assert.ok(app.includes("contextmenu',e=>{if(el.dataset.selectionMode==='1')return;e.preventDefault();openReactionPicker"));
-  assert.ok(css.includes('-webkit-user-select:text!important'));
-  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+  assert.ok(app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
+  assert.ok(app.includes("selectstart',e=>e.preventDefault()"));
+  assert.ok(css.includes('.message-text-picker'));
 });
 
 
@@ -270,23 +269,28 @@ test('Build 25 invalidates old Feed editions and hydrates news detail into the a
   assert.ok(app.includes('Buscando contexto y antecedentes'));
 });
 
-test('Build 25 uses an explicit Safari text-selection mode instead of programmatic Range selection',()=>{
+test('Build 27 uses a deterministic word and emoji picker instead of WebKit selection',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes('function clearMessageSelectionMode'));
-  assert.ok(app.includes('Mantén pulsado sobre una palabra para seleccionar'));
+  assert.ok(app.includes('function segmentMessageText'));
+  assert.ok(app.includes('function openMessageTextPicker'));
+  assert.ok(app.includes('new Intl.Segmenter'));
+  assert.ok(app.includes('Copiar selección'));
   assert.ok(!app.includes('range.selectNodeContents'));
-  assert.ok(app.includes("el.dataset.selectionMode==='1'"));
-  assert.ok(css.includes('body.message-selection-active .message.selection-mode'));
-  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+  assert.ok(!app.includes('message-selection-active'));
+  assert.ok(css.includes('.message-token.selected'));
 });
 
-test('Build 25 keeps Isabella ORB docked while the conversation opens at the latest message',()=>{
+test('Build 27 docks the same Isabella ORB in the top bar instead of floating over chat',()=>{
+  const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes('isabella-orb-docked'));
-  assert.ok(css.includes('body.isabella-orb-docked #orbButton'));
-  assert.ok(css.includes('position:fixed!important'));
+  assert.ok(shell.includes('id="orbDock"'));
+  assert.ok(shell.includes('id="orbHome"'));
+  assert.ok(app.includes("const target=docked?dock:home"));
+  assert.ok(app.includes('target.appendChild(orb)'));
+  assert.ok(css.includes('.orb-dock'));
+  assert.ok(css.includes('position:relative!important'));
 });
 
 
@@ -299,4 +303,13 @@ test('Build 26 supports confirmed server-side Isabella routines',()=>{
   assert.ok(app.includes('async function routinesPanel'));
   assert.ok(app.includes("await maybeProactiveNudge()"));
   assert.ok(!app.includes("const briefed=await maybeDailyBrief()"));
+});
+
+
+test('Build 27 supports one-time server chat reminders without requiring push permission',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("p.schedule_kind==='once'"));
+  assert.ok(app.includes("kind==='once'?{date:p.date||today()}"));
+  assert.ok(app.includes("notificaciones del sistema son opcionales"));
+  assert.ok(app.includes("sch.kind==='once'"));
 });
