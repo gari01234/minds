@@ -253,6 +253,10 @@ function openSofia(prompt=''){
   show('readings');ensureReadings();
   setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:prompt?'minds:sofia-prompt':'minds:sofia-open',prompt},location.origin),260);
 }
+window.addEventListener('message',e=>{
+  if(e.origin!==location.origin||e.data?.type!=='minds:sofia-state')return;
+  $('#readingsScreen')?.classList.toggle('sofia-chat-active',!!e.data.open);
+});
 function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
 function syncOrbCompact(force=null){
   const scroller=$('.assistant-scroll');if(!scroller)return;
