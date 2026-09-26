@@ -140,3 +140,14 @@
 .skill-row{padding:14px 2px;border-bottom:1px solid #ececef}
 .skill-row:last-child{border-bottom:0}
 .skill-meta{margin-top:7px;font-size:11px;line-height:1.35;color:#aaa;overflow-wrap:anywhere}
+
+/* Chat-aware ORB: expansive on arrival, compact while reading the conversation */
+.orb-button{transition:width .3s ease,height .3s ease,margin .3s ease,transform .3s ease}
+.orb-core,.orb-haze{transition:width .3s ease,height .3s ease,filter .3s ease,opacity .3s ease}
+.assistant-scroll.orb-compact .orb-button{
+  width:112px;height:112px;margin:0 auto 8px;position:sticky;top:0;z-index:6;
+}
+.assistant-scroll.orb-compact .orb-core{width:82px;height:82px;filter:blur(10px) saturate(.98)}
+.assistant-scroll.orb-compact .orb-haze{width:98px;height:98px;filter:blur(16px);opacity:.62}
+.assistant-scroll.orb-compact .orb-haze-b{width:110px;height:110px;opacity:.32}
+.message-text strong{font-weight:700}
