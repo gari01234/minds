@@ -120,7 +120,7 @@ async function afterSync(){
   if(!briefed)await maybeProactiveNudge();
 }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
-function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
+function say(role,text){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
