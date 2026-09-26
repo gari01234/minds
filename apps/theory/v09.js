@@ -201,7 +201,7 @@
     const transcript=recent.map(m=>(m.role==='assistant'?'Sofía':'Gari')+': '+String(m.text||'')).join('\n\n');
     const request=[
       ...originBits,
-      'Modo: '+(conv.mode==='outside'?'Explorar fuera':'Mi memoria'),
+      'Decide tú si la pregunta se resuelve con la memoria/corpus disponible o si necesitas explorar fuera. No pidas al usuario elegir un modo.',
       transcript||('Gari: '+q)
     ].filter(Boolean).join('\n\n');
     const {data,error}=await sb.functions.invoke('sofia-chat',{body:{message:request}});
@@ -316,14 +316,13 @@
     const msgs=c.messages.length
       ?c.messages.map(m=>`<div class="v09-msg ${m.role}" data-sofia-msg="${esc(m.id)}"><span class="v09-msg-label">${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span><span class="v09-msg-text">${formatSofiaText(m.text)}</span>${m.reaction?`<button class="v09-reaction-chip">${esc(m.reaction)}</button>`:''}</div>`).join('')
       :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
-    openSheet('MINDS · SOFÍA','',`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><button type="button" class="v09-chat-mic" aria-label="Hablar">⌁</button><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button class="v09-chat-send" aria-label="Enviar">↑</button></form>`,'chat');
+    openSheet('MINDS · SOFÍA','',`${context}<button type="button" class="sofia-orb-button" aria-label="Hablar con Sofía"><span class="sofia-orb-haze sofia-orb-haze-a"></span><span class="sofia-orb-haze sofia-orb-haze-b"></span><span class="sofia-orb-core"></span></button><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><button type="button" class="v09-chat-mic" aria-label="Hablar">⌁</button><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button class="v09-chat-send" aria-label="Enviar">↑</button></form>`,'chat');
     document.documentElement.classList.add('sofia-chat-open');
     if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:true},location.origin);
-    sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     bindSofiaReactions(c);
     const form=sheetBody.querySelector('.v09-chat-form'),ta=form.querySelector('textarea');
-    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();bindSofiaVoice(form,ta,autosize);
+    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();bindSofiaVoice(form,ta,autosize);sheetBody.querySelector('.sofia-orb-button')?.addEventListener('click',()=>form.querySelector('.v09-chat-mic')?.click());
     ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
     form.onsubmit=async e=>{
       e.preventDefault();
@@ -439,7 +438,7 @@
   // ---------- reader integration ----------
   function enhanceReaderV09(){
     const drawer=$('drawer');if(!drawer?.classList.contains('open'))return;
-    drawer.querySelector('.reader-quiet-tools')?.remove();
+    drawer.querySelector('.reader-quiet-tools')?.remove();drawer.querySelectorAll('.v09-reader-tools').forEach(el=>el.remove());
     const tools=document.createElement('div');tools.className='v09-reader-tools';const id=(typeof activeReading!=='undefined'&&activeReading)||'';const s=id?readingStats(id):{marks:0,convs:0};
     tools.innerHTML=`<button data-reader-notes>Anotaciones · ${s.marks}</button><button data-reader-convs>Conversaciones · ${s.convs}</button><span></span><button data-font="down">A−</button><button data-font="up">A+</button>`;
     drawer.querySelector('.reader-grid')?.before(tools);

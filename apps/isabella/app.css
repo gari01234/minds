@@ -456,3 +456,36 @@ body.sofia-chat-open #readingsScreen .readings-frame{
   }
   .assistant-scroll.orb-compact{padding-bottom:94px!important}
 }
+
+
+/* Build 20 — continuous chat flow; compact ORB stays fully visible */
+.assistant-scroll.orb-compact{
+  display:block!important;
+  padding-top:0!important;
+  padding-bottom:118px!important;
+}
+.assistant-scroll.orb-compact .orb-button{
+  position:relative!important;
+  top:auto!important;
+  width:78px!important;
+  height:78px!important;
+  margin:0 auto -16px!important;
+  transform:none!important;
+}
+.assistant-scroll.orb-compact .orb-core{width:54px!important;height:54px!important}
+.assistant-scroll.orb-compact .orb-haze{width:66px!important;height:66px!important}
+.assistant-scroll.orb-compact .orb-haze-b{width:76px!important;height:76px!important}
+.assistant-scroll.orb-compact .today-card{margin-top:0!important}
+.assistant-scroll.orb-compact .messages{
+  max-height:none!important;
+  overflow:visible!important;
+  margin:0 auto!important;
+  padding-top:8px!important;
+}
+@media(max-width:520px){
+  .assistant-scroll.orb-compact .orb-button{
+    position:relative!important;
+    top:auto!important;
+    margin:0 auto -16px!important;
+  }
+}

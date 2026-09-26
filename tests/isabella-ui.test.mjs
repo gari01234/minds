@@ -116,3 +116,33 @@ test('Build 19 removes the redundant calendar shortcut and hides closed embedded
   assert.ok(theoryCss.includes('html.embedded .v09-sheet:not(.open)'));
   assert.ok(theoryCss.includes('visibility:hidden!important'));
 });
+
+
+test('Build 20 keeps Isabella chat continuous and compact ORB unclipped',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('/* Build 20 — continuous chat flow; compact ORB stays fully visible */'));
+  assert.ok(css.includes('max-height:none!important'));
+  assert.ok(css.includes('margin:0 auto!important'));
+});
+
+test('Readings removes explanatory overlays and duplicate reader controls',()=>{
+  const v05=read('apps/theory/v05.js');
+  const v09=read('apps/theory/v09.js');
+  const css=read('apps/theory/v10.css');
+  assert.ok(!v05.includes('Texto recuperado de la conversación. Las lecturas son análisis del asistente'));
+  assert.ok(!v05.includes('Selecciona un pasaje y usa «Subrayar selección» o «Añadir nota».'));
+  assert.ok(v09.includes("drawer.querySelectorAll('.v09-reader-tools').forEach(el=>el.remove())"));
+  assert.ok(css.includes('html.embedded .reader-tools{display:none!important}'));
+  assert.ok(css.includes('html.embedded .reader-tools.mobile-open'));
+});
+
+test('Sofia routes automatically and mirrors Isabella message typography with an ORB',()=>{
+  const js=read('apps/theory/v09.js');
+  const css=read('apps/theory/v10.css');
+  assert.ok(!js.includes("Modo: '+(conv.mode"));
+  assert.ok(!js.includes('data-mode="memory"'));
+  assert.ok(js.includes('sofia-orb-button'));
+  assert.ok(js.includes("form.querySelector('.v09-chat-mic')?.click()"));
+  assert.ok(css.includes('.sofia-orb-core'));
+  assert.ok(css.includes('font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Arial,sans-serif!important'));
+});
