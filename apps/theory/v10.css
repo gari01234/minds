@@ -348,3 +348,12 @@ html.embedded .v09-sheet[data-kind="chat"] .v09-msg.user{
   justify-content:center!important;
 }
 .v09-reaction-popover.expanded{border-radius:20px!important}
+
+.v09-reaction-row.more{
+  grid-template-columns:repeat(6,40px)!important;
+  max-height:210px!important;
+  overflow-y:auto!important;
+  overscroll-behavior:contain!important;
+  -webkit-overflow-scrolling:touch!important;
+  padding:5px 2px 2px!important;
+}
