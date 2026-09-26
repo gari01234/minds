@@ -171,9 +171,9 @@ async function pullState(local,maps){
 async function pullConversation(){
   const {data,error}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope',APP_SCOPE).order('updated_at',{ascending:false}).limit(1);
   if(error||!data?.length)return[];
-  const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
+  const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,metadata,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
   if(me)throw me;
-  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at}));
+  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null}));
 }
 async function recordProposalFeedback(detail){
   try{
