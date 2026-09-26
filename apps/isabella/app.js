@@ -74,6 +74,32 @@ function load(){try{const x={...base,...JSON.parse(localStorage.getItem(KEY)||'{
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
 function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIso(s).toLocaleDateString('es-ES',opt)}
 function cat(id){return state.categories.find(x=>x.id===id)?.name||''} function project(id){return state.projects.find(x=>x.id===id)?.name||''}
+function fallbackColor(seed=''){
+  const palette=['#5A9EC1','#6D7278','#8A72C7','#D08A6A','#9A9466','#2F6FB0','#4F8A62','#B678A2'];
+  let h=0;for(const ch of String(seed))h=(h*31+ch.charCodeAt(0))>>>0;
+  return palette[h%palette.length];
+}
+function itemColor(item){
+  if(item?.projectId){
+    const p=state.projects.find(x=>x.id===item.projectId);
+    if(p?.color)return p.color;
+  }
+  if(item?.categoryId){
+    const k=state.categories.find(x=>x.id===item.categoryId);
+    if(k?.color)return k.color;
+  }
+  return fallbackColor(item?.projectId||item?.categoryId||item?.id||'item');
+}
+function dayColors(date){
+  const items=[...state.events.filter(x=>x.date===date),...state.tasks.filter(x=>x.date===date&&activeTask(x))];
+  return [...new Set(items.map(itemColor).filter(Boolean))].slice(0,4);
+}
+function formatMessageText(text){
+  let html=esc(text);
+  html=html.replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>');
+  html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
+  return html;
+}
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
 function init(){
@@ -126,7 +152,7 @@ function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
   const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${esc(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   setTimeout(()=>{
     const b=$('#messages');
@@ -317,6 +343,10 @@ async function handle(text){
   finally{orb()}
 }
 function bind(){
+ const assistantScroll=$('.assistant-scroll');
+ const updateOrbCompact=()=>assistantScroll?.classList.toggle('orb-compact',assistantScroll.scrollTop>48);
+ assistantScroll?.addEventListener('scroll',updateOrbCompact,{passive:true});
+ updateOrbCompact();
  const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();$('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
