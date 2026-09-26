@@ -149,3 +149,149 @@ html.embedded .v10-auth-dialog{max-width:100vw}
   html.embedded .view{min-height:auto}
   html.embedded .v09-readings-head{padding-top:6px}
 }
+
+
+/* Build 17 — embedded Readings + Sofía feel like the main MINDS app */
+html.embedded .v09-sheet[data-kind="chat"]{
+  inset:0!important;
+  width:100%!important;
+  height:100dvh!important;
+  max-height:none!important;
+  transform:translateY(104%)!important;
+  border:0!important;
+  box-shadow:none!important;
+  background:#fff!important;
+}
+html.embedded .v09-sheet[data-kind="chat"].open{transform:translateY(0)!important}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-head{
+  flex:none;
+  min-height:72px;
+  padding:calc(16px + env(safe-area-inset-top,0px)) 24px 12px!important;
+  align-items:center!important;
+  border-bottom:0!important;
+  background:#fff!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-kicker{
+  font:700 8px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif!important;
+  letter-spacing:.28em!important;
+  color:#9c938b!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-head h2{
+  font:400 30px/1 "Iowan Old Style","Palatino Linotype",Georgia,serif!important;
+  margin:5px 0 0!important;
+  letter-spacing:-.03em!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-close{
+  width:42px!important;height:42px!important;border:0!important;border-radius:50%!important;
+  background:#f8f8fa!important;font-size:27px!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-body{
+  flex:1!important;min-height:0!important;overflow:hidden!important;
+  padding:0 24px calc(8px + env(safe-area-inset-bottom,0px))!important;
+  display:flex!important;flex-direction:column!important;background:#fff!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-conv-context{
+  flex:none!important;margin:0 0 8px!important;padding:10px 12px!important;
+  border:0!important;border-radius:14px!important;background:#f6f6f7!important;
+  font:13px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-conv-mode{
+  flex:none!important;margin:0 0 8px!important;gap:5px!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-conv-mode button{
+  padding:6px 9px!important;font-size:10px!important;background:#fff!important;border-color:#e5e5e7!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-conv-mode button.active{
+  background:#f1f1f3!important;color:#111!important;border-color:#f1f1f3!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-log{
+  flex:1!important;min-height:0!important;max-height:none!important;overflow:auto!important;
+  padding:8px 0 18px!important;gap:13px!important;scroll-behavior:smooth!important;
+  -webkit-overflow-scrolling:touch!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg{
+  position:relative!important;
+  max-width:82%!important;
+  margin:0!important;
+  padding:4px 0!important;
+  border-radius:0!important;
+  background:#fff!important;color:#111!important;
+  font:15px/1.48 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif!important;
+  white-space:pre-wrap!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg.user{
+  align-self:flex-end!important;
+  width:max-content!important;
+  padding:10px 14px!important;
+  background:#f4f4f5!important;
+  border-radius:18px!important;color:#111!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg.assistant{align-self:flex-start!important}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg-label{display:none!important}
+html.embedded .v09-sheet[data-kind="chat"] .v09-msg-text{display:inline!important}
+html.embedded .v09-sheet[data-kind="chat"] .sofia-empty{
+  max-width:520px!important;color:#555!important;padding-top:16px!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form{
+  flex:none!important;
+  position:relative!important;bottom:auto!important;
+  display:flex!important;align-items:flex-end!important;gap:8px!important;
+  margin:0!important;padding:7px!important;
+  border:1px solid #e7e7e9!important;border-radius:28px!important;background:#fff!important;
+  box-shadow:0 10px 32px rgba(0,0,0,.04)!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form textarea{
+  flex:1!important;min-height:42px!important;max-height:156px!important;
+  resize:none!important;overflow-y:auto!important;border:0!important;outline:0!important;
+  background:transparent!important;padding:10px 7px!important;font-size:16px!important;line-height:1.35!important
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form button{
+  flex:none!important;width:44px!important;height:44px!important;min-width:44px!important;
+  border:0!important;border-radius:50%!important;background:#171717!important;color:#fff!important;
+  padding:0!important;font-size:25px!important;display:grid!important;place-items:center!important
+}
+
+/* Sofía reactions use the same lightweight message-attached pattern */
+.v09-reaction-chip{
+  position:absolute;bottom:-11px;left:8px;min-width:29px;height:23px;padding:1px 7px;
+  border:2px solid #fff;border-radius:99px;background:#fff;box-shadow:0 1px 5px rgba(0,0,0,.16);
+  font-size:14px;line-height:1;cursor:pointer
+}
+.v09-msg.user .v09-reaction-chip{left:auto;right:8px}
+.v09-msg:has(.v09-reaction-chip){margin-bottom:20px!important}
+.v09-reaction-popover{
+  position:fixed;z-index:900;width:max-content;max-width:calc(100vw - 20px);padding:5px;
+  border-radius:24px;background:rgba(250,250,251,.97);
+  box-shadow:0 12px 38px rgba(0,0,0,.18),0 0 0 1px rgba(0,0,0,.04);
+  backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px)
+}
+.v09-reaction-row{display:flex;gap:2px;align-items:center}
+.v09-reaction-row.more{padding-top:4px;margin-top:3px;border-top:1px solid rgba(0,0,0,.06)}
+.v09-reaction-popover button{
+  width:42px;height:42px;padding:0;border:0;border-radius:50%;background:transparent;
+  display:grid;place-items:center;font-size:24px
+}
+.v09-reaction-popover button.selected{background:#e9e9ed;transform:scale(1.06)}
+.v09-reaction-popover .v09-reaction-more{background:#efeff2;color:#666}
+.v09-reaction-popover .remove{color:#888}
+
+/* In embedded reading mode, annotations are a contextual drawer, never an overlay over the text */
+html.embedded .reader-grid{display:block!important}
+html.embedded .reader-tools{
+  position:fixed!important;
+  left:10px!important;right:10px!important;top:auto!important;
+  bottom:calc(10px + env(safe-area-inset-bottom,0px))!important;
+  width:auto!important;max-height:min(68dvh,640px)!important;
+  overflow:auto!important;z-index:780!important;
+  padding:18px!important;border:1px solid #e4e4e7!important;border-radius:24px!important;
+  background:rgba(255,255,255,.98)!important;box-shadow:0 18px 60px rgba(0,0,0,.18)!important;
+  transform:translateY(calc(100% + 40px))!important;transition:transform .2s ease!important
+}
+html.embedded .reader-tools.mobile-open{transform:translateY(0)!important}
+html.embedded .reader-tools:not(.mobile-open){pointer-events:none!important}
+html.embedded .v09-reader-tools{position:relative!important;z-index:4!important;background:#fff!important}
+html.embedded .reader-toolbar{position:static!important;background:#fff!important}
+html.embedded .drawer-inner{padding-bottom:90px!important}
+
+/* Remove any old chat/footer reservation that created the blank band */
+html.embedded .v09-conv-foot{display:none!important}
