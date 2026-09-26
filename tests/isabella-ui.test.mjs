@@ -35,12 +35,10 @@ test('Feed keeps Hoy, Noticias and Para mí as explicit information layers',()=>
   assert.ok(app.includes('feed-section-title">Hoy'));
   assert.ok(app.includes('feed-section-title">Noticias'));
   assert.ok(app.includes('feed-section-title">Para mí'));
-  assert.ok(ai.includes('"section":"today"|"news"|"for_me"'));
-  for(const kind of ['weather','news','architecture','ai','family','project']){
-    assert.ok(ai.includes('"'+kind+'"'),`missing Feed kind: ${kind}`);
-  }
+  assert.ok(ai.includes("functions.invoke('isabella-feed'"));
+  assert.ok(ai.includes('preference_signature'));
+  assert.ok(ai.includes("surface_version:surface==='feed'?7"));
   assert.ok(ai.includes('source_url'));
-  assert.ok(ai.includes('web_search'));
 });
 
 
@@ -157,8 +155,8 @@ test('Build 21 Feed supports free interests, followed entities and deeper news',
   assert.ok(app.includes('Leer más'));
   assert.ok(ai.includes('feed_custom_topics'));
   assert.ok(ai.includes('feed_following'));
-  assert.ok(ai.includes('entre 4 y 6 noticias actuales'));
-  assert.ok(ai.includes('PORTADA PERSONAL CURADA'));
+  assert.ok(ai.includes("functions.invoke('isabella-feed'"));
+  assert.ok(ai.includes('feed_follow_graph'));
 });
 
 test('Build 21 removes redundant surface headings and Readings explainer',()=>{
@@ -233,8 +231,9 @@ test('Build 24 refresh requests a genuinely new Feed edition',()=>{
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes("feed?.(state,{force,currentItems:previous})"));
   assert.ok(ai.includes('currentItems=[]'));
-  assert.ok(ai.includes('ACTUALIZACIÓN MANUAL DEL FEED'));
-  assert.ok(ai.includes('Evita repetir estos titulares o ángulos'));
+  assert.ok(ai.includes("force:!!force"));
+  assert.ok(ai.includes('current_titles:currentTitles'));
+  assert.ok(app.includes("status.textContent='Actualizando…'"));
 });
 
 test('Build 24 news detail can render immediate context and optional verified media',()=>{
@@ -245,9 +244,9 @@ test('Build 24 news detail can render immediate context and optional verified me
   assert.ok(shell.includes('id="feedDetailArticle"'));
   assert.ok(app.includes('image_url'));
   assert.ok(app.includes('feed-detail-copy'));
-  assert.ok(ai.includes('"detail":"..."'));
-  assert.ok(ai.includes('"image_url":""'));
-  assert.ok(ai.includes('100–180 palabras'));
+  assert.ok(app.includes('feed-detail-copy'));
+  assert.ok(app.includes('image_url'));
+  assert.ok(ai.includes('async function feedStory'));
 });
 
 test('Build 24 gives Isabella a warmer conversational voice without changing surface prompts',()=>{
@@ -262,8 +261,8 @@ test('Build 24 gives Isabella a warmer conversational voice without changing sur
 test('Build 25 invalidates old Feed editions and hydrates news detail into the article',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(ai.includes("surface_version:surface==='feed'?6:1"));
-  assert.ok(ai.includes('SEGUNDO INTENTO OBLIGATORIO'));
+  assert.ok(ai.includes("surface_version:surface==='feed'?7"));
+  assert.ok(ai.includes('feedPreferenceSignature'));
   assert.ok(app.includes('function hydrateFeedStory'));
   assert.ok(app.includes('function renderFeedOverview'));
   assert.ok(app.includes('Buscando contexto y antecedentes'));
@@ -325,4 +324,37 @@ test('Build 28 lets Isabella propose and persist Feed curation changes',()=>{
   assert.ok(sync.includes("preference_key:'feed'"));
   assert.ok(sync.includes("from('isabella_preferences').upsert"));
   assert.ok(sync.includes("eq('preference_key','feed')"));
+});
+
+
+test('Build 29 Feed cache is preference-aware and refresh has visible state',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  const shell=read('apps/isabella/shell.js');
+  assert.ok(ai.includes('function feedPreferenceSignature'));
+  assert.ok(ai.includes("functions.invoke('isabella-feed'"));
+  assert.ok(ai.includes("preference_signature:signature"));
+  assert.ok(app.includes("status.textContent='Actualizando…'"));
+  assert.ok(shell.includes('id="feedRefreshStatus"'));
+});
+
+test('Build 29 lets Isabella ask sparse non-sensitive curiosity questions',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('function maybeCuriosityQuestion'));
+  assert.ok(app.includes('curiosityCadenceHours'));
+  assert.ok(ai.includes('async function curiosity'));
+  assert.ok(ai.includes('NO_QUESTION'));
+  assert.ok(ai.includes('No preguntes por salud'));
+});
+
+test('Build 29 supports confirmed behavioral self-improvement',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(ai.includes('isabella_improvement'));
+  assert.ok(app.includes("p.kind==='assistant_preferences'"));
+  assert.ok(app.includes('function applyAssistantPreferencesProposal'));
+  assert.ok(sync.includes("preference_key:'assistant'"));
+  assert.ok(app.includes('Proactividad de Isabella'));
 });

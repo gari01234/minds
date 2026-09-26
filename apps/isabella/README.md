@@ -44,3 +44,12 @@ Las rutinas recurrentes y los recordatorios únicos de Isabella ya se persisten 
 ### Feed control desde el chat
 
 Desde Build 28, la constelación e intereses del Feed dejan de ser solo ajustes manuales del navegador. Isabella puede proponer cambios explícitos en bloque —por ejemplo seguir una lista de arquitectos, artistas o estudios que acaba de investigar— y la interfaz pide confirmación antes de aplicarlos. Las preferencias del Feed se sincronizan en `isabella_preferences` con `preference_key='feed'`, de modo que el futuro cliente nativo comparte la misma curaduría.
+
+
+### Build 29 — Feed, curiosidad y auto-mejora
+
+El Feed usa una Edge Function especializada (`isabella-feed`) con un presupuesto de salida suficiente para producir una edición completa con contexto, en vez de reutilizar el presupuesto corto del chat. Cada edición se firma contra la configuración actual del Feed; un cambio en la constelación invalida automáticamente la caché anterior. Refresh muestra estado visible mientras genera una edición nueva.
+
+Isabella puede hacer preguntas ocasionales y no sensibles para reducir huecos útiles de memoria. La cadencia y el opt-in se controlan desde «Proactividad de Isabella». Las respuestas siguen entrando por la conversación normal y solo se conservan si el sistema de memoria las considera útiles.
+
+Ideas puede incluir una autoevaluación de Isabella. Si el usuario acepta una mejora de comportamiento o workflow, Isabella prepara una propuesta confirmable y la regla queda en preferencias compartidas. No se permite que el agente autoedite o despliegue código desde su propio chat.

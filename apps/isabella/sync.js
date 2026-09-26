@@ -147,6 +147,18 @@ async function pushState(state,maps){
     },{onConflict:'user_id,preference_key'});
     if(error)throw error;
   }
+  if(state.assistantPreferences){
+    const {error}=await sb.from('isabella_preferences').upsert({
+      user_id:user.id,
+      preference_key:'assistant',
+      value:state.assistantPreferences,
+      status:'confirmed',
+      confidence:1,
+      evidence:[{source:'isabella_client',at:new Date().toISOString()}],
+      updated_at:new Date().toISOString()
+    },{onConflict:'user_id,preference_key'});
+    if(error)throw error;
+  }
   await pushConversation(state.messages||[]);
 }
 async function conversationId(){
@@ -165,13 +177,14 @@ async function pushConversation(messages){
   await sb.from('conversations').update({updated_at:now}).eq('id',cid).eq('user_id',user.id).eq('app_scope',APP_SCOPE);
 }
 async function pullState(local,maps){
-  const [{data:tasks,error:te},{data:events,error:ee},{data:mem,error:me},{data:pref,error:pre}] = await Promise.all([
+  const [{data:tasks,error:te},{data:events,error:ee},{data:mem,error:me},{data:pref,error:pre},{data:assistantPref,error:ape}] = await Promise.all([
     sb.from('isabella_tasks').select('*').eq('user_id',user.id).order('due_date',{ascending:true}),
     sb.from('isabella_events').select('*').eq('user_id',user.id).order('starts_at',{ascending:true}),
     sb.from('isabella_memories').select('*').eq('user_id',user.id).eq('status','active').order('created_at',{ascending:true}),
-    sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','feed').maybeSingle()
+    sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','feed').maybeSingle(),
+    sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle()
   ]);
-  if(te)throw te;if(ee)throw ee;if(me)throw me;if(pre)throw pre;
+  if(te)throw te;if(ee)throw ee;if(me)throw me;if(pre)throw pre;if(ape)throw ape;
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
   const deletedTaskIds=new Set(local.deletedTaskIds||[]);
   const deletedEventIds=new Set(local.deletedEventIds||[]);
@@ -180,7 +193,8 @@ async function pullState(local,maps){
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
   const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?{...(local.feedPreferences||{}),...pref.value}:local.feedPreferences;
-  return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,messages:remoteMessages.length?remoteMessages:local.messages};
+  const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(local.assistantPreferences||{}),...assistantPref.value}:local.assistantPreferences;
+  return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:remoteMessages.length?remoteMessages:local.messages};
 }
 async function pullConversation(){
   const {data,error}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope',APP_SCOPE).order('updated_at',{ascending:false}).limit(1);

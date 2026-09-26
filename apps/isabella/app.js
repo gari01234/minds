@@ -50,7 +50,11 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
 ],projects:[
   {id:'bernried',categoryId:'trabajo',name:'Bernried',color:'#2F6FB0'},
   {id:'schwarz',categoryId:'trabajo',name:'Schwarz',color:'#4F8A62'}
-],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedThreads:{},feedSignals:[],feedPreferences:{
+],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedThreads:{},feedSignals:[],assistantPreferences:{
+  curiosityEnabled:true,
+  curiosityCadenceHours:30,
+  behaviorRules:[]
+},feedPreferences:{
   instructions:'',
   topics:['Clima','Noticias','Arquitectura','Arte','Inteligencia artificial','Proyectos','Familia'],
   customTopics:[],
@@ -79,7 +83,10 @@ function normalizeMessages(items){
 let state=load();
 function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
-  const x={...base,...raw,feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
+  const x={...base,...raw,assistantPreferences:{...base.assistantPreferences,...(raw.assistantPreferences||{})},feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
+  x.assistantPreferences.behaviorRules=Array.isArray(x.assistantPreferences.behaviorRules)?x.assistantPreferences.behaviorRules:[];
+  x.assistantPreferences.curiosityEnabled=x.assistantPreferences.curiosityEnabled!==false;
+  x.assistantPreferences.curiosityCadenceHours=Math.max(12,Math.min(168,Number(x.assistantPreferences.curiosityCadenceHours||30)));
   x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
   x.feedPreferences.customTopics=Array.isArray(x.feedPreferences.customTopics)?x.feedPreferences.customTopics:[];
   x.feedPreferences.following=Array.isArray(x.feedPreferences.following)?x.feedPreferences.following:[];
@@ -160,18 +167,34 @@ async function maybeDailyBrief(){
 }
 async function maybeProactiveNudge(){
   try{
-    if(!window.ISABELLA_AI?.nudge)return;
+    if(!window.ISABELLA_AI?.nudge)return false;
     const key='isabella-last-nudge-at';
     const last=Number(localStorage.getItem(key)||0),now=Date.now();
-    if(now-last<6*60*60*1000)return;
-    localStorage.setItem(key,String(now));
+    if(now-last<6*60*60*1000)return false;
     const result=await window.ISABELLA_AI.nudge(state);
     const reply=String(result?.reply||'').trim();
-    if(reply&&reply!=='NO_NUDGE'&&!/^NO_NUDGE[.!]?$/i.test(reply))say('assistant',reply);
+    localStorage.setItem(key,String(now));
+    if(reply&&reply!=='NO_NUDGE'&&!/^NO_NUDGE[.!]?$/i.test(reply)){say('assistant',reply);return true}
   }catch{}
+  return false;
+}
+async function maybeCuriosityQuestion(){
+  try{
+    const prefs=state.assistantPreferences||base.assistantPreferences;
+    if(prefs.curiosityEnabled===false||!window.ISABELLA_AI?.curiosity)return false;
+    const h=new Date().getHours();if(h<9||h>21)return false;
+    const key='isabella-last-curiosity-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
+    const cadence=Math.max(12,Math.min(168,Number(prefs.curiosityCadenceHours||30)))*60*60*1000;
+    if(now-last<cadence)return false;
+    const result=await window.ISABELLA_AI.curiosity(state),reply=String(result?.reply||'').trim();
+    localStorage.setItem(key,String(now));
+    if(reply&&reply!=='NO_QUESTION'&&!/^NO_QUESTION[.!]?$/i.test(reply)){say('assistant',reply);return true}
+  }catch{}
+  return false;
 }
 async function afterSync(){
-  await maybeProactiveNudge();
+  const nudged=await maybeProactiveNudge();
+  if(!nudged)await maybeCuriosityQuestion();
 }
 function show(name){
   const allowed=['assistant','feed','ideas','calendar','readings'];
@@ -209,19 +232,19 @@ function recordFeedSignal(kind,item,extra={}){
 }
 function surfaceCard(item,surface){
   const agent=String(item.agent||'isabella'),prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim(),icon=String(item.icon||'').trim();
-  const kind=String(item.kind||item.metadata?.kind||'').toLowerCase(),details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
+  const kind=String(item.kind||item.metadata?.kind||'').toLowerCase(),improvement=kind==='isabella_improvement',details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
   const weather=kind==='weather',news=kind==='news',rawSource=String(item.source_url||item.metadata?.source_url||'').trim(),sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
   const storyKey=feedStoryKey(item);
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
-    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${surfaceAgentLabel(agent)}</span></div>
+    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span></div>
     <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
       ${news?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
       ${news&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${!news&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:''}
+      ${!news&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
     </div>
   </article>`;
 }
@@ -262,8 +285,11 @@ function renderFeedItems(items){
   bindSurfaceActions();
 }
 async function renderFeed(force=false){
-  const box=$('#feedList');if(!box||feedBusy)return;feedBusy=true;
-  const previous=[...feedItems];if(!previous.length)box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
+  const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
+  const previous=[...feedItems];
+  if(force&&refresh){refresh.disabled=true;refresh.classList.add('refreshing');refresh.textContent='…'}
+  if(status&&force)status.textContent='Actualizando…';
+  if(!previous.length)box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
   try{
     const [a,b]=await Promise.all([window.ISABELLA_AI?.feed?.(state,{force,currentItems:previous})||[],window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]]);
     const fresh=dedupeFeedItems([...(a||[]),...(b||[])]);
@@ -274,8 +300,14 @@ async function renderFeed(force=false){
       const [cachedA,cachedB]=await Promise.all([window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]]);
       renderFeedItems(dedupeFeedItems([...(cachedA||[]),...(cachedB||[])]));
     }
-  }catch(err){if(previous.length)renderFeedItems(previous);else box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo. Tu edición anterior no se ha borrado.</div>'}
-  finally{feedBusy=false}
+    if(status&&force){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
+  }catch(err){
+    if(previous.length)renderFeedItems(previous);else box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo. Tu edición anterior no se ha borrado.</div>';
+    if(status&&force){status.textContent='No pude actualizar';setTimeout(()=>{if(status.textContent==='No pude actualizar')status.textContent=''},2600)}
+  }finally{
+    feedBusy=false;
+    if(refresh){refresh.disabled=false;refresh.classList.remove('refreshing');refresh.textContent='↻'}
+  }
 }
 function feedThreadFor(item){
   const key=feedStoryKey(item);if(!key)return null;
@@ -550,6 +582,10 @@ function proposalLabel(p){
     if(topics)bits.push('añadir '+topics+(topics===1?' tema':' temas'));
     return bits.join(' · ');
   }
+  if(p.kind==='assistant_preferences'){
+    const add=(p.add_rules||[]).length,remove=(p.remove_rules||[]).length;
+    return ['Mejorar Isabella',add?('adoptar '+add+(add===1?' regla':' reglas')):'',remove?('retirar '+remove):''].filter(Boolean).join(' · ');
+  }
   const action=p.action||'create';
   const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
@@ -562,6 +598,18 @@ function proposalLabel(p){
   return bits.filter(Boolean).join(' · ');
 }
 function proposalEditor(p,onDone){
+  if(p.kind==='assistant_preferences'){
+    modal('Revisar mejora de Isabella',`<div class="form proposal-editor assistant-rule-editor">
+      <div class="small">Estas reglas afectan cómo trabaja Isabella contigo. No modifican código y puedes retirarlas después.</div>
+      <label>Reglas a adoptar<textarea id="assistantRulesAdd" rows="5">${esc((p.add_rules||[]).join('\n'))}</textarea></label>
+      <label>Reglas a retirar<textarea id="assistantRulesRemove" rows="3">${esc((p.remove_rules||[]).join('\n'))}</textarea></label>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estas reglas</button></div>
+    </div>`);
+    const lines=v=>String(v||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,add_rules:lines($('#assistantRulesAdd').value),remove_rules:lines($('#assistantRulesRemove').value)});
+    return;
+  }
   if(p.kind==='feed_preferences'){
     const additions=Array.isArray(p.add_entities)?p.add_entities:[];
     modal('Revisar cambios del Feed',`<div class="form proposal-editor feed-proposal-editor">
@@ -651,7 +699,7 @@ function proposalEditor(p,onDone){
   };
 }
 function confirmProposal(p){
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div></div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(q);else confirmProposal(p)});
@@ -736,9 +784,20 @@ function applyFeedPreferencesProposal(p){
   const added=(p.add_entities||[]).length,removed=(p.remove_entities||[]).length;
   say('assistant',`Listo. Actualicé tu Feed${added?' y añadí '+added+(added===1?' seguimiento':' seguimientos'):''}${removed?'; quité '+removed:''}. La próxima edición ya usará esta constelación.`);
 }
+function applyAssistantPreferencesProposal(p){
+  const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
+  const key=s=>String(s||'').trim().toLocaleLowerCase();
+  const remove=new Set((p.remove_rules||[]).map(key).filter(Boolean));
+  let rules=(prefs.behaviorRules||[]).filter(x=>!remove.has(key(x)));
+  for(const raw of p.add_rules||[]){const rule=String(raw||'').trim();if(rule&&!rules.some(x=>key(x)===key(rule)))rules.push(rule)}
+  state.assistantPreferences={...prefs,behaviorRules:rules.slice(0,20)};
+  save();closeModal();
+  say('assistant','Listo. Adopté esta mejora como una preferencia de comportamiento. Puedes revisarla o quitarla desde Proactividad de Isabella.');
+}
 function applyProposal(p){
   if(p.kind==='routine'){createRoutineProposal(p);return}
   if(p.kind==='feed_preferences'){applyFeedPreferencesProposal(p);return}
+  if(p.kind==='assistant_preferences'){applyAssistantPreferencesProposal(p);return}
   const action=p.action||'create';
   const categoryId=p.category?state.categories.find(c=>c.name.toLowerCase()===String(p.category).toLowerCase())?.id:null;
   const projectId=p.project?state.projects.find(x=>x.name.toLowerCase()===String(p.project).toLowerCase())?.id:null;
@@ -1136,7 +1195,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
 function tasksPanel(){
   const active=state.tasks.filter(t=>!t.archivedAt).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
   const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
@@ -1149,6 +1208,18 @@ function tasksPanel(){
   $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
 }
 function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
+function assistantPreferencesPanel(){
+  const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
+  const rules=[...(prefs.behaviorRules||[])];
+  modal('Proactividad de Isabella',`<div class="form assistant-preferences">
+    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
+    <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
+    <div><div class="small section-label">Mejoras de comportamiento adoptadas</div><div id="assistantRuleRows">${rules.length?rules.map((r,i)=>`<div class="assistant-rule-row"><span>${esc(r)}</span><button data-rule-remove="${i}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small empty-panel">Todavía no has adoptado reglas adicionales.</div>'}</div></div>
+    <button id="saveAssistantPreferences" class="primary">Guardar</button>
+  </div>`);
+  document.querySelectorAll('[data-rule-remove]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.ruleRemove);state.assistantPreferences={...prefs,behaviorRules:rules.filter((_,idx)=>idx!==i)};save();assistantPreferencesPanel()});
+  $('#saveAssistantPreferences').onclick=()=>{state.assistantPreferences={...prefs,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number($('#curiosityCadence').value||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};save();closeModal()};
+}
 async function routinesPanel(){
   modal('Rutinas','<div class="small">Cargando rutinas…</div>');
   try{
