@@ -268,7 +268,41 @@ async function handle(text){say('user',text);orb('thinking','Pensando…');try{i
 function bind(){
  const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();$('#calendarButton').onclick=()=>show('calendar');$('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initSwipe();initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
-function initVoice(){const R=window.SpeechRecognition||window.webkitSpeechRecognition;let rec=null;const start=()=>{openFocus();orb('listening','Escuchando…');if(!R){$('#focusStatus').textContent='Voz no disponible';$('#focusTranscript').textContent='Este navegador no ofrece dictado. Puedes seguir escribiendo.';return}try{rec=new R();rec.lang='es-ES';rec.interimResults=true;rec.onresult=e=>{let f='',i='';for(let k=e.resultIndex;k<e.results.length;k++){const x=e.results[k][0].transcript;e.results[k].isFinal?f+=x:i+=x}$('#focusTranscript').textContent=(f||i||'Te escucho…').trim();if(f.trim()){const t=f.trim();$('#focusStatus').textContent='Pensando…';orb('thinking','Pensando…');setTimeout(()=>{closeFocus();handle(t)},300)}};rec.onerror=()=>{$('#focusStatus').textContent='No pude escuchar';$('#focusTranscript').textContent='Revisa el permiso del micrófono o escribe el mensaje.'};rec.start()}catch{$('#focusStatus').textContent='No pude iniciar el micrófono'}};$('#micButton').onclick=start;$('#orbButton').onclick=start;$('#focusClose').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};$('#focusStop').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};$('#focusKeyboard').onclick=()=>{try{rec?.stop()}catch{}closeFocus();setTimeout(()=>$('#chatInput').focus(),50)}}
+function initVoice(){
+  const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+  let rec=null;
+  let voiceLang=localStorage.getItem('isabella-voice-lang')||'es-ES';
+  const langButton=$('#focusLang');
+  const paintLang=()=>{if(langButton)langButton.textContent=voiceLang.startsWith('de')?'DE':'ES'};
+  const start=()=>{
+    openFocus();paintLang();orb('listening','Escuchando…');
+    if(!R){$('#focusStatus').textContent='Voz no disponible';$('#focusTranscript').textContent='Este navegador no ofrece dictado. Puedes seguir escribiendo.';return}
+    try{
+      rec=new R();rec.lang=voiceLang;rec.interimResults=true;
+      rec.onresult=e=>{
+        let f='',i='';
+        for(let k=e.resultIndex;k<e.results.length;k++){const x=e.results[k][0].transcript;e.results[k].isFinal?f+=x:i+=x}
+        $('#focusTranscript').textContent=(f||i||'Te escucho…').trim();
+        if(f.trim()){const t=f.trim();$('#focusStatus').textContent='Pensando…';orb('thinking','Pensando…');setTimeout(()=>{closeFocus();handle(t)},300)}
+      };
+      rec.onerror=()=>{$('#focusStatus').textContent='No pude escuchar';$('#focusTranscript').textContent=voiceLang.startsWith('de')?'Prüfe die Mikrofonfreigabe oder schreibe die Nachricht.':'Revisa el permiso del micrófono o escribe el mensaje.'};
+      rec.start();
+    }catch{$('#focusStatus').textContent='No pude iniciar el micrófono'}
+  };
+  $('#micButton').onclick=start;$('#orbButton').onclick=start;
+  if(langButton)langButton.onclick=()=>{
+    try{rec?.stop()}catch{}
+    voiceLang=voiceLang.startsWith('de')?'es-ES':'de-DE';
+    localStorage.setItem('isabella-voice-lang',voiceLang);
+    paintLang();
+    $('#focusTranscript').textContent=voiceLang.startsWith('de')?'Deutsch aktiviert.':'Español activado.';
+    setTimeout(start,180);
+  };
+  $('#focusClose').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};
+  $('#focusStop').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};
+  $('#focusKeyboard').onclick=()=>{try{rec?.stop()}catch{}closeFocus();setTimeout(()=>$('#chatInput').focus(),50)};
+  paintLang();
+}
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';$('#focusTranscript').textContent='Puedes hablar con naturalidad.'}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
 function move(dir){let d=fromIso(state.date);if(state.view==='day')d=addDays(d,dir);else if(state.view==='week')d=addDays(d,dir*7);else d=new Date(d.getFullYear(),d.getMonth()+dir,1);state.date=iso(d);save();renderCalendar()}
