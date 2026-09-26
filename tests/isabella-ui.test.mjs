@@ -69,12 +69,16 @@ test('Feed exposes preferences and expandable weather',()=>{
 test('Sofia chat is a first-class messaging surface inside Readings',()=>{
   const js=read('apps/theory/v09.js');
   const css=read('apps/theory/v10.css');
-  assert.ok(js.includes("openSheet('SOFÍA'"));
+  assert.ok(js.includes("openSheet('MINDS · SOFÍA'"));
   assert.ok(js.includes('Escríbele a Sofía...'));
+  assert.ok(js.includes('v09-chat-mic'));
+  assert.ok(js.includes("functions.invoke('sofia-chat'"));
+  assert.ok(js.includes("/functions/v1/isabella-transcribe"));
   assert.ok(js.includes('minds:sofia-state'));
   assert.ok(js.includes('v09-reaction-popover'));
   assert.ok(css.includes('html.embedded .v09-sheet[data-kind="chat"]'));
   assert.ok(css.includes('html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form'));
+  assert.ok(css.includes('.v09-chat-mic'));
 });
 
 test('embedded Readings keeps annotations contextual instead of over the reading',()=>{
@@ -98,4 +102,17 @@ test('Sofia chat informs the parent when opened and closed',()=>{
   assert.ok(js.includes("classList.add('sofia-chat-open')"));
   assert.ok(js.includes("open:false"));
   assert.ok(css.includes('html.embedded.sofia-chat-open .v09-sheet[data-kind="chat"].open'));
+});
+
+
+test('Build 19 removes the redundant calendar shortcut and hides closed embedded sheets',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  const theoryCss=read('apps/theory/v10.css');
+  assert.ok(!shell.includes('id="calendarButton"'));
+  assert.ok(!app.includes("$('#calendarButton').onclick"));
+  assert.ok(css.includes('margin:auto auto 0!important'));
+  assert.ok(theoryCss.includes('html.embedded .v09-sheet:not(.open)'));
+  assert.ok(theoryCss.includes('visibility:hidden!important'));
 });

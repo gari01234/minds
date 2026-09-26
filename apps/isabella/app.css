@@ -428,3 +428,31 @@ body.sofia-chat-open #readingsScreen .readings-frame{
   -webkit-overflow-scrolling:touch;
   padding:5px 2px 2px!important;
 }
+
+
+/* Build 19 — compact chat viewport and ORB separation */
+.assistant-scroll.orb-compact{
+  display:flex!important;
+  flex-direction:column!important;
+  padding-bottom:96px!important;
+}
+.assistant-scroll.orb-compact .orb-button{
+  flex:none!important;
+  margin:-38px auto 8px!important;
+  top:-28px!important;
+}
+.assistant-scroll.orb-compact .orb-status,
+.assistant-scroll.orb-compact .today-card{
+  flex:none!important;
+}
+.assistant-scroll.orb-compact .messages{
+  flex:none!important;
+  margin:auto auto 0!important;
+}
+@media(max-width:520px){
+  .assistant-scroll.orb-compact .orb-button{
+    margin:-40px auto 8px!important;
+    top:-30px!important;
+  }
+  .assistant-scroll.orb-compact{padding-bottom:94px!important}
+}

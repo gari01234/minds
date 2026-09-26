@@ -357,3 +357,65 @@ html.embedded .v09-sheet[data-kind="chat"] .v09-msg.user{
   -webkit-overflow-scrolling:touch!important;
   padding:5px 2px 2px!important;
 }
+
+
+/* Build 19 — embedded Readings cleanup + Isabella/Sofía chat parity */
+html.embedded .v09-sheet:not(.open){
+  visibility:hidden!important;
+  pointer-events:none!important;
+  transform:translateY(110dvh)!important;
+}
+html.embedded .v09-sheet.open{visibility:visible!important}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-head{
+  min-height:58px!important;
+  padding:calc(18px + env(safe-area-inset-top,0px)) 28px 10px!important;
+  align-items:center!important;
+  border-bottom:0!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-kicker{
+  font:700 8px/1 -apple-system,BlinkMacSystemFont,"SF Pro Text",sans-serif!important;
+  letter-spacing:.30em!important;
+  color:#9c938b!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-head h2{display:none!important}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-close{
+  width:42px!important;height:42px!important;border:0!important;border-radius:50%!important;
+  background:#f8f8fa!important;color:#111!important;font-size:27px!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-body{
+  padding:0 28px 10px!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-conv-mode{
+  width:min(100%,600px)!important;
+  margin:0 auto 6px!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-log{
+  width:min(100%,600px)!important;
+  margin:0 auto!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-log>.v09-msg:first-child{
+  margin-top:auto!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-form{
+  width:min(100%,600px)!important;
+  margin:0 auto!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-mic{
+  flex:none!important;width:44px!important;height:44px!important;min-width:44px!important;
+  border:0!important;border-radius:50%!important;background:#f7f4f1!important;color:#111!important;
+  padding:0!important;font-size:22px!important;display:grid!important;place-items:center!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-mic.recording{
+  background:#171717!important;color:#fff!important;font-size:16px!important;
+}
+html.embedded .v09-sheet[data-kind="chat"] .v09-chat-mic.working{
+  background:#f1f1f3!important;color:#777!important;
+}
+@media(max-width:520px){
+  html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-head{
+    padding-left:28px!important;padding-right:28px!important;
+  }
+  html.embedded .v09-sheet[data-kind="chat"] .v09-sheet-body{
+    padding-left:28px!important;padding-right:28px!important;
+  }
+}

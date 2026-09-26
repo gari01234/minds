@@ -191,6 +191,84 @@
     html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
     return html;
   }
+  async function askSofia(conv,q){
+    const sb=window.MINDS_SUPABASE;
+    if(!sb?.functions?.invoke)throw new Error('Supabase no está disponible.');
+    const recent=(conv.messages||[]).filter(m=>!m.pending).slice(-12);
+    const originBits=[];
+    if(conv.origin?.label)originBits.push('Origen: '+conv.origin.label);
+    if(conv.origin?.quote)originBits.push('Fragmento de origen: “'+conv.origin.quote+'”');
+    const transcript=recent.map(m=>(m.role==='assistant'?'Sofía':'Gari')+': '+String(m.text||'')).join('\n\n');
+    const request=[
+      ...originBits,
+      'Modo: '+(conv.mode==='outside'?'Explorar fuera':'Mi memoria'),
+      transcript||('Gari: '+q)
+    ].filter(Boolean).join('\n\n');
+    const {data,error}=await sb.functions.invoke('sofia-chat',{body:{message:request}});
+    if(error)throw error;
+    const reply=String(data?.reply||'').trim();
+    if(!reply)throw new Error('Sofía no devolvió una respuesta.');
+    return {reply,sources:Array.isArray(data?.sources)?data.sources:[]};
+  }
+  async function transcribeSofia(blob){
+    const sb=window.MINDS_SUPABASE;
+    if(!sb)throw new Error('Supabase no está disponible.');
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw new Error('Conecta la memoria para usar voz multilingüe.');
+    const cfg=window.MINDS_SUPABASE_CONFIG;
+    if(!cfg?.url||!cfg?.publishableKey)throw new Error('Falta la configuración de Supabase.');
+    const form=new FormData();
+    const type=blob?.type||'audio/webm';
+    const ext=type.includes('mp4')||type.includes('m4a')?'m4a':type.includes('ogg')?'ogg':type.includes('wav')?'wav':'webm';
+    form.append('file',blob,'sofia-voice.'+ext);
+    const response=await fetch(cfg.url+'/functions/v1/isabella-transcribe',{
+      method:'POST',
+      headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token},
+      body:form
+    });
+    const data=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
+    return String(data?.text||'').trim();
+  }
+  function bindSofiaVoice(form,ta,autosize){
+    const mic=form.querySelector('.v09-chat-mic');if(!mic)return;
+    const R=window.SpeechRecognition||window.webkitSpeechRecognition;
+    let recorder=null,stream=null,chunks=[],fallback=null,recording=false;
+    const reset=()=>{recording=false;mic.classList.remove('recording','working');mic.textContent='⌁';mic.setAttribute('aria-label','Hablar');try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null};
+    const fill=text=>{if(!text)return;ta.value=text;autosize();ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch{}};
+    const useBrowser=()=>{
+      if(!R){reset();return}
+      try{
+        fallback=new R();fallback.lang='es-ES';fallback.interimResults=true;let finalText='';
+        recording=true;mic.classList.add('recording');mic.textContent='■';mic.setAttribute('aria-label','Detener');
+        fallback.onresult=e=>{let interim='';for(let i=e.resultIndex;i<e.results.length;i++){const part=e.results[i][0].transcript;if(e.results[i].isFinal)finalText+=part;else interim+=part}fill((finalText+' '+interim).trim())};
+        fallback.onend=()=>reset();fallback.onerror=()=>reset();fallback.start();
+      }catch{reset()}
+    };
+    mic.onclick=async()=>{
+      if(recording){
+        try{fallback?.stop()}catch{}
+        try{if(recorder&&recorder.state!=='inactive')recorder.stop()}catch{}
+        return;
+      }
+      if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder){useBrowser();return}
+      try{
+        stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+        const candidates=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'];
+        const mime=candidates.find(x=>MediaRecorder.isTypeSupported?.(x))||'';
+        recorder=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);chunks=[];
+        recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
+        recorder.onstop=async()=>{
+          const blob=new Blob(chunks,{type:recorder?.mimeType||mime||'audio/webm'});chunks=[];
+          reset();if(!blob.size)return;
+          mic.classList.add('working');mic.textContent='…';
+          try{fill(await transcribeSofia(blob))}catch{}
+          finally{mic.classList.remove('working');mic.textContent='⌁'}
+        };
+        recording=true;mic.classList.add('recording');mic.textContent='■';mic.setAttribute('aria-label','Detener');recorder.start(250);
+      }catch{reset();useBrowser()}
+    };
+  }
   function closeSofiaReactionPicker(){
     document.querySelector('.v09-reaction-popover')?.remove();
     document.querySelectorAll('.v09-msg.reaction-target').forEach(x=>x.classList.remove('reaction-target'));
@@ -238,15 +316,14 @@
     const msgs=c.messages.length
       ?c.messages.map(m=>`<div class="v09-msg ${m.role}" data-sofia-msg="${esc(m.id)}"><span class="v09-msg-label">${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span><span class="v09-msg-text">${formatSofiaText(m.text)}</span>${m.reaction?`<button class="v09-reaction-chip">${esc(m.reaction)}</button>`:''}</div>`).join('')
       :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
-    const title=c.origin?.type==='reading'?(c.origin?.label||'Lectura'):'Sofía';
-    openSheet('SOFÍA',title,`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button aria-label="Enviar">↑</button></form>`,'chat');
+    openSheet('MINDS · SOFÍA','',`${context}<div class="v09-conv-mode"><button data-mode="memory" class="${c.mode!=='outside'?'active':''}">Mi memoria</button><button data-mode="outside" class="${c.mode==='outside'?'active':''}">Explorar fuera</button></div><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><button type="button" class="v09-chat-mic" aria-label="Hablar">⌁</button><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button class="v09-chat-send" aria-label="Enviar">↑</button></form>`,'chat');
     document.documentElement.classList.add('sofia-chat-open');
     if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:true},location.origin);
     sheetBody.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{c.mode=b.dataset.mode;saveConversations();openConversation(c.id);});
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     bindSofiaReactions(c);
     const form=sheetBody.querySelector('.v09-chat-form'),ta=form.querySelector('textarea');
-    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();
+    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();bindSofiaVoice(form,ta,autosize);
     ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
     form.onsubmit=async e=>{
       e.preventDefault();
