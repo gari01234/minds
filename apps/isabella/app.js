@@ -150,8 +150,8 @@ function show(name){
   const allowed=['assistant','feed','ideas','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
   state.screen=name;
-  $('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
-  $('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
+  $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
+  $$('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
   document.body.dataset.section=name;
   save();
   if(name==='calendar')renderCalendar();
@@ -172,7 +172,7 @@ function surfaceCard(item,surface){
   </article>`;
 }
 function bindSurfaceActions(){
-  $('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
+  $$('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
     const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
@@ -193,7 +193,16 @@ async function renderFeed(force=false){
       window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]
     ]);
     const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
-    box.innerHTML=items.length?items.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
+    if(!items.length){
+      box.innerHTML='<div class="surface-empty">No hay nada que merezca interrumpirte ahora.</div>';
+    }else{
+      const sectionOf=x=>String(x?.section||x?.metadata?.section||'for_me').toLowerCase()==='today'?'today':'for_me';
+      const todayItems=items.filter(x=>sectionOf(x)==='today');
+      const forMeItems=items.filter(x=>sectionOf(x)==='for_me');
+      box.innerHTML=
+        (todayItems.length?'<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+        (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
+    }
     bindSurfaceActions();
   }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo.</div>'}
   finally{feedBusy=false}
@@ -224,9 +233,15 @@ function openSofia(prompt=''){
   setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:prompt?'minds:sofia-prompt':'minds:sofia-open',prompt},location.origin),260);
 }
 function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
+function syncOrbCompact(force=null){
+  const scroller=$('.assistant-scroll');if(!scroller)return;
+  const hasUserConversation=state.messages.some(m=>m.role==='user'&&String(m.text||'').trim());
+  scroller.classList.toggle('orb-compact',force===null?hasUserConversation:!!force);
+}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
+  syncOrbCompact();
   const nearBottom=box?box.scrollHeight-box.scrollTop-box.clientHeight<120:true;
   box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
@@ -239,7 +254,7 @@ function renderMessages(forceBottom=false){
   },20);
 }
 function bindMessageReactions(){
-  $('#messages .message[data-message-id]').forEach(el=>{
+  $$('#messages .message[data-message-id]').forEach(el=>{
     if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
     let timer=null,sx=0,sy=0;
     const cancel=()=>{clearTimeout(timer);timer=null};
@@ -260,7 +275,7 @@ function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
   try{navigator.vibrate?.(8)}catch{}
   modal('Reaccionar',`<div class="emoji-picker">${['👍','❤️','😂','👏','🙌','💡','😊','❌'].map(x=>`<button data-reaction="${x}">${x}</button>`).join('')}<button data-reaction="" class="emoji-remove">Quitar</button></div>`);
-  $('[data-reaction]').forEach(b=>b.onclick=()=>{m.reaction=b.dataset.reaction||null;save();closeModal();renderMessages()});
+  $$('[data-reaction]').forEach(b=>b.onclick=()=>{m.reaction=b.dataset.reaction||null;save();closeModal();renderMessages()});
 }
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
@@ -420,11 +435,11 @@ async function handle(text){
 }
 function bind(){
  const assistantScroll=$('.assistant-scroll');
- const updateOrbCompact=()=>assistantScroll?.classList.toggle('orb-compact',assistantScroll.scrollTop>48);
+ const updateOrbCompact=()=>syncOrbCompact(state.messages.some(m=>m.role==='user'&&String(m.text||'').trim())||Number(assistantScroll?.scrollTop||0)>48);
  assistantScroll?.addEventListener('scroll',updateOrbCompact,{passive:true});
  updateOrbCompact();
- const i=$('#chatInput');const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
- $('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
+ const i=$('#chatInput');i.addEventListener('focus',()=>syncOrbCompact(true));const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
+ $$('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  $('#refreshFeed').onclick=()=>renderFeed(true);
  $('#refreshIdeas').onclick=()=>renderIdeas(true);
  $('#openSofiaButton').onclick=()=>openSofia();
