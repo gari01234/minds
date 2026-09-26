@@ -90,16 +90,34 @@ function init(){
 async function maybeDailyBrief(){
   try{
     const now=new Date(),d=today();
-    if(now.getHours()<8)return;
+    if(now.getHours()<8)return false;
     const key='isabella-daily-brief-date';
-    if(localStorage.getItem(key)===d)return;
-    if(!window.ISABELLA_AI?.brief)return;
+    if(localStorage.getItem(key)===d)return false;
+    if(!window.ISABELLA_AI?.brief)return false;
     const result=await window.ISABELLA_AI.brief(state);
     if(result?.reply){
       localStorage.setItem(key,d);
       say('assistant',result.reply);
+      return true;
     }
   }catch{}
+  return false;
+}
+async function maybeProactiveNudge(){
+  try{
+    if(!window.ISABELLA_AI?.nudge)return;
+    const key='isabella-last-nudge-at';
+    const last=Number(localStorage.getItem(key)||0),now=Date.now();
+    if(now-last<6*60*60*1000)return;
+    localStorage.setItem(key,String(now));
+    const result=await window.ISABELLA_AI.nudge(state);
+    const reply=String(result?.reply||'').trim();
+    if(reply&&reply!=='NO_NUDGE'&&!/^NO_NUDGE[.!]?$/i.test(reply))say('assistant',reply);
+  }catch{}
+}
+async function afterSync(){
+  const briefed=await maybeDailyBrief();
+  if(!briefed)await maybeProactiveNudge();
 }
 function show(name){state.screen=name; $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name)); save(); if(name==='calendar')renderCalendar();}
 function say(role,text){state.messages.push({id:uid(),role,text}); if(state.messages.length>150)state.messages=state.messages.slice(-150);save();renderMessages();}
