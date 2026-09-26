@@ -270,38 +270,85 @@ function bind(){
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
-  let rec=null;
-  let voiceLang=localStorage.getItem('isabella-voice-lang')||'es-ES';
-  const langButton=$('#focusLang');
-  const paintLang=()=>{if(langButton)langButton.textContent=voiceLang.startsWith('de')?'DE':'ES'};
-  const start=()=>{
-    openFocus();paintLang();orb('listening','Escuchando…');
-    if(!R){$('#focusStatus').textContent='Voz no disponible';$('#focusTranscript').textContent='Este navegador no ofrece dictado. Puedes seguir escribiendo.';return}
+  let recorder=null,stream=null,audioCtx=null,analyser=null,raf=0,chunks=[],discard=false,fallbackRec=null;
+  const stopTracks=()=>{try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null;try{audioCtx?.close()}catch{}audioCtx=null;analyser=null;if(raf)cancelAnimationFrame(raf);raf=0};
+  const stopRecording=()=>{try{if(recorder&&recorder.state!=='inactive')recorder.stop()}catch{}};
+  const browserFallback=()=>{
+    if(!R){$('#focusStatus').textContent='Voz no disponible';$('#focusTranscript').textContent='Puedes seguir escribiendo.';return}
     try{
-      rec=new R();rec.lang=voiceLang;rec.interimResults=true;
-      rec.onresult=e=>{
-        let f='',i='';
-        for(let k=e.resultIndex;k<e.results.length;k++){const x=e.results[k][0].transcript;e.results[k].isFinal?f+=x:i+=x}
-        $('#focusTranscript').textContent=(f||i||'Te escucho…').trim();
-        if(f.trim()){const t=f.trim();$('#focusStatus').textContent='Pensando…';orb('thinking','Pensando…');setTimeout(()=>{closeFocus();handle(t)},300)}
-      };
-      rec.onerror=()=>{$('#focusStatus').textContent='No pude escuchar';$('#focusTranscript').textContent=voiceLang.startsWith('de')?'Prüfe die Mikrofonfreigabe oder schreibe die Nachricht.':'Revisa el permiso del micrófono o escribe el mensaje.'};
-      rec.start();
+      fallbackRec=new R();
+      fallbackRec.lang='es-ES';
+      fallbackRec.interimResults=true;
+      fallbackRec.onresult=e=>{let f='',i='';for(let k=e.resultIndex;k<e.results.length;k++){const x=e.results[k][0].transcript;e.results[k].isFinal?f+=x:i+=x}$('#focusTranscript').textContent=(f||i||'Te escucho…').trim();if(f.trim()){const t=f.trim();$('#focusStatus').textContent='Pensando…';orb('thinking','Pensando…');setTimeout(()=>{closeFocus();handle(t)},250)}};
+      fallbackRec.onerror=()=>{$('#focusStatus').textContent='No pude escuchar';$('#focusTranscript').textContent='Revisa el permiso del micrófono o escribe el mensaje.'};
+      fallbackRec.start();
     }catch{$('#focusStatus').textContent='No pude iniciar el micrófono'}
   };
-  $('#micButton').onclick=start;$('#orbButton').onclick=start;
-  if(langButton)langButton.onclick=()=>{
-    try{rec?.stop()}catch{}
-    voiceLang=voiceLang.startsWith('de')?'es-ES':'de-DE';
-    localStorage.setItem('isabella-voice-lang',voiceLang);
-    paintLang();
-    $('#focusTranscript').textContent=voiceLang.startsWith('de')?'Deutsch aktiviert.':'Español activado.';
-    setTimeout(start,180);
+  const start=async()=>{
+    discard=false;openFocus();orb('listening','Escuchando…');
+    $('#focusStatus').textContent='Escuchando…';
+    $('#focusTranscript').textContent='Habla con naturalidad en español, alemán o mezclando ambos.';
+    $('#focusStop').textContent='Enviar';
+    if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder||!window.ISABELLA_AI?.transcribe){browserFallback();return}
+    try{
+      stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}});
+      const candidates=['audio/mp4','audio/webm;codecs=opus','audio/webm','audio/ogg;codecs=opus'];
+      const mime=candidates.find(x=>MediaRecorder.isTypeSupported?.(x))||'';
+      recorder=mime?new MediaRecorder(stream,{mimeType:mime}):new MediaRecorder(stream);
+      chunks=[];
+      recorder.ondataavailable=e=>{if(e.data?.size)chunks.push(e.data)};
+      recorder.onstop=async()=>{
+        stopTracks();
+        if(discard){chunks=[];return}
+        const blob=new Blob(chunks,{type:recorder?.mimeType||mime||'audio/webm'});
+        chunks=[];
+        if(!blob.size){$('#focusStatus').textContent='No escuché audio';return}
+        $('#focusStatus').textContent='Transcribiendo…';
+        $('#focusTranscript').textContent='Español + Deutsch';
+        orb('thinking','Transcribiendo…');
+        try{
+          const text=await window.ISABELLA_AI.transcribe(blob);
+          if(!text){$('#focusStatus').textContent='No entendí el audio';$('#focusTranscript').textContent='Inténtalo de nuevo.';orb();return}
+          $('#focusTranscript').textContent=text;
+          $('#focusStatus').textContent='Pensando…';
+          setTimeout(()=>{closeFocus();handle(text)},180);
+        }catch(err){
+          $('#focusStatus').textContent='No pude transcribir';
+          $('#focusTranscript').textContent=err?.message||'Inténtalo de nuevo.';
+          orb();
+        }
+      };
+      recorder.start(250);
+
+      try{
+        const AC=window.AudioContext||window.webkitAudioContext;
+        if(AC){
+          audioCtx=new AC();
+          await audioCtx.resume?.();
+          const source=audioCtx.createMediaStreamSource(stream);
+          analyser=audioCtx.createAnalyser();analyser.fftSize=1024;source.connect(analyser);
+          const buf=new Uint8Array(analyser.fftSize);
+          const started=performance.now();let heard=false,lastVoice=started;
+          const watch=()=>{
+            if(!recorder||recorder.state==='inactive'||!analyser)return;
+            analyser.getByteTimeDomainData(buf);
+            let sum=0;for(const v of buf)sum+=Math.abs(v-128)/128;
+            const level=sum/buf.length,now=performance.now();
+            if(level>0.025){heard=true;lastVoice=now}
+            if((heard&&now-lastVoice>1350&&now-started>1000)||now-started>30000){stopRecording();return}
+            raf=requestAnimationFrame(watch);
+          };
+          raf=requestAnimationFrame(watch);
+        }
+      }catch{}
+    }catch{
+      stopTracks();browserFallback();
+    }
   };
-  $('#focusClose').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};
-  $('#focusStop').onclick=()=>{try{rec?.stop()}catch{}closeFocus()};
-  $('#focusKeyboard').onclick=()=>{try{rec?.stop()}catch{}closeFocus();setTimeout(()=>$('#chatInput').focus(),50)};
-  paintLang();
+  $('#micButton').onclick=start;$('#orbButton').onclick=start;
+  $('#focusClose').onclick=()=>{discard=true;try{fallbackRec?.stop()}catch{}stopRecording();stopTracks();closeFocus()};
+  $('#focusStop').onclick=()=>{try{fallbackRec?.stop()}catch{};if(recorder&&recorder.state!=='inactive')stopRecording();else closeFocus()};
+  $('#focusKeyboard').onclick=()=>{discard=true;try{fallbackRec?.stop()}catch{}stopRecording();stopTracks();closeFocus();setTimeout(()=>$('#chatInput').focus(),50)};
 }
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';$('#focusTranscript').textContent='Puedes hablar con naturalidad.'}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
