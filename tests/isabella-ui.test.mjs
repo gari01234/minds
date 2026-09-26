@@ -48,7 +48,7 @@ test('message reactions stay attached to messages instead of opening a large mod
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('reaction-popover'));
-  assert.ok(app.includes("const quick=['❤️','👍','😂','😮','😢','👏']"));
+  assert.ok(app.includes("const quick=['❤️','👍','👎','😂','‼️','❓']"));
   assert.ok(!app.includes("modal('Reaccionar'"));
   assert.ok(css.includes('.reaction-chip'));
 });
