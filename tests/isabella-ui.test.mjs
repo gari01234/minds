@@ -188,7 +188,7 @@ test('Build 22 keeps Feed generations stable and conversations inside Feed',()=>
   assert.ok(app.includes('feedThreads'));
   assert.ok(!app.includes('data-news-more'));
   assert.ok(ai.includes('generation_id:generationId'));
-  assert.ok(ai.includes("if(items.length<3){"));
+  assert.ok(ai.includes("const fresh=await loadSurface('feed','isabella')"));
   assert.ok(ai.includes('async function feedStory'));
   assert.ok(shell.includes('id="feedDetail"'));
   assert.ok(shell.includes('Preguntar sobre esto...'));
@@ -229,11 +229,11 @@ test('browser entry scripts are syntactically valid JavaScript',()=>{
 test('Build 24 refresh requests a genuinely new Feed edition',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes("feed?.(state,{force,currentItems:previous})"));
+  assert.ok(app.includes("feed?.(state,{force,currentItems:visible})"));
   assert.ok(ai.includes('currentItems=[]'));
   assert.ok(ai.includes("force:!!force"));
   assert.ok(ai.includes('current_titles:currentTitles'));
-  assert.ok(app.includes("status.textContent='Actualizando…'"));
+  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando Feed…'"));
 });
 
 test('Build 24 news detail can render immediate context and optional verified media',()=>{
