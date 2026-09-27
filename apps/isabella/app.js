@@ -14,7 +14,7 @@ const MEMORY_KINDS=new Set(['fact','person','routine','episodic','preference','c
 const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'preference',interaction:'preference',constraint:'context',goal:'context',priority:'context',value:'preference',project:'context',relation:'context',relationship:'person',work:'context',identity:'fact',note:'context',other:'context'};
 function normalizeMemoryKind(kind){const k=String(kind||'context').trim().toLowerCase();return MEMORY_KINDS.has(k)?k:(MEMORY_KIND_ALIASES[k]||'context')}
 const taskOrder=(a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))||String(a.title||'').localeCompare(String(b.title||''),'es');
-function nextTaskOrder(date){const xs=state.tasks.filter(t=>t.date===date&&!t.archivedAt);return xs.length?Math.max(...xs.map(t=>Number(t.sortOrder||0)))+10:10}
+function nextTaskOrder(date){const key=date||null,xs=state.tasks.filter(t=>(t.date||null)===key&&!t.archivedAt);return xs.length?Math.max(...xs.map(t=>Number(t.sortOrder||0)))+10:10}
 function mutation(entityType,action,before,after,source='manual'){
   const entityKey=(after||before)?.id;
   if(!entityKey)return;
@@ -238,6 +238,8 @@ async function afterSync(){
 function show(name){
   const allowed=['assistant','feed','ideas','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
+  const previous=state.screen;
+  if(name==='calendar'&&previous!=='calendar')state.date=today();
   if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
     $('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-close'},location.origin);
     $('#readingsScreen')?.classList.remove('sofia-chat-active');
@@ -588,6 +590,7 @@ function say(role,text,meta={}){
   state.messages.push({
     id:uid(),role,text,at:new Date().toISOString(),reaction:null,
     sources:Array.isArray(meta.sources)?meta.sources:[],
+    attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Foto')})).filter(x=>x.path):[],
     quickReplies:Array.isArray(meta.quickReplies)?meta.quickReplies.slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value):[]
   });
   if(state.messages.length>800)state.messages=state.messages.slice(-800);
@@ -617,7 +620,8 @@ function renderMessages(forceBottom=false){
   state.messages=normalizeMessages(state.messages);
   syncOrbCompact();
   const nearBottom=scroller?scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140:true;
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>`<img data-chat-image-path="${esc(a.path||'')}" alt="${esc(a.name||'Foto')}">`).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  void hydrateChatImages();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.quickMessage),q=m?.quickReplies?.[Number(b.dataset.quickIndex)];
@@ -852,7 +856,7 @@ function proposalEditor(p,onDone){
   }
   const target=(p.action&&p.action!=='create')?findTarget(p):null;
   const title=(p.title??target?.title??'');
-  const date=(p.date??target?.date??today());
+  const date=p.kind==='event'?(p.date??target?.date??today()):(p.date??target?.date??'');
   const time=(p.time??(p.kind==='event'?target?.start:'')??'');
   const duration=(p.duration_minutes??(p.kind==='event'?target?.duration:60)??60);
   const reminder=(p.reminder_time??(p.kind==='task'?target?.reminderTime:'')??'');
@@ -865,7 +869,7 @@ function proposalEditor(p,onDone){
     :`<label>Recordatorio<input id="proposalReminder" type="time" value="${esc(reminder||'')}"></label>`;
   modal('Revisar antes de confirmar',`<div class="form proposal-editor">
     <label>Nombre<input id="proposalTitle" value="${esc(title)}"></label>
-    <label>Fecha<input id="proposalDate" type="date" value="${esc(date)}"></label>
+    <label>${p.kind==='task'?'Fecha (opcional)':'Fecha'}<input id="proposalDate" type="date" value="${esc(date||'')}"></label>
     ${specific}
     <label>Categoría<select id="proposalCategory">${cats}</select></label>
     <label>Proyecto<select id="proposalProject">${projects}</select></label>
@@ -876,7 +880,7 @@ function proposalEditor(p,onDone){
   $('#proposalEditSave').onclick=()=>{
     const q={...p,
       title:$('#proposalTitle').value.trim()||title,
-      date:$('#proposalDate').value||date,
+      date:p.kind==='task'?($('#proposalDate').value||null):($('#proposalDate').value||date),
       category:$('#proposalCategory').value||null,
       project:$('#proposalProject').value||null,
       notes:$('#proposalNotes').value||null
@@ -994,7 +998,7 @@ function applyProposal(p){
   const action=p.action||'create';
   const categoryId=p.category?state.categories.find(c=>c.name.toLowerCase()===String(p.category).toLowerCase())?.id:null;
   const projectId=p.project?state.projects.find(x=>x.name.toLowerCase()===String(p.project).toLowerCase())?.id:null;
-  const date=p.date||today();
+  const date=p.kind==='event'?(p.date||today()):(p.date||null);
   if(action==='update'||action==='delete'||action==='complete'||action==='archive'){
     const target=findTarget(p);
     if(!target){closeModal();say('assistant','No pude identificar con seguridad cuál elemento quieres cambiar. Dime cuál y lo intento de nuevo.');return}
@@ -1018,13 +1022,14 @@ function applyProposal(p){
       save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó eliminado.');return;
     }
     if(p.title!=null&&String(p.title).trim())target.title=String(p.title).trim();
-    if(p.date)target.date=p.date;
+    if(p.kind==='task'&&p.clear_date)target.date=null;
+    else if(p.date)target.date=p.date;
     if(p.kind==='event'){
       if(p.time)target.start=p.time;
       if(p.duration_minutes!=null)target.duration=Number(p.duration_minutes);
       if(p.all_day!=null)target.allDay=!!p.all_day;
     }else{
-      if(Object.prototype.hasOwnProperty.call(p,'reminder_time'))target.reminderTime=p.reminder_time||null;
+      if(Object.prototype.hasOwnProperty.call(p,'reminder_time'))target.reminderTime=target.date?(p.reminder_time||null):null;
       if(target.sortOrder==null)target.sortOrder=nextTaskOrder(target.date);
     }
     if(categoryId)target.categoryId=categoryId;
@@ -1041,16 +1046,17 @@ function applyProposal(p){
     const item={id:uid(),title:p.title||'Evento',date,start:p.time,duration:Number(p.duration_minutes||60),allDay:!!p.all_day,categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},notes:p.notes||'',metadata:{source:'isabella'}};
     state.events.push(item);mutation('event','create',null,item,'assistant');
   }else{
-    const item={id:uid(),title:p.title||'Tarea',date,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date),categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},reminderTime:p.reminder_time||null,notes:p.notes||'',metadata:{source:'isabella'}};
+    const item={id:uid(),title:p.title||'Tarea',date,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date),categoryId:createCategoryId,projectId:projectId||null,recurrence:p.recurrence?{text:p.recurrence}:{},reminderTime:date?(p.reminder_time||null):null,notes:p.notes||'',metadata:{source:'isabella'}};
     state.tasks.push(item);mutation('task','create',null,item,'assistant');
   }
   save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó agregado.');
 }
-async function handle(text){
-  say('user',text);orb('thinking','Pensando…');
+async function handle(text,attachments=[]){
+  const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
+  say('user',text||'📷 Foto',{attachments:copy});orb('thinking','Pensando…');
   try{
     if(window.ISABELLA_AI?.ask){
-      const result=await window.ISABELLA_AI.ask(text,state);
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy});
       state.pendingIntent=null;
       if(result?.reply)say('assistant',result.reply,{sources:result.sources||[],quickReplies:result.quick_replies||[]});
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
@@ -1062,12 +1068,86 @@ async function handle(text){
   }catch(e){say('assistant',e?.message||localFallback(text))}
   finally{orb()}
 }
+let pendingChatFiles=[];
+const pendingChatUrls=new Map();
+function renderPendingChatFiles(){
+  const box=$('#chatAttachmentPreview');if(!box)return;
+  if(!pendingChatFiles.length){box.innerHTML='';box.classList.add('hidden');return}
+  box.classList.remove('hidden');
+  box.innerHTML=pendingChatFiles.map((file,i)=>{
+    let url=pendingChatUrls.get(file);
+    if(!url){url=URL.createObjectURL(file);pendingChatUrls.set(file,url)}
+    return `<div class="pending-photo"><img src="${esc(url)}" alt=""><button data-remove-chat-file="${i}" aria-label="Quitar foto">×</button></div>`;
+  }).join('');
+  document.querySelectorAll('[data-remove-chat-file]').forEach(b=>b.onclick=()=>{
+    const i=Number(b.dataset.removeChatFile),file=pendingChatFiles[i],url=pendingChatUrls.get(file);
+    if(url)URL.revokeObjectURL(url);pendingChatUrls.delete(file);pendingChatFiles.splice(i,1);renderPendingChatFiles();
+  });
+}
+async function normalizeUploadImage(file){
+  const supported=['image/jpeg','image/png','image/webp'];
+  if(supported.includes(String(file.type||'').toLowerCase())&&file.size<=8*1024*1024)return {blob:file,mime:file.type||'image/jpeg'};
+  return await new Promise((resolve,reject)=>{
+    const url=URL.createObjectURL(file),img=new Image();
+    img.onload=()=>{
+      try{
+        const max=2200,scale=Math.min(1,max/Math.max(img.naturalWidth||1,img.naturalHeight||1));
+        const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
+        const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
+        canvas.toBlob(blob=>{URL.revokeObjectURL(url);blob?resolve({blob,mime:'image/jpeg'}):reject(new Error('No pude preparar la foto.'))},'image/jpeg',.88);
+      }catch(e){URL.revokeObjectURL(url);reject(e)}
+    };
+    img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No pude leer esta imagen.'))};
+    img.src=url;
+  });
+}
+async function uploadChatImages(files){
+  const sb=window.MINDS_SUPABASE;if(!sb)throw new Error('Necesito la memoria conectada para enviar fotos.');
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria antes de enviar fotos.');
+  const out=[];
+  for(const file of (files||[]).slice(0,3)){
+    const prepared=await normalizeUploadImage(file);
+    const ext=prepared.mime==='image/png'?'png':prepared.mime==='image/webp'?'webp':'jpg';
+    const id=globalThis.crypto?.randomUUID?.()||uid();
+    const path=`${session.user.id}/chat/${today()}/${id}.${ext}`;
+    const {error}=await sb.storage.from('isabella-uploads').upload(path,prepared.blob,{contentType:prepared.mime,upsert:false});
+    if(error)throw error;
+    out.push({path,mime:prepared.mime,name:file.name||('Foto.'+ext)});
+  }
+  return out;
+}
+async function hydrateChatImages(){
+  const imgs=[...document.querySelectorAll('img[data-chat-image-path]')].filter(x=>!x.dataset.loaded);
+  if(!imgs.length)return;
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    await Promise.all(imgs.map(async img=>{
+      const path=img.dataset.chatImagePath;if(!path)return;
+      const {data}=await sb.storage.from('isabella-uploads').createSignedUrl(path,3600);
+      if(data?.signedUrl){img.src=data.signedUrl;img.dataset.loaded='1'}
+    }));
+  }catch{}
+}
+
 function bind(){
  const assistantScroll=$('.assistant-scroll');
  const updateOrbCompact=()=>syncOrbCompact(state.messages.some(m=>m.role==='user'&&String(m.text||'').trim())||Number(assistantScroll?.scrollTop||0)>48);
  assistantScroll?.addEventListener('scroll',updateOrbCompact,{passive:true});
  updateOrbCompact();
- const i=$('#chatInput');i.addEventListener('focus',()=>syncOrbCompact(true));const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};const send=()=>{const t=i.value.trim();if(!t)return;i.value='';autosize();handle(t)};$('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
+ const i=$('#chatInput'),imageInput=$('#chatImageInput'),attachButton=$('#attachButton');
+ i.addEventListener('focus',()=>syncOrbCompact(true));
+ const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};
+ attachButton.onclick=()=>imageInput.click();
+ imageInput.onchange=()=>{const next=[...imageInput.files||[]].filter(f=>String(f.type||'').startsWith('image/'));pendingChatFiles=[...pendingChatFiles,...next].slice(0,3);imageInput.value='';renderPendingChatFiles()};
+ const send=async()=>{
+   const t=i.value.trim();if(!t&&!pendingChatFiles.length)return;
+   const files=[...pendingChatFiles];pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();$('#sendButton').disabled=true;attachButton.disabled=true;
+   try{const attachments=files.length?await uploadChatImages(files):[];await handle(t,attachments)}
+   catch(e){say('assistant',e?.message||'No pude enviar la foto.')}
+   finally{$('#sendButton').disabled=false;attachButton.disabled=false}
+ };
+ $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
  $$('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  $('#refreshFeed').onclick=()=>renderFeed(true);
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
@@ -1170,7 +1250,7 @@ function agendaRow(kind,item){
 }
 function month(){
   const f=fromIso(state.date),first=new Date(f.getFullYear(),f.getMonth(),1),start=startWeek(first),wd=['L','M','X','J','V','S','D'];
-  let h=`<div class="month-year">${f.getFullYear()}</div><div class="month-grid"><div class="mh"></div>${wd.map(x=>`<div class="mh">${x}</div>`).join('')}`;
+  let h=`<div class="month-year">${f.getFullYear()}</div><div class="month-weekdays"><div></div>${wd.map(x=>`<div>${x}</div>`).join('')}</div><div class="month-grid">`;
   for(let r=0;r<6;r++){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
@@ -1241,7 +1321,7 @@ function editItem(kind,id){
     :`<label>Recordatorio<input id="editReminder" type="time" value="${esc(item.reminderTime||'')}"></label>`;
   modal(kind==='event'?'Editar evento':'Editar tarea',`<div class="form item-editor">
     <label>Título<input id="editTitle" value="${esc(item.title)}"></label>
-    <label>Fecha<input id="editDate" type="date" value="${esc(item.date)}"></label>
+    <label>${kind==='task'?'Fecha (opcional)':'Fecha'}<input id="editDate" type="date" value="${esc(item.date||'')}"></label>
     ${specific}
     <label>Categoría<select id="editCategory">${cats}</select></label>
     <label>Proyecto<select id="editProject">${projects}</select></label>
@@ -1252,12 +1332,12 @@ function editItem(kind,id){
   $('#editSave').onclick=()=>{
     const before=clone(item);
     item.title=$('#editTitle').value.trim()||item.title;
-    item.date=$('#editDate').value||item.date;
+    item.date=kind==='task'?($('#editDate').value||null):($('#editDate').value||item.date);
     item.categoryId=$('#editCategory').value||'personal';
     item.projectId=$('#editProject').value||null;
     item.notes=$('#editNotes').value||'';
     if(kind==='event'){item.start=$('#editTime').value||item.start;item.duration=Math.max(5,Number($('#editDuration').value||item.duration||60))}
-    else {item.reminderTime=$('#editReminder').value||null;if(item.sortOrder==null)item.sortOrder=nextTaskOrder(item.date)}
+    else {item.reminderTime=item.date?($('#editReminder').value||null):null;if(item.sortOrder==null)item.sortOrder=nextTaskOrder(item.date)}
     mutation(kind,'update',before,item,'manual');save();renderCalendar();closeModal();
   };
   $('#editDelete').onclick=()=>deleteItem(kind,id);
@@ -1390,17 +1470,46 @@ function initEventDrag(){
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
 function tasksPanel(){
-  const active=state.tasks.filter(t=>!t.archivedAt).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
+  const active=state.tasks.filter(t=>!t.archivedAt);
+  const undated=active.filter(t=>!t.date).sort(taskOrder);
+  const dated=active.filter(t=>!!t.date).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
   const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
-  let body='<div class="small section-label">Activas</div>';
-  body+=active.length?active.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>${esc(t.date)} · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas activas.</div>';
+  let body='<div class="small section-label">Sin fecha</div>';
+  body+=undated.length?undated.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>Sin fecha · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas sin fecha.</div>';
+  body+='<div class="small section-label task-dated-label">Programadas</div>';
+  body+=dated.length?dated.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>${esc(t.date)} · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas programadas.</div>';
   body+='<div class="small section-label archived-label">Archivadas</div>';
   body+=archived.length?archived.map(t=>`<div class="task-panel-row archived"><span>${esc(t.title)}</span><button data-restore-task="${t.id}">Restaurar</button></div>`).join(''):'<div class="small empty-panel">No hay tareas archivadas.</div>';
   modal('Tareas',body);
   $$('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
   $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
 }
-function newPanel(){modal('Agregar manualmente',`<div class="form"><select id="newType"><option value="task">Tarea de día completo</option><option value="event">Evento</option></select><input id="newTitle" placeholder="Nombre"><input id="newDate" type="date" value="${today()}"><select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><input id="newTime" type="time" value="09:00"><button id="newSave" class="primary">Guardar</button></div>`);$('#newSave').onclick=()=>{const title=$('#newTitle').value.trim();if(!title)return;const type=$('#newType').value,date=$('#newDate').value,categoryId=$('#newCat').value;if(type==='task'){const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};state.tasks.push(item);mutation('task','create',null,item,'manual')}else{const item={id:uid(),title,date,categoryId,start:$('#newTime').value||'09:00',duration:60};state.events.push(item);mutation('event','create',null,item,'manual')}save();closeModal();renderCalendar()}}
+function newPanel(){
+  modal('Agregar manualmente',`<div class="form">
+    <select id="newType"><option value="task">Tarea</option><option value="event">Evento</option></select>
+    <input id="newTitle" placeholder="Nombre">
+    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date"></label>
+    <select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+    <input id="newTime" type="time" value="09:00">
+    <button id="newSave" class="primary">Guardar</button>
+  </div>`);
+  const type=$('#newType'),dateInput=$('#newDate'),timeInput=$('#newTime');
+  const syncType=()=>{const event=type.value==='event';if(event&&!dateInput.value)dateInput.value=today();timeInput.classList.toggle('hidden',!event)};
+  type.onchange=syncType;syncType();
+  $('#newSave').onclick=()=>{
+    const title=$('#newTitle').value.trim();if(!title)return;
+    const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value;
+    if(kind==='task'){
+      const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};
+      state.tasks.push(item);mutation('task','create',null,item,'manual');
+    }else{
+      if(!date)return;
+      const item={id:uid(),title,date,categoryId,start:timeInput.value||'09:00',duration:60};
+      state.events.push(item);mutation('event','create',null,item,'manual');
+    }
+    save();closeModal();renderCalendar();
+  };
+}
 function assistantPreferencesPanel(){
   const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
   const rules=[...(prefs.behaviorRules||[])];

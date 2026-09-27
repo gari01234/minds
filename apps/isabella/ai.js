@@ -7,9 +7,10 @@ function compact(state){
   const projectName=id=>(state.projects||[]).find(x=>x.id===id)?.name||id||null;
   const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)}));
   const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}));
+  const undatedTasks=(state.tasks||[]).filter(x=>!x.date&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).slice(0,30).map(x=>({id:x.id,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),sort_order:Number(x.sortOrder||0)}));
   const upcoming=[
     ...(state.events||[]).filter(x=>x.date>=td).slice(0,30).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)})),
-    ...(state.tasks||[]).filter(x=>x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,30).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
+    ...(state.tasks||[]).filter(x=>x.date&&x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,30).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,30);
   const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null})).filter(m=>m.content);
   return {
@@ -17,6 +18,7 @@ function compact(state){
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
     today_events:todayEvents,
     today_tasks:todayTasks,
+    undated_tasks:undatedTasks,
     upcoming,
     recent_local_conversation:recentLocal,
     pending_intent:state.pendingIntent||null,
@@ -47,7 +49,7 @@ Responde como una asistente personal que conoce el contexto de Gari y mantiene c
 
 MENSAJE DE GARI:
 ${message}`;
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:personalVoice,context:compact(state),background:!!options.background}});
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:personalVoice,context:compact(state),background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};

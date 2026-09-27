@@ -104,3 +104,12 @@ El modelo conversacional trata el relato natural del usuario como entrada princi
 ### Build 36 — saneamiento del contrato de memoria
 
 La sincronización normaliza recuerdos locales heredados antes de enviarlos a Supabase. Los tipos legacy se traducen al contrato persistente (`fact`, `person`, `routine`, `episodic`, `preference`, `context`) y las memorias marcadas localmente como `deleted` dejan de reinsertarse. Así un recuerdo antiguo en localStorage no puede bloquear toda la sincronización con `isabella_memories_kind_check`.
+
+
+### Build 37 — calendario compacto, tareas sin fecha y fotos
+
+El calendario mensual abre en el día de hoy cada vez que se entra desde otra sección. El día seleccionado usa círculo negro; si se selecciona otro día, hoy permanece marcado en rosa. La cuadrícula mensual es más compacta y las iniciales de los días aparecen inmediatamente bajo el encabezado del mes.
+
+Las tareas pueden existir sin `due_date`. Viven en «Tareas → Sin fecha», no ocupan el calendario y pueden recibir una fecha más adelante. Isabella también puede crearlas desde conversación sin forzar un día artificial.
+
+El chat acepta hasta tres imágenes por mensaje. Las fotos se almacenan en el bucket privado `isabella-uploads`, bajo el directorio del usuario autenticado, y se envían al modelo como entrada visual. Los mensajes conservan únicamente la referencia privada al archivo; la interfaz genera URLs firmadas temporales para mostrarlas.

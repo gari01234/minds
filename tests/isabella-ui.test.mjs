@@ -480,3 +480,33 @@ test('Build 36 sanitizes legacy memory kinds before Supabase sync',()=>{
   assert.ok(sync.includes("kind:typeof m==='object'?normalizeMemoryKind(m.kind):'context'"));
   assert.ok(sync.includes("['active','corrected','rejected','archived'].includes"));
 });
+
+
+test('Build 37 opens calendar on today and keeps today visually marked after another selection',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes("if(name==='calendar'&&previous!=='calendar')state.date=today()"));
+  assert.ok(app.includes('month-weekdays'));
+  assert.ok(css.includes('.mc.today:not(.selected) .mn{color:#e84d62'));
+  assert.ok(css.includes('.mc.selected .mn{background:#111;color:#fff}'));
+});
+
+test('Build 37 supports undated tasks without forcing them into the calendar',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(app.includes("const undated=active.filter(t=>!t.date)"));
+  assert.ok(app.includes("Fecha (opcional)"));
+  assert.ok(ai.includes('undated_tasks:undatedTasks'));
+  assert.ok(sync.includes('due_date:t.date||null'));
+});
+
+test('Build 37 allows private photo attachments in Isabella chat',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(shell.includes('id="chatImageInput"'));
+  assert.ok(app.includes("storage.from('isabella-uploads').upload"));
+  assert.ok(app.includes('hydrateChatImages'));
+  assert.ok(ai.includes('attachments:Array.isArray(options.attachments)'));
+});

@@ -699,3 +699,35 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 .message-quick-replies{display:flex;gap:8px;flex-wrap:wrap;margin-top:14px}
 .message-quick-replies button{border:1px solid #e2e2e2;background:#fff;border-radius:999px;padding:9px 13px;font:inherit;font-size:13px;line-height:1.15;color:#333}
 .message-quick-replies button:active{transform:scale(.98);background:#f4f4f4}
+
+
+/* Build 37 — compact calendar, undated tasks, image attachments */
+.cal-toolbar{padding-top:6px;padding-bottom:4px}
+.cal-nav{padding-top:2px;padding-bottom:2px}
+.cal-title{font-size:30px}
+.month-year{font-size:11px;margin:0 0 2px}
+.month-weekdays{display:grid;grid-template-columns:24px repeat(7,minmax(0,1fr));padding:0 16px;border-bottom:1px solid var(--line)}
+.month-weekdays>div{font-size:11px;font-weight:700;text-align:center;padding:7px 0}
+.month-grid{grid-template-columns:24px repeat(7,minmax(0,1fr));padding:0 16px}
+.mc,.mw{min-height:58px}
+.mc{padding:7px 0;gap:2px}
+.mn{width:32px;height:32px;font-size:16px}
+.mc.today:not(.selected) .mn{color:#e84d62;font-weight:800}
+.mc.selected .mn{background:#111;color:#fff}
+.task-dated-label{margin-top:22px}
+.attach{width:42px;height:42px;border:0;border-radius:50%;background:#f4f4f5;font-size:24px;line-height:1;cursor:pointer}
+.chat-attachment-preview{display:flex;gap:8px;overflow-x:auto;padding:0 4px 8px}
+.pending-photo{position:relative;width:62px;height:62px;flex:0 0 62px}
+.pending-photo img,.message-images img{width:100%;height:100%;object-fit:cover;border-radius:12px;background:#f2f2f3}
+.pending-photo button{position:absolute;right:-5px;top:-5px;width:22px;height:22px;border:0;border-radius:50%;background:#111;color:#fff;font-size:14px}
+.message-images{display:grid;grid-template-columns:repeat(auto-fit,minmax(90px,1fr));gap:6px;margin-bottom:8px;max-width:320px}
+.message-images img{min-height:110px;max-height:220px}
+.message.user:has(.message-images){width:min(82%,340px)}
+@media(max-width:520px){
+  .cal-toolbar{padding-top:2px}
+  .cal-nav{padding-top:0}
+  .month-grid,.month-weekdays{padding-left:12px;padding-right:12px}
+  .mc,.mw{min-height:54px}
+  .composer{gap:6px}
+  .attach,.mic,.send{width:40px;height:40px}
+}
