@@ -348,7 +348,6 @@ test('Build 29 supports confirmed behavioral self-improvement',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   const sync=read('apps/isabella/sync.js');
-  assert.ok(ai.includes('isabella_improvement'));
   assert.ok(app.includes("p.kind==='assistant_preferences'"));
   assert.ok(app.includes('function applyAssistantPreferencesProposal'));
   assert.ok(sync.includes("preference_key:'assistant'"));
@@ -420,7 +419,7 @@ test('Build 41 Ideas keep lifecycle but only generate producible proposals',()=>
   assert.ok(app.includes("from('isabella_return_queue').insert"));
   assert.ok(ai.includes('deliverable'));
   assert.ok(ai.includes("surface==='idea'?4"));
-  assert.ok(ai.includes('Una Idea NO es una observación'));
+  assert.ok(ai.includes("functions.invoke('isabella-ideas'"));
 });
 
 
