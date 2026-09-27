@@ -811,7 +811,10 @@ function proposalEditor(p,onDone){
     $('#proposalEditCancel').onclick=()=>onDone?.(null);
     $('#proposalEditSave').onclick=()=>{
       const add_entities=$('#proposalFeedRows .feed-follow-row').map(row=>({name:row.querySelector('[data-follow-name]')?.value.trim()||'',type:row.querySelector('[data-follow-type]')?.value||'other',focus:row.querySelector('[data-follow-focus]')?.value.trim()||''})).filter(x=>x.name);
-      onDone?.({...p,add_entities,remove_entities:split($('#proposalFeedRemove').value),add_topics:split($('#proposalFeedTopics').value),add_custom_topics:split($('#proposalFeedCustom').value),instructions_append:$('#proposalFeedInstructions').value.trim(),weather_location:$('#proposalWeatherLocation').value.trim()});
+      const weather=$('#proposalWeatherLocation').value.trim(),currentWeather=String(state.feedPreferences?.weatherLocation||'').trim();
+      const next={...p,add_entities,remove_entities:split($('#proposalFeedRemove').value),add_topics:split($('#proposalFeedTopics').value),add_custom_topics:split($('#proposalFeedCustom').value),instructions_append:$('#proposalFeedInstructions').value.trim()};
+      if(Object.prototype.hasOwnProperty.call(p,'weather_location')||weather!==currentWeather)next.weather_location=weather;
+      onDone?.(next);
     };
     return;
   }

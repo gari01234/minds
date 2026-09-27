@@ -466,6 +466,6 @@ test('Build 35 supports low-friction Isabella quick replies',()=>{
 test('Build 35 Feed proposals can confirm weather location cross-links',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes('proposalWeatherLocation'));
-  assert.ok(app.includes("weather_location:$('#proposalWeatherLocation').value.trim()"));
+  assert.ok(app.includes("if(Object.prototype.hasOwnProperty.call(p,'weather_location')||weather!==currentWeather)next.weather_location=weather"));
   assert.ok(app.includes("weatherChanged=Object.prototype.hasOwnProperty.call(p,'weather_location')"));
 });
