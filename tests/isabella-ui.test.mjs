@@ -435,3 +435,21 @@ test('Build 33 morning brief includes weather and news',()=>{
   assert.ok(ai.includes('pronóstico breve del clima'));
   assert.ok(ai.includes('noticias realmente relevantes'));
 });
+
+
+test('Build 34 runs a small autonomous research queue and surfaces finished work',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes("functions.invoke('isabella-research'"));
+  assert.ok(ai.includes("from('isabella_research_queue')"));
+  assert.ok(app.includes('maybePrewarmResearch'));
+  assert.ok(app.includes('Avances de Isabella'));
+  assert.ok(app.includes('researchItems'));
+});
+
+test('Build 34 reactivates sleeping ideas when their return date arrives',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('async function maybeReactivateIdeas'));
+  assert.ok(app.includes("from('isabella_return_queue')"));
+  assert.ok(app.includes("lifecycle_state:'changed'"));
+});

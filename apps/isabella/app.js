@@ -201,8 +201,33 @@ async function maybePrewarmFeed(){
     if(result?.accepted||result?.skipped)localStorage.setItem(key,String(now));
   }catch{}
 }
+async function maybePrewarmResearch(){
+  try{
+    if(!window.ISABELLA_AI?.startResearch)return;
+    const key='isabella-research-prewarm-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
+    if(now-last<12*60*60*1000)return;
+    const result=await window.ISABELLA_AI.startResearch();
+    if(result?.accepted||result?.skipped)localStorage.setItem(key,String(now));
+  }catch{}
+}
+async function maybeReactivateIdeas(){
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    const now=new Date().toISOString();
+    const {data:rows}=await sb.from('isabella_return_queue').select('id,reference_id,reactivate_after').eq('status','waiting').not('reactivate_after','is',null).lte('reactivate_after',now).limit(10);
+    for(const row of rows||[]){
+      if(row.reference_id&&/^[0-9a-f-]{36}$/i.test(String(row.reference_id))){
+        await sb.from('minds_surface_items').update({status:'active',lifecycle_state:'changed',expires_at:new Date(Date.now()+24*60*60*1000).toISOString()}).eq('id',row.reference_id);
+      }
+      await sb.from('isabella_return_queue').update({status:'returned',last_trigger_at:now,updated_at:now}).eq('id',row.id);
+    }
+  }catch{}
+}
 async function afterSync(){
   void maybePrewarmFeed();
+  void maybePrewarmResearch();
+  void maybeReactivateIdeas();
   const nudged=await maybeProactiveNudge();
   if(!nudged)await maybeCuriosityQuestion();
 }
@@ -274,6 +299,7 @@ function surfaceItemByKey(key){
   return all.find(x=>String(x?.id||feedStoryKey(x)||x?.title||'')===String(key))||null;
 }
 function dbSurfaceId(item){
+  if(String(item?.metadata?.source_table||'')==='isabella_research_queue')return null;
   const id=String(item?.id||'');return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)?id:null;
 }
 async function persistSurfaceFeedback(item,action){
@@ -297,6 +323,8 @@ async function persistSurfaceFeedback(item,action){
       const patch=action==='liked'?{user_feedback:'liked'}:action==='not_relevant'?{user_feedback:'not_relevant',status:'dismissed',lifecycle_state:'dismissed'}:action==='dismissed'?{status:'dismissed',lifecycle_state:'dismissed'}:{};
       if(Object.keys(patch).length)await sb.from('minds_surface_items').update(patch).eq('id',id);
     }
+    const researchId=String(item?.research_id||'');
+    if(researchId&&(action==='not_relevant'||action==='dismissed'))await sb.from('isabella_research_queue').update({status:'dismissed',updated_at:new Date().toISOString()}).eq('id',researchId);
   }catch{}
 }
 async function markSurfaceSeen(item){
@@ -366,7 +394,7 @@ function bindSurfaceActions(){
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
 }
-let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],activeFeedStory=null;
+let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],researchItems=[],activeFeedStory=null;
 function dedupeFeedItems(items){
   return (items||[]).filter(Boolean).filter((x,i,arr)=>{
     const key=feedStoryKey(x)||String(x.id||x.title||'');
@@ -389,15 +417,17 @@ function fixedTodayFeedItems(){
 }
 function renderFeedItems(items){
   const box=$('#feedList');if(!box)return;
-  const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'};
-  const generated=dedupeFeedItems(items).filter(x=>sectionOf(x)!=='today');
+  const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':s==='work'?'work':'for_me'};
+  const generated=dedupeFeedItems(items).filter(x=>sectionOf(x)!=='today'&&sectionOf(x)!=='work');
+  const work=dedupeFeedItems(researchItems||[]).filter(x=>sectionOf(x)==='work');
   const todayItems=fixedTodayFeedItems();
-  feedItems=dedupeFeedItems([...todayItems,...generated]);
+  feedItems=dedupeFeedItems([...todayItems,...generated,...work]);
   const newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10),forMeItems=generated.filter(x=>sectionOf(x)==='for_me');
   const todayHtml=todayItems.length?todayItems.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty surface-day-clear">No tienes eventos ni tareas pendientes para hoy.</div>';
   box.innerHTML='<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayHtml+'</section>'+
     (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
-    (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
+    (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+    (work.length?'<section class="feed-section"><h2 class="feed-section-title">Avances de Isabella</h2>'+work.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
   bindSurfaceActions();
 }
 async function renderFeed(force=false){
@@ -405,10 +435,12 @@ async function renderFeed(force=false){
   let visible=[...feedItems];
   if(force&&refresh){refresh.disabled=true;refresh.classList.add('refreshing');refresh.textContent='…'}
   try{
-    const [cachedA,cachedB]=await Promise.all([
+    const [cachedA,cachedB,cachedResearch]=await Promise.all([
       window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[],
-      window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[]
+      window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[],
+      window.ISABELLA_AI?.loadResearchReady?.()||[]
     ]);
+    researchItems=cachedResearch||[];
     visible=dedupeFeedItems([...(cachedA||[]),...(cachedB||[]),...visible]);
     if(visible.length)renderFeedItems(visible);
     else box.innerHTML='<div class="surface-loading">Abriendo tu Feed…</div>';
@@ -426,9 +458,13 @@ async function renderFeed(force=false){
     const result=await window.ISABELLA_AI?.waitForFeedRefresh?.(request.generation_id,{timeoutMs:90000,intervalMs:1600});
     if(result?.status==='succeeded'){
       const latestA=result.items||await window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[];
-      const latestB=await window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[];
+      const [latestB,latestResearch]=await Promise.all([
+        window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[],
+        window.ISABELLA_AI?.loadResearchReady?.()||[]
+      ]);
+      researchItems=latestResearch||[];
       const fresh=dedupeFeedItems([...(latestA||[]),...(latestB||[])]);
-      if(fresh.length)renderFeedItems(fresh);
+      if(fresh.length||researchItems.length)renderFeedItems(fresh);
       if(status){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
     }else if(result?.status==='pending'){
       if(status)status.textContent='Se terminará de actualizar en segundo plano';

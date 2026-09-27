@@ -83,3 +83,10 @@ Isabella separa memoria explícita de un modelo personal estructurado. El modelo
 Feed incorpora feedback explícito por tarjeta: «Me gusta», «No es relevante» y «Eliminar». Las señales se persisten en `minds_surface_feedback` y sirven a generaciones posteriores sin convertir el historial en un filtro absoluto. Las tarjetas personalizadas pueden desplegar «¿Por qué esto?» con una razón concreta.
 
 Ideas incorpora ciclo de vida: discutir, dormir o descartar. Dormir una idea crea una entrada en `isabella_return_queue`, con retorno por fecha o por futura evidencia. El briefing matinal incluye agenda, tareas, clima y una selección breve de noticias relevantes.
+
+
+### Build 34 — investigación autónoma y retornos
+
+Isabella mantiene una cola pequeña de investigación autónoma. Como máximo cada doce horas, y solo si encuentra una pregunta externa con valor personal claro, puede abrir una investigación en segundo plano. El trabajo vive en `isabella_research_queue`; al terminar aparece como una cuarta capa del Feed: «Avances de Isabella». No se crea investigación por rellenar espacio.
+
+Las Ideas dormidas con fecha se reactivan automáticamente al cumplirse su periodo y vuelven con estado `changed`. Las Ideas dormidas «hasta nueva evidencia» permanecen en la cola de retorno para una futura reactivación contextual.

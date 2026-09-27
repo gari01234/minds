@@ -183,6 +183,44 @@ async function feed(state,{force=false,currentItems=[]}={}){
   try{await startFeedRefresh(state,{force,currentItems})}catch{}
   return cached;
 }
+async function startResearch(){
+  if(!sb)return {accepted:false,skipped:true};
+  const {data:{session}}=await sb.auth.getSession();if(!session)return {accepted:false,skipped:true};
+  const {data,error}=await sb.functions.invoke('isabella-research',{body:{}});
+  if(error)return {accepted:false,error:error.message||String(error)};
+  return data||{accepted:false};
+}
+async function loadResearchReady(){
+  if(!sb)return [];
+  const {data:{session}}=await sb.auth.getSession();if(!session)return [];
+  const {data,error}=await sb.from('isabella_research_queue')
+    .select('id,title,question,rationale,result,priority,completed_at')
+    .eq('status','ready')
+    .order('priority',{ascending:false})
+    .order('completed_at',{ascending:false})
+    .limit(4);
+  if(error)return [];
+  return (data||[]).map(r=>{
+    const summary=String(r?.result?.summary||'').trim();
+    const sources=Array.isArray(r?.result?.sources)?r.result.sources:[];
+    const first=sources[0]||{};
+    return {
+      id:'research:'+r.id,
+      research_id:r.id,
+      agent:'isabella',
+      section:'work',
+      kind:'research',
+      title:r.title,
+      body:summary.length>360?summary.slice(0,357)+'…':summary,
+      detail:summary,
+      why:String(r.rationale||'').trim(),
+      source_title:String(first.title||'').trim(),
+      source_url:String(first.url||'').trim(),
+      entities:[],
+      metadata:{section:'work',kind:'research',why:String(r.rationale||'').trim(),source_table:'isabella_research_queue',sources}
+    };
+  });
+}
 async function feedStory(item,state,question='',history=[]){
   const sourceUrl=String(item?.source_url||item?.metadata?.source_url||'').trim();
   const sourceTitle=String(item?.source_title||item?.metadata?.source_title||'').trim();
@@ -248,5 +286,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,feedStory,ideas,sofiaSurface,loadSurface};
+window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,startResearch,loadResearchReady,feedStory,ideas,sofiaSurface,loadSurface};
 })();
