@@ -545,3 +545,19 @@ test('Build 39 keeps Feed loading transient and makes contextual questions visib
   assert.ok(app.includes('Buscando una respuesta…'));
   assert.ok(app.includes("if(!result?.reply)throw new Error('La respuesta del Feed llegó vacía.')"));
 });
+
+test('Build 40 exposes the real build and cannot suppress future service-worker reloads',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const index=read('apps/isabella/index.html');
+  const sw=read('apps/isabella/sw.js');
+  assert.ok(shell.includes('Build 2026.09.27.40'));
+  assert.ok(index.includes('shell.js?v=40'));
+  assert.ok(index.includes('app.js?v=49'));
+  assert.ok(index.includes('ai.js?v=33'));
+  assert.ok(index.includes('let reloadingForServiceWorker = false'));
+  assert.ok(!index.includes("sessionStorage.getItem('isabella-sw-reloaded')"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v47'"));
+  assert.ok(sw.includes("'./shell.js?v=40'"));
+  assert.ok(sw.includes("'./app.js?v=49'"));
+  assert.ok(sw.includes("'./ai.js?v=33'"));
+});
