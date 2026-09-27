@@ -675,3 +675,21 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 .assistant-rule-row{display:grid;grid-template-columns:1fr 34px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:13px;line-height:1.4}
 .assistant-rule-row button{width:34px;height:34px;border:0;border-radius:50%;background:#f4f4f5}
 .surface-card-agent{white-space:nowrap}
+
+
+/* Build 33 — personal model, Feed feedback and idea lifecycle */
+.surface-card-top{gap:8px}
+.surface-state{margin-left:auto;font-size:9px;letter-spacing:.08em;color:#aaa;font-weight:600}
+.surface-why-copy{margin-top:10px;padding:10px 12px;background:#f7f7f7;border-radius:12px;font-size:12px;line-height:1.45;color:#666}
+.surface-feedback{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;padding-top:9px;border-top:1px solid var(--line)}
+.surface-feedback button{border:0;background:transparent;padding:4px 0;margin-right:10px;font-size:11px;color:#888}
+.surface-feedback button.active{color:#111;font-weight:600}
+.surface-feedback .danger-text{color:#999}
+.idea-lifecycle{margin-top:8px}
+.model-claim-row{padding:12px 0;border-bottom:1px solid var(--line);display:grid;gap:8px}
+.model-claim-row.hypothesis .row-main>div:first-child:before{content:'≈ ';color:#aaa}
+.model-claim-actions{display:flex;gap:8px;flex-wrap:wrap}
+.model-claim-actions button{border:0;background:#f4f4f5;border-radius:999px;padding:6px 10px;font-size:11px}
+.personal-model-list{margin-bottom:22px}
+.memory-section-title{margin-top:18px}
+.surface-day-clear{padding:10px 0}

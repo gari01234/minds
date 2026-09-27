@@ -245,27 +245,114 @@ function surfaceCard(item,surface){
   const kind=String(item.kind||item.metadata?.kind||'').toLowerCase(),improvement=kind==='isabella_improvement',details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
   const weather=kind==='weather',news=kind==='news',rawSource=String(item.source_url||item.metadata?.source_url||'').trim(),sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
+  const why=String(item.why||item.metadata?.why||'').trim();
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
-  const storyKey=feedStoryKey(item);
+  const storyKey=feedStoryKey(item),itemKey=String(item.id||storyKey||item.title||'');
   const operational=weather||kind==='commitment'||kind==='pending';
-  const feedStory=surface==='feed'&&agent==='isabella'&&!operational;
-  return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
-    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span></div>
+  const feedStory=surface==='feed'&&!operational;
+  const idea=surface==='idea';
+  const feedback=String(item.user_feedback||'');
+  const lifecycle=String(item.lifecycle_state||'new');
+  return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''} ${feedback==='liked'?'liked':''}" data-agent="${esc(agent)}" data-surface-item="${esc(itemKey)}">
+    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span>${surface==='feed'&&!operational&&lifecycle==='new'?'<span class="surface-state">NUEVO</span>':''}</div>
     <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}
+    ${why?`<div class="surface-why-copy hidden" data-why-copy="${esc(itemKey)}">${esc(why)}</div>`:''}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
       ${feedStory?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
+      ${feedStory&&why?`<button class="surface-why" data-why-key="${esc(itemKey)}">¿Por qué esto?</button>`:''}
       ${feedStory&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
+      ${!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}" ${idea?`data-idea-open="${esc(itemKey)}"`:''}>${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
     </div>
+    ${feedStory?`<div class="surface-feedback"><button class="${feedback==='liked'?'active':''}" data-feed-feedback="liked" data-feed-item="${esc(itemKey)}">Me gusta</button><button data-feed-feedback="not_relevant" data-feed-item="${esc(itemKey)}">No es relevante</button><button class="danger-text" data-feed-feedback="dismissed" data-feed-item="${esc(itemKey)}">Eliminar</button></div>`:''}
+    ${idea?`<div class="surface-feedback idea-lifecycle"><button data-idea-sleep="${esc(itemKey)}">Dormir</button><button class="danger-text" data-idea-dismiss="${esc(itemKey)}">Descartar</button></div>`:''}
   </article>`;
 }
 
+function surfaceItemByKey(key){
+  const all=[...(feedItems||[]),...(ideaItems||[])];
+  return all.find(x=>String(x?.id||feedStoryKey(x)||x?.title||'')===String(key))||null;
+}
+function dbSurfaceId(item){
+  const id=String(item?.id||'');return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)?id:null;
+}
+async function persistSurfaceFeedback(item,action){
+  if(!item)return;
+  const sb=window.MINDS_SUPABASE,id=dbSurfaceId(item),storyKey=feedStoryKey(item);
+  recordFeedSignal(action,item);
+  if(action==='liked')item.user_feedback='liked';
+  if(action==='not_relevant')item.user_feedback='not_relevant';
+  if(action==='dismissed'||action==='not_relevant'){
+    feedItems=(feedItems||[]).filter(x=>String(x?.id||feedStoryKey(x)||'')!==String(item.id||storyKey));
+    renderFeedItems(feedItems);
+  }else renderFeedItems(feedItems);
+  if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    await sb.from('minds_surface_feedback').insert({
+      user_id:session.user.id,item_id:id,surface:'feed',action,title:String(item.title||''),
+      metadata:{kind:String(item.kind||item.metadata?.kind||''),section:String(item.section||item.metadata?.section||''),entities:feedEntities(item).map(x=>x.name),source_url:String(item.source_url||item.metadata?.source_url||'')}
+    });
+    if(id){
+      const patch=action==='liked'?{user_feedback:'liked'}:action==='not_relevant'?{user_feedback:'not_relevant',status:'dismissed',lifecycle_state:'dismissed'}:action==='dismissed'?{status:'dismissed',lifecycle_state:'dismissed'}:{};
+      if(Object.keys(patch).length)await sb.from('minds_surface_items').update(patch).eq('id',id);
+    }
+  }catch{}
+}
+async function markSurfaceSeen(item){
+  const id=dbSurfaceId(item);if(!id||String(item.lifecycle_state||'')==='seen')return;
+  item.lifecycle_state='seen';item.seen_at=new Date().toISOString();
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    await Promise.all([
+      sb.from('minds_surface_items').update({lifecycle_state:'seen',seen_at:item.seen_at}).eq('id',id),
+      sb.from('minds_surface_feedback').insert({user_id:session.user.id,item_id:id,surface:'feed',action:'seen',title:String(item.title||''),metadata:{}})
+    ]);
+  }catch{}
+}
+async function updateIdeaLifecycle(item,lifecycle,status='active'){
+  const id=dbSurfaceId(item),sb=window.MINDS_SUPABASE;if(!id||!sb)return;
+  try{await sb.from('minds_surface_items').update({lifecycle_state:lifecycle,status}).eq('id',id)}catch{}
+}
+function renderIdeaItems(items){
+  const box=$('#ideasList');if(!box)return;
+  ideaItems=(items||[]).filter(Boolean);
+  box.innerHTML=ideaItems.length?ideaItems.map(x=>surfaceCard(x,'idea')).join(''):'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
+  bindSurfaceActions();
+}
+function sleepIdea(key){
+  const item=surfaceItemByKey(key);if(!item)return;
+  modal('Dormir idea',`<div class="form"><div class="small">La idea sale de la vista activa y puede volver más adelante.</div><button data-sleep-days="7" class="secondary">Una semana</button><button data-sleep-days="30" class="secondary">Un mes</button><button data-sleep-days="" class="secondary">Hasta que haya nueva evidencia</button></div>`);
+  document.querySelectorAll('[data-sleep-days]').forEach(b=>b.onclick=async()=>{
+    const raw=b.dataset.sleepDays,days=raw?Number(raw):null,reactivate=days?new Date(Date.now()+days*86400000).toISOString():null;
+    const sb=window.MINDS_SUPABASE,id=dbSurfaceId(item);
+    if(sb){try{
+      const {data:{session}}=await sb.auth.getSession();
+      if(session){
+        await sb.from('isabella_return_queue').insert({user_id:session.user.id,kind:'idea',reference_id:id||String(item.id||''),title:String(item.title||'Idea'),reason:'Idea dormida por el usuario',status:'waiting',reactivate_after:reactivate,metadata:{source:'ideas'}});
+        if(id)await sb.from('minds_surface_items').update({lifecycle_state:'pending',status:'dismissed'}).eq('id',id);
+      }
+    }catch{}}
+    ideaItems=ideaItems.filter(x=>String(x.id||x.title)!==String(item.id||item.title));closeModal();renderIdeaItems(ideaItems);
+  });
+}
+async function dismissIdea(key){
+  const item=surfaceItemByKey(key);if(!item)return;
+  await updateIdeaLifecycle(item,'dismissed','dismissed');
+  ideaItems=ideaItems.filter(x=>String(x.id||x.title)!==String(item.id||item.title));
+  renderIdeaItems(ideaItems);
+}
 function bindSurfaceActions(){
   document.querySelectorAll('[data-news-key]').forEach(b=>b.onclick=()=>openFeedStory(b.dataset.newsKey||''));
+  document.querySelectorAll('[data-why-key]').forEach(b=>b.onclick=()=>{const key=b.dataset.whyKey||'',copy=document.querySelector('[data-why-copy="'+CSS.escape(key)+'"]');if(!copy)return;const opening=copy.classList.contains('hidden');copy.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar razón':'¿Por qué esto?'});
+  document.querySelectorAll('[data-feed-feedback]').forEach(b=>b.onclick=()=>{const item=surfaceItemByKey(b.dataset.feedItem||'');if(item)void persistSurfaceFeedback(item,b.dataset.feedFeedback||'')});
+  document.querySelectorAll('[data-idea-sleep]').forEach(b=>b.onclick=()=>sleepIdea(b.dataset.ideaSleep||''));
+  document.querySelectorAll('[data-idea-dismiss]').forEach(b=>b.onclick=()=>void dismissIdea(b.dataset.ideaDismiss||''));
   document.querySelectorAll('[data-feed-source]').forEach(a=>a.onclick=()=>{const item=feedItems.find(x=>feedStoryKey(x)===(a.dataset.feedSource||''));if(item)recordFeedSignal('source_opened',item)});
   document.querySelectorAll('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
-    const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
+    const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella',ideaKey=b.dataset.ideaOpen||'';
+    if(ideaKey){const item=surfaceItemByKey(ideaKey);if(item)void updateIdeaLifecycle(item,'pending','active')}
     if(agent==='sofia'){
       show('readings');
       setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-prompt',prompt},location.origin),220);
@@ -279,7 +366,7 @@ function bindSurfaceActions(){
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
 }
-let feedBusy=false,ideasBusy=false,feedItems=[],activeFeedStory=null;
+let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],activeFeedStory=null;
 function dedupeFeedItems(items){
   return (items||[]).filter(Boolean).filter((x,i,arr)=>{
     const key=feedStoryKey(x)||String(x.id||x.title||'');
@@ -407,7 +494,7 @@ function bindFeedFollowChips(){
 }
 function openFeedStory(key){
   const item=feedItems.find(x=>feedStoryKey(x)===key);if(!item)return;
-  activeFeedStory=item;recordFeedSignal('opened',item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
+  activeFeedStory=item;recordFeedSignal('opened',item);void markSurfaceSeen(item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
   const kind=String(item.kind||item.metadata?.kind||'news').toLowerCase(),sourceUrl=String(item.source_url||item.metadata?.source_url||'').trim(),sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detail=String(item.detail||item.metadata?.detail||'').trim(),imageUrl=String(item.image_url||item.metadata?.image_url||'').trim(),imageAlt=String(item.image_alt||item.metadata?.image_alt||item.title||'').trim();
   $('#feedDetailMeta').innerHTML=`<span>${kind==='news'?'NOTICIA':'FEED'}</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
@@ -415,7 +502,7 @@ function openFeedStory(key){
   media.querySelector('img')?.addEventListener('error',()=>{media.innerHTML=''});
   const entities=feedEntities(item);$('#feedDetailFollow').innerHTML=entities.length?entities.map(feedFollowChip).join(''):'';
   $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedOverview(item);renderFeedThread(item);bindFeedFollowChips();
-  if(kind==='news'&&!detail)hydrateFeedStory(item);
+  if(!['weather','commitment','pending'].includes(kind)&&!detail)hydrateFeedStory(item);
 }
 function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
 async function submitFeedStoryQuestion(text){
@@ -435,8 +522,7 @@ async function renderIdeas(force=false){
       window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[]
     ]);
     const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
-    box.innerHTML=items.length?items.map(x=>surfaceCard(x,'idea')).join(''):'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
-    bindSurfaceActions();
+    renderIdeaItems(items);
   }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
   finally{ideasBusy=false}
 }
@@ -1296,16 +1382,50 @@ async function skillsPanel(){
     modal('Habilidades','<div class="small">No pude cargar las habilidades ahora mismo.</div>');
   }
 }
-function memoryPanel(){
+async function memoryPanel(){
   const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
-  const body=items.length?items.map((m,i)=>{
+  let claims=[];
+  try{
+    const sb=window.MINDS_SUPABASE,{data:{session}}=await sb.auth.getSession();
+    if(session){
+      const {data}=await sb.from('isabella_model_claims').select('id,claim_type,claim,status,confidence,source_type,last_seen_at').in('status',['confirmed','hypothesis']).order('status',{ascending:true}).order('confidence',{ascending:false}).limit(60);
+      claims=data||[];
+    }
+  }catch{}
+  const modelHtml=claims.length?claims.map(c=>`<div class="model-claim-row ${esc(c.status)}"><div class="row-main"><div>${esc(c.claim)}</div><div class="small">${c.status==='confirmed'?'Confirmado':'Hipótesis'} · ${esc(c.claim_type)} · ${Math.round(Number(c.confidence||0)*100)}%</div></div><div class="model-claim-actions">${c.status==='hypothesis'?`<button data-model-confirm="${esc(c.id)}">Confirmar</button><button data-model-reject="${esc(c.id)}">No</button>`:''}<button data-model-correct="${esc(c.id)}" data-model-text="${esc(c.claim)}">Corregir</button></div></div>`).join(''):'<div class="small">Todavía no hay hipótesis estructuradas sobre ti.</div>';
+  const memoryHtml=items.length?items.map((m,i)=>{
     const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';
     const id=typeof m==='object'?(m.id||String(i)):String(i);
     return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`;
   }).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
-  modal('Lo que Isabella sabe de mí',body);
+  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}`);
+  document.querySelectorAll('[data-model-confirm]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelConfirm,'confirmed'));
+  document.querySelectorAll('[data-model-reject]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelReject,'contradicted'));
+  document.querySelectorAll('[data-model-correct]').forEach(b=>b.onclick=()=>correctModelClaim(b.dataset.modelCorrect,b.dataset.modelText||''));
   $$('[data-memory-edit]').forEach(b=>b.onclick=()=>editMemory(b.dataset.memoryEdit));
   $$('[data-memory-delete]').forEach(b=>b.onclick=()=>deleteMemory(b.dataset.memoryDelete));
+}
+async function setModelClaimStatus(id,status){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  try{
+    const patch={status,last_seen_at:new Date().toISOString()};
+    if(status==='confirmed'){patch.confidence=1;patch.confirmed_at=new Date().toISOString();patch.source_type='explicit'}
+    await sb.from('isabella_model_claims').update(patch).eq('id',id);
+  }catch{}
+  memoryPanel();
+}
+function correctModelClaim(id,current){
+  modal('Corregir lo que Isabella cree',`<div class="form"><label>Formulación correcta<textarea id="modelClaimCorrection" rows="4">${esc(current)}</textarea></label><button id="saveModelClaimCorrection" class="primary">Guardar corrección</button></div>`);
+  $('#saveModelClaimCorrection').onclick=async()=>{
+    const claim=$('#modelClaimCorrection').value.trim();if(!claim)return;
+    const sb=window.MINDS_SUPABASE;
+    try{
+      const {data:{session}}=await sb.auth.getSession();if(!session)return;
+      await sb.from('isabella_model_claims').update({status:'contradicted',last_seen_at:new Date().toISOString()}).eq('id',id);
+      await sb.from('isabella_model_claims').insert({user_id:session.user.id,claim_type:'other',claim,status:'confirmed',confidence:1,source_type:'explicit',evidence:[{source:'user_correction',at:new Date().toISOString()}],confirmed_at:new Date().toISOString()});
+    }catch{}
+    memoryPanel();
+  };
 }
 function memoryById(id){
   return (state.memory||[]).find((m,i)=>String(typeof m==='object'?(m.id||i):i)===String(id));

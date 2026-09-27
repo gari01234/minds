@@ -398,3 +398,40 @@ test('Build 32 keeps Hoy deterministic and Feed exploration inside Feed',()=>{
   assert.ok(app.includes("newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10)"));
   assert.ok(ai.includes("return 'feed10-'"));
 });
+
+
+test('Build 33 Feed learns from explicit card feedback and explains personalization',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes("data-feed-feedback=\"liked\""));
+  assert.ok(app.includes("data-feed-feedback=\"not_relevant\""));
+  assert.ok(app.includes("data-feed-feedback=\"dismissed\""));
+  assert.ok(app.includes("from('minds_surface_feedback').insert"));
+  assert.ok(app.includes('¿Por qué esto?'));
+  assert.ok(ai.includes("why:String(x.why||'').trim()||null"));
+});
+
+test('Build 33 exposes a structured personal model with confirm and correct controls',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("from('isabella_model_claims')"));
+  assert.ok(app.includes('Modelo personal'));
+  assert.ok(app.includes('data-model-confirm'));
+  assert.ok(app.includes('data-model-correct'));
+  assert.ok(app.includes("status:'contradicted'"));
+});
+
+test('Build 33 gives Ideas a sleep/discard lifecycle and return queue',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('data-idea-sleep'));
+  assert.ok(app.includes('data-idea-dismiss'));
+  assert.ok(app.includes("from('isabella_return_queue').insert"));
+  assert.ok(ai.includes('research_candidate'));
+  assert.ok(ai.includes("surface==='idea'?3"));
+});
+
+test('Build 33 morning brief includes weather and news',()=>{
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes('pronóstico breve del clima'));
+  assert.ok(ai.includes('noticias realmente relevantes'));
+});

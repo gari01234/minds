@@ -74,3 +74,12 @@ La interfaz conserva y muestra la última edición disponible aunque haya vencid
 `Hoy` deja de ser contenido editorial generado por IA. Se deriva directamente de los eventos y tareas de la fecha actual, de modo que un refresh de noticias no puede borrarlo ni cambiarlo. Las tarjetas externas de Isabella abren `Leer más` dentro del propio Feed; el chat personal de Isabella deja de ser el destino por defecto para noticias, arquitectura, arte y otros contenidos editoriales.
 
 La sección Noticias admite hasta diez tarjetas por edición. `Para mí` queda reservada para señales personalizadas no operativas: proyectos, entidades seguidas, arquitectura, arte, cultura y otras conexiones derivadas del contexto e intereses del usuario.
+
+
+### Build 33 — modelo personal, feedback explícito y ciclo de vida
+
+Isabella separa memoria explícita de un modelo personal estructurado. El modelo contiene claims confirmados e hipótesis revisables con confianza y procedencia. En «Lo que Isabella sabe de mí» el usuario puede ver hipótesis, confirmarlas, rechazarlas o corregirlas. La decisión del usuario prevalece sobre cualquier inferencia.
+
+Feed incorpora feedback explícito por tarjeta: «Me gusta», «No es relevante» y «Eliminar». Las señales se persisten en `minds_surface_feedback` y sirven a generaciones posteriores sin convertir el historial en un filtro absoluto. Las tarjetas personalizadas pueden desplegar «¿Por qué esto?» con una razón concreta.
+
+Ideas incorpora ciclo de vida: discutir, dormir o descartar. Dormir una idea crea una entrada en `isabella_return_queue`, con retorno por fecha o por futura evidencia. El briefing matinal incluye agenda, tareas, clima y una selección breve de noticias relevantes.

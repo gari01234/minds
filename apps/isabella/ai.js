@@ -54,7 +54,7 @@ ${message}`;
 }
 
 async function brief(state){
-  return ask("Prepara mi resumen de hoy. Sé breve y práctico: dime mis eventos y tareas pendientes de hoy y, solo si aporta valor, señala el siguiente compromiso o una prioridad clara. No propongas cambios ni crees tareas en este resumen.",state,{background:true});
+  return ask("Prepara mi briefing de la mañana. Incluye: 1) eventos y tareas pendientes de hoy, 2) pronóstico breve del clima usando la ubicación configurada si existe y sin inventar ubicación, y 3) una selección muy breve de noticias realmente relevantes para mí. Prioriza utilidad sobre cantidad; si una sección no tiene datos fiables, dilo o sáltala. No propongas cambios ni crees tareas en este resumen.",state,{background:true});
 }
 async function nudge(state){
   return ask("Evalúa si existe exactamente un seguimiento personal u operativo que valga la pena traerme ahora: algo pendiente, una respuesta esperada, una tarea que estoy dejando atrás, una cita cercana o algo significativo que te conté y que razonablemente merezca seguimiento. Si no hay nada suficientemente útil, responde exactamente NO_NUDGE. Si sí lo hay, escribe solo un mensaje breve y natural, sin crear ni modificar nada.",state,{background:true});
@@ -104,7 +104,7 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?10:surface==='idea'?2:1,
+      surface_version:surface==='feed'?10:surface==='idea'?3:1,
       preference_signature:String(x.preference_signature||x.metadata?.preference_signature||'').trim()||null,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
@@ -114,8 +114,10 @@ async function saveSurface(surface,agent,items){
       image_alt:String(x.image_alt||'').trim()||null,
       weather_location:String(x.weather_location||'').trim()||null,
       source_title:String(x.source_title||'').trim()||null,
-      source_url:/^https?:\/\//i.test(String(x.source_url||'').trim())?String(x.source_url).trim():null
+      source_url:/^https?:\/\//i.test(String(x.source_url||'').trim())?String(x.source_url).trim():null,
+      why:String(x.why||'').trim()||null
     },
+    lifecycle_state:'new',
     expires_at:new Date(Date.now()+12*60*60*1000).toISOString()
   }));
   const {data,error}=await sb.from('minds_surface_items').insert(rows).select('*');
@@ -186,11 +188,12 @@ async function feedStory(item,state,question='',history=[]){
   const sourceTitle=String(item?.source_title||item?.metadata?.source_title||'').trim();
   const entities=Array.isArray(item?.entities)?item.entities:(Array.isArray(item?.metadata?.entities)?item.metadata.entities:[]);
   const transcript=(history||[]).slice(-10).map(m=>(m.role==='user'?'Gari':'MINDS')+': '+String(m.text||'')).join('\n\n');
-  const task=question?`Responde la pregunta del usuario sobre esta noticia: ${question}`:'Amplía esta noticia con contexto actualizado: qué ocurrió, antecedentes relevantes, actores, por qué importa y qué conviene observar después.';
+  const task=question?`Responde la pregunta del usuario sobre esta tarjeta: ${question}`:'Amplía esta tarjeta con contexto actualizado: qué ocurrió o qué significa, antecedentes relevantes, actores, por qué importa y qué conviene observar después.';
   const prompt=`Estás dentro del detalle de una tarjeta del Feed de MINDS. Esta conversación está SEPARADA del chat personal de Isabella y no debe presentarse como una conversación privada con ella.
 
 Título: ${String(item?.title||'')}
 Resumen de la tarjeta: ${String(item?.body||'')}
+Razón de personalización: ${String(item?.why||item?.metadata?.why||'')}
 Fuente inicial: ${sourceTitle}${sourceUrl?' — '+sourceUrl:''}
 Entidades: ${JSON.stringify(entities)}
 ${transcript?'Conversación de esta tarjeta:\n'+transcript:''}
@@ -201,8 +204,8 @@ Investiga con web_search cuando haga falta información actual. Distingue hechos
   return ask(prompt,state,{background:true,surface:true});
 }
 async function ideas(state,{force=false}={}){
-  if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=2))return cached}
-  const prompt='Genera máximo 4 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. No son tareas obligatorias: son propuestas útiles que quizá no haya pensado pedir. Puedes incluir COMO MÁXIMO una idea con kind:"isabella_improvement": una autoevaluación concreta de algo que Isabella podría hacer mejor para ayudarle, basada en fricción observada, feedback o una práctica de interacción que merezca investigar. Si hace falta, usa web_search para contrastar patrones de asistentes o UX, pero no copies productos ni inventes evidencia. Esa mejora debe poder discutirse y, si es una regla de comportamiento o workflow, adoptarse solo después de confirmación explícita del usuario; no prometas autoeditar código. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"kind":"idea"|"isabella_improvement","title":"...","body":"...","action_prompt":"...","icon":"..."}. Para isabella_improvement, action_prompt debe empezar por "Quiero revisar esta mejora de Isabella:" y resumir la mejora. Evita consejos genéricos y transacciones. Cada idea debe explicar por qué aparece ahora.';
+  if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=3))return cached}
+  const prompt='Genera máximo 4 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. Las Ideas tienen ciclo de vida: pueden discutirse, dormirse, descartarse y reaparecer más tarde si nueva evidencia las vuelve relevantes. No son tareas obligatorias. Puedes incluir COMO MÁXIMO una idea con kind:"isabella_improvement": una autoevaluación concreta de algo que Isabella podría hacer mejor para ayudarle, basada en fricción observada, feedback o una práctica de interacción que merezca investigar. También puedes incluir COMO MÁXIMO una idea con kind:"research_candidate" cuando exista una pregunta que Isabella podría investigar en segundo plano y que tenga valor personal claro. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"kind":"idea"|"isabella_improvement"|"research_candidate","title":"...","body":"...","action_prompt":"...","icon":"...","why":"por qué esta idea aparece ahora"}. Para isabella_improvement, action_prompt debe empezar por "Quiero revisar esta mejora de Isabella:". Para research_candidate, action_prompt debe empezar por "Quiero explorar esta investigación:". Evita consejos genéricos y transacciones. Cada idea debe tener una razón concreta de aparición.';
   const result=await ask(prompt,state,{background:true,surface:true});
   const items=parseSurface(result?.reply);
   return saveSurface('idea','isabella',items);
