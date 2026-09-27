@@ -18,6 +18,7 @@ function nextTaskOrder(date){const key=date||null,xs=state.tasks.filter(t=>(t.da
 function mutation(entityType,action,before,after,source='manual'){
   const entityKey=(after||before)?.id;
   if(!entityKey)return;
+  if(['event','task','project'].includes(String(entityType||'')))try{localStorage.setItem('isabella-feed-dirty','1')}catch{}
   try{window.dispatchEvent(new CustomEvent('isabella:mutation',{detail:{entityType,entityKey,action,source,before:clone(before),after:clone(after)}}))}catch{}
 }
 function proposalFeedback(outcome,proposal){
@@ -192,10 +193,10 @@ async function maybeCuriosityQuestion(){
 async function maybePrewarmFeed(){
   try{
     if(!window.ISABELLA_AI?.startFeedRefresh)return;
-    const key='isabella-feed-prewarm-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
-    if(now-last<6*60*60*1000)return;
+    const key='isabella-feed-prewarm-at',last=Number(localStorage.getItem(key)||0),now=Date.now(),dirty=localStorage.getItem('isabella-feed-dirty')==='1';
+    if(!dirty&&now-last<3*60*60*1000)return;
     const result=await window.ISABELLA_AI.startFeedRefresh(state,{force:false,currentItems:feedItems||[]});
-    if(result?.accepted||result?.skipped)localStorage.setItem(key,String(now));
+    if(result?.accepted||result?.skipped){localStorage.setItem(key,String(now));localStorage.removeItem('isabella-feed-dirty')}
   }catch{}
 }
 async function maybePrewarmResearch(){
@@ -602,10 +603,11 @@ async function renderFeed(force=false){
     const hasCurrent=(cached||[]).some(x=>Number(x?.metadata?.surface_version||0)>=11);
     if(status&&(force||!hasCurrent))status.textContent='Reevaluando tu situación…';
     const request=await window.ISABELLA_AI?.startFeedRefresh?.(state,{force,currentItems:visible});
-    if(!request||request.skipped){if(status)status.textContent='';return}
+    if(!request||request.skipped){try{localStorage.removeItem('isabella-feed-dirty')}catch{}if(status)status.textContent='';return}
     if(status)status.textContent='Reevaluando tu situación…';
     const result=await window.ISABELLA_AI?.waitForFeedRefresh?.(request.generation_id,{timeoutMs:90000,intervalMs:1600});
     if(result?.status==='succeeded'){
+      try{localStorage.removeItem('isabella-feed-dirty')}catch{}
       const fresh=result.items||await window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[];
       if(fresh.length)renderFeedItems(fresh);
       if(status){status.textContent='Al día';setTimeout(()=>{if(status.textContent==='Al día')status.textContent=''},1800)}

@@ -79,8 +79,14 @@ function parseSurface(raw){
   return [];
 }
 function feedPreferenceSignature(state){
-  const p=state.feedPreferences||{};
-  const raw=JSON.stringify({instructions:String(p.instructions||''),weatherLocation:String(p.weatherLocation||'')});
+  const p=state.feedPreferences||{},stable=x=>[...(x||[])].sort((a,b)=>String(a?.id||a?.client_key||a?.name||'').localeCompare(String(b?.id||b?.client_key||b?.name||'')));
+  const raw=JSON.stringify({
+    date:new Date().toISOString().slice(0,10),
+    instructions:String(p.instructions||''),weatherLocation:String(p.weatherLocation||''),
+    events:stable(state.events).map(x=>({id:x.id||x.client_key,title:x.title,date:x.date,start:x.start,end:x.end,allDay:!!x.allDay,projectId:x.projectId||null})),
+    tasks:stable(state.tasks).filter(x=>!x.archivedAt).map(x=>({id:x.id||x.client_key,title:x.title,date:x.date||null,done:!!x.done,reminder:x.reminderTime||x.reminder_time||null,projectId:x.projectId||null})),
+    projects:stable(state.projects).map(x=>({id:x.id,name:x.name,categoryId:x.categoryId||null}))
+  });
   let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
   return 'feed11-'+(h>>>0).toString(16);
 }
@@ -144,7 +150,7 @@ async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
   const cached=await loadSurface('feed','isabella',{allowStale:true});
   const newest=cached[0]?.generated_at?Date.parse(cached[0].generated_at):0;
   const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=11&&String(x?.metadata?.preference_signature||'')===signature);
-  if(!force&&cacheMatches&&newest&&Date.now()-newest<4*60*60*1000){
+  if(!force&&cacheMatches&&newest&&Date.now()-newest<2*60*60*1000){
     return {accepted:false,skipped:true,generation_id:cached[0]?.metadata?.generation_id||null,signature,items:cached};
   }
   const currentTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
