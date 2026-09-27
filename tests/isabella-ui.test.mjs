@@ -334,7 +334,7 @@ test('Build 29 Feed cache is preference-aware and refresh has visible state',()=
   assert.ok(ai.includes('function feedPreferenceSignature'));
   assert.ok(ai.includes("functions.invoke('isabella-feed'"));
   assert.ok(ai.includes("preference_signature:signature"));
-  assert.ok(app.includes("status.textContent='Actualizando…'"));
+  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando Feed…'"));
   assert.ok(shell.includes('id="feedRefreshStatus"'));
 });
 
