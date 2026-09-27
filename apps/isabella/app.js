@@ -129,7 +129,7 @@ function itemColor(item){
   return fallbackColor(item?.projectId||item?.categoryId||item?.id||'item');
 }
 function dayColors(date){
-  const items=[...state.events.filter(x=>x.date===date),...state.tasks.filter(x=>x.date===date&&activeTask(x))];
+  const items=[...state.events.filter(x=>x.date===date),...state.tasks.filter(x=>x.date===date&&!x.archivedAt)];
   return [...new Set(items.map(itemColor).filter(Boolean))].slice(0,4);
 }
 function formatMessageText(text){
@@ -1241,9 +1241,9 @@ function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('activ
 function agendaRow(kind,item){
   const category=cat(item.categoryId),proj=item.projectId?' · '+project(item.projectId):'';
   const time=kind==='event'?item.start:'Todo el día';
-  const color=itemColor(item);
-  return `<div class="agenda-item ${kind}-item ${kind==='task'?'task-item':''}" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0" style="--item-color:${color}">
-    <span class="adot"></span>
+  const color=itemColor(item),done=kind==='task'&&!!item.done;
+  return `<div class="agenda-item ${kind}-item ${kind==='task'?'task-item':''} ${done?'task-done':''}" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0" style="--item-color:${color}">
+    ${kind==='task'?`<button class="task-check ${done?'checked':''}" data-task-toggle="${item.id}" aria-label="${done?'Marcar pendiente':'Marcar hecha'}">${done?'✓':''}</button>`:'<span class="adot"></span>'}
     <div class="agenda-main"><strong>${esc(item.title)}</strong><div class="meta">${esc(category)}${esc(proj)}</div></div>
     <div class="agenda-tail"><div class="atime">${esc(time)}</div>${kind==='task'?'<button class="drag-handle" aria-label="Mantén y arrastra para reordenar">⋮⋮</button>':''}</div>
   </div>`;
@@ -1261,7 +1261,7 @@ function month(){
   }
   h+='</div>';
   const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start));
-  const ta=state.tasks.filter(x=>x.date===state.date&&activeTask(x)).sort(taskOrder);
+  const ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
   if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
   for(const e of ev)h+=agendaRow('event',e);
@@ -1274,26 +1274,27 @@ function month(){
 function week(){
   const s=startWeek(fromIso(state.date));let h='<div class="week">';
   for(let i=0;i<7;i++){
-    const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&activeTask(x)).sort(taskOrder);
-    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">○ ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+    const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
+    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function day(){
-  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&activeTask(x)).sort(taskOrder);
-  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry task-item" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
+  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
+  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry task-item ${t.done?'task-done':''}" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓ ':'○ '}${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
   for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;
   for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="top:${top}px;height:${height}px;--item-color:${itemColor(e)}"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></button>`}
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function bindCalendarItems(){
-  $$('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
+  document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTaskDone(b.dataset.taskToggle)});
+  $('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
     if(el.dataset.bound)return;el.dataset.bound='1';
     let sx=0,sy=0,moved=false;
-    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
+    el.addEventListener('touchstart',e=>{if(e.target.closest('.task-check'))return;if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
     el.addEventListener('touchmove',e=>{const t=e.touches[0];if(Math.abs(t.clientX-sx)>12||Math.abs(t.clientY-sy)>12)moved=true;e.stopPropagation()},{passive:true});
-    el.addEventListener('touchend',e=>{const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.dragActive==='1'||el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')completeTask(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
-    el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle'))return;editItem(el.dataset.kind,el.dataset.id)});
+    el.addEventListener('touchend',e=>{if(e.target.closest('.task-check'))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.dragActive==='1'||el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')toggleTaskDone(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
+    el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle,.task-check'))return;editItem(el.dataset.kind,el.dataset.id)});
   });
   initTaskDrag();
   initEventDrag();
@@ -1302,12 +1303,12 @@ function itemBy(kind,id){return (kind==='task'?state.tasks:state.events).find(x=
 function itemActions(kind,id){
   const item=itemBy(kind,id);if(!item)return;
   const archive=kind==='task'?'<button id="quickArchive" class="sheet-action">Archivar</button>':'';
-  const complete=kind==='task'?'<button id="quickComplete" class="sheet-action">Marcar como hecha</button>':'';
+  const complete=kind==='task'?'<button id="quickComplete" class="sheet-action">'+(item.done?'Marcar como pendiente':'Marcar como hecha')+'</button>':'';
   modal(item.title,`<div class="sheet-actions">${complete}<button id="quickEdit" class="sheet-action">Editar / mover</button><button id="quickDuplicate" class="sheet-action">Duplicar</button>${archive}<button id="quickDelete" class="sheet-action danger">Eliminar</button></div>`);
   $('#quickEdit').onclick=()=>editItem(kind,id);
   $('#quickDuplicate').onclick=()=>duplicateItem(kind,id);
   if(kind==='task'){
-    $('#quickComplete').onclick=()=>completeTask(id);
+    $('#quickComplete').onclick=()=>toggleTaskDone(id);
     $('#quickArchive').onclick=()=>archiveTask(id);
   }
   $('#quickDelete').onclick=()=>deleteItem(kind,id);
@@ -1349,10 +1350,14 @@ function duplicateItem(kind,id){
   else state.events.push(copy);
   mutation(kind,'create',null,copy,'manual');save();renderCalendar();closeModal();
 }
-function completeTask(id){
+function toggleTaskDone(id){
   const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
-  t.done=true;t.completedAt=new Date().toISOString();
-  mutation('task','complete',before,t,'manual');save();renderCalendar();closeModal();
+  t.done=!t.done;t.completedAt=t.done?new Date().toISOString():null;
+  mutation('task',t.done?'complete':'reopen',before,t,'manual');save();renderCalendar();
+  if(!$('#modal')?.classList.contains('hidden'))closeModal();
+}
+function completeTask(id){
+  const t=state.tasks.find(x=>x.id===id);if(!t||t.done)return;toggleTaskDone(id);
 }
 function archiveTask(id){
   const t=state.tasks.find(x=>x.id===id);if(!t)return;const before=clone(t);
@@ -1470,19 +1475,32 @@ function initEventDrag(){
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
 function tasksPanel(){
-  const active=state.tasks.filter(t=>!t.archivedAt);
-  const undated=active.filter(t=>!t.date).sort(taskOrder);
-  const dated=active.filter(t=>!!t.date).sort((a,b)=>String(a.date).localeCompare(String(b.date))||taskOrder(a,b));
-  const archived=state.tasks.filter(t=>t.archivedAt).sort((a,b)=>String(b.archivedAt).localeCompare(String(a.archivedAt)));
-  let body='<div class="small section-label">Sin fecha</div>';
-  body+=undated.length?undated.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>Sin fecha · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas sin fecha.</div>';
-  body+='<div class="small section-label task-dated-label">Programadas</div>';
-  body+=dated.length?dated.map(t=>`<button class="task-panel-row" data-edit-task="${t.id}"><span class="${t.done?'done-text':''}">${esc(t.title)}</span><small>${esc(t.date)} · ${esc(cat(t.categoryId))}</small></button>`).join(''):'<div class="small empty-panel">No hay tareas programadas.</div>';
-  body+='<div class="small section-label archived-label">Archivadas</div>';
-  body+=archived.length?archived.map(t=>`<div class="task-panel-row archived"><span>${esc(t.title)}</span><button data-restore-task="${t.id}">Restaurar</button></div>`).join(''):'<div class="small empty-panel">No hay tareas archivadas.</div>';
+  const pending=state.tasks.filter(t=>!t.archivedAt&&!t.done);
+  const undated=pending.filter(t=>!t.date).length;
+  const groups=state.categories.map(c=>({id:'category:'+c.id,name:c.name,color:c.color||fallbackColor(c.id),count:pending.filter(t=>t.categoryId===c.id).length}));
+  let body='<div class="task-groups">';
+  body+=`<button class="task-group-card smart" data-task-group="undated"><span><strong>Sin fecha</strong><small>Backlog sin programar</small></span><b>${undated}</b></button>`;
+  body+=groups.map(g=>`<button class="task-group-card" data-task-group="${esc(g.id)}" style="--group-color:${esc(g.color)}"><span><strong>${esc(g.name)}</strong><small>Lista</small></span><b>${g.count}</b></button>`).join('');
+  body+='</div>';
   modal('Tareas',body);
-  $$('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
-  $$('[data-restore-task]').forEach(x=>x.onclick=e=>{e.stopPropagation();restoreTask(x.dataset.restoreTask)});
+  document.querySelectorAll('[data-task-group]').forEach(b=>b.onclick=()=>taskGroupPanel(b.dataset.taskGroup||''));
+}
+function taskGroupPanel(group){
+  const all=state.tasks.filter(t=>!t.archivedAt);
+  const isUndated=group==='undated',categoryId=group.startsWith('category:')?group.slice(9):null;
+  const title=isUndated?'Sin fecha':(state.categories.find(c=>c.id===categoryId)?.name||'Tareas');
+  const filtered=all.filter(t=>isUndated?!t.date:t.categoryId===categoryId);
+  const pending=filtered.filter(t=>!t.done).sort((a,b)=>(a.date?0:1)-(b.date?0:1)||String(a.date||'').localeCompare(String(b.date||''))||taskOrder(a,b));
+  const done=filtered.filter(t=>t.done).sort((a,b)=>String(b.completedAt||'').localeCompare(String(a.completedAt||'')));
+  const row=t=>`<div class="task-list-row ${t.done?'done':''}"><button class="task-list-check ${t.done?'checked':''}" data-list-task-toggle="${t.id}" aria-label="${t.done?'Marcar pendiente':'Marcar hecha'}">${t.done?'✓':''}</button><button class="task-list-main" data-edit-task="${t.id}"><span>${esc(t.title)}</span><small>${t.date?esc(t.date):'Sin fecha'}${t.projectId?' · '+esc(project(t.projectId)):''}</small></button></div>`;
+  let body='<button class="task-list-back" id="taskListBack">‹ Listas</button>';
+  body+='<div class="small section-label">Pendientes</div>';
+  body+=pending.length?pending.map(row).join(''):'<div class="small empty-panel">No hay tareas pendientes en esta lista.</div>';
+  if(done.length){body+='<div class="small section-label task-done-label">Hechas</div>'+done.map(row).join('')}
+  modal(title,body);
+  $('#taskListBack').onclick=tasksPanel;
+  document.querySelectorAll('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
+  document.querySelectorAll('[data-list-task-toggle]').forEach(x=>x.onclick=e=>{e.stopPropagation();const id=x.dataset.listTaskToggle;const t=state.tasks.find(y=>y.id===id);if(!t)return;const before=clone(t);t.done=!t.done;t.completedAt=t.done?new Date().toISOString():null;mutation('task',t.done?'complete':'reopen',before,t,'manual');save();taskGroupPanel(group)});
 }
 function newPanel(){
   modal('Agregar manualmente',`<div class="form">

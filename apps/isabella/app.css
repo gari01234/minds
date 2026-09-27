@@ -731,3 +731,17 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
   .composer{gap:6px}
   .attach,.mic,.send{width:40px;height:40px}
 }
+
+
+/* Task lists + visible completion state */
+.task-groups{display:grid;gap:10px;padding-top:4px}
+.task-group-card{display:grid;grid-template-columns:1fr auto;align-items:center;gap:14px;width:100%;border:1px solid color-mix(in srgb,var(--group-color,#bbb) 28%,#eee);background:color-mix(in srgb,var(--group-color,#bbb) 7%,#fff);border-radius:20px;padding:17px 18px;text-align:left}
+.task-group-card.smart{--group-color:#8e8e93}
+.task-group-card span{display:grid;gap:4px}.task-group-card strong{font-size:18px}.task-group-card small{font-size:11px;color:#999}.task-group-card>b{min-width:34px;height:34px;border-radius:99px;display:grid;place-items:center;background:#fff;font-size:14px}
+.task-list-back{border:0;background:transparent;padding:0 0 12px;color:#777;font-size:13px}
+.task-list-row{display:grid;grid-template-columns:34px 1fr;align-items:center;border-bottom:1px solid var(--line);padding:7px 0}
+.task-list-check,.task-check{width:27px;height:27px;border-radius:50%;border:1.5px solid #bbb;background:#fff;display:grid;place-items:center;font-size:13px}
+.task-list-check.checked,.task-check.checked{background:#111;color:#fff;border-color:#111}
+.task-list-main{border:0;background:transparent;text-align:left;padding:9px 2px;display:grid;gap:4px}.task-list-main span{font-size:16px}.task-list-main small{font-size:11px;color:#999}
+.task-list-row.done .task-list-main span,.task-done strong,.witem.task-done,.pill.task-done{text-decoration:line-through;color:#999}
+.task-done-label{margin-top:22px}.agenda-item.task-done{opacity:.68}.agenda-item .task-check{margin-top:1px}
