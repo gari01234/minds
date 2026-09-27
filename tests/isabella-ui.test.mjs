@@ -431,14 +431,15 @@ test('Build 41 morning brief uses weather and situational observations without n
   assert.ok(ai.includes('No incluyas noticias generales'));
 });
 
-test('Build 34 runs a small autonomous research queue and surfaces finished work',()=>{
+test('Build 41 keeps autonomous research available without turning Feed into a research inbox',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(ai.includes("functions.invoke('isabella-research'"));
   assert.ok(ai.includes("from('isabella_research_queue')"));
+  assert.ok(ai.includes('async function startResearch'));
+  assert.ok(ai.includes('async function loadResearchReady'));
   assert.ok(app.includes('maybePrewarmResearch'));
-  assert.ok(app.includes('Avances de Isabella'));
-  assert.ok(app.includes('researchItems'));
+  assert.ok(!app.includes('Avances de Isabella'));
 });
 
 test('Build 34 reactivates sleeping ideas when their return date arrives',()=>{
