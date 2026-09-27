@@ -88,7 +88,7 @@ function feedPreferenceSignature(state){
   });
   let h=2166136261;
   for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
-  return 'feed8-'+(h>>>0).toString(16);
+  return 'feed9-'+(h>>>0).toString(16);
 }
 async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
@@ -104,7 +104,7 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?8:surface==='idea'?2:1,
+      surface_version:surface==='feed'?9:surface==='idea'?2:1,
       preference_signature:String(x.preference_signature||x.metadata?.preference_signature||'').trim()||null,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
@@ -121,39 +121,64 @@ async function saveSurface(surface,agent,items){
   const {data,error}=await sb.from('minds_surface_items').insert(rows).select('*');
   return error?items:(data||items);
 }
-async function loadSurface(surface,agent=null){
+async function loadSurface(surface,agent=null,options={}){
   if(!sb)return [];
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
   let q=sb.from('minds_surface_items').select('*')
-    .eq('surface',surface).eq('status','active').gt('expires_at',new Date().toISOString());
+    .eq('surface',surface).eq('status','active');
+  if(surface!=='feed'&&!options.allowStale)q=q.gt('expires_at',new Date().toISOString());
   if(agent)q=q.eq('agent',agent);
   const {data,error}=await q.order('generated_at',{ascending:false}).limit(40);
   if(error)return [];
   const rows=data||[],generation=rows.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id;
   return generation?rows.filter(x=>x?.metadata?.generation_id===generation):rows;
 }
-async function feed(state,{force=false,currentItems=[]}={}){
-  if(!sb)return [];
+async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
+  if(!sb)return {accepted:false,skipped:true,generation_id:null};
   const signature=feedPreferenceSignature(state);
-  const cached=await loadSurface('feed','isabella');
-  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=8&&String(x?.metadata?.preference_signature||'')===signature);
-  if(!force&&cacheMatches)return cached;
-  const weakSignals=(state.feedSignals||[]).slice(-30).map(x=>({kind:x.kind,title:x.title,entities:x.entities||[],at:x.at}));
+  const cached=await loadSurface('feed','isabella',{allowStale:true});
+  const newest=cached[0]?.generated_at?Date.parse(cached[0].generated_at):0;
+  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=9&&String(x?.metadata?.preference_signature||'')===signature);
+  if(!force&&cacheMatches&&newest&&Date.now()-newest<2*60*60*1000){
+    return {accepted:false,skipped:true,generation_id:cached[0]?.metadata?.generation_id||null,signature,items:cached};
+  }
   const currentTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
   const {data,error}=await sb.functions.invoke('isabella-feed',{body:{
     context:compact(state),
-    signals:weakSignals,
     current_titles:currentTitles,
     force:!!force,
     preference_signature:signature
   }});
-  if(error||data?.error){
-    if(force)throw new Error(data?.detail||data?.error||error?.message||'No pude actualizar el Feed.');
-    return cached;
+  if(error||data?.error)throw new Error(data?.detail||data?.error||error?.message||'No pude iniciar la actualización del Feed.');
+  return {accepted:!!data?.accepted,skipped:false,generation_id:data?.generation_id||null,status:data?.status||'queued',signature,reused:!!data?.reused};
+}
+async function feedJobStatus(generationId){
+  if(!sb||!generationId)return null;
+  const {data,error}=await sb.from('minds_feed_jobs')
+    .select('generation_id,status,error,created_at,started_at,completed_at')
+    .eq('generation_id',generationId)
+    .maybeSingle();
+  if(error)return null;
+  return data||null;
+}
+async function waitForFeedRefresh(generationId,{timeoutMs=90000,intervalMs=1600}={}){
+  if(!generationId)return null;
+  const started=Date.now();
+  while(Date.now()-started<timeoutMs){
+    const job=await feedJobStatus(generationId);
+    if(job?.status==='succeeded'){
+      const rows=await loadSurface('feed','isabella',{allowStale:true});
+      const exact=rows.filter(x=>String(x?.metadata?.generation_id||'')===String(generationId));
+      return {status:'succeeded',items:exact.length?exact:rows,job};
+    }
+    if(job?.status==='failed')throw new Error(job.error||'No pude actualizar el Feed.');
+    await new Promise(r=>setTimeout(r,intervalMs));
   }
-  const fresh=await loadSurface('feed','isabella');
-  if(fresh.length)return fresh;
-  if(force)throw new Error('La edición se generó pero no apareció en el Feed.');
+  return {status:'pending',items:await loadSurface('feed','isabella',{allowStale:true}),job:await feedJobStatus(generationId)};
+}
+async function feed(state,{force=false,currentItems=[]}={}){
+  const cached=await loadSurface('feed','isabella',{allowStale:true});
+  try{await startFeedRefresh(state,{force,currentItems})}catch{}
   return cached;
 }
 async function feedStory(item,state,question='',history=[]){
@@ -220,5 +245,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,feedStory,ideas,sofiaSurface,loadSurface};
+window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,feedStory,ideas,sofiaSurface,loadSurface};
 })();

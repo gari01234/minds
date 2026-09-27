@@ -60,3 +60,10 @@ Ideas puede incluir una autoevaluación de Isabella. Si el usuario acepta una me
 El Feed ya no espera a terminar una generación completa para mostrar algo: primero recupera y pinta de inmediato cualquier edición válida de Isabella o Sofía y después completa la portada en segundo plano. La actualización de Sofía no bloquea el refresh de noticias.
 
 La función `isabella-feed` persiste la edición directamente en Supabase y devuelve una respuesta mínima al navegador. Esto elimina el punto frágil anterior en el que Safari tenía que recibir una respuesta grande y volver a insertarla desde el cliente. La generación inicial se reduce a 4–6 tarjetas compactas; el contexto largo se investiga al abrir una noticia. La constelación extensa rota por muestras de entidades en lugar de intentar revisar decenas de nombres en cada refresh.
+
+
+### Build 31 — refresh asíncrono, stale-while-revalidate y prewarm
+
+El Feed deja de usar una petición HTTP larga. `isabella-feed` crea un trabajo en `minds_feed_jobs`, responde de inmediato y continúa la investigación mediante `EdgeRuntime.waitUntil`. El navegador sigue el estado del trabajo y reemplaza la portada cuando la nueva edición ya está materializada en Supabase.
+
+La interfaz conserva y muestra la última edición disponible aunque haya vencido mientras se revalida en segundo plano. MINDS también inicia un prewarm del Feed después de sincronizar, como máximo una vez cada tres horas, para que la generación pueda ocurrir mientras el usuario está usando Chat, Calendario u otra sección.

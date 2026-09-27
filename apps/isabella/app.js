@@ -192,7 +192,17 @@ async function maybeCuriosityQuestion(){
   }catch{}
   return false;
 }
+async function maybePrewarmFeed(){
+  try{
+    if(!window.ISABELLA_AI?.startFeedRefresh)return;
+    const key='isabella-feed-prewarm-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
+    if(now-last<3*60*60*1000)return;
+    const result=await window.ISABELLA_AI.startFeedRefresh(state,{force:false,currentItems:feedItems||[]});
+    if(result?.accepted||result?.skipped)localStorage.setItem(key,String(now));
+  }catch{}
+}
 async function afterSync(){
+  void maybePrewarmFeed();
   const nudged=await maybeProactiveNudge();
   if(!nudged)await maybeCuriosityQuestion();
 }
@@ -288,29 +298,36 @@ async function renderFeed(force=false){
   const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
   let visible=[...feedItems];
   if(force&&refresh){refresh.disabled=true;refresh.classList.add('refreshing');refresh.textContent='…'}
-  if(!visible.length){
-    box.innerHTML='<div class="surface-loading">Abriendo tu Feed…</div>';
-    try{
-      const [cachedA,cachedB]=await Promise.all([
-        window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],
-        window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]
-      ]);
-      visible=dedupeFeedItems([...(cachedA||[]),...(cachedB||[])]);
-      if(visible.length)renderFeedItems(visible);
-    }catch{}
-  }
-  const hasIsabella=visible.some(x=>String(x?.agent||'')==='isabella');
-  if(status&&(force||!hasIsabella))status.textContent=force?'Actualizando…':'Completando Feed…';
   try{
-    const [a,b]=await Promise.all([
-      window.ISABELLA_AI?.feed?.(state,{force,currentItems:visible})||[],
-      window.ISABELLA_AI?.sofiaSurface?.('feed',{force:false})||[]
+    const [cachedA,cachedB]=await Promise.all([
+      window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[],
+      window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[]
     ]);
-    const fresh=dedupeFeedItems([...(a||[]),...(b||[])]);
-    if(fresh.length)renderFeedItems(fresh);
-    else if(visible.length)renderFeedItems(visible);
-    else box.innerHTML='<div class="surface-empty">No encontré una edición disponible ahora mismo.</div>';
-    if(status&&(force||!hasIsabella)){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
+    visible=dedupeFeedItems([...(cachedA||[]),...(cachedB||[]),...visible]);
+    if(visible.length)renderFeedItems(visible);
+    else box.innerHTML='<div class="surface-loading">Abriendo tu Feed…</div>';
+
+    const hasCurrentIsabella=(cachedA||[]).some(x=>Number(x?.metadata?.surface_version||0)>=9);
+    if(status&&(force||!hasCurrentIsabella))status.textContent=force?'Actualizando…':'Completando en segundo plano…';
+
+    const request=await window.ISABELLA_AI?.startFeedRefresh?.(state,{force,currentItems:visible});
+    if(!request||request.skipped){
+      if(status)status.textContent='';
+      return;
+    }
+
+    if(status)status.textContent='Actualizando en segundo plano…';
+    const result=await window.ISABELLA_AI?.waitForFeedRefresh?.(request.generation_id,{timeoutMs:90000,intervalMs:1600});
+    if(result?.status==='succeeded'){
+      const latestA=result.items||await window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[];
+      const latestB=await window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[];
+      const fresh=dedupeFeedItems([...(latestA||[]),...(latestB||[])]);
+      if(fresh.length)renderFeedItems(fresh);
+      if(status){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
+    }else if(result?.status==='pending'){
+      if(status)status.textContent='Se terminará de actualizar en segundo plano';
+      setTimeout(()=>{if(status.textContent==='Se terminará de actualizar en segundo plano')status.textContent=''},4500);
+    }
   }catch(err){
     if(visible.length)renderFeedItems(visible);else box.innerHTML='<div class="surface-empty">No pude completar el Feed ahora mismo.</div>';
     if(status){status.textContent='No pude actualizar';setTimeout(()=>{if(status.textContent==='No pude actualizar')status.textContent=''},2600)}
@@ -1337,6 +1354,7 @@ function categoriesPanel(){
     save();renderCalendar();closeModal();
   };
 }
+window.addEventListener('isabella:synced',()=>{void afterSync()});
 window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
   replaceState:(next)=>{state={...base,...next};state.messages=normalizeMessages(state.messages);save();renderMessages(true);renderToday();renderCalendar();show(state.screen||'assistant')},
