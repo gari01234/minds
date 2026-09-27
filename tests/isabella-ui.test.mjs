@@ -365,7 +365,7 @@ test('Build 30 Feed renders cached content before slow generation and reloads se
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('Abriendo tu Feed…'));
   assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
-  assert.ok(app.includes("sofiaSurface?.('feed',{force:false})"));
+  assert.ok(app.includes("loadSurface?.('feed','sofia',{allowStale:true})"));
   assert.ok(ai.includes("const cached=await loadSurface('feed','isabella',{allowStale:true})"));
   assert.ok(ai.includes("surface_version:surface==='feed'?9"));
   assert.ok(ai.includes("return 'feed9-'"));
