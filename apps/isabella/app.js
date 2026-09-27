@@ -793,6 +793,7 @@ function restoreAssistantScroll(snapshot,force=false){
   else if(Number.isFinite(snapshot?.scrollTop))scroller.scrollTop=snapshot.scrollTop;
   scroller.dataset.initialScroll='1';
 }
+function scrollAssistantToLatest(force=false){restoreAssistantScroll({nearBottom:true},force)}
 function renderMessages(forceBottom=false){
   const box=$('#messages'),snapshot=captureAssistantScroll();
   state.messages=normalizeMessages(state.messages);
