@@ -506,7 +506,7 @@ function bindSurfaceActions(){
       setTimeout(()=>handle(prompt),80);
     }
   });
-  $$('.weather-toggle').forEach(b=>b.onclick=()=>{
+  document.querySelectorAll('.weather-toggle').forEach(b=>b.onclick=()=>{
     const card=b.closest('.weather-card'),week=card?.querySelector('.weather-week');if(!week)return;
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
@@ -1406,7 +1406,7 @@ function day(){
 }
 function bindCalendarItems(){
   document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTaskDone(b.dataset.taskToggle)});
-  $$('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
+  document.querySelectorAll('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
     if(el.dataset.bound)return;el.dataset.bound='1';
     let sx=0,sy=0,moved=false;
     el.addEventListener('touchstart',e=>{if(e.target.closest('.task-check'))return;if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
