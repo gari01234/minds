@@ -188,7 +188,7 @@ test('Build 22 keeps Feed generations stable and conversations inside Feed',()=>
   assert.ok(app.includes('feedThreads'));
   assert.ok(!app.includes('data-news-more'));
   assert.ok(ai.includes('generation_id:generationId'));
-  assert.ok(ai.includes("const fresh=await loadSurface('feed','isabella')"));
+  assert.ok(ai.includes("const cached=await loadSurface('feed','isabella',{allowStale:true})"));
   assert.ok(ai.includes('async function feedStory'));
   assert.ok(shell.includes('id="feedDetail"'));
   assert.ok(shell.includes('Preguntar sobre esto...'));
@@ -229,11 +229,11 @@ test('browser entry scripts are syntactically valid JavaScript',()=>{
 test('Build 24 refresh requests a genuinely new Feed edition',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes("feed?.(state,{force,currentItems:visible})"));
+  assert.ok(app.includes("startFeedRefresh?.(state,{force,currentItems:visible})"));
   assert.ok(ai.includes('currentItems=[]'));
   assert.ok(ai.includes("force:!!force"));
   assert.ok(ai.includes('current_titles:currentTitles'));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando Feed…'"));
+  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
 });
 
 test('Build 24 news detail can render immediate context and optional verified media',()=>{
@@ -334,7 +334,7 @@ test('Build 29 Feed cache is preference-aware and refresh has visible state',()=
   assert.ok(ai.includes('function feedPreferenceSignature'));
   assert.ok(ai.includes("functions.invoke('isabella-feed'"));
   assert.ok(ai.includes("preference_signature:signature"));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando Feed…'"));
+  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
   assert.ok(shell.includes('id="feedRefreshStatus"'));
 });
 
@@ -364,9 +364,9 @@ test('Build 30 Feed renders cached content before slow generation and reloads se
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('Abriendo tu Feed…'));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando Feed…'"));
+  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
   assert.ok(app.includes("sofiaSurface?.('feed',{force:false})"));
-  assert.ok(ai.includes("const fresh=await loadSurface('feed','isabella')"));
+  assert.ok(ai.includes("const cached=await loadSurface('feed','isabella',{allowStale:true})"));
   assert.ok(ai.includes("surface_version:surface==='feed'?9"));
   assert.ok(ai.includes("return 'feed9-'"));
 });
