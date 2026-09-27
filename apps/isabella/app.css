@@ -745,3 +745,20 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 .task-list-main{border:0;background:transparent;text-align:left;padding:9px 2px;display:grid;gap:4px}.task-list-main span{font-size:16px}.task-list-main small{font-size:11px;color:#999}
 .task-list-row.done .task-list-main span,.task-done strong,.witem.task-done,.pill.task-done{text-decoration:line-through;color:#999}
 .task-done-label{margin-top:22px}.agenda-item.task-done{opacity:.68}.agenda-item .task-check{margin-top:1px}
+
+
+/* Build 38 — isolated idea workspaces */
+.idea-workspace{position:fixed;inset:0;background:#fff;z-index:26;display:flex;flex-direction:column;padding:calc(18px + env(safe-area-inset-top,0px)) 22px calc(14px + var(--safe))}
+.idea-workspace-head{display:flex;align-items:center;justify-content:space-between;flex:none}.idea-workspace-status{font-size:9px;letter-spacing:.12em;color:#999;margin-top:5px;font-weight:700}
+.idea-workspace-scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;padding:18px 2px 130px}
+.idea-workspace h1{font-family:"Iowan Old Style",Georgia,serif;font-size:38px;line-height:1.02;margin:8px 0 16px;max-width:680px}
+.idea-workspace-brief{font-size:17px;line-height:1.5;color:#666;max-width:680px;margin:0 0 22px}
+.idea-workspaces-section{margin-bottom:28px}.idea-workspace-cards{display:grid;gap:10px}
+.idea-workspace-card{border:1px solid var(--line);border-radius:18px;background:#fff;padding:15px 16px;display:grid;gap:5px;text-align:left}
+.idea-workspace-card-state{font-size:9px;letter-spacing:.12em;color:#999;font-weight:700}.idea-workspace-card strong{font-size:17px}.idea-workspace-card>span:last-child{font-size:11px;color:#999}
+.idea-workspace-artifact{border:1px solid #e5e5e7;border-radius:18px;padding:15px 16px;margin:0 0 24px;background:#fafafa}
+.idea-artifact-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.idea-artifact-head>div:first-child{display:grid;gap:4px}.idea-artifact-head span{font-size:9px;letter-spacing:.12em;color:#999}.idea-artifact-head strong{font-size:16px}.idea-artifact-head button{border:0;background:#fff;border-radius:99px;padding:7px 10px;font-size:11px;margin-left:5px}
+.idea-workspace-artifact pre{margin:0;white-space:pre-wrap;font:13px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Arial,sans-serif;color:#333;max-height:42dvh;overflow:auto}
+.idea-workspace-thread{display:grid;gap:12px;max-width:680px}.idea-workspace-message{font-size:15px;line-height:1.48;white-space:pre-wrap}.idea-workspace-message.user{justify-self:end;max-width:82%;background:#f4f4f5;border-radius:17px;padding:10px 13px}.idea-workspace-message.assistant{padding:2px 0}
+.idea-workspace-form{position:absolute;left:0;right:0;bottom:0;padding:16px 22px calc(12px + var(--safe));background:linear-gradient(to top,#fff 82%,rgba(255,255,255,0));display:flex;gap:8px}.idea-workspace-form textarea{flex:1;border:1px solid #e5e5e7;border-radius:24px;resize:none;padding:12px 15px;min-height:48px;max-height:132px;background:#fff}.idea-workspace-form.working{opacity:.65;pointer-events:none}
+@media(max-width:520px){.idea-workspace{padding-left:20px;padding-right:20px}.idea-workspace h1{font-size:34px}.idea-artifact-head{display:grid}.idea-artifact-head button{margin-left:0;margin-right:5px}}

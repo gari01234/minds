@@ -510,3 +510,29 @@ test('Build 37 allows private photo attachments in Isabella chat',()=>{
   assert.ok(app.includes('hydrateChatImages'));
   assert.ok(ai.includes('attachments:Array.isArray(options.attachments)'));
 });
+
+
+test('Build 38 organizes tasks as lists with drill-down and completion toggles',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('task-group-card'));
+  assert.ok(app.includes('function taskGroupPanel(group)'));
+  assert.ok(app.includes('function toggleTaskDone(id)'));
+  assert.ok(app.includes('data-task-toggle'));
+});
+
+test('Build 38 uses a dedicated Feed detail worker',()=>{
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes("functions.invoke('isabella-feed-story'"));
+  assert.ok(ai.includes('45000'));
+});
+
+test('Build 38 gives accepted Ideas persistent isolated workspaces and deliverables',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  const shell=read('apps/isabella/shell.js');
+  assert.ok(shell.includes('id="ideaWorkspace"'));
+  assert.ok(app.includes("from('minds_idea_workspaces')"));
+  assert.ok(app.includes("from('minds_idea_messages')"));
+  assert.ok(app.includes('artifact_content'));
+  assert.ok(ai.includes("functions.invoke('minds-idea-worker'"));
+});

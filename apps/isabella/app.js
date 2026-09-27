@@ -293,7 +293,7 @@ function surfaceCard(item,surface){
       ${feedStory?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
       ${feedStory&&why?`<button class="surface-why" data-why-key="${esc(itemKey)}">¿Por qué esto?</button>`:''}
       ${feedStory&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}" ${idea?`data-idea-open="${esc(itemKey)}"`:''}>${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
+      ${idea?`<button class="surface-discuss" data-idea-workspace="${esc(itemKey)}">${improvement?'Revisar mejora':'Desarrollar idea'}</button>`:(!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:'')}
     </div>
     ${feedStory?`<div class="surface-feedback"><button class="${feedback==='liked'?'active':''}" data-feed-feedback="liked" data-feed-item="${esc(itemKey)}">Me gusta</button><button data-feed-feedback="not_relevant" data-feed-item="${esc(itemKey)}">No es relevante</button><button class="danger-text" data-feed-feedback="dismissed" data-feed-item="${esc(itemKey)}">Eliminar</button></div>`:''}
     ${idea?`<div class="surface-feedback idea-lifecycle"><button data-idea-sleep="${esc(itemKey)}">Dormir</button><button class="danger-text" data-idea-dismiss="${esc(itemKey)}">Descartar</button></div>`:''}
@@ -350,11 +350,121 @@ async function updateIdeaLifecycle(item,lifecycle,status='active'){
   const id=dbSurfaceId(item),sb=window.MINDS_SUPABASE;if(!id||!sb)return;
   try{await sb.from('minds_surface_items').update({lifecycle_state:lifecycle,status}).eq('id',id)}catch{}
 }
+function ideaWorkspaceCard(w){
+  const artifact=String(w.artifact_content||'').trim();
+  return `<button class="idea-workspace-card" data-open-idea-workspace="${esc(w.id)}"><span class="idea-workspace-card-state">${w.status==='done'?'HECHO':'EN CURSO'}</span><strong>${esc(w.title||'Idea')}</strong><span>${artifact?'Entregable en desarrollo':'Espacio de trabajo'} · ${new Date(w.updated_at||w.created_at||Date.now()).toLocaleDateString('es-ES')}</span></button>`;
+}
+async function loadIdeaWorkspaces(){
+  const sb=window.MINDS_SUPABASE;if(!sb)return [];
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return [];
+    const {data,error}=await sb.from('minds_idea_workspaces').select('*').in('status',['active','done']).order('updated_at',{ascending:false}).limit(24);
+    if(error)throw error;
+    return data||[];
+  }catch{return []}
+}
+function bindIdeaWorkspaceCards(){
+  document.querySelectorAll('[data-open-idea-workspace]').forEach(b=>b.onclick=()=>void openIdeaWorkspace(b.dataset.openIdeaWorkspace||''));
+}
 function renderIdeaItems(items){
   const box=$('#ideasList');if(!box)return;
   ideaItems=(items||[]).filter(Boolean);
-  box.innerHTML=ideaItems.length?ideaItems.map(x=>surfaceCard(x,'idea')).join(''):'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
-  bindSurfaceActions();
+  const active=(ideaWorkspaces||[]).filter(w=>w.status==='active');
+  const workHtml=active.length?`<section class="idea-workspaces-section"><h2 class="feed-section-title">En curso</h2><div class="idea-workspace-cards">${active.map(ideaWorkspaceCard).join('')}</div></section>`:'';
+  const ideasHtml=ideaItems.length?`<section class="idea-suggestions-section"><h2 class="feed-section-title">${active.length?'Nuevas ideas':'Ideas'}</h2>${ideaItems.map(x=>surfaceCard(x,'idea')).join('')}</section>`:'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
+  box.innerHTML=workHtml+ideasHtml;
+  bindSurfaceActions();bindIdeaWorkspaceCards();
+}
+async function openIdeaWorkspaceFromIdea(key){
+  const item=surfaceItemByKey(key);if(!item)return;
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session){say('assistant','Conecta la memoria para abrir un espacio de trabajo persistente.');return}
+    const sourceId=dbSurfaceId(item);
+    let workspace=null;
+    if(sourceId){
+      const {data}=await sb.from('minds_idea_workspaces').select('*').eq('source_item_id',sourceId).maybeSingle();
+      workspace=data||null;
+    }
+    if(!workspace){
+      const {data,error}=await sb.from('minds_idea_workspaces').insert({
+        user_id:session.user.id,source_item_id:sourceId,title:String(item.title||'Idea'),brief:String(item.body||''),
+        why:String(item.why||item.metadata?.why||''),agent:String(item.agent||'minds'),status:'active'
+      }).select('*').single();
+      if(error)throw error;workspace=data;
+      await updateIdeaLifecycle(item,'active','active');
+      ideaWorkspaces=[workspace,...ideaWorkspaces.filter(x=>x.id!==workspace.id)];
+    }
+    await openIdeaWorkspace(workspace.id,{kickoff:true});
+  }catch(e){modal('Idea','<div class="small">No pude abrir este espacio de trabajo ahora mismo.</div>')}
+}
+async function openIdeaWorkspace(id,{kickoff=false}={}){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  try{
+    const [{data:workspace,error:werr},{data:messages,error:merr}]=await Promise.all([
+      sb.from('minds_idea_workspaces').select('*').eq('id',id).single(),
+      sb.from('minds_idea_messages').select('id,role,content,sources,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(120)
+    ]);
+    if(werr||merr||!workspace)throw werr||merr||new Error('Workspace not found');
+    activeIdeaWorkspace={...workspace,messages:messages||[]};
+    $('#ideaWorkspace').classList.remove('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','false');document.body.classList.add('idea-workspace-open');
+    renderIdeaWorkspace();
+    if(kickoff&&!activeIdeaWorkspace.messages.length){
+      await runIdeaWorkspace('Empieza a desarrollar esta idea. Si ya puedes producir una primera versión útil del entregable, hazlo ahora; pregunta solo si falta una decisión realmente necesaria.',{kickoff:true});
+    }
+  }catch(e){modal('Idea','<div class="small">No pude cargar este espacio de trabajo.</div>')}
+}
+function closeIdeaWorkspace(){
+  $('#ideaWorkspace').classList.add('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','true');document.body.classList.remove('idea-workspace-open');activeIdeaWorkspace=null;
+}
+function renderIdeaWorkspace(){
+  const w=activeIdeaWorkspace;if(!w)return;
+  $('#ideaWorkspaceTitle').textContent=w.title||'Idea';
+  $('#ideaWorkspaceBrief').textContent=w.brief||'';
+  $('#ideaWorkspaceStatus').textContent=w.status==='done'?'HECHO':'EN CURSO';
+  const artifact=$('#ideaWorkspaceArtifact'),content=String(w.artifact_content||'').trim();
+  if(content){
+    artifact.classList.remove('hidden');
+    artifact.innerHTML=`<div class="idea-artifact-head"><div><span>ENTREGABLE</span><strong>${esc(w.artifact_title||'Documento')}</strong></div><div><button id="copyIdeaArtifact">Copiar</button><button id="downloadIdeaArtifact">Descargar .md</button></div></div><pre>${esc(content)}</pre>`;
+    $('#copyIdeaArtifact').onclick=()=>navigator.clipboard?.writeText(content);
+    $('#downloadIdeaArtifact').onclick=()=>downloadIdeaArtifact(w);
+  }else{artifact.classList.add('hidden');artifact.innerHTML=''}
+  const thread=$('#ideaWorkspaceThread');
+  thread.innerHTML=(w.messages||[]).map(m=>`<div class="idea-workspace-message ${m.role}"><div>${formatMessageText(m.content||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
+  requestAnimationFrame(()=>{const sc=$('#ideaWorkspaceScroll');if(sc)sc.scrollTop=sc.scrollHeight});
+}
+function downloadIdeaArtifact(w){
+  const content=String(w?.artifact_content||'');if(!content)return;
+  const blob=new Blob([content],{type:'text/markdown;charset=utf-8'}),url=URL.createObjectURL(blob),a=document.createElement('a');
+  a.href=url;a.download=(String(w.artifact_title||w.title||'entregable').replace(/[^a-z0-9áéíóúüñ_-]+/gi,'-').replace(/^-|-$/g,'')||'entregable')+'.md';
+  a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+async function runIdeaWorkspace(message,{kickoff=false}={}){
+  const w=activeIdeaWorkspace,sb=window.MINDS_SUPABASE;if(!w||!sb||!message)return;
+  const form=$('#ideaWorkspaceForm'),input=$('#ideaWorkspaceInput');
+  try{
+    form?.classList.add('working');
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    if(!kickoff){
+      const {data,error}=await sb.from('minds_idea_messages').insert({workspace_id:w.id,user_id:session.user.id,role:'user',content:message,sources:[]}).select('id,role,content,sources,created_at').single();
+      if(error)throw error;w.messages.push(data);renderIdeaWorkspace();
+    }
+    const result=await window.ISABELLA_AI?.ideaWork?.(w,message,w.messages||[]);
+    if(result?.artifact?.content){
+      const patch={artifact_title:String(result.artifact.title||w.title||'Entregable'),artifact_content:String(result.artifact.content),artifact_format:'markdown',updated_at:new Date().toISOString()};
+      const {error}=await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);if(error)throw error;Object.assign(w,patch);
+    }else{
+      const patch={updated_at:new Date().toISOString()};await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);Object.assign(w,patch);
+    }
+    if(result?.reply){
+      const {data,error}=await sb.from('minds_idea_messages').insert({workspace_id:w.id,user_id:session.user.id,role:'assistant',content:result.reply,sources:result.sources||[]}).select('id,role,content,sources,created_at').single();
+      if(error)throw error;w.messages.push(data);
+    }
+    ideaWorkspaces=[{...w,messages:undefined},...ideaWorkspaces.filter(x=>x.id!==w.id)];
+    renderIdeaWorkspace();
+  }catch(e){
+    if(!kickoff){w.messages.push({id:uid(),role:'assistant',content:'No pude avanzar este espacio ahora mismo. Inténtalo otra vez.',sources:[],created_at:new Date().toISOString()});renderIdeaWorkspace()}
+  }finally{form?.classList.remove('working');if(input)input.focus()}
 }
 function sleepIdea(key){
   const item=surfaceItemByKey(key);if(!item)return;
@@ -382,12 +492,12 @@ function bindSurfaceActions(){
   document.querySelectorAll('[data-news-key]').forEach(b=>b.onclick=()=>openFeedStory(b.dataset.newsKey||''));
   document.querySelectorAll('[data-why-key]').forEach(b=>b.onclick=()=>{const key=b.dataset.whyKey||'',copy=document.querySelector('[data-why-copy="'+CSS.escape(key)+'"]');if(!copy)return;const opening=copy.classList.contains('hidden');copy.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar razón':'¿Por qué esto?'});
   document.querySelectorAll('[data-feed-feedback]').forEach(b=>b.onclick=()=>{const item=surfaceItemByKey(b.dataset.feedItem||'');if(item)void persistSurfaceFeedback(item,b.dataset.feedFeedback||'')});
+  document.querySelectorAll('[data-idea-workspace]').forEach(b=>b.onclick=()=>void openIdeaWorkspaceFromIdea(b.dataset.ideaWorkspace||''));
   document.querySelectorAll('[data-idea-sleep]').forEach(b=>b.onclick=()=>sleepIdea(b.dataset.ideaSleep||''));
   document.querySelectorAll('[data-idea-dismiss]').forEach(b=>b.onclick=()=>void dismissIdea(b.dataset.ideaDismiss||''));
   document.querySelectorAll('[data-feed-source]').forEach(a=>a.onclick=()=>{const item=feedItems.find(x=>feedStoryKey(x)===(a.dataset.feedSource||''));if(item)recordFeedSignal('source_opened',item)});
   document.querySelectorAll('[data-surface-prompt]').forEach(b=>b.onclick=()=>{
-    const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella',ideaKey=b.dataset.ideaOpen||'';
-    if(ideaKey){const item=surfaceItemByKey(ideaKey);if(item)void updateIdeaLifecycle(item,'pending','active')}
+    const prompt=b.dataset.surfacePrompt||'',agent=b.dataset.surfaceAgent||'isabella';
     if(agent==='sofia'){
       show('readings');
       setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-prompt',prompt},location.origin),220);
@@ -396,12 +506,12 @@ function bindSurfaceActions(){
       setTimeout(()=>handle(prompt),80);
     }
   });
-  $$('.weather-toggle').forEach(b=>b.onclick=()=>{
+  $('.weather-toggle').forEach(b=>b.onclick=()=>{
     const card=b.closest('.weather-card'),week=card?.querySelector('.weather-week');if(!week)return;
     const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);b.textContent=opening?'Ocultar semana':'Ver semana';
   });
 }
-let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],researchItems=[],activeFeedStory=null;
+let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],ideaWorkspaces=[],researchItems=[],activeFeedStory=null,activeIdeaWorkspace=null;
 function dedupeFeedItems(items){
   return (items||[]).filter(Boolean).filter((x,i,arr)=>{
     const key=feedStoryKey(x)||String(x.id||x.title||'');
@@ -560,10 +670,12 @@ async function renderIdeas(force=false){
   const box=$('#ideasList');if(!box||ideasBusy)return;ideasBusy=true;
   box.innerHTML='<div class="surface-loading">Buscando conexiones útiles…</div>';
   try{
-    const [a,b]=await Promise.all([
+    const [a,b,workspaces]=await Promise.all([
       window.ISABELLA_AI?.ideas?.(state,{force})||[],
-      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[]
+      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[],
+      loadIdeaWorkspaces()
     ]);
+    ideaWorkspaces=workspaces||[];
     const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
     renderIdeaItems(items);
   }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
@@ -1159,6 +1271,12 @@ function bind(){
  feedThreadInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();feedThreadForm.requestSubmit()}});
  feedThreadForm.onsubmit=e=>{e.preventDefault();const q=feedThreadInput.value.trim();if(!q)return;feedThreadInput.value='';autosizeFeedThread();submitFeedStoryQuestion(q)};
  $('#openSofiaButton').onclick=()=>openSofia();
+ $('#closeIdeaWorkspace').onclick=closeIdeaWorkspace;
+ const ideaWorkspaceInput=$('#ideaWorkspaceInput'),ideaWorkspaceForm=$('#ideaWorkspaceForm');
+ const autosizeIdeaWorkspace=()=>{ideaWorkspaceInput.style.height='auto';ideaWorkspaceInput.style.height=Math.min(ideaWorkspaceInput.scrollHeight,132)+'px'};
+ ideaWorkspaceInput.addEventListener('input',autosizeIdeaWorkspace);autosizeIdeaWorkspace();
+ ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
+ ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
  $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){

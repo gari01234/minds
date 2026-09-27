@@ -224,24 +224,25 @@ async function loadResearchReady(){
   });
 }
 async function feedStory(item,state,question='',history=[]){
-  const sourceUrl=String(item?.source_url||item?.metadata?.source_url||'').trim();
-  const sourceTitle=String(item?.source_title||item?.metadata?.source_title||'').trim();
-  const entities=Array.isArray(item?.entities)?item.entities:(Array.isArray(item?.metadata?.entities)?item.metadata.entities:[]);
-  const transcript=(history||[]).slice(-10).map(m=>(m.role==='user'?'Gari':'MINDS')+': '+String(m.text||'')).join('\n\n');
-  const task=question?`Responde la pregunta del usuario sobre esta tarjeta: ${question}`:'Amplía esta tarjeta con contexto actualizado: qué ocurrió o qué significa, antecedentes relevantes, actores, por qué importa y qué conviene observar después.';
-  const prompt=`Estás dentro del detalle de una tarjeta del Feed de MINDS. Esta conversación está SEPARADA del chat personal de Isabella y no debe presentarse como una conversación privada con ella.
-
-Título: ${String(item?.title||'')}
-Resumen de la tarjeta: ${String(item?.body||'')}
-Razón de personalización: ${String(item?.why||item?.metadata?.why||'')}
-Fuente inicial: ${sourceTitle}${sourceUrl?' — '+sourceUrl:''}
-Entidades: ${JSON.stringify(entities)}
-${transcript?'Conversación de esta tarjeta:\n'+transcript:''}
-
-${task}
-
-Investiga con web_search cuando haga falta información actual. Distingue hechos confirmados de interpretación. Incluye fuentes verificables. No conviertas esta conversación en una tarea, memoria personal o mensaje del chat de Isabella.`;
-  return ask(prompt,state,{background:true,surface:true});
+  if(!sb)throw new Error('Supabase no está disponible.');
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria para ampliar el Feed.');
+  const request=sb.functions.invoke('isabella-feed-story',{body:{item,question:String(question||''),history:(history||[]).slice(-12)}});
+  const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('La ampliación está tardando demasiado. Inténtalo de nuevo.')),45000));
+  const {data,error}=await Promise.race([request,timeout]);
+  if(error)throw error;
+  if(data?.error)throw new Error(data.detail||data.error);
+  return data||{reply:'',sources:[]};
+}
+async function ideaWork(workspace,message,history=[]){
+  if(!sb)throw new Error('Supabase no está disponible.');
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria para trabajar en esta idea.');
+  const {data,error}=await sb.functions.invoke('minds-idea-worker',{body:{
+    workspace:{id:workspace?.id,title:workspace?.title,brief:workspace?.brief,why:workspace?.why,artifact_title:workspace?.artifact_title,artifact_content:workspace?.artifact_content},
+    message:String(message||''),history:(history||[]).slice(-14)
+  }});
+  if(error)throw error;
+  if(data?.error)throw new Error(data.detail||data.error);
+  return data||{reply:'',artifact:null,sources:[]};
 }
 async function ideas(state,{force=false}={}){
   if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=3))return cached}
@@ -288,5 +289,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,startResearch,loadResearchReady,feedStory,ideas,sofiaSurface,loadSurface};
+window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,startResearch,loadResearchReady,feedStory,ideaWork,ideas,sofiaSurface,loadSurface};
 })();
