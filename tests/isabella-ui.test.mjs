@@ -453,3 +453,19 @@ test('Build 34 reactivates sleeping ideas when their return date arrives',()=>{
   assert.ok(app.includes("from('isabella_return_queue')"));
   assert.ok(app.includes("lifecycle_state:'changed'"));
 });
+
+
+test('Build 35 supports low-friction Isabella quick replies',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('message-quick-replies'));
+  assert.ok(app.includes('data-quick-message'));
+  assert.ok(app.includes('quickReplies:result.quick_replies'));
+  assert.ok(app.includes('handle(q.value)'));
+});
+
+test('Build 35 Feed proposals can confirm weather location cross-links',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('proposalWeatherLocation'));
+  assert.ok(app.includes("weather_location:$('#proposalWeatherLocation').value.trim()"));
+  assert.ok(app.includes("weatherChanged=Object.prototype.hasOwnProperty.call(p,'weather_location')"));
+});

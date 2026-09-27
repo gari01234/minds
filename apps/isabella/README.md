@@ -90,3 +90,12 @@ Ideas incorpora ciclo de vida: discutir, dormir o descartar. Dormir una idea cre
 Isabella mantiene una cola pequeña de investigación autónoma. Como máximo cada doce horas, y solo si encuentra una pregunta externa con valor personal claro, puede abrir una investigación en segundo plano. El trabajo vive en `isabella_research_queue`; al terminar aparece como una cuarta capa del Feed: «Avances de Isabella». No se crea investigación por rellenar espacio.
 
 Las Ideas dormidas con fecha se reactivan automáticamente al cumplirse su periodo y vuelven con estado `changed`. Las Ideas dormidas «hasta nueva evidencia» permanecen en la cola de retorno para una futura reactivación contextual.
+
+
+### Build 35 — conversación narrativa y respuestas rápidas
+
+Isabella puede ofrecer opciones de respuesta breves directamente debajo de un mensaje cuando una confirmación no merece un párrafo. Estas opciones se usan especialmente para confirmar hipótesis operativas y conexiones entre partes de MINDS.
+
+Las propuestas de Feed admiten ahora `weather_location`. Cuando Isabella aprende explícitamente una localidad útil pero el clima no tiene ubicación configurada, debe señalar la conexión y pedir confirmación; solo después prepara el cambio.
+
+El modelo conversacional trata el relato natural del usuario como entrada principal: hechos biográficos y rutinas durables pueden pasar a memoria explícita; detalles episódicos se dejan fuera por defecto; conclusiones operativas se mantienen como hipótesis hasta que su uso estable sea confirmado.

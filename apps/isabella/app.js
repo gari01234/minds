@@ -580,7 +580,15 @@ window.addEventListener('message',e=>{
   $('#readingsScreen')?.classList.toggle('sofia-chat-active',open);
   document.body.classList.toggle('sofia-chat-open',open);
 });
-function say(role,text,meta={}){state.messages.push({id:uid(),role,text,at:new Date().toISOString(),reaction:null,sources:Array.isArray(meta.sources)?meta.sources:[]}); if(state.messages.length>800)state.messages=state.messages.slice(-800);save();renderMessages();}
+function say(role,text,meta={}){
+  state.messages.push({
+    id:uid(),role,text,at:new Date().toISOString(),reaction:null,
+    sources:Array.isArray(meta.sources)?meta.sources:[],
+    quickReplies:Array.isArray(meta.quickReplies)?meta.quickReplies.slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value):[]
+  });
+  if(state.messages.length>800)state.messages=state.messages.slice(-800);
+  save();renderMessages();
+}
 function syncOrbCompact(force=null){
   const scroller=$('.assistant-scroll'),orb=$('#orbButton'),home=$('#orbHome'),dock=$('#orbDock');if(!scroller||!orb||!home||!dock)return;
   const hasUserConversation=state.messages.some(m=>m.role==='user'&&String(m.text||'').trim());
@@ -605,8 +613,14 @@ function renderMessages(forceBottom=false){
   state.messages=normalizeMessages(state.messages);
   syncOrbCompact();
   const nearBottom=scroller?scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140:true;
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}"><span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
+  document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{
+    const m=state.messages.find(x=>x.id===b.dataset.quickMessage),q=m?.quickReplies?.[Number(b.dataset.quickIndex)];
+    if(!m||!q)return;
+    m.quickReplies=[];save();renderMessages();
+    handle(q.value);
+  });
   setTimeout(()=>scrollAssistantToLatest(forceBottom,nearBottom),20);
 }
 function closeReactionPicker(){
@@ -749,6 +763,7 @@ function proposalLabel(p){
     if(add)bits.push('seguir '+add+(add===1?' entidad':' entidades'));
     if(remove)bits.push('dejar de seguir '+remove);
     if(topics)bits.push('añadir '+topics+(topics===1?' tema':' temas'));
+    if(Object.prototype.hasOwnProperty.call(p,'weather_location'))bits.push('clima: '+(p.weather_location||'sin ubicación'));
     return bits.join(' · ');
   }
   if(p.kind==='assistant_preferences'){
@@ -787,6 +802,7 @@ function proposalEditor(p,onDone){
       <label>Dejar de seguir <span class="small">(separado por comas)</span><input id="proposalFeedRemove" value="${esc((p.remove_entities||[]).join(', '))}"></label>
       <label>Añadir temas base <span class="small">(separado por comas)</span><input id="proposalFeedTopics" value="${esc((p.add_topics||[]).join(', '))}"></label>
       <label>Añadir otros temas <span class="small">(separado por comas)</span><input id="proposalFeedCustom" value="${esc((p.add_custom_topics||[]).join(', '))}"></label>
+      <label>Lugar habitual para el clima<input id="proposalWeatherLocation" value="${esc(Object.prototype.hasOwnProperty.call(p,'weather_location')?(p.weather_location||''):(state.feedPreferences?.weatherLocation||''))}" placeholder="Ciudad o localidad"></label>
       <label>Instrucción adicional para el Feed<textarea id="proposalFeedInstructions" rows="3">${esc(p.instructions_append||'')}</textarea></label>
       <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos cambios</button></div>
     </div>`);
@@ -795,7 +811,7 @@ function proposalEditor(p,onDone){
     $('#proposalEditCancel').onclick=()=>onDone?.(null);
     $('#proposalEditSave').onclick=()=>{
       const add_entities=$('#proposalFeedRows .feed-follow-row').map(row=>({name:row.querySelector('[data-follow-name]')?.value.trim()||'',type:row.querySelector('[data-follow-type]')?.value||'other',focus:row.querySelector('[data-follow-focus]')?.value.trim()||''})).filter(x=>x.name);
-      onDone?.({...p,add_entities,remove_entities:split($('#proposalFeedRemove').value),add_topics:split($('#proposalFeedTopics').value),add_custom_topics:split($('#proposalFeedCustom').value),instructions_append:$('#proposalFeedInstructions').value.trim()});
+      onDone?.({...p,add_entities,remove_entities:split($('#proposalFeedRemove').value),add_topics:split($('#proposalFeedTopics').value),add_custom_topics:split($('#proposalFeedCustom').value),instructions_append:$('#proposalFeedInstructions').value.trim(),weather_location:$('#proposalWeatherLocation').value.trim()});
     };
     return;
   }
@@ -948,10 +964,11 @@ function applyFeedPreferencesProposal(p){
   let instructions=String(prefs.instructions||'').trim(),extra=String(p.instructions_append||'').trim();
   if(extra&&!instructions.toLowerCase().includes(extra.toLowerCase()))instructions=[instructions,extra].filter(Boolean).join('\n');
   graph=graph.filter(x=>x.name).slice(0,120);
-  state.feedPreferences={...prefs,topics,customTopics,followGraph:graph,following:graph.map(x=>x.name),instructions};
+  const weatherLocation=Object.prototype.hasOwnProperty.call(p,'weather_location')?String(p.weather_location||'').trim():String(prefs.weatherLocation||'');
+  state.feedPreferences={...prefs,topics,customTopics,followGraph:graph,following:graph.map(x=>x.name),instructions,weatherLocation};
   save();closeModal();renderFeed(true);
-  const added=(p.add_entities||[]).length,removed=(p.remove_entities||[]).length;
-  say('assistant',`Listo. Actualicé tu Feed${added?' y añadí '+added+(added===1?' seguimiento':' seguimientos'):''}${removed?'; quité '+removed:''}. La próxima edición ya usará esta constelación.`);
+  const added=(p.add_entities||[]).length,removed=(p.remove_entities||[]).length,weatherChanged=Object.prototype.hasOwnProperty.call(p,'weather_location');
+  say('assistant',`Listo. Actualicé tu Feed${added?' y añadí '+added+(added===1?' seguimiento':' seguimientos'):''}${removed?'; quité '+removed:''}${weatherChanged?(weatherLocation?'; usaré '+weatherLocation+' como lugar habitual para el clima':'; dejé el clima sin ubicación habitual'):''}. La próxima edición ya usará estos ajustes.`);
 }
 function applyAssistantPreferencesProposal(p){
   const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
@@ -1028,8 +1045,8 @@ async function handle(text){
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text,state);
       state.pendingIntent=null;
-      if(result?.reply)say('assistant',result.reply,{sources:result.sources||[]});
-      if(result?.question&&result.question!==result.reply)say('assistant',result.question);
+      if(result?.reply)say('assistant',result.reply,{sources:result.sources||[],quickReplies:result.quick_replies||[]});
+      if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
       else if(result?.proposal){state.pendingIntent=null;save();confirmProposal(result.proposal)}
