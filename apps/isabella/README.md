@@ -99,3 +99,8 @@ Isabella puede ofrecer opciones de respuesta breves directamente debajo de un me
 Las propuestas de Feed admiten ahora `weather_location`. Cuando Isabella aprende explícitamente una localidad útil pero el clima no tiene ubicación configurada, debe señalar la conexión y pedir confirmación; solo después prepara el cambio.
 
 El modelo conversacional trata el relato natural del usuario como entrada principal: hechos biográficos y rutinas durables pueden pasar a memoria explícita; detalles episódicos se dejan fuera por defecto; conclusiones operativas se mantienen como hipótesis hasta que su uso estable sea confirmado.
+
+
+### Build 36 — saneamiento del contrato de memoria
+
+La sincronización normaliza recuerdos locales heredados antes de enviarlos a Supabase. Los tipos legacy se traducen al contrato persistente (`fact`, `person`, `routine`, `episodic`, `preference`, `context`) y las memorias marcadas localmente como `deleted` dejan de reinsertarse. Así un recuerdo antiguo en localStorage no puede bloquear toda la sincronización con `isabella_memories_kind_check`.

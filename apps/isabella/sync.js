@@ -10,6 +10,9 @@ const localDateTime=(date,time)=>new Date(date+'T'+(time||'09:00')+':00');
 const pad=n=>String(n).padStart(2,'0');
 const isoDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
 const timeOf=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const MEMORY_KINDS=new Set(['fact','person','routine','episodic','preference','context']);
+const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'preference',interaction:'preference',constraint:'context',goal:'context',priority:'context',value:'preference',project:'context',relation:'context',relationship:'person',work:'context',identity:'fact',note:'context',other:'context'};
+function normalizeMemoryKind(kind){const k=String(kind||'context').trim().toLowerCase();return MEMORY_KINDS.has(k)?k:(MEMORY_KIND_ALIASES[k]||'context')}
 function apiError(e){return e?.message||String(e||'Error desconocido')}
 async function init(){
   if(!sb||!app){setStatus('Memoria local · Supabase no disponible');if(authButton)authButton.textContent='Memoria local';return}
@@ -130,7 +133,7 @@ async function pushState(state,maps){
     const {error}=await sb.from('isabella_events').delete().eq('user_id',user.id).in('client_key',state.deletedEventIds);
     if(error)throw error;
   }
-  const memories=(state.memory||[]).map((m,i)=>({user_id:user.id,client_key:typeof m==='object'?(m.id||'memory-'+i):'memory-'+i,kind:typeof m==='object'?(m.kind||'context'):'context',subject:typeof m==='object'?(m.subject||null):null,content:typeof m==='object'?(m.content||''):String(m),status:typeof m==='object'?(m.status||'active'):'active',confidence:typeof m==='object'?(m.confidence??1):1,source:typeof m==='object'?(m.source||'conversation'):'conversation',metadata:typeof m==='object'?(m.metadata||{}):{}})).filter(x=>x.content);
+  const memories=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted').map((m,i)=>({user_id:user.id,client_key:typeof m==='object'?(m.id||'memory-'+i):'memory-'+i,kind:typeof m==='object'?normalizeMemoryKind(m.kind):'context',subject:typeof m==='object'?(m.subject||null):null,content:typeof m==='object'?(m.content||''):String(m),status:typeof m==='object'&&['active','corrected','rejected','archived'].includes(String(m.status||''))?m.status:'active',confidence:Math.max(0,Math.min(1,Number(typeof m==='object'?(m.confidence??1):1))),source:typeof m==='object'?(m.source||'conversation'):'conversation',metadata:typeof m==='object'?(m.metadata||{}):{}})).filter(x=>x.content);
   if(memories.length){
     const {error}=await sb.from('isabella_memories').upsert(memories,{onConflict:'user_id,client_key'});
     if(error)throw error;

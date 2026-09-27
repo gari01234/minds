@@ -10,6 +10,9 @@ const today=()=>iso(new Date());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=x=>x==null?null:JSON.parse(JSON.stringify(x));
 const activeTask=t=>!t.done&&!t.archivedAt;
+const MEMORY_KINDS=new Set(['fact','person','routine','episodic','preference','context']);
+const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'preference',interaction:'preference',constraint:'context',goal:'context',priority:'context',value:'preference',project:'context',relation:'context',relationship:'person',work:'context',identity:'fact',note:'context',other:'context'};
+function normalizeMemoryKind(kind){const k=String(kind||'context').trim().toLowerCase();return MEMORY_KINDS.has(k)?k:(MEMORY_KIND_ALIASES[k]||'context')}
 const taskOrder=(a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))||String(a.title||'').localeCompare(String(b.title||''),'es');
 function nextTaskOrder(date){const xs=state.tasks.filter(t=>t.date===date&&!t.archivedAt);return xs.length?Math.max(...xs.map(t=>Number(t.sortOrder||0)))+10:10}
 function mutation(entityType,action,before,after,source='manual'){
@@ -96,6 +99,7 @@ function load(){try{
   }
   x.feedThreads=x.feedThreads&&typeof x.feedThreads==='object'&&!Array.isArray(x.feedThreads)?x.feedThreads:{};
   x.feedSignals=Array.isArray(x.feedSignals)?x.feedSignals:[];
+  x.memory=(Array.isArray(x.memory)?x.memory:[]).map((m,i)=>{if(typeof m!=='object')return {id:'memory-'+i,kind:'context',content:String(m),status:'active',confidence:1,source:'local'};return {...m,kind:normalizeMemoryKind(m.kind),status:m.status==='deleted'?'deleted':(m.status||'active')}});
   if(x.feedPreferences.topics.includes('Noticias que sigo')&&!x.feedPreferences.topics.includes('Noticias')){
     x.feedPreferences.topics=x.feedPreferences.topics.map(t=>t==='Noticias que sigo'?'Noticias':t);
   }
@@ -750,7 +754,7 @@ function bindMessageReactions(){
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
-function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:m.kind||'context',content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
+function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:normalizeMemoryKind(m.kind),content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
   if(p.kind==='routine'){
     const days=p.schedule_kind==='weekly'&&Array.isArray(p.weekdays)&&p.weekdays.length?(' · '+p.weekdays.map(d=>['dom','lun','mar','mié','jue','vie','sáb'][Number(d)]||d).join(', ')):'';
