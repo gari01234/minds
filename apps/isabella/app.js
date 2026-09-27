@@ -419,24 +419,38 @@ function closeIdeaWorkspace(){
 function artifactMarkup(a,compact=false){
   const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
   if(!path)return '';
-  if(kind==='image')return `<figure class="generated-artifact generated-image ${compact?'compact':''}"><img data-artifact-image="${esc(path)}" alt="${esc(title)}"><figcaption><span>IMAGEN</span><strong>${esc(title)}</strong></figcaption></figure>`;
+  if(kind==='image')return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`;
   const label=kind==='docx'?'WORD':kind==='pdf'?'PDF':kind.toUpperCase();
   return `<a class="generated-artifact generated-file ${compact?'compact':''}" data-artifact-file="${esc(path)}" href="#" target="_blank" rel="noopener"><span>${esc(label)}</span><strong>${esc(title)}</strong><em>Abrir archivo ↗</em></a>`;
 }
-async function hydrateArtifactFiles(){
-  const nodes=[...document.querySelectorAll('[data-artifact-image],[data-artifact-file]')].filter(x=>!x.dataset.loaded);
-  if(!nodes.length)return;
-  const sb=window.MINDS_SUPABASE;if(!sb)return;
+async function artifactSignedUrl(path,expires=3600){
+  const sb=window.MINDS_SUPABASE;if(!sb||!path)return '';
   try{
-    const {data:{session}}=await sb.auth.getSession();if(!session)return;
-    await Promise.all(nodes.map(async node=>{
-      const path=node.dataset.artifactImage||node.dataset.artifactFile;if(!path)return;
-      const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,3600);
-      if(!data?.signedUrl)return;
-      if(node.matches('img'))node.src=data.signedUrl;else node.href=data.signedUrl;
-      node.dataset.loaded='1';
-    }));
-  }catch{}
+    const {data:{session}}=await sb.auth.getSession();if(!session)return '';
+    const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,expires);
+    return data?.signedUrl||'';
+  }catch{return ''}
+}
+async function openArtifactImage(path,title='Imagen'){
+  const url=await artifactSignedUrl(path,3600);if(!url)return;
+  modal(title,`<div class="artifact-image-viewer"><img src="${esc(url)}" alt="${esc(title)}"></div>`);
+  $('#modal')?.classList.add('artifact-image-modal');
+}
+function bindArtifactActions(root=document){
+  root.querySelectorAll?.('[data-artifact-open-image]').forEach(b=>{
+    b.onclick=()=>void openArtifactImage(String(b.dataset.artifactOpenImage||''),String(b.dataset.artifactTitle||'Imagen'));
+  });
+}
+async function hydrateArtifactFiles(root=document){
+  const nodes=[...root.querySelectorAll('[data-artifact-image],[data-artifact-file]')].filter(x=>!x.dataset.loaded);
+  if(!nodes.length){bindArtifactActions(root);return}
+  await Promise.all(nodes.map(async node=>{
+    const path=node.dataset.artifactImage||node.dataset.artifactFile;if(!path)return;
+    const signed=await artifactSignedUrl(path,3600);if(!signed)return;
+    if(node.matches('img'))node.src=signed;else node.href=signed;
+    node.dataset.loaded='1';
+  }));
+  bindArtifactActions(root);
 }
 function renderIdeaWorkspace(){
   const w=activeIdeaWorkspace;if(!w)return;
@@ -760,19 +774,29 @@ function syncOrbCompact(force=null){
   if(orb.parentElement!==target)target.appendChild(orb);
   dock.setAttribute('aria-hidden',docked?'false':'true');
 }
-function scrollAssistantToLatest(force=false,wasNearBottom=null){
-  const scroller=$('.assistant-scroll');if(!scroller)return;
-  const near=wasNearBottom===null?(scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140):wasNearBottom;
-  if(force||near||!scroller.dataset.initialScroll){
-    scroller.scrollTop=scroller.scrollHeight;
-    scroller.dataset.initialScroll='1';
+function captureAssistantScroll(){
+  const scroller=$('.assistant-scroll'),box=$('#messages');if(!scroller||!box)return {nearBottom:true};
+  const nearBottom=scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140;
+  if(nearBottom)return {nearBottom:true};
+  const top=scroller.getBoundingClientRect().top;
+  const anchor=[...box.querySelectorAll('.message')].find(el=>el.getBoundingClientRect().bottom>top+8);
+  return {nearBottom:false,id:anchor?.dataset.messageId||'',offset:anchor?anchor.getBoundingClientRect().top-top:0,scrollTop:scroller.scrollTop};
+}
+function restoreAssistantScroll(snapshot,force=false){
+  const scroller=$('.assistant-scroll'),box=$('#messages');if(!scroller||!box)return;
+  if(force||snapshot?.nearBottom||!scroller.dataset.initialScroll){
+    scroller.scrollTop=scroller.scrollHeight;scroller.dataset.initialScroll='1';return;
   }
+  const top=scroller.getBoundingClientRect().top;
+  const anchor=[...box.querySelectorAll('.message')].find(el=>el.dataset.messageId===snapshot?.id);
+  if(anchor){scroller.scrollTop+=anchor.getBoundingClientRect().top-top-Number(snapshot.offset||0)}
+  else if(Number.isFinite(snapshot?.scrollTop))scroller.scrollTop=snapshot.scrollTop;
+  scroller.dataset.initialScroll='1';
 }
 function renderMessages(forceBottom=false){
-  const box=$('#messages'),scroller=$('.assistant-scroll');
+  const box=$('#messages'),snapshot=captureAssistantScroll();
   state.messages=normalizeMessages(state.messages);
   syncOrbCompact();
-  const nearBottom=scroller?scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140:true;
   box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>`<img data-chat-image-path="${esc(a.path||'')}" alt="${esc(a.name||'Foto')}">`).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
@@ -782,7 +806,7 @@ function renderMessages(forceBottom=false){
     m.quickReplies=[];save();renderMessages();
     handle(q.value);
   });
-  setTimeout(()=>scrollAssistantToLatest(forceBottom,nearBottom),20);
+  requestAnimationFrame(()=>restoreAssistantScroll(snapshot,forceBottom));
 }
 function closeReactionPicker(){
   document.querySelector('.reaction-popover')?.remove();
@@ -1301,7 +1325,7 @@ function bind(){
    catch(e){say('assistant',e?.message||'No pude enviar la foto.')}
    finally{$('#sendButton').disabled=false;attachButton.disabled=false}
  };
- $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send()}});autosize();
+ $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
  $$('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  $('#refreshFeed').onclick=()=>renderFeed(true);
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
@@ -1310,14 +1334,14 @@ function bind(){
  const feedThreadInput=$('#feedThreadInput'),feedThreadForm=$('#feedThreadForm');
  const autosizeFeedThread=()=>{feedThreadInput.style.height='auto';feedThreadInput.style.height=Math.min(feedThreadInput.scrollHeight,132)+'px'};
  feedThreadInput.addEventListener('input',autosizeFeedThread);autosizeFeedThread();
- feedThreadInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();feedThreadForm.requestSubmit()}});
+ feedThreadInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();feedThreadForm.requestSubmit()}});
  feedThreadForm.onsubmit=e=>{e.preventDefault();const q=feedThreadInput.value.trim();if(!q)return;feedThreadInput.value='';autosizeFeedThread();submitFeedStoryQuestion(q)};
  $('#openSofiaButton').onclick=()=>openSofia();
  $('#closeIdeaWorkspace').onclick=closeIdeaWorkspace;
  const ideaWorkspaceInput=$('#ideaWorkspaceInput'),ideaWorkspaceForm=$('#ideaWorkspaceForm');
  const autosizeIdeaWorkspace=()=>{ideaWorkspaceInput.style.height='auto';ideaWorkspaceInput.style.height=Math.min(ideaWorkspaceInput.scrollHeight,132)+'px'};
  ideaWorkspaceInput.addEventListener('input',autosizeIdeaWorkspace);autosizeIdeaWorkspace();
- ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
+ ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
  ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
  $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
@@ -1632,8 +1656,20 @@ function initEventDrag(){
     row.addEventListener('touchcancel',finish,{passive:true});
   });
 }
-function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+async function artifactsPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
+  modal('Artefactos','<div class="surface-loading">Cargando artefactos…</div>');
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    const {data,error}=await sb.from('minds_artifacts').select('id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at').order('created_at',{ascending:false}).limit(100);
+    if(error)throw error;
+    const rows=data||[];
+    $('#modalBody').innerHTML=rows.length?`<div class="artifact-library">${rows.map(a=>`<div class="artifact-library-item"><div class="artifact-library-meta"><span>${esc(a.source_kind==='idea'?'TRABAJO':'CHAT')}</span><time>${new Date(a.created_at).toLocaleDateString('es-ES')}</time></div>${artifactMarkup(a)}</div>`).join('')}</div>`:'<div class="small">Todavía no hay artefactos generados.</div>';
+    await hydrateArtifactFiles($('#modalBody'));
+  }catch{$('#modalBody').innerHTML='<div class="small">No pude cargar los artefactos ahora mismo.</div>'}
+}
 async function aiUsagePanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Uso IA','<div class="small">Conecta la memoria para medir el uso de MINDS.</div>');return}
   modal('Uso IA','<div class="surface-loading">Leyendo consumo…</div>');

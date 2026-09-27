@@ -545,13 +545,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.27.43'));
+  assert.ok(shell.includes('Build 2026.09.27.44'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=39'));
-  assert.ok(index.includes('shell.js?v=43'));
-  assert.ok(index.includes('app.js?v=52'));
+  assert.ok(index.includes('app.css?v=40'));
+  assert.ok(index.includes('shell.js?v=44'));
+  assert.ok(index.includes('app.js?v=53'));
   assert.ok(index.includes('ai.js?v=36'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v50'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v51'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -600,4 +600,29 @@ test('Build 43 preserves Build 42 artifacts and usage observability',()=>{
   assert.ok(ai.includes("functions.invoke('isabella-artifact'"));
   assert.ok(app.includes("from('minds_ai_usage')"));
   assert.ok(shell.includes('data-action="aiusage"'));
+});
+
+
+test('Build 44 makes generated artifacts discoverable and images openable',()=>{
+  const app=read('apps/isabella/app.js');
+  const shell=read('apps/isabella/shell.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(shell.includes('data-action="artifacts"'));
+  assert.ok(app.includes('async function artifactsPanel'));
+  assert.ok(app.includes('openArtifactImage'));
+  assert.ok(app.includes('data-artifact-open-image'));
+  assert.ok(css.includes('.artifact-image-viewer'));
+});
+
+test('Build 44 preserves the reading position while chat rerenders',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('function captureAssistantScroll'));
+  assert.ok(app.includes('function restoreAssistantScroll'));
+  assert.ok(app.includes('requestAnimationFrame(()=>restoreAssistantScroll(snapshot,forceBottom))'));
+});
+
+test('Build 44 Enter inserts a newline and command-enter sends',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("e.key==='Enter'&&(e.metaKey||e.ctrlKey)"));
+  assert.ok(!app.includes("e.key==='Enter'&&!e.shiftKey"));
 });
