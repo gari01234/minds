@@ -174,7 +174,7 @@ async function conversationId(){
 async function pushConversation(messages){
   if(!messages.length)return;
   const cid=await conversationId(),now=new Date().toISOString();
-  const rows=messages.map((m,i)=>({user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],metadata:{app:APP_SCOPE,attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[]},created_at:m.at||now}));
+  const rows=messages.map((m,i)=>({user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],metadata:{app:APP_SCOPE,attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},created_at:m.at||now}));
   const {error}=await sb.from('conversation_messages').upsert(rows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true});
   if(error)throw error;
   await sb.from('conversations').update({updated_at:now}).eq('id',cid).eq('user_id',user.id).eq('app_scope',APP_SCOPE);
@@ -204,7 +204,7 @@ async function pullConversation(){
   if(error||!data?.length)return[];
   const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,metadata,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
   if(me)throw me;
-  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null,sources:Array.isArray(m.metadata?.sources)?m.metadata.sources:[],attachments:Array.isArray(m.metadata?.attachments)?m.metadata.attachments:[]}));
+  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null,sources:Array.isArray(m.metadata?.sources)?m.metadata.sources:[],attachments:Array.isArray(m.metadata?.attachments)?m.metadata.attachments:[],artifacts:Array.isArray(m.metadata?.artifacts)?m.metadata.artifacts:[]}));
 }
 async function recordProposalFeedback(detail){
   try{

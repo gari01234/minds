@@ -546,13 +546,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.27.41'));
+  assert.ok(shell.includes('Build 2026.09.27.42'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=38'));
-  assert.ok(index.includes('shell.js?v=41'));
-  assert.ok(index.includes('app.js?v=50'));
-  assert.ok(index.includes('ai.js?v=34'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v48'"));
+  assert.ok(index.includes('app.css?v=39'));
+  assert.ok(index.includes('shell.js?v=42'));
+  assert.ok(index.includes('app.js?v=51'));
+  assert.ok(index.includes('ai.js?v=35'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v49'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -576,3 +576,6 @@ test('Build 41 shows visible AI activity around action buttons',()=>{
   assert.ok(css.includes('.send.is-working::before'));
   assert.ok(css.includes('@keyframes minds-ai-ring'));
 });
+
+
+test('Build 42 adds real artifacts, selective Ideas, Retomar and usage monitoring',()=>{const app=read('apps/isabella/app.js'),ai=read('apps/isabella/ai.js'),sync=read('apps/isabella/sync.js'),shell=read('apps/isabella/shell.js');assert.equal((app.match(/async function renderIdeas\(force=false\)/g)||[]).length,1);assert.ok(!app.includes("sofiaSurface?.('idea'"));assert.ok(ai.includes("functions.invoke('isabella-ideas'"));assert.ok(ai.includes("functions.invoke('isabella-artifact'"));assert.ok(app.includes('artifactMarkup'));assert.ok(app.includes('feed-section-title">Retomar'));assert.ok(!app.includes('feed-section-title">En conversación'));assert.ok(app.includes("from('minds_ai_usage')"));assert.ok(shell.includes('data-action="aiusage"'));assert.ok(sync.includes('artifacts:Array.isArray(m.artifacts)'));});

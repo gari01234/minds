@@ -69,8 +69,8 @@ function normalizeMessages(items){
   const out=[];
   let greetingSeen=false;
   for(const m of items||[]){
-    const text=String(m?.text||'').trim();
-    if(!text)continue;
+    const text=String(m?.text||'').trim(),artifacts=Array.isArray(m?.artifacts)?m.artifacts.filter(x=>x?.storage_path):[];
+    if(!text&&!artifacts.length)continue;
     if(/^Edge Function returned a non-2xx status code$/i.test(text))continue;
     if(/^Conecta la memoria de Isabella para activar la IA\.?$/i.test(text))continue;
     if(m.role==='assistant'&&text==='Hola. Soy Isabella.'){
@@ -79,7 +79,7 @@ function normalizeMessages(items){
     }
     const prev=out[out.length-1];
     if(prev&&prev.role===m.role&&prev.text===text)continue;
-    out.push({...m,text});
+    out.push({...m,text,artifacts});
   }
   return out;
 }
@@ -193,7 +193,7 @@ async function maybePrewarmFeed(){
   try{
     if(!window.ISABELLA_AI?.startFeedRefresh)return;
     const key='isabella-feed-prewarm-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
-    if(now-last<3*60*60*1000)return;
+    if(now-last<6*60*60*1000)return;
     const result=await window.ISABELLA_AI.startFeedRefresh(state,{force:false,currentItems:feedItems||[]});
     if(result?.accepted||result?.skipped)localStorage.setItem(key,String(now));
   }catch{}
@@ -398,12 +398,13 @@ async function openIdeaWorkspaceFromIdea(key){
 async function openIdeaWorkspace(id,{kickoff=false}={}){
   const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
   try{
-    const [{data:workspace,error:werr},{data:messages,error:merr}]=await Promise.all([
+    const [{data:workspace,error:werr},{data:messages,error:merr},{data:artifacts,error:aerr}]=await Promise.all([
       sb.from('minds_idea_workspaces').select('*').eq('id',id).single(),
-      sb.from('minds_idea_messages').select('id,role,content,sources,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(120)
+      sb.from('minds_idea_messages').select('id,role,content,sources,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(120),
+      sb.from('minds_artifacts').select('id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(40)
     ]);
-    if(werr||merr||!workspace)throw werr||merr||new Error('Workspace not found');
-    activeIdeaWorkspace={...workspace,messages:messages||[]};
+    if(werr||merr||aerr||!workspace)throw werr||merr||aerr||new Error('Workspace not found');
+    activeIdeaWorkspace={...workspace,messages:messages||[],artifacts:artifacts||[]};
     $('#ideaWorkspace').classList.remove('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','false');document.body.classList.add('idea-workspace-open');
     renderIdeaWorkspace();
     if(kickoff&&!activeIdeaWorkspace.messages.length){
@@ -414,18 +415,42 @@ async function openIdeaWorkspace(id,{kickoff=false}={}){
 function closeIdeaWorkspace(){
   $('#ideaWorkspace').classList.add('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','true');document.body.classList.remove('idea-workspace-open');activeIdeaWorkspace=null;
 }
+function artifactMarkup(a,compact=false){
+  const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
+  if(!path)return '';
+  if(kind==='image')return `<figure class="generated-artifact generated-image ${compact?'compact':''}"><img data-artifact-image="${esc(path)}" alt="${esc(title)}"><figcaption><span>IMAGEN</span><strong>${esc(title)}</strong></figcaption></figure>`;
+  const label=kind==='docx'?'WORD':kind==='pdf'?'PDF':kind.toUpperCase();
+  return `<a class="generated-artifact generated-file ${compact?'compact':''}" data-artifact-file="${esc(path)}" href="#" target="_blank" rel="noopener"><span>${esc(label)}</span><strong>${esc(title)}</strong><em>Abrir archivo ↗</em></a>`;
+}
+async function hydrateArtifactFiles(){
+  const nodes=[...document.querySelectorAll('[data-artifact-image],[data-artifact-file]')].filter(x=>!x.dataset.loaded);
+  if(!nodes.length)return;
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    await Promise.all(nodes.map(async node=>{
+      const path=node.dataset.artifactImage||node.dataset.artifactFile;if(!path)return;
+      const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,3600);
+      if(!data?.signedUrl)return;
+      if(node.matches('img'))node.src=data.signedUrl;else node.href=data.signedUrl;
+      node.dataset.loaded='1';
+    }));
+  }catch{}
+}
 function renderIdeaWorkspace(){
   const w=activeIdeaWorkspace;if(!w)return;
   $('#ideaWorkspaceTitle').textContent=w.title||'Trabajo';
   $('#ideaWorkspaceBrief').textContent=w.brief||'';
   $('#ideaWorkspaceStatus').textContent=w.status==='done'?'PRODUCIDO':'EN PRODUCCIÓN';
-  const artifact=$('#ideaWorkspaceArtifact'),content=String(w.artifact_content||'').trim();
-  if(content){
+  const artifact=$('#ideaWorkspaceArtifact'),content=String(w.artifact_content||'').trim(),files=Array.isArray(w.artifacts)?w.artifacts:[];
+  if(content||files.length){
     artifact.classList.remove('hidden');
-    artifact.innerHTML=`<div class="idea-artifact-head"><div><span>ARTEFACTO</span><strong>${esc(w.artifact_title||'Documento')}</strong></div><div><button id="copyIdeaArtifact">Copiar</button><button id="downloadIdeaArtifact">Descargar .md</button><button id="toggleIdeaWorkspaceDone">${w.status==='done'?'Reabrir':'Marcar producido'}</button></div></div><pre>${esc(content)}</pre>`;
-    $('#copyIdeaArtifact').onclick=()=>navigator.clipboard?.writeText(content);
-    $('#downloadIdeaArtifact').onclick=()=>downloadIdeaArtifact(w);
+    const textActions=content?`<button id="copyIdeaArtifact">Copiar</button><button id="downloadIdeaArtifact">Descargar .md</button>`:'';
+    const textArtifact=content?`<div class="idea-markdown-artifact"><div class="idea-artifact-label">BORRADOR DE TRABAJO</div><pre>${esc(content)}</pre></div>`:'';
+    artifact.innerHTML=`<div class="idea-artifact-head"><div><span>PRODUCTO</span><strong>${esc(w.artifact_title||files.at(-1)?.title||'Artefacto')}</strong></div><div>${textActions}<button id="toggleIdeaWorkspaceDone">${w.status==='done'?'Reabrir':'Marcar producido'}</button></div></div>${files.length?`<div class="idea-file-artifacts">${files.map(x=>artifactMarkup(x)).join('')}</div>`:''}${textArtifact}`;
+    if(content){$('#copyIdeaArtifact').onclick=()=>navigator.clipboard?.writeText(content);$('#downloadIdeaArtifact').onclick=()=>downloadIdeaArtifact(w)}
     $('#toggleIdeaWorkspaceDone').onclick=()=>void toggleIdeaWorkspaceStatus(w.status==='done'?'active':'done');
+    void hydrateArtifactFiles();
   }else{artifact.classList.add('hidden');artifact.innerHTML=''}
   const thread=$('#ideaWorkspaceThread');
   thread.innerHTML=(w.messages||[]).map(m=>`<div class="idea-workspace-message ${m.role}"><div>${formatMessageText(m.content||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
@@ -460,6 +485,7 @@ async function runIdeaWorkspace(message,{kickoff=false}={}){
       if(error)throw error;w.messages.push(data);renderIdeaWorkspace();$('#ideaWorkspaceStatus').textContent='PRODUCIENDO…';
     }
     const result=await window.ISABELLA_AI?.ideaWork?.(w,message,w.messages||[],state);
+    if(result?.generated_artifact)w.artifacts=[...(w.artifacts||[]),result.generated_artifact].filter((x,i,a)=>a.findIndex(y=>String(y.id)===String(x.id))===i);
     if(result?.artifact?.content){
       const patch={artifact_title:String(result.artifact.title||w.title||'Artefacto'),artifact_content:String(result.artifact.content),artifact_format:'markdown',updated_at:new Date().toISOString()};
       const {error}=await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);if(error)throw error;Object.assign(w,patch);
@@ -554,11 +580,14 @@ function renderFeedItems(items){
   const weather=current.find(x=>kindOf(x)==='weather')||all.find(x=>kindOf(x)==='weather');
   const allowed=x=>!['weather','clear','news','commitment','pending','research'].includes(kindOf(x))&&sectionOf(x)!=='news'&&sectionOf(x)!=='work';
   const now=current.filter(allowed).slice(0,5);
-  const ongoing=all.filter(x=>allowed(x)&&(!generation||String(x?.metadata?.generation_id||'')!==generation)&&(String(x.lifecycle_state||'')==='seen'||String(x.user_feedback||'')==='liked')).slice(0,2);
+  const norm=v=>String(v||'').toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const anchors=x=>{const text=norm((x?.title||'')+' '+(x?.body||'')),out=new Set();for(const e of (x?.entities||x?.metadata?.entities||[])){const n=norm(e?.name||'');if(n)out.add(n)}for(const p of state.projects||[]){const n=norm(p?.name||'');if(n&&text.includes(n))out.add(n)}const first=norm(x?.title||'').match(/[a-z0-9][a-z0-9&/-]{4,}/)?.[0];if(first)out.add(first);return out};
+  const overlaps=(a,b)=>{const aa=anchors(a),bb=anchors(b);return [...aa].some(x=>bb.has(x))};
+  const ongoing=all.filter(x=>allowed(x)&&(!generation||String(x?.metadata?.generation_id||'')!==generation)&&(String(x.lifecycle_state||'')==='seen'||String(x.user_feedback||'')==='liked')&&!now.some(n=>overlaps(x,n))).slice(0,2);
   feedItems=dedupeFeedItems([...(weather?[weather]:[]),...now,...ongoing]);
   const weatherHtml=weather?surfaceCard(weather,'feed'):`<div class="feed-weather-placeholder"><div><span>CLIMA</span><strong>Sin localidad configurada</strong></div><button data-weather-settings>Ajustar</button></div>`;
   const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">Ahora mismo no hay nada que merezca interrumpirte.</div>';
-  const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">En conversación</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
+  const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">Retomar</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
   box.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section><section class="feed-section"><h2 class="feed-section-title">Ahora</h2>${nowHtml}</section>${ongoingHtml}`;
   bindSurfaceActions();
   document.querySelector('[data-weather-settings]')?.addEventListener('click',feedPreferencesPanel);
@@ -684,33 +713,11 @@ async function renderIdeas(force=false){
   const box=$('#ideasList'),refresh=$('#refreshIdeas');if(!box||ideasBusy)return;ideasBusy=true;setWorking(refresh,true);
   box.innerHTML='<div class="surface-loading">Buscando una propuesta que pueda convertirse en trabajo…</div>';
   try{
-    const [a,b,workspaces]=await Promise.all([
-      window.ISABELLA_AI?.ideas?.(state,{force})||[],
-      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[],
-      loadIdeaWorkspaces()
-    ]);
+    const [items,workspaces]=await Promise.all([window.ISABELLA_AI?.ideas?.(state,{force})||[],loadIdeaWorkspaces()]);
     ideaWorkspaces=workspaces||[];
-    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,4);
-    renderIdeaItems(items);
+    renderIdeaItems((items||[]).slice(0,3));
   }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
   finally{ideasBusy=false;setWorking(refresh,false)}
-}
-
-
-async function renderIdeas(force=false){
-  const box=$('#ideasList');if(!box||ideasBusy)return;ideasBusy=true;
-  box.innerHTML='<div class="surface-loading">Buscando conexiones útiles…</div>';
-  try{
-    const [a,b,workspaces]=await Promise.all([
-      window.ISABELLA_AI?.ideas?.(state,{force})||[],
-      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[],
-      loadIdeaWorkspaces()
-    ]);
-    ideaWorkspaces=workspaces||[];
-    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,6);
-    renderIdeaItems(items);
-  }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
-  finally{ideasBusy=false}
 }
 function readingsUrl(){
   return location.pathname.includes('/isabella/')?'../theory/?embedded=1':'./theory/?embedded=1';
@@ -734,6 +741,7 @@ function say(role,text,meta={}){
     id:uid(),role,text,at:new Date().toISOString(),reaction:null,
     sources:Array.isArray(meta.sources)?meta.sources:[],
     attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Foto')})).filter(x=>x.path):[],
+    artifacts:Array.isArray(meta.artifacts)?meta.artifacts.slice(0,8).map(x=>({id:String(x?.id||''),kind:String(x?.kind||''),title:String(x?.title||'Artefacto'),mime_type:String(x?.mime_type||''),storage_path:String(x?.storage_path||'')})).filter(x=>x.storage_path):[],
     quickReplies:Array.isArray(meta.quickReplies)?meta.quickReplies.slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value):[]
   });
   if(state.messages.length>800)state.messages=state.messages.slice(-800);
@@ -763,8 +771,8 @@ function renderMessages(forceBottom=false){
   state.messages=normalizeMessages(state.messages);
   syncOrbCompact();
   const nearBottom=scroller?scroller.scrollHeight-scroller.scrollTop-scroller.clientHeight<140:true;
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>`<img data-chat-image-path="${esc(a.path||'')}" alt="${esc(a.name||'Foto')}">`).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
-  void hydrateChatImages();
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>`<img data-chat-image-path="${esc(a.path||'')}" alt="${esc(a.name||'Foto')}">`).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.quickMessage),q=m?.quickReplies?.[Number(b.dataset.quickIndex)];
@@ -1202,7 +1210,7 @@ async function handle(text,attachments=[]){
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy});
       state.pendingIntent=null;
-      if(result?.reply)say('assistant',result.reply,{sources:result.sources||[],quickReplies:result.quick_replies||[]});
+      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
@@ -1623,7 +1631,22 @@ function initEventDrag(){
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+async function aiUsagePanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Uso IA','<div class="small">Conecta la memoria para medir el uso de MINDS.</div>');return}
+  modal('Uso IA','<div class="surface-loading">Leyendo consumo…</div>');
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    const from=new Date(Date.now()-7*86400000).toISOString();
+    const {data,error}=await sb.from('minds_ai_usage').select('feature,model,input_tokens,cached_input_tokens,output_tokens,total_tokens,created_at').gte('created_at',from).order('created_at',{ascending:false}).limit(1000);if(error)throw error;
+    const rows=data||[],fmt=n=>new Intl.NumberFormat('es-ES',{notation:n>=100000?'compact':'standard',maximumFractionDigits:1}).format(n||0);
+    const totals=rows.reduce((a,x)=>{a.input+=Number(x.input_tokens||0);a.cached+=Number(x.cached_input_tokens||0);a.output+=Number(x.output_tokens||0);a.total+=Number(x.total_tokens||0);return a},{input:0,cached:0,output:0,total:0}),groups={};
+    for(const x of rows){const k=String(x.feature||'otro');groups[k]=groups[k]||{calls:0,tokens:0};groups[k].calls++;groups[k].tokens+=Number(x.total_tokens||0)}
+    const labels={isabella_chat:'Chat Isabella',isabella_background:'Procesos de Isabella',isabella_embedding:'Memoria semántica',situational_feed:'Feed',feed_detail:'Detalle del Feed',ideas_generation:'Ideas',idea_worker:'Trabajos de Ideas',artifact_image:'Imágenes',sofia_chat:'Chat Sofía',sofia_background:'Procesos de Sofía',research:'Investigación',routine:'Rutinas'};
+    const breakdown=Object.entries(groups).sort((a,b)=>b[1].tokens-a[1].tokens).map(([k,v])=>`<div class="usage-row"><span>${esc(labels[k]||k)}</span><strong>${fmt(v.tokens)} tok.</strong><em>${v.calls} llamada${v.calls===1?'':'s'}</em></div>`).join(''),hit=totals.input?Math.round(totals.cached/totals.input*100):0;
+    modal('Uso IA',`<div class="usage-panel"><div class="usage-summary"><div><span>TOKENS · 7 DÍAS</span><strong>${fmt(totals.total)}</strong></div><div><span>CACHÉ DE INPUT</span><strong>${hit}%</strong></div></div><div class="small">Medición interna disponible desde Build 42. El gasto exacto sigue estando en OpenAI; aquí vemos qué parte de MINDS consume los tokens.</div><div class="usage-breakdown">${breakdown||'<div class="small">Todavía no hay llamadas medidas.</div>'}</div></div>`);
+  }catch{modal('Uso IA','<div class="small">No pude leer el consumo ahora mismo.</div>')}
+}
 function tasksPanel(){
   const pending=state.tasks.filter(t=>!t.archivedAt&&!t.done);
   const undated=pending.filter(t=>!t.date).length;

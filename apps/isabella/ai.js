@@ -144,7 +144,7 @@ async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
   const cached=await loadSurface('feed','isabella',{allowStale:true});
   const newest=cached[0]?.generated_at?Date.parse(cached[0].generated_at):0;
   const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=11&&String(x?.metadata?.preference_signature||'')===signature);
-  if(!force&&cacheMatches&&newest&&Date.now()-newest<2*60*60*1000){
+  if(!force&&cacheMatches&&newest&&Date.now()-newest<4*60*60*1000){
     return {accepted:false,skipped:true,generation_id:cached[0]?.metadata?.generation_id||null,signature,items:cached};
   }
   const currentTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
@@ -233,6 +233,12 @@ async function feedStory(item,state,question='',history=[]){
   if(data?.error)throw new Error(data.detail||data.error);
   return data||{reply:'',sources:[]};
 }
+async function createArtifact({kind,title,content='',instruction='',size='',quality='',workspaceId=null}={}){
+  if(!sb)throw new Error('Supabase no está disponible.');
+  const {data,error}=await sb.functions.invoke('isabella-artifact',{body:{kind,title,content,instruction,size,quality,workspace_id:workspaceId}});
+  if(error||data?.error)throw new Error(data?.detail||data?.error||error?.message||'No pude crear el artefacto.');
+  return data?.artifact||null;
+}
 async function ideaWork(workspace,message,history=[],state=null){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria para trabajar en esta idea.');
@@ -243,14 +249,19 @@ async function ideaWork(workspace,message,history=[],state=null){
   }});
   if(error)throw error;
   if(data?.error)throw new Error(data.detail||data.error);
-  return data||{reply:'',artifact:null,sources:[]};
+  const result=data||{reply:'',artifact:null,sources:[]};
+  if(result?.file_request){
+    const req=result.file_request,kind=String(req.kind||''),content=(kind==='docx'||kind==='pdf')?String(result?.artifact?.content||workspace?.artifact_content||''):'';
+    result.generated_artifact=await createArtifact({kind,title:req.title||workspace?.title||'Artefacto',content,instruction:req.instruction||'',workspaceId:workspace?.id||null});
+  }
+  return result;
 }
 async function ideas(state,{force=false}={}){
+  if(!sb)return [];
   if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=4))return cached}
-  const prompt='Genera máximo 3 propuestas para MINDS a partir del contexto, proyectos, agenda, pendientes y memoria. Una Idea NO es una observación, un recordatorio ni un consejo: debe ser una posibilidad concreta que todavía no existe y que pueda convertirse en un trabajo aislado con un artefacto tangible. Ejemplos de clases de resultado: documento, protocolo, investigación, mapa, sistema, borrador, especificación, análisis o experimento. Cada propuesta debe justificar por qué vale la pena producirla ahora. Si no hay una propuesta con suficiente potencial, devuelve []. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"kind":"idea"|"research_project"|"isabella_improvement","title":"...","body":"qué se propone construir o investigar","deliverable":"resultado concreto que debería producir el workspace","work_type":"document|research|system|analysis|experiment|other","why":"por qué surge ahora","action_prompt":"","icon":""}. Evita productividad genérica y cualquier cosa que pertenezca simplemente al Feed situacional.';
-  const result=await ask(prompt,state,{background:true,surface:true});
-  const items=parseSurface(result?.reply);
-  return saveSurface('idea','isabella',items);
+  const {data,error}=await sb.functions.invoke('isabella-ideas',{body:{context:compact(state),force:!!force}});
+  if(error||data?.error)throw new Error(data?.detail||data?.error||error?.message||'No pude generar Ideas.');
+  return saveSurface('idea','isabella',Array.isArray(data?.items)?data.items:[]);
 }
 async function sofiaSurface(kind,{force=false}={}){
   if(!sb)return [];
@@ -290,5 +301,5 @@ async function transcribe(blob){
   if(!response.ok)throw new Error(data?.detail||data?.error||'No pude transcribir el audio.');
   return String(data?.text||'').trim();
 }
-window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,startResearch,loadResearchReady,feedStory,ideaWork,ideas,sofiaSurface,loadSurface};
+window.ISABELLA_AI={ask,brief,nudge,curiosity,transcribe,listSkills,feed,startFeedRefresh,waitForFeedRefresh,feedJobStatus,startResearch,loadResearchReady,feedStory,createArtifact,ideaWork,ideas,sofiaSurface,loadSurface};
 })();
