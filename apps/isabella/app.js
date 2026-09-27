@@ -310,6 +310,7 @@ async function persistSurfaceFeedback(item,action){
   if(action==='not_relevant')item.user_feedback='not_relevant';
   if(action==='dismissed'||action==='not_relevant'){
     feedItems=(feedItems||[]).filter(x=>String(x?.id||feedStoryKey(x)||'')!==String(item.id||storyKey));
+    if(item?.research_id)researchItems=(researchItems||[]).filter(x=>String(x?.research_id||'')!==String(item.research_id));
     renderFeedItems(feedItems);
   }else renderFeedItems(feedItems);
   if(!sb)return;

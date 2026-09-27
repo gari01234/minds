@@ -392,7 +392,7 @@ test('Build 32 keeps Hoy deterministic and Feed exploration inside Feed',()=>{
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('function fixedTodayFeedItems'));
   assert.ok(app.includes("filter(x=>x.date===td"));
-  assert.ok(app.includes("filter(x=>sectionOf(x)!=='today')"));
+  assert.ok(app.includes("filter(x=>sectionOf(x)!=='today'&&sectionOf(x)!=='work')"));
   assert.ok(app.includes("const feedStory=surface==='feed'&&!operational"));
   assert.ok(app.includes('Leer más'));
   assert.ok(app.includes("newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10)"));
