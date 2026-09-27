@@ -536,3 +536,12 @@ test('Build 38 gives accepted Ideas persistent isolated workspaces and deliverab
   assert.ok(app.includes('artifact_content'));
   assert.ok(ai.includes("functions.invoke('minds-idea-worker'"));
 });
+
+test('Build 39 keeps Feed loading transient and makes contextual questions visibly progress',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('const feedOverviewRequests=new Set(),feedQuestionRequests=new Set()'));
+  assert.ok(app.includes("delete thread.overviewLoading"));
+  assert.ok(!app.includes('thread.overviewLoading=true'));
+  assert.ok(app.includes('Buscando una respuesta…'));
+  assert.ok(app.includes("if(!result?.reply)throw new Error('La respuesta del Feed llegó vacía.')"));
+});

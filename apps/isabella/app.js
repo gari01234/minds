@@ -512,6 +512,7 @@ function bindSurfaceActions(){
   });
 }
 let feedBusy=false,ideasBusy=false,feedItems=[],ideaItems=[],ideaWorkspaces=[],researchItems=[],activeFeedStory=null,activeIdeaWorkspace=null;
+const feedOverviewRequests=new Set(),feedQuestionRequests=new Set();
 function dedupeFeedItems(items){
   return (items||[]).filter(Boolean).filter((x,i,arr)=>{
     const key=feedStoryKey(x)||String(x.id||x.title||'');
@@ -599,6 +600,7 @@ function feedThreadFor(item){
   const key=feedStoryKey(item);if(!key)return null;
   if(!state.feedThreads[key])state.feedThreads[key]={key,title:String(item.title||''),source_url:String(item.source_url||item.metadata?.source_url||''),created:new Date().toISOString(),updated:new Date().toISOString(),overview:'',messages:[]};
   const thread=state.feedThreads[key];
+  if(Object.prototype.hasOwnProperty.call(thread,'overviewLoading'))delete thread.overviewLoading;
   if(typeof thread.overview!=='string')thread.overview='';
   if(!thread.overview&&Array.isArray(thread.messages)&&thread.messages.length&&thread.messages[0]?.role==='assistant'){
     const firstUser=thread.messages.findIndex(m=>m.role==='user');
@@ -610,24 +612,29 @@ function renderFeedOverview(item){
   const thread=feedThreadFor(item),article=$('#feedDetailArticle');if(!article||!thread)return;
   const itemDetail=String(item.detail||item.metadata?.detail||'').trim();
   const detail=itemDetail||String(thread.overview||'').trim();
-  if(thread.overviewLoading&&!detail){article.innerHTML='<div class="feed-detail-loading">Buscando contexto y antecedentes…</div>';return}
+  if(feedOverviewRequests.has(thread.key)&&!detail){article.innerHTML='<div class="feed-detail-loading">Buscando contexto y antecedentes…</div>';return}
   article.innerHTML=detail?`<div class="feed-detail-copy">${formatMessageText(detail)}</div>${Array.isArray(thread.overviewSources)&&thread.overviewSources.length?`<div class="feed-detail-sources">${thread.overviewSources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}`:'';
 }
 function renderFeedThread(item){
   const thread=feedThreadFor(item),log=$('#feedThreadLog');if(!thread||!log)return;
-  log.innerHTML=(thread.messages||[]).map(m=>`<div class="feed-thread-message ${m.role}"><div class="feed-thread-text">${formatMessageText(m.text||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
-  requestAnimationFrame(()=>{const sc=$('#feedDetailScroll');if(sc&&thread.messages?.length)sc.scrollTop=sc.scrollHeight});
+  const pending=feedQuestionRequests.has(thread.key)?'<div class="feed-thread-message assistant pending"><div class="feed-thread-text">Buscando una respuesta…</div></div>':'';
+  log.innerHTML=(thread.messages||[]).map(m=>`<div class="feed-thread-message ${m.role}"><div class="feed-thread-text">${formatMessageText(m.text||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('')+pending;
+  requestAnimationFrame(()=>{const sc=$('#feedDetailScroll');if(sc&&(thread.messages?.length||pending))sc.scrollTop=sc.scrollHeight});
 }
 async function hydrateFeedStory(item){
-  const thread=feedThreadFor(item);if(!thread||thread.overviewLoading)return;
+  const thread=feedThreadFor(item);if(!thread)return;
+  const key=thread.key;if(feedOverviewRequests.has(key))return;
   const existing=String(item.detail||item.metadata?.detail||thread.overview||'').trim();if(existing){renderFeedOverview(item);return}
-  thread.overviewLoading=true;renderFeedOverview(item);
+  feedOverviewRequests.add(key);renderFeedOverview(item);
   try{
     const result=await window.ISABELLA_AI?.feedStory?.(item,state,'',[]);
-    if(result?.reply){thread.overview=String(result.reply);thread.overviewSources=result.sources||[];thread.updated=new Date().toISOString();recordFeedSignal('expanded',item);save()}
+    if(!result?.reply)throw new Error('La ampliación no devolvió contenido.');
+    thread.overview=String(result.reply);thread.overviewSources=result.sources||[];thread.updated=new Date().toISOString();recordFeedSignal('expanded',item);
   }catch(e){
     thread.overview='No pude ampliar esta noticia ahora mismo. Puedes abrir la fuente original o intentarlo de nuevo más tarde.';
-  }finally{thread.overviewLoading=false;renderFeedOverview(item)}
+  }finally{
+    feedOverviewRequests.delete(key);thread.updated=new Date().toISOString();save();renderFeedOverview(item)
+  }
 }
 
 function feedFollowChip(entity){
@@ -660,10 +667,20 @@ function openFeedStory(key){
 function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
 async function submitFeedStoryQuestion(text){
   const item=activeFeedStory,thread=item?feedThreadFor(item):null;if(!item||!thread)return;
-  const q=String(text||'').trim();if(!q)return;thread.messages.push({id:uid(),role:'user',text:q,at:new Date().toISOString()});thread.updated=new Date().toISOString();save();renderFeedThread(item);recordFeedSignal('questioned',item);
-  try{const result=await window.ISABELLA_AI?.feedStory?.(item,state,q,thread.messages||[]);if(result?.reply)thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()})}
-  catch(e){thread.messages.push({id:uid(),role:'assistant',text:'No pude responder sobre esta noticia ahora mismo.',at:new Date().toISOString()})}
-  thread.updated=new Date().toISOString();save();renderFeedThread(item);
+  const key=thread.key;if(feedQuestionRequests.has(key))return;
+  const q=String(text||'').trim();if(!q)return;
+  thread.messages.push({id:uid(),role:'user',text:q,at:new Date().toISOString()});thread.updated=new Date().toISOString();save();recordFeedSignal('questioned',item);
+  feedQuestionRequests.add(key);renderFeedThread(item);
+  try{
+    const result=await window.ISABELLA_AI?.feedStory?.(item,state,q,thread.messages||[]);
+    if(!result?.reply)throw new Error('La respuesta del Feed llegó vacía.');
+    thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()})
+  }catch(e){
+    thread.messages.push({id:uid(),role:'assistant',text:'No pude responder sobre esta noticia ahora mismo. Inténtalo de nuevo.',at:new Date().toISOString()})
+  }finally{
+    feedQuestionRequests.delete(key);thread.updated=new Date().toISOString();save();
+    if(activeFeedStory&&feedStoryKey(activeFeedStory)===key)renderFeedThread(item)
+  }
 }
 
 async function renderIdeas(force=false){
