@@ -495,7 +495,7 @@ test('Build 37 supports undated tasks without forcing them into the calendar',()
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   const sync=read('apps/isabella/sync.js');
-  assert.ok(app.includes("const undated=active.filter(t=>!t.date)"));
+  assert.ok(app.includes("const undated=pending.filter(t=>!t.date).length"));
   assert.ok(app.includes("Fecha (opcional)"));
   assert.ok(ai.includes('undated_tasks:undatedTasks'));
   assert.ok(sync.includes('due_date:t.date||null'));
