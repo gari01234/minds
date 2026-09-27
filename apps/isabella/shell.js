@@ -28,14 +28,14 @@ document.body.innerHTML = `
     <section id="feedScreen" class="screen surface-screen" data-screen="feed">
       <div class="surface-scroll">
         <div class="surface-head surface-head-compact"><div class="surface-head-actions"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span><button id="feedSettings" class="surface-text-action">Ajustar</button><button id="refreshFeed" class="round surface-refresh" aria-label="Actualizar Feed">↻</button></div></div>
-        <div id="feedList" class="surface-list"><div class="surface-loading">Preparando tu Feed…</div></div>
+        <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
       </div>
     </section>
 
     <section id="ideasScreen" class="screen surface-screen" data-screen="ideas">
       <div class="surface-scroll">
         <div class="surface-head surface-head-compact"><button id="refreshIdeas" class="round surface-refresh" aria-label="Actualizar Ideas">↻</button></div>
-        <div id="ideasList" class="surface-list"><div class="surface-loading">Buscando conexiones útiles…</div></div>
+        <div id="ideasList" class="surface-list"><div class="surface-loading">Buscando algo que valga la pena producir…</div></div>
       </div>
     </section>
 
@@ -70,7 +70,7 @@ document.body.innerHTML = `
 
   <section id="ideaWorkspace" class="idea-workspace hidden" aria-hidden="true">
     <div class="idea-workspace-head">
-      <div><div class="eyebrow">MINDS · IDEA</div><div id="ideaWorkspaceStatus" class="idea-workspace-status">EN CURSO</div></div>
+      <div><div class="eyebrow">MINDS · TRABAJO</div><div id="ideaWorkspaceStatus" class="idea-workspace-status">EN PRODUCCIÓN</div></div>
       <button id="closeIdeaWorkspace" class="round" aria-label="Cerrar">×</button>
     </div>
     <div id="ideaWorkspaceScroll" class="idea-workspace-scroll">
@@ -94,7 +94,7 @@ document.body.innerHTML = `
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
-  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.27.40</div></aside>
+  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.27.41</div></aside>
   <div id="focusMode" class="focus hidden" role="dialog" aria-modal="true"><div class="focus-head"><div class="focus-name">Isabella</div><button id="focusClose" class="round">×</button></div><div class="focus-center"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="focusStatus" class="focus-status">Escuchando…</div><textarea id="focusTranscript" class="focus-transcript" rows="5" readonly placeholder="Tu transcripción aparecerá aquí."></textarea></div><div class="focus-actions"><button id="focusKeyboard">Cancelar</button><button id="focusStop" class="dark">Detener</button></div></div>
   <div id="modalBackdrop" class="backdrop hidden"></div><div id="modal" class="modal hidden"><div class="modal-head"><div id="modalTitle" class="modal-title"></div><button id="closeModal" class="round">×</button></div><div id="modalBody"></div></div>
 </div>`;

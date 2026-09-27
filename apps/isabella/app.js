@@ -59,7 +59,7 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
   behaviorRules:[]
 },feedPreferences:{
   instructions:'',
-  topics:['Clima','Noticias','Arquitectura','Arte','Inteligencia artificial','Proyectos','Familia'],
+  topics:[],
   customTopics:[],
   following:[],
   followGraph:[],
@@ -100,13 +100,6 @@ function load(){try{
   x.feedThreads=x.feedThreads&&typeof x.feedThreads==='object'&&!Array.isArray(x.feedThreads)?x.feedThreads:{};
   x.feedSignals=Array.isArray(x.feedSignals)?x.feedSignals:[];
   x.memory=(Array.isArray(x.memory)?x.memory:[]).map((m,i)=>{if(typeof m!=='object')return {id:'memory-'+i,kind:'context',content:String(m),status:'active',confidence:1,source:'local'};return {...m,kind:normalizeMemoryKind(m.kind),status:m.status==='deleted'?'deleted':(m.status||'active')}});
-  if(x.feedPreferences.topics.includes('Noticias que sigo')&&!x.feedPreferences.topics.includes('Noticias')){
-    x.feedPreferences.topics=x.feedPreferences.topics.map(t=>t==='Noticias que sigo'?'Noticias':t);
-  }
-  if(localStorage.getItem('isabella-feed-news-v1')!=='1'){
-    if(!x.feedPreferences.topics.includes('Noticias'))x.feedPreferences.topics.push('Noticias');
-    localStorage.setItem('isabella-feed-news-v1','1');
-  }
   x.messages=normalizeMessages(x.messages);return x
 }catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
@@ -277,6 +270,7 @@ function surfaceCard(item,surface){
   const weather=kind==='weather',news=kind==='news',rawSource=String(item.source_url||item.metadata?.source_url||'').trim(),sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const why=String(item.why||item.metadata?.why||'').trim();
+  const deliverable=String(item.deliverable||item.metadata?.deliverable||'').trim();
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
   const storyKey=feedStoryKey(item),itemKey=String(item.id||storyKey||item.title||'');
   const operational=weather||kind==='commitment'||kind==='pending';
@@ -286,14 +280,14 @@ function surfaceCard(item,surface){
   const lifecycle=String(item.lifecycle_state||'new');
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''} ${feedback==='liked'?'liked':''}" data-agent="${esc(agent)}" data-surface-item="${esc(itemKey)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span>${surface==='feed'&&!operational&&lifecycle==='new'?'<span class="surface-state">NUEVO</span>':''}</div>
-    <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}
+    <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}${idea&&deliverable?`<div class="idea-deliverable"><span>RESULTADO</span><strong>${esc(deliverable)}</strong></div>`:''}
     ${why?`<div class="surface-why-copy hidden" data-why-copy="${esc(itemKey)}">${esc(why)}</div>`:''}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
       ${feedStory?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
       ${feedStory&&why?`<button class="surface-why" data-why-key="${esc(itemKey)}">¿Por qué esto?</button>`:''}
       ${feedStory&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${idea?`<button class="surface-discuss" data-idea-workspace="${esc(itemKey)}">${improvement?'Revisar mejora':'Desarrollar idea'}</button>`:(!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:'')}
+      ${idea?`<button class="surface-discuss" data-idea-workspace="${esc(itemKey)}">Convertir en trabajo</button>`:(!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:'')}
     </div>
     ${feedStory?`<div class="surface-feedback"><button class="${feedback==='liked'?'active':''}" data-feed-feedback="liked" data-feed-item="${esc(itemKey)}">Me gusta</button><button data-feed-feedback="not_relevant" data-feed-item="${esc(itemKey)}">No es relevante</button><button class="danger-text" data-feed-feedback="dismissed" data-feed-item="${esc(itemKey)}">Eliminar</button></div>`:''}
     ${idea?`<div class="surface-feedback idea-lifecycle"><button data-idea-sleep="${esc(itemKey)}">Dormir</button><button class="danger-text" data-idea-dismiss="${esc(itemKey)}">Descartar</button></div>`:''}
@@ -351,8 +345,9 @@ async function updateIdeaLifecycle(item,lifecycle,status='active'){
   try{await sb.from('minds_surface_items').update({lifecycle_state:lifecycle,status}).eq('id',id)}catch{}
 }
 function ideaWorkspaceCard(w){
-  const artifact=String(w.artifact_content||'').trim();
-  return `<button class="idea-workspace-card" data-open-idea-workspace="${esc(w.id)}"><span class="idea-workspace-card-state">${w.status==='done'?'HECHO':'EN CURSO'}</span><strong>${esc(w.title||'Idea')}</strong><span>${artifact?'Entregable en desarrollo':'Espacio de trabajo'} · ${new Date(w.updated_at||w.created_at||Date.now()).toLocaleDateString('es-ES')}</span></button>`;
+  const artifact=String(w.artifact_content||'').trim(),done=w.status==='done';
+  const stateLabel=done?'PRODUCIDO':artifact?'ARTEFACTO EN DESARROLLO':'EN PRODUCCIÓN';
+  return `<button class="idea-workspace-card ${done?'done':''}" data-open-idea-workspace="${esc(w.id)}"><span class="idea-workspace-card-state">${stateLabel}</span><strong>${esc(w.title||'Trabajo')}</strong><span>${artifact?'Artefacto disponible':'Trabajo activo'} · ${new Date(w.updated_at||w.created_at||Date.now()).toLocaleDateString('es-ES')}</span></button>`;
 }
 async function loadIdeaWorkspaces(){
   const sb=window.MINDS_SUPABASE;if(!sb)return [];
@@ -369,10 +364,11 @@ function bindIdeaWorkspaceCards(){
 function renderIdeaItems(items){
   const box=$('#ideasList');if(!box)return;
   ideaItems=(items||[]).filter(Boolean);
-  const active=(ideaWorkspaces||[]).filter(w=>w.status==='active');
-  const workHtml=active.length?`<section class="idea-workspaces-section"><h2 class="feed-section-title">En curso</h2><div class="idea-workspace-cards">${active.map(ideaWorkspaceCard).join('')}</div></section>`:'';
-  const ideasHtml=ideaItems.length?`<section class="idea-suggestions-section"><h2 class="feed-section-title">${active.length?'Nuevas ideas':'Ideas'}</h2>${ideaItems.map(x=>surfaceCard(x,'idea')).join('')}</section>`:'<div class="surface-empty">Todavía no apareció una idea suficientemente buena para mostrarte.</div>';
-  box.innerHTML=workHtml+ideasHtml;
+  const active=(ideaWorkspaces||[]).filter(w=>w.status==='active'),done=(ideaWorkspaces||[]).filter(w=>w.status==='done').slice(0,6);
+  const activeHtml=active.length?`<section class="idea-workspaces-section"><h2 class="feed-section-title">En producción</h2><div class="idea-workspace-cards">${active.map(ideaWorkspaceCard).join('')}</div></section>`:'';
+  const proposalsHtml=ideaItems.length?`<section class="idea-suggestions-section"><h2 class="feed-section-title">Propuestas</h2>${ideaItems.map(x=>surfaceCard(x,'idea')).join('')}</section>`:'<div class="surface-empty">Ahora mismo no apareció una propuesta suficientemente fuerte para convertirla en trabajo.</div>';
+  const doneHtml=done.length?`<section class="idea-workspaces-section idea-produced-section"><h2 class="feed-section-title">Producido</h2><div class="idea-workspace-cards">${done.map(ideaWorkspaceCard).join('')}</div></section>`:'';
+  box.innerHTML=activeHtml+proposalsHtml+doneHtml;
   bindSurfaceActions();bindIdeaWorkspaceCards();
 }
 async function openIdeaWorkspaceFromIdea(key){
@@ -380,7 +376,7 @@ async function openIdeaWorkspaceFromIdea(key){
   const sb=window.MINDS_SUPABASE;if(!sb)return;
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session){say('assistant','Conecta la memoria para abrir un espacio de trabajo persistente.');return}
-    const sourceId=dbSurfaceId(item);
+    const sourceId=dbSurfaceId(item),deliverable=String(item.deliverable||item.metadata?.deliverable||'').trim();
     let workspace=null;
     if(sourceId){
       const {data}=await sb.from('minds_idea_workspaces').select('*').eq('source_item_id',sourceId).maybeSingle();
@@ -388,7 +384,8 @@ async function openIdeaWorkspaceFromIdea(key){
     }
     if(!workspace){
       const {data,error}=await sb.from('minds_idea_workspaces').insert({
-        user_id:session.user.id,source_item_id:sourceId,title:String(item.title||'Idea'),brief:String(item.body||''),
+        user_id:session.user.id,source_item_id:sourceId,title:String(item.title||'Idea'),
+        brief:String(item.body||'')+(deliverable?'\n\nResultado esperado: '+deliverable:''),
         why:String(item.why||item.metadata?.why||''),agent:String(item.agent||'minds'),status:'active'
       }).select('*').single();
       if(error)throw error;workspace=data;
@@ -410,7 +407,7 @@ async function openIdeaWorkspace(id,{kickoff=false}={}){
     $('#ideaWorkspace').classList.remove('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','false');document.body.classList.add('idea-workspace-open');
     renderIdeaWorkspace();
     if(kickoff&&!activeIdeaWorkspace.messages.length){
-      await runIdeaWorkspace('Empieza a desarrollar esta idea. Si ya puedes producir una primera versión útil del entregable, hazlo ahora; pregunta solo si falta una decisión realmente necesaria.',{kickoff:true});
+      await runIdeaWorkspace('Convierte esta propuesta en trabajo real. Produce ahora una primera versión útil del artefacto siempre que el contexto sea suficiente; pregunta solo si falta una decisión que bloquee de verdad el siguiente avance.',{kickoff:true});
     }
   }catch(e){modal('Idea','<div class="small">No pude cargar este espacio de trabajo.</div>')}
 }
@@ -419,15 +416,16 @@ function closeIdeaWorkspace(){
 }
 function renderIdeaWorkspace(){
   const w=activeIdeaWorkspace;if(!w)return;
-  $('#ideaWorkspaceTitle').textContent=w.title||'Idea';
+  $('#ideaWorkspaceTitle').textContent=w.title||'Trabajo';
   $('#ideaWorkspaceBrief').textContent=w.brief||'';
-  $('#ideaWorkspaceStatus').textContent=w.status==='done'?'HECHO':'EN CURSO';
+  $('#ideaWorkspaceStatus').textContent=w.status==='done'?'PRODUCIDO':'EN PRODUCCIÓN';
   const artifact=$('#ideaWorkspaceArtifact'),content=String(w.artifact_content||'').trim();
   if(content){
     artifact.classList.remove('hidden');
-    artifact.innerHTML=`<div class="idea-artifact-head"><div><span>ENTREGABLE</span><strong>${esc(w.artifact_title||'Documento')}</strong></div><div><button id="copyIdeaArtifact">Copiar</button><button id="downloadIdeaArtifact">Descargar .md</button></div></div><pre>${esc(content)}</pre>`;
+    artifact.innerHTML=`<div class="idea-artifact-head"><div><span>ARTEFACTO</span><strong>${esc(w.artifact_title||'Documento')}</strong></div><div><button id="copyIdeaArtifact">Copiar</button><button id="downloadIdeaArtifact">Descargar .md</button><button id="toggleIdeaWorkspaceDone">${w.status==='done'?'Reabrir':'Marcar producido'}</button></div></div><pre>${esc(content)}</pre>`;
     $('#copyIdeaArtifact').onclick=()=>navigator.clipboard?.writeText(content);
     $('#downloadIdeaArtifact').onclick=()=>downloadIdeaArtifact(w);
+    $('#toggleIdeaWorkspaceDone').onclick=()=>void toggleIdeaWorkspaceStatus(w.status==='done'?'active':'done');
   }else{artifact.classList.add('hidden');artifact.innerHTML=''}
   const thread=$('#ideaWorkspaceThread');
   thread.innerHTML=(w.messages||[]).map(m=>`<div class="idea-workspace-message ${m.role}"><div>${formatMessageText(m.content||'')}</div>${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`).join('');
@@ -439,19 +437,31 @@ function downloadIdeaArtifact(w){
   a.href=url;a.download=(String(w.artifact_title||w.title||'entregable').replace(/[^a-z0-9áéíóúüñ_-]+/gi,'-').replace(/^-|-$/g,'')||'entregable')+'.md';
   a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
+async function toggleIdeaWorkspaceStatus(status){
+  const w=activeIdeaWorkspace,sb=window.MINDS_SUPABASE;if(!w||!sb)return;
+  try{
+    const patch={status,updated_at:new Date().toISOString()};
+    const {error}=await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);if(error)throw error;
+    Object.assign(w,patch);ideaWorkspaces=[{...w,messages:undefined},...ideaWorkspaces.filter(x=>x.id!==w.id)];
+    renderIdeaWorkspace();
+  }catch{}
+}
 async function runIdeaWorkspace(message,{kickoff=false}={}){
   const w=activeIdeaWorkspace,sb=window.MINDS_SUPABASE;if(!w||!sb||!message)return;
-  const form=$('#ideaWorkspaceForm'),input=$('#ideaWorkspaceInput');
+  const form=$('#ideaWorkspaceForm'),input=$('#ideaWorkspaceInput'),send=form?.querySelector('.send');let session=null;
   try{
-    form?.classList.add('working');
-    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    form?.classList.add('working');setWorking(send,true);$('#ideaWorkspaceStatus').textContent='PRODUCIENDO…';
+    const auth=await sb.auth.getSession();session=auth.data.session;if(!session)throw new Error('Sin sesión');
+    if(w.status==='done'){
+      await sb.from('minds_idea_workspaces').update({status:'active',updated_at:new Date().toISOString()}).eq('id',w.id);w.status='active';
+    }
     if(!kickoff){
       const {data,error}=await sb.from('minds_idea_messages').insert({workspace_id:w.id,user_id:session.user.id,role:'user',content:message,sources:[]}).select('id,role,content,sources,created_at').single();
-      if(error)throw error;w.messages.push(data);renderIdeaWorkspace();
+      if(error)throw error;w.messages.push(data);renderIdeaWorkspace();$('#ideaWorkspaceStatus').textContent='PRODUCIENDO…';
     }
-    const result=await window.ISABELLA_AI?.ideaWork?.(w,message,w.messages||[]);
+    const result=await window.ISABELLA_AI?.ideaWork?.(w,message,w.messages||[],state);
     if(result?.artifact?.content){
-      const patch={artifact_title:String(result.artifact.title||w.title||'Entregable'),artifact_content:String(result.artifact.content),artifact_format:'markdown',updated_at:new Date().toISOString()};
+      const patch={artifact_title:String(result.artifact.title||w.title||'Artefacto'),artifact_content:String(result.artifact.content),artifact_format:'markdown',updated_at:new Date().toISOString()};
       const {error}=await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);if(error)throw error;Object.assign(w,patch);
     }else{
       const patch={updated_at:new Date().toISOString()};await sb.from('minds_idea_workspaces').update(patch).eq('id',w.id);Object.assign(w,patch);
@@ -461,10 +471,13 @@ async function runIdeaWorkspace(message,{kickoff=false}={}){
       if(error)throw error;w.messages.push(data);
     }
     ideaWorkspaces=[{...w,messages:undefined},...ideaWorkspaces.filter(x=>x.id!==w.id)];
-    renderIdeaWorkspace();
   }catch(e){
-    if(!kickoff){w.messages.push({id:uid(),role:'assistant',content:'No pude avanzar este espacio ahora mismo. Inténtalo otra vez.',sources:[],created_at:new Date().toISOString()});renderIdeaWorkspace()}
-  }finally{form?.classList.remove('working');if(input)input.focus()}
+    const content='No pude avanzar este trabajo ahora mismo. Inténtalo otra vez.';
+    if(session){try{const {data}=await sb.from('minds_idea_messages').insert({workspace_id:w.id,user_id:session.user.id,role:'assistant',content,sources:[]}).select('id,role,content,sources,created_at').single();if(data)w.messages.push(data)}catch{}}
+    else w.messages.push({id:uid(),role:'assistant',content,sources:[],created_at:new Date().toISOString()});
+  }finally{
+    form?.classList.remove('working');setWorking(send,false);renderIdeaWorkspace();if(input)input.focus()
+  }
 }
 function sleepIdea(key){
   const item=surfaceItemByKey(key);if(!item)return;
@@ -535,65 +548,48 @@ function fixedTodayFeedItems(){
 }
 function renderFeedItems(items){
   const box=$('#feedList');if(!box)return;
-  const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':s==='work'?'work':'for_me'};
-  const generated=dedupeFeedItems(items).filter(x=>sectionOf(x)!=='today'&&sectionOf(x)!=='work');
-  const work=dedupeFeedItems(researchItems||[]).filter(x=>sectionOf(x)==='work');
-  const todayItems=fixedTodayFeedItems();
-  feedItems=dedupeFeedItems([...todayItems,...generated,...work]);
-  const newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10),forMeItems=generated.filter(x=>sectionOf(x)==='for_me');
-  const todayHtml=todayItems.length?todayItems.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty surface-day-clear">No tienes eventos ni tareas pendientes para hoy.</div>';
-  box.innerHTML='<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayHtml+'</section>'+
-    (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
-    (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
-    (work.length?'<section class="feed-section"><h2 class="feed-section-title">Avances de Isabella</h2>'+work.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
+  const all=dedupeFeedItems(items),generation=String(all.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id||'');
+  const current=all.filter(x=>!generation||String(x?.metadata?.generation_id||'')===generation);
+  const kindOf=x=>String(x?.kind||x?.metadata?.kind||'').toLowerCase(),sectionOf=x=>String(x?.section||x?.metadata?.section||'').toLowerCase();
+  const weather=current.find(x=>kindOf(x)==='weather')||all.find(x=>kindOf(x)==='weather');
+  const allowed=x=>!['weather','clear','news','commitment','pending','research'].includes(kindOf(x))&&sectionOf(x)!=='news'&&sectionOf(x)!=='work';
+  const now=current.filter(allowed).slice(0,5);
+  const ongoing=all.filter(x=>allowed(x)&&(!generation||String(x?.metadata?.generation_id||'')!==generation)&&(String(x.lifecycle_state||'')==='seen'||String(x.user_feedback||'')==='liked')).slice(0,2);
+  feedItems=dedupeFeedItems([...(weather?[weather]:[]),...now,...ongoing]);
+  const weatherHtml=weather?surfaceCard(weather,'feed'):`<div class="feed-weather-placeholder"><div><span>CLIMA</span><strong>Sin localidad configurada</strong></div><button data-weather-settings>Ajustar</button></div>`;
+  const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">Ahora mismo no hay nada que merezca interrumpirte.</div>';
+  const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">En conversación</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
+  box.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section><section class="feed-section"><h2 class="feed-section-title">Ahora</h2>${nowHtml}</section>${ongoingHtml}`;
   bindSurfaceActions();
+  document.querySelector('[data-weather-settings]')?.addEventListener('click',feedPreferencesPanel);
 }
 async function renderFeed(force=false){
   const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
-  let visible=[...feedItems];
-  if(force&&refresh){refresh.disabled=true;refresh.classList.add('refreshing');refresh.textContent='…'}
+  let visible=[...feedItems];if(force&&refresh){refresh.disabled=true;setWorking(refresh,true)}
   try{
-    const [cachedA,cachedB,cachedResearch]=await Promise.all([
-      window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[],
-      window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[],
-      window.ISABELLA_AI?.loadResearchReady?.()||[]
-    ]);
-    researchItems=cachedResearch||[];
-    visible=dedupeFeedItems([...(cachedA||[]),...(cachedB||[]),...visible]);
-    if(visible.length)renderFeedItems(visible);
-    else box.innerHTML='<div class="surface-loading">Abriendo tu Feed…</div>';
-
-    const hasCurrentIsabella=(cachedA||[]).some(x=>Number(x?.metadata?.surface_version||0)>=9);
-    if(status&&(force||!hasCurrentIsabella))status.textContent=force?'Actualizando…':'Completando en segundo plano…';
-
+    const cached=await (window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[]);
+    visible=dedupeFeedItems([...(cached||[]),...visible]);
+    if(visible.length)renderFeedItems(visible);else box.innerHTML='<div class="surface-loading">Leyendo tu situación…</div>';
+    const hasCurrent=(cached||[]).some(x=>Number(x?.metadata?.surface_version||0)>=11);
+    if(status&&(force||!hasCurrent))status.textContent='Reevaluando tu situación…';
     const request=await window.ISABELLA_AI?.startFeedRefresh?.(state,{force,currentItems:visible});
-    if(!request||request.skipped){
-      if(status)status.textContent='';
-      return;
-    }
-
-    if(status)status.textContent='Actualizando en segundo plano…';
+    if(!request||request.skipped){if(status)status.textContent='';return}
+    if(status)status.textContent='Reevaluando tu situación…';
     const result=await window.ISABELLA_AI?.waitForFeedRefresh?.(request.generation_id,{timeoutMs:90000,intervalMs:1600});
     if(result?.status==='succeeded'){
-      const latestA=result.items||await window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[];
-      const [latestB,latestResearch]=await Promise.all([
-        window.ISABELLA_AI?.loadSurface?.('feed','sofia',{allowStale:true})||[],
-        window.ISABELLA_AI?.loadResearchReady?.()||[]
-      ]);
-      researchItems=latestResearch||[];
-      const fresh=dedupeFeedItems([...(latestA||[]),...(latestB||[])]);
-      if(fresh.length||researchItems.length)renderFeedItems(fresh);
-      if(status){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
+      const fresh=result.items||await window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[];
+      if(fresh.length)renderFeedItems(fresh);
+      if(status){status.textContent='Al día';setTimeout(()=>{if(status.textContent==='Al día')status.textContent=''},1800)}
     }else if(result?.status==='pending'){
-      if(status)status.textContent='Se terminará de actualizar en segundo plano';
-      setTimeout(()=>{if(status.textContent==='Se terminará de actualizar en segundo plano')status.textContent=''},4500);
+      if(status)status.textContent='Sigo reevaluando en segundo plano…';
+      setTimeout(()=>{if(status.textContent==='Sigo reevaluando en segundo plano…')status.textContent=''},4500);
     }
   }catch(err){
-    if(visible.length)renderFeedItems(visible);else box.innerHTML='<div class="surface-empty">No pude completar el Feed ahora mismo.</div>';
-    if(status){status.textContent='No pude actualizar';setTimeout(()=>{if(status.textContent==='No pude actualizar')status.textContent=''},2600)}
+    if(visible.length)renderFeedItems(visible);else box.innerHTML='<div class="surface-empty">No pude reevaluar tu situación ahora mismo.</div>';
+    if(status){status.textContent='No pude reevaluar';setTimeout(()=>{if(status.textContent==='No pude reevaluar')status.textContent=''},2600)}
   }finally{
     feedBusy=false;
-    if(refresh){refresh.disabled=false;refresh.classList.remove('refreshing');refresh.textContent='↻'}
+    if(refresh){refresh.disabled=false;setWorking(refresh,false)}
   }
 }
 function feedThreadFor(item){
@@ -657,11 +653,11 @@ function openFeedStory(key){
   activeFeedStory=item;recordFeedSignal('opened',item);void markSurfaceSeen(item);$('#feedDetailTitle').textContent=item.title||'';$('#feedDetailSummary').textContent=item.body||'';
   const kind=String(item.kind||item.metadata?.kind||'news').toLowerCase(),sourceUrl=String(item.source_url||item.metadata?.source_url||'').trim(),sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detail=String(item.detail||item.metadata?.detail||'').trim(),imageUrl=String(item.image_url||item.metadata?.image_url||'').trim(),imageAlt=String(item.image_alt||item.metadata?.image_alt||item.title||'').trim();
-  $('#feedDetailMeta').innerHTML=`<span>${kind==='news'?'NOTICIA':'FEED'}</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
+  $('#feedDetailMeta').innerHTML=`<span>SEÑAL</span>${/^https?:\/\//i.test(sourceUrl)?`<a href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)} ↗</a>`:''}`;
   const media=$('#feedDetailMedia');media.innerHTML=/^https?:\/\//i.test(imageUrl)?`<figure><img src="${esc(imageUrl)}" alt="${esc(imageAlt)}"><figcaption>${esc(sourceTitle)}</figcaption></figure>`:'';
   media.querySelector('img')?.addEventListener('error',()=>{media.innerHTML=''});
-  const entities=feedEntities(item);$('#feedDetailFollow').innerHTML=entities.length?entities.map(feedFollowChip).join(''):'';
-  $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedOverview(item);renderFeedThread(item);bindFeedFollowChips();
+  $('#feedDetailFollow').innerHTML='';
+  $('#feedDetail').classList.remove('hidden');$('#feedDetail').setAttribute('aria-hidden','false');document.body.classList.add('feed-detail-open');renderFeedOverview(item);renderFeedThread(item);
   if(!['weather','commitment','pending'].includes(kind)&&!detail)hydrateFeedStory(item);
 }
 function closeFeedStory(){$('#feedDetail').classList.add('hidden');$('#feedDetail').setAttribute('aria-hidden','true');document.body.classList.remove('feed-detail-open');activeFeedStory=null}
@@ -669,19 +665,37 @@ async function submitFeedStoryQuestion(text){
   const item=activeFeedStory,thread=item?feedThreadFor(item):null;if(!item||!thread)return;
   const key=thread.key;if(feedQuestionRequests.has(key))return;
   const q=String(text||'').trim();if(!q)return;
+  const send=$('#feedThreadForm .send');
   thread.messages.push({id:uid(),role:'user',text:q,at:new Date().toISOString()});thread.updated=new Date().toISOString();save();recordFeedSignal('questioned',item);
-  feedQuestionRequests.add(key);renderFeedThread(item);
+  feedQuestionRequests.add(key);setWorking(send,true);renderFeedThread(item);
   try{
     const result=await window.ISABELLA_AI?.feedStory?.(item,state,q,thread.messages||[]);
     if(!result?.reply)throw new Error('La respuesta del Feed llegó vacía.');
     thread.messages.push({id:uid(),role:'assistant',text:result.reply,sources:result.sources||[],at:new Date().toISOString()})
   }catch(e){
-    thread.messages.push({id:uid(),role:'assistant',text:'No pude responder sobre esta noticia ahora mismo. Inténtalo de nuevo.',at:new Date().toISOString()})
+    thread.messages.push({id:uid(),role:'assistant',text:'No pude profundizar esta señal ahora mismo. Inténtalo de nuevo.',at:new Date().toISOString()})
   }finally{
-    feedQuestionRequests.delete(key);thread.updated=new Date().toISOString();save();
+    feedQuestionRequests.delete(key);setWorking(send,false);thread.updated=new Date().toISOString();save();
     if(activeFeedStory&&feedStoryKey(activeFeedStory)===key)renderFeedThread(item)
   }
 }
+
+async function renderIdeas(force=false){
+  const box=$('#ideasList'),refresh=$('#refreshIdeas');if(!box||ideasBusy)return;ideasBusy=true;setWorking(refresh,true);
+  box.innerHTML='<div class="surface-loading">Buscando una propuesta que pueda convertirse en trabajo…</div>';
+  try{
+    const [a,b,workspaces]=await Promise.all([
+      window.ISABELLA_AI?.ideas?.(state,{force})||[],
+      window.ISABELLA_AI?.sofiaSurface?.('idea',{force})||[],
+      loadIdeaWorkspaces()
+    ]);
+    ideaWorkspaces=workspaces||[];
+    const items=[...(a||[]),...(b||[])].filter((x,i,arr)=>arr.findIndex(y=>String(y.id||y.title)===String(x.id||x.title))===i).slice(0,4);
+    renderIdeaItems(items);
+  }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
+  finally{ideasBusy=false;setWorking(refresh,false)}
+}
+
 
 async function renderIdeas(force=false){
   const box=$('#ideasList');if(!box||ideasBusy)return;ideasBusy=true;
@@ -886,6 +900,7 @@ function bindMessageReactions(){
 
 function renderToday(){const d=today(),ev=state.events.filter(x=>x.date===d).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===d&&activeTask(x));$('#todaySummary').textContent=`${ev.length} ${ev.length===1?'evento':'eventos'} · ${ta.length} ${ta.length===1?'tarea':'tareas'}`;$('#todayNext').textContent=ev[0]?`${ev[0].start} · ${ev[0].title}`:'Sin próxima cita'}
 function orb(mode='idle',label=''){const o=$('#orbButton');if(!o)return;o.classList.remove('listening','thinking');if(mode!=='idle')o.classList.add(mode);const s=$('#orbStatus');if(s)s.textContent=label}
+function setWorking(el,on){if(el)el.classList.toggle('is-working',!!on)}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:normalizeMemoryKind(m.kind),content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
@@ -1182,7 +1197,7 @@ function applyProposal(p){
 }
 async function handle(text,attachments=[]){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
-  say('user',text||'📷 Foto',{attachments:copy});orb('thinking','Pensando…');
+  say('user',text||'📷 Foto',{attachments:copy});orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy});
@@ -1195,7 +1210,7 @@ async function handle(text,attachments=[]){
       else save();
     }else say('assistant',localFallback(text));
   }catch(e){say('assistant',e?.message||localFallback(text))}
-  finally{orb()}
+  finally{orb();setWorking($('#sendButton'),false)}
 }
 let pendingChatFiles=[];
 const pendingChatUrls=new Map();
@@ -1779,25 +1794,18 @@ function feedFollowRow(node={}){
 }
 function feedPreferencesPanel(){
   const prefs=state.feedPreferences||base.feedPreferences;
-  const standard=['Clima','Noticias','Arquitectura','Arte','Diseño','Cultura','Inteligencia artificial','Ciencia','Tecnología','Mundo','Alemania','Proyectos','Familia','Readings'];
-  const selected=new Set(prefs.topics||[]),graph=Array.isArray(prefs.followGraph)?prefs.followGraph:[];
-  modal('Curar mi Feed',`<div class="form feed-preferences">
-    <label>Temas base<div class="topic-grid">${standard.map(t=>`<label class="topic-choice"><input type="checkbox" value="${esc(t)}" ${selected.has(t)?'checked':''}><span>${esc(t)}</span></label>`).join('')}</div></label>
-    <label>Otros temas que quieres seguir<input id="feedCustomTopics" value="${esc((prefs.customTopics||[]).join(', '))}" placeholder="Ej. vivienda colectiva, fotografía, literatura japonesa"></label>
-    <div class="feed-follow-editor"><div class="feed-follow-editor-title">Tu constelación</div><div class="small">No solo a quién sigues, sino qué te interesa de cada uno.</div><div id="feedFollowRows">${graph.map(feedFollowRow).join('')}</div><button id="addFeedFollow" type="button" class="secondary">+ Seguir algo</button></div>
-    <label>Instrucciones para tu Feed<textarea id="feedInstructions" rows="4" placeholder="Ej. prioriza arquitectura y arte; evita noticias repetidas; dame contexto, no titulares.">${esc(prefs.instructions||'')}</textarea></label>
-    <label>Lugar habitual para el clima <span class="small">(opcional; si queda vacío Isabella usa solo contexto que ya conozca)</span><input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad"></label>
+  modal('Ajustar Feed',`<div class="form feed-preferences">
+    <div class="small">El Feed ya no se cura por temas ni noticias. Isabella reevalúa tu situación y solo muestra señales que merecen atención ahora.</div>
+    <label>Lugar habitual para el clima <span class="small">(opcional; no se inferirá una localidad que no hayas confirmado)</span><input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad"></label>
+    <label>Qué merece emerger<textarea id="feedInstructions" rows="5" placeholder="Ej. señala conflictos y concentraciones entre proyectos; evita consejos genéricos; no me interrumpas por cosas obvias.">${esc(prefs.instructions||'')}</textarea></label>
     <button id="saveFeedPreferences" class="primary">Guardar</button>
   </div>`);
-  const bindRemove=()=>$$('#feedFollowRows [data-follow-remove]').forEach(b=>b.onclick=()=>b.closest('.feed-follow-row')?.remove());bindRemove();
-  $('#addFeedFollow').onclick=()=>{$('#feedFollowRows').insertAdjacentHTML('beforeend',feedFollowRow({}));bindRemove()};
   $('#saveFeedPreferences').onclick=()=>{
-    const split=v=>String(v||'').split(/[\n,]+/).map(x=>x.trim()).filter(Boolean).filter((x,i,a)=>a.indexOf(x)===i).slice(0,40);
-    const followGraph=$$('#feedFollowRows .feed-follow-row').map(row=>({id:row.dataset.followId||uid(),name:row.querySelector('[data-follow-name]')?.value.trim()||'',type:row.querySelector('[data-follow-type]')?.value||'other',focus:row.querySelector('[data-follow-focus]')?.value.trim()||'',active:true})).filter(x=>x.name).slice(0,60);
-    state.feedPreferences={instructions:$('#feedInstructions').value.trim(),weatherLocation:$('#weatherLocation').value.trim(),topics:$$('.topic-choice input:checked').map(x=>x.value),customTopics:split($('#feedCustomTopics').value),followGraph,following:followGraph.map(x=>x.name)};
+    state.feedPreferences={...prefs,instructions:$('#feedInstructions').value.trim(),weatherLocation:$('#weatherLocation').value.trim()};
     save();closeModal();renderFeed(true);
   };
 }
+
 
 function categoriesPanel(){
   const rows=state.categories.map(x=>`<div class="settings-row color-row"><input type="color" data-cat-color="${x.id}" value="${esc(x.color||fallbackColor(x.id))}" aria-label="Color"><input data-cat-name="${x.id}" value="${esc(x.name)}"><button data-cat-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join('');

@@ -29,18 +29,17 @@ test('ORB compact mode is driven by conversation state',()=>{
   assert.ok(css.includes('.assistant-scroll.orb-compact .orb-button'));
 });
 
-test('Feed keeps Hoy, Noticias and Para mí as explicit information layers',()=>{
+
+test('Feed is a situational surface with weather and Now, not an editorial news feed',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('feed-section-title">Hoy'));
-  assert.ok(app.includes('feed-section-title">Noticias'));
-  assert.ok(app.includes('feed-section-title">Para mí'));
-  assert.ok(ai.includes("functions.invoke('isabella-feed'"));
-  assert.ok(ai.includes('preference_signature'));
-  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
-  assert.ok(ai.includes('source_url'));
+  assert.ok(app.includes('feed-weather-section'));
+  assert.ok(app.includes('feed-section-title">Ahora'));
+  assert.ok(!app.includes('feed-section-title">Noticias'));
+  assert.ok(!app.includes('feed-section-title">Para mí'));
+  assert.ok(ai.includes("surface_version:surface==='feed'?11"));
+  assert.ok(ai.includes("return 'feed11-'"));
 });
-
 
 test('message reactions stay attached to messages instead of opening a large modal',()=>{
   const app=read('apps/isabella/app.js');
@@ -146,17 +145,15 @@ test('Sofia routes automatically and mirrors Isabella message typography with an
 });
 
 
-test('Build 21 Feed supports free interests, followed entities and deeper news',()=>{
+
+test('Build 41 Feed no longer exposes topic curation or a follow graph',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('feedCustomTopics'));
-  assert.ok(app.includes('followGraph'));
-  assert.ok(app.includes('data-news-key'));
-  assert.ok(app.includes('Leer más'));
-  assert.ok(ai.includes('feed_custom_topics'));
-  assert.ok(ai.includes('feed_following'));
+  assert.ok(app.includes('El Feed ya no se cura por temas ni noticias'));
+  assert.ok(!app.includes('id="feedCustomTopics"'));
+  assert.ok(!app.includes('Tu constelación'));
+  assert.ok(!ai.includes('feed_follow_graph'));
   assert.ok(ai.includes("functions.invoke('isabella-feed'"));
-  assert.ok(ai.includes('feed_follow_graph'));
 });
 
 test('Build 21 removes redundant surface headings and Readings explainer',()=>{
@@ -194,15 +191,15 @@ test('Build 22 keeps Feed generations stable and conversations inside Feed',()=>
   assert.ok(shell.includes('Preguntar sobre esto...'));
 });
 
-test('Build 22 adds an explicit personal follow graph',()=>{
+
+test('Build 41 Feed settings are limited to weather and attentional policy',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('followGraph'));
-  assert.ok(app.includes('Tu constelación'));
-  assert.ok(app.includes('data-follow-focus'));
-  assert.ok(app.includes('data-feed-follow-name'));
-  assert.ok(ai.includes('feed_follow_graph'));
-  assert.ok(ai.includes('feedPreferenceSignature'));
+  assert.ok(app.includes("modal('Ajustar Feed'"));
+  assert.ok(app.includes('id="weatherLocation"'));
+  assert.ok(app.includes('id="feedInstructions"'));
+  assert.ok(ai.includes('weather_location'));
+  assert.ok(ai.includes('feed_instructions'));
 });
 
 test('Build 24 uses a long-press message context with reactions and text actions',()=>{
@@ -226,14 +223,14 @@ test('browser entry scripts are syntactically valid JavaScript',()=>{
 });
 
 
-test('Build 24 refresh requests a genuinely new Feed edition',()=>{
+
+test('Build 41 refresh re-evaluates the situation instead of demanding novelty',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes("startFeedRefresh?.(state,{force,currentItems:visible})"));
-  assert.ok(ai.includes('currentItems=[]'));
-  assert.ok(ai.includes("force:!!force"));
   assert.ok(ai.includes('current_titles:currentTitles'));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
+  assert.ok(app.includes('Reevaluando tu situación…'));
+  assert.ok(app.includes("status.textContent='Al día'"));
 });
 
 test('Build 24 news detail can render immediate context and optional verified media',()=>{
@@ -258,13 +255,13 @@ test('Build 24 gives Isabella a warmer conversational voice without changing sur
 });
 
 
-test('Build 25 invalidates old Feed editions and hydrates news detail into the article',()=>{
+
+test('Build 41 hydrates situational detail with personal context',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
-  assert.ok(ai.includes('feedPreferenceSignature'));
+  assert.ok(ai.includes("surface_version:surface==='feed'?11"));
+  assert.ok(ai.includes("context:compact(state)"));
   assert.ok(app.includes('function hydrateFeedStory'));
-  assert.ok(app.includes('function renderFeedOverview'));
   assert.ok(app.includes('Buscando contexto y antecedentes'));
 });
 
@@ -314,27 +311,26 @@ test('Build 27 supports one-time server chat reminders without requiring push pe
 });
 
 
-test('Build 28 lets Isabella propose and persist Feed curation changes',()=>{
+
+test('Build 41 preserves Feed preferences as weather plus attentional instructions',()=>{
   const app=read('apps/isabella/app.js');
   const sync=read('apps/isabella/sync.js');
   assert.ok(app.includes("p.kind==='feed_preferences'"));
   assert.ok(app.includes('function applyFeedPreferencesProposal'));
-  assert.ok(app.includes('add_entities'));
-  assert.ok(app.includes('followGraph:graph'));
+  assert.ok(app.includes('weather_location'));
   assert.ok(sync.includes("preference_key:'feed'"));
   assert.ok(sync.includes("from('isabella_preferences').upsert"));
-  assert.ok(sync.includes("eq('preference_key','feed')"));
 });
 
 
-test('Build 29 Feed cache is preference-aware and refresh has visible state',()=>{
+test('Build 41 Feed cache is situational-policy aware and refresh has visible state',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   const shell=read('apps/isabella/shell.js');
   assert.ok(ai.includes('function feedPreferenceSignature'));
   assert.ok(ai.includes("functions.invoke('isabella-feed'"));
   assert.ok(ai.includes("preference_signature:signature"));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
+  assert.ok(app.includes('Reevaluando tu situación…'));
   assert.ok(shell.includes('id="feedRefreshStatus"'));
 });
 
@@ -360,45 +356,40 @@ test('Build 29 supports confirmed behavioral self-improvement',()=>{
 });
 
 
-test('Build 30 Feed renders cached content before slow generation and reloads server-persisted edition',()=>{
+
+test('Build 41 Feed renders cached situational content before slow re-evaluation',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('Abriendo tu Feed…'));
-  assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
-  assert.ok(app.includes("loadSurface?.('feed','sofia',{allowStale:true})"));
+  assert.ok(app.includes('Leyendo tu situación…'));
+  assert.ok(app.includes("loadSurface?.('feed','isabella',{allowStale:true})"));
   assert.ok(ai.includes("const cached=await loadSurface('feed','isabella',{allowStale:true})"));
-  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
-  assert.ok(ai.includes("return 'feed10-'"));
+  assert.ok(ai.includes("surface_version:surface==='feed'?11"));
+  assert.ok(ai.includes("return 'feed11-'"));
 });
 
 
-test('Build 31 Feed refresh is asynchronous and keeps stale content usable',()=>{
+test('Build 41 Feed re-evaluation is asynchronous and keeps engaged signals reachable',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(ai.includes('async function startFeedRefresh'));
   assert.ok(ai.includes('async function waitForFeedRefresh'));
   assert.ok(ai.includes("from('minds_feed_jobs')"));
-  assert.ok(ai.includes("allowStale:true"));
-  assert.ok(app.includes('Actualizando en segundo plano…'));
-  assert.ok(app.includes('Se terminará de actualizar en segundo plano'));
-  assert.ok(app.includes("window.addEventListener('isabella:synced'"));
-  assert.ok(app.includes('maybePrewarmFeed'));
-  assert.ok(ai.includes("return 'feed10-'"));
+  assert.ok(ai.includes("String(x?.lifecycle_state||'')==='seen'"));
+  assert.ok(app.includes('Sigo reevaluando en segundo plano…'));
+  assert.ok(app.includes('feed-ongoing'));
+  assert.ok(ai.includes("return 'feed11-'"));
 });
 
 
-test('Build 32 keeps Hoy deterministic and Feed exploration inside Feed',()=>{
+test('Build 41 separates Calendar from Feed and keeps only situational signals',()=>{
   const app=read('apps/isabella/app.js');
-  const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('function fixedTodayFeedItems'));
-  assert.ok(app.includes("filter(x=>x.date===td"));
-  assert.ok(app.includes("filter(x=>sectionOf(x)!=='today'&&sectionOf(x)!=='work')"));
-  assert.ok(app.includes("const feedStory=surface==='feed'&&!operational"));
+  assert.ok(app.includes('feed-weather-section'));
+  assert.ok(app.includes('feed-now-empty'));
+  assert.ok(app.includes("!['weather','clear','news','commitment','pending','research'].includes"));
+  assert.ok(!app.includes('feed-section-title">Hoy'));
+  assert.ok(!app.includes('feed-section-title">Noticias'));
   assert.ok(app.includes('Leer más'));
-  assert.ok(app.includes("newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10)"));
-  assert.ok(ai.includes("return 'feed10-'"));
 });
-
 
 test('Build 33 Feed learns from explicit card feedback and explains personalization',()=>{
   const app=read('apps/isabella/app.js');
@@ -420,22 +411,25 @@ test('Build 33 exposes a structured personal model with confirm and correct cont
   assert.ok(app.includes("status:'contradicted'"));
 });
 
-test('Build 33 gives Ideas a sleep/discard lifecycle and return queue',()=>{
+
+test('Build 41 Ideas keep lifecycle but only generate producible proposals',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('data-idea-sleep'));
   assert.ok(app.includes('data-idea-dismiss'));
   assert.ok(app.includes("from('isabella_return_queue').insert"));
-  assert.ok(ai.includes('research_candidate'));
-  assert.ok(ai.includes("surface==='idea'?3"));
+  assert.ok(ai.includes('deliverable'));
+  assert.ok(ai.includes("surface==='idea'?4"));
+  assert.ok(ai.includes('Una Idea NO es una observación'));
 });
 
-test('Build 33 morning brief includes weather and news',()=>{
+
+test('Build 41 morning brief uses weather and situational observations without news',()=>{
   const ai=read('apps/isabella/ai.js');
   assert.ok(ai.includes('pronóstico breve del clima'));
-  assert.ok(ai.includes('noticias realmente relevantes'));
+  assert.ok(ai.includes('observaciones situacionales'));
+  assert.ok(ai.includes('No incluyas noticias generales'));
 });
-
 
 test('Build 34 runs a small autonomous research queue and surfaces finished work',()=>{
   const app=read('apps/isabella/app.js');
@@ -546,18 +540,38 @@ test('Build 39 keeps Feed loading transient and makes contextual questions visib
   assert.ok(app.includes("if(!result?.reply)throw new Error('La respuesta del Feed llegó vacía.')"));
 });
 
-test('Build 40 exposes the real build and cannot suppress future service-worker reloads',()=>{
+
+test('Build 41 exposes the new situational/productive architecture and fresh PWA assets',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.27.40'));
-  assert.ok(index.includes('shell.js?v=40'));
-  assert.ok(index.includes('app.js?v=49'));
-  assert.ok(index.includes('ai.js?v=33'));
-  assert.ok(index.includes('let reloadingForServiceWorker = false'));
-  assert.ok(!index.includes("sessionStorage.getItem('isabella-sw-reloaded')"));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v47'"));
-  assert.ok(sw.includes("'./shell.js?v=40'"));
-  assert.ok(sw.includes("'./app.js?v=49'"));
-  assert.ok(sw.includes("'./ai.js?v=33'"));
+  assert.ok(shell.includes('Build 2026.09.27.41'));
+  assert.ok(shell.includes('MINDS · TRABAJO'));
+  assert.ok(index.includes('app.css?v=38'));
+  assert.ok(index.includes('shell.js?v=41'));
+  assert.ok(index.includes('app.js?v=50'));
+  assert.ok(index.includes('ai.js?v=34'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v48'"));
+});
+
+test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('Convertir en trabajo'));
+  assert.ok(app.includes('En producción'));
+  assert.ok(app.includes('Producido'));
+  assert.ok(app.includes('ARTEFACTO'));
+  assert.ok(app.includes('toggleIdeaWorkspaceStatus'));
+  assert.ok(app.includes("ideaWork?.(w,message,w.messages||[],state)"));
+  assert.ok(ai.includes('context:state?compact(state):{}'));
+});
+
+test('Build 41 shows visible AI activity around action buttons',()=>{
+  const app=read('apps/isabella/app.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(app.includes('function setWorking'));
+  assert.ok(app.includes("setWorking($('#sendButton'),true)"));
+  assert.ok(app.includes("setWorking(refresh,true)"));
+  assert.ok(css.includes('.send.is-working::before'));
+  assert.ok(css.includes('@keyframes minds-ai-ring'));
 });

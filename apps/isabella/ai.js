@@ -30,10 +30,6 @@ function compact(state){
     locale:navigator.language||'es-ES',
     preferences:{
       feed_instructions:String(state.feedPreferences?.instructions||'').trim(),
-      feed_topics:Array.isArray(state.feedPreferences?.topics)?state.feedPreferences.topics:[],
-      feed_custom_topics:Array.isArray(state.feedPreferences?.customTopics)?state.feedPreferences.customTopics:[],
-      feed_following:Array.isArray(state.feedPreferences?.following)?state.feedPreferences.following:[],
-      feed_follow_graph:Array.isArray(state.feedPreferences?.followGraph)?state.feedPreferences.followGraph.map(x=>({name:x.name,type:x.type||'other',focus:x.focus||''})):[],
       weather_location:String(state.feedPreferences?.weatherLocation||'').trim(),
       assistant_behavior_rules:Array.isArray(state.assistantPreferences?.behaviorRules)?state.assistantPreferences.behaviorRules:[],
       curiosity_enabled:state.assistantPreferences?.curiosityEnabled!==false
@@ -56,7 +52,7 @@ ${message}`;
 }
 
 async function brief(state){
-  return ask("Prepara mi briefing de la mañana. Incluye: 1) eventos y tareas pendientes de hoy, 2) pronóstico breve del clima usando la ubicación configurada si existe y sin inventar ubicación, y 3) una selección muy breve de noticias realmente relevantes para mí. Prioriza utilidad sobre cantidad; si una sección no tiene datos fiables, dilo o sáltala. No propongas cambios ni crees tareas en este resumen.",state,{background:true});
+  return ask("Prepara mi briefing de la mañana. Incluye: 1) eventos y tareas pendientes de hoy, 2) pronóstico breve del clima usando la ubicación configurada si existe y sin inventar ubicación, y 3) como máximo tres observaciones situacionales derivadas de mi agenda, pendientes, proyectos y contexto que realmente merezcan atención. No incluyas noticias generales ni contenido por intereses. No propongas cambios ni crees tareas en este resumen.",state,{background:true});
 }
 async function nudge(state){
   return ask("Evalúa si existe exactamente un seguimiento personal u operativo que valga la pena traerme ahora: algo pendiente, una respuesta esperada, una tarea que estoy dejando atrás, una cita cercana o algo significativo que te conté y que razonablemente merezca seguimiento. Si no hay nada suficientemente útil, responde exactamente NO_NUDGE. Si sí lo hay, escribe solo un mensaje breve y natural, sin crear ni modificar nada.",state,{background:true});
@@ -84,13 +80,9 @@ function parseSurface(raw){
 }
 function feedPreferenceSignature(state){
   const p=state.feedPreferences||{};
-  const raw=JSON.stringify({
-    topics:p.topics||[],customTopics:p.customTopics||[],instructions:String(p.instructions||''),weatherLocation:String(p.weatherLocation||''),
-    followGraph:(p.followGraph||[]).map(x=>({name:String(x.name||''),type:String(x.type||'other'),focus:String(x.focus||'')}))
-  });
-  let h=2166136261;
-  for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
-  return 'feed10-'+(h>>>0).toString(16);
+  const raw=JSON.stringify({instructions:String(p.instructions||''),weatherLocation:String(p.weatherLocation||'')});
+  let h=2166136261;for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
+  return 'feed11-'+(h>>>0).toString(16);
 }
 async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
@@ -104,9 +96,9 @@ async function saveSurface(surface,agent,items){
     icon:String(x.icon||'').trim()||null,
     metadata:{
       source:x.source||null,
-      section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
+      section:String(x.section||(surface==='feed'?'now':'for_me')).toLowerCase(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?10:surface==='idea'?3:1,
+      surface_version:surface==='feed'?11:surface==='idea'?4:1,
       preference_signature:String(x.preference_signature||x.metadata?.preference_signature||'').trim()||null,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
@@ -117,7 +109,9 @@ async function saveSurface(surface,agent,items){
       weather_location:String(x.weather_location||'').trim()||null,
       source_title:String(x.source_title||'').trim()||null,
       source_url:/^https?:\/\//i.test(String(x.source_url||'').trim())?String(x.source_url).trim():null,
-      why:String(x.why||'').trim()||null
+      why:String(x.why||'').trim()||null,
+      deliverable:String(x.deliverable||x.metadata?.deliverable||'').trim()||null,
+      work_type:String(x.work_type||x.metadata?.work_type||'').trim()||null
     },
     lifecycle_state:'new',
     expires_at:new Date(Date.now()+12*60*60*1000).toISOString()
@@ -128,13 +122,20 @@ async function saveSurface(surface,agent,items){
 async function loadSurface(surface,agent=null,options={}){
   if(!sb)return [];
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
-  let q=sb.from('minds_surface_items').select('*')
-    .eq('surface',surface).eq('status','active');
+  let q=sb.from('minds_surface_items').select('*').eq('surface',surface).eq('status','active');
   if(surface!=='feed'&&!options.allowStale)q=q.gt('expires_at',new Date().toISOString());
   if(agent)q=q.eq('agent',agent);
-  const {data,error}=await q.order('generated_at',{ascending:false}).limit(40);
-  if(error)return [];
+  const {data,error}=await q.order('generated_at',{ascending:false}).limit(40);if(error)return [];
   const rows=data||[],generation=rows.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id;
+  if(surface==='feed'){
+    const cutoff=Date.now()-24*60*60*1000;
+    return rows.filter(x=>{
+      if(generation&&x?.metadata?.generation_id===generation)return true;
+      const engaged=String(x?.lifecycle_state||'')==='seen'||String(x?.user_feedback||'')==='liked';
+      const generated=x?.generated_at?Date.parse(x.generated_at):0;
+      return engaged&&generated>=cutoff;
+    }).slice(0,16);
+  }
   return generation?rows.filter(x=>x?.metadata?.generation_id===generation):rows;
 }
 async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
@@ -142,7 +143,7 @@ async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
   const signature=feedPreferenceSignature(state);
   const cached=await loadSurface('feed','isabella',{allowStale:true});
   const newest=cached[0]?.generated_at?Date.parse(cached[0].generated_at):0;
-  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=10&&String(x?.metadata?.preference_signature||'')===signature);
+  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=11&&String(x?.metadata?.preference_signature||'')===signature);
   if(!force&&cacheMatches&&newest&&Date.now()-newest<2*60*60*1000){
     return {accepted:false,skipped:true,generation_id:cached[0]?.metadata?.generation_id||null,signature,items:cached};
   }
@@ -172,8 +173,7 @@ async function waitForFeedRefresh(generationId,{timeoutMs=90000,intervalMs=1600}
     const job=await feedJobStatus(generationId);
     if(job?.status==='succeeded'){
       const rows=await loadSurface('feed','isabella',{allowStale:true});
-      const exact=rows.filter(x=>String(x?.metadata?.generation_id||'')===String(generationId));
-      return {status:'succeeded',items:exact.length?exact:rows,job};
+      return {status:'succeeded',items:rows,job};
     }
     if(job?.status==='failed')throw new Error(job.error||'No pude actualizar el Feed.');
     await new Promise(r=>setTimeout(r,intervalMs));
@@ -226,27 +226,28 @@ async function loadResearchReady(){
 async function feedStory(item,state,question='',history=[]){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria para ampliar el Feed.');
-  const request=sb.functions.invoke('isabella-feed-story',{body:{item,question:String(question||''),history:(history||[]).slice(-12)}});
+  const request=sb.functions.invoke('isabella-feed-story',{body:{item,context:compact(state),question:String(question||''),history:(history||[]).slice(-12)}});
   const timeout=new Promise((_,reject)=>setTimeout(()=>reject(new Error('La ampliación está tardando demasiado. Inténtalo de nuevo.')),45000));
   const {data,error}=await Promise.race([request,timeout]);
   if(error)throw error;
   if(data?.error)throw new Error(data.detail||data.error);
   return data||{reply:'',sources:[]};
 }
-async function ideaWork(workspace,message,history=[]){
+async function ideaWork(workspace,message,history=[],state=null){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria para trabajar en esta idea.');
   const {data,error}=await sb.functions.invoke('minds-idea-worker',{body:{
     workspace:{id:workspace?.id,title:workspace?.title,brief:workspace?.brief,why:workspace?.why,artifact_title:workspace?.artifact_title,artifact_content:workspace?.artifact_content},
-    message:String(message||''),history:(history||[]).slice(-14)
+    context:state?compact(state):{},
+    message:String(message||''),history:(history||[]).slice(-16)
   }});
   if(error)throw error;
   if(data?.error)throw new Error(data.detail||data.error);
   return data||{reply:'',artifact:null,sources:[]};
 }
 async function ideas(state,{force=false}={}){
-  if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=3))return cached}
-  const prompt='Genera máximo 4 Ideas proactivas para Gari a partir de su contexto, proyectos, agenda, pendientes y memoria. Las Ideas tienen ciclo de vida: pueden discutirse, dormirse, descartarse y reaparecer más tarde si nueva evidencia las vuelve relevantes. No son tareas obligatorias. Puedes incluir COMO MÁXIMO una idea con kind:"isabella_improvement": una autoevaluación concreta de algo que Isabella podría hacer mejor para ayudarle, basada en fricción observada, feedback o una práctica de interacción que merezca investigar. También puedes incluir COMO MÁXIMO una idea con kind:"research_candidate" cuando exista una pregunta que Isabella podría investigar en segundo plano y que tenga valor personal claro. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"kind":"idea"|"isabella_improvement"|"research_candidate","title":"...","body":"...","action_prompt":"...","icon":"...","why":"por qué esta idea aparece ahora"}. Para isabella_improvement, action_prompt debe empezar por "Quiero revisar esta mejora de Isabella:". Para research_candidate, action_prompt debe empezar por "Quiero explorar esta investigación:". Evita consejos genéricos y transacciones. Cada idea debe tener una razón concreta de aparición.';
+  if(!force){const cached=await loadSurface('idea','isabella');if(cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=4))return cached}
+  const prompt='Genera máximo 3 propuestas para MINDS a partir del contexto, proyectos, agenda, pendientes y memoria. Una Idea NO es una observación, un recordatorio ni un consejo: debe ser una posibilidad concreta que todavía no existe y que pueda convertirse en un trabajo aislado con un artefacto tangible. Ejemplos de clases de resultado: documento, protocolo, investigación, mapa, sistema, borrador, especificación, análisis o experimento. Cada propuesta debe justificar por qué vale la pena producirla ahora. Si no hay una propuesta con suficiente potencial, devuelve []. Devuelve EXCLUSIVAMENTE JSON válido: un array de objetos {"kind":"idea"|"research_project"|"isabella_improvement","title":"...","body":"qué se propone construir o investigar","deliverable":"resultado concreto que debería producir el workspace","work_type":"document|research|system|analysis|experiment|other","why":"por qué surge ahora","action_prompt":"","icon":""}. Evita productividad genérica y cualquier cosa que pertenezca simplemente al Feed situacional.';
   const result=await ask(prompt,state,{background:true,surface:true});
   const items=parseSurface(result?.reply);
   return saveSurface('idea','isabella',items);
@@ -259,7 +260,7 @@ async function sofiaSurface(kind,{force=false}={}){
   }
   const {data:{session}}=await sb.auth.getSession();if(!session)return [];
   const request=kind==='idea'
-    ?'Analiza mis Readings, subrayados, notas e hilos activos y genera máximo 3 descubrimientos o ideas que merezcan conversación ahora. Deben ser específicos, provisionales y trazables a mi memoria intelectual. Devuelve EXCLUSIVAMENTE JSON válido como array de {"title":"...","body":"...","action_prompt":"...","icon":"..."}. action_prompt debe formular cómo continuar la conversación contigo, Sofía.'
+    ?'Analiza mis Readings, subrayados, notas e hilos activos y genera máximo 2 propuestas que puedan convertirse en trabajo real dentro de MINDS. No devuelvas meras conexiones interesantes: cada propuesta debe poder producir un artefacto concreto. Devuelve EXCLUSIVAMENTE JSON válido como array de {"kind":"idea","title":"...","body":"qué se propone desarrollar","deliverable":"artefacto concreto","work_type":"research|analysis|document|other","why":"por qué surge ahora","action_prompt":"","icon":""}. Si no hay una propuesta suficientemente fuerte, devuelve [].'
     :'Genera como máximo 1 señal para mi Feed desde Readings, y solo si realmente merece reaparecer ahora: algo que haya quedado vivo, una pregunta abierta o una lectura/hilo que convenga retomar. Devuelve EXCLUSIVAMENTE JSON válido como array de {"section":"for_me","kind":"reading","title":"...","body":"...","action_prompt":"...","icon":"..."}. Si no hay una señal suficientemente fuerte, devuelve [].';
   const {data,error}=await sb.functions.invoke('sofia-chat',{body:{message:request,background:true,structured:true}});
   if(error)return [];

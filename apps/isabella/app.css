@@ -762,3 +762,28 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 .idea-workspace-thread{display:grid;gap:12px;max-width:680px}.idea-workspace-message{font-size:15px;line-height:1.48;white-space:pre-wrap}.idea-workspace-message.user{justify-self:end;max-width:82%;background:#f4f4f5;border-radius:17px;padding:10px 13px}.idea-workspace-message.assistant{padding:2px 0}
 .idea-workspace-form{position:absolute;left:0;right:0;bottom:0;padding:16px 22px calc(12px + var(--safe));background:linear-gradient(to top,#fff 82%,rgba(255,255,255,0));display:flex;gap:8px}.idea-workspace-form textarea{flex:1;border:1px solid #e5e5e7;border-radius:24px;resize:none;padding:12px 15px;min-height:48px;max-height:132px;background:#fff}.idea-workspace-form.working{opacity:.65;pointer-events:none}
 @media(max-width:520px){.idea-workspace{padding-left:20px;padding-right:20px}.idea-workspace h1{font-size:34px}.idea-artifact-head{display:grid}.idea-artifact-head button{margin-left:0;margin-right:5px}}
+
+
+/* Build 41 — situational Feed, productive Ideas, visible AI activity */
+.feed-weather-section{margin:2px 0 26px}
+.feed-weather-section .weather-card{border:1px solid #ececef;border-radius:22px;padding:17px 18px 16px;background:#fafafa}
+.feed-weather-section .weather-card .surface-card-top{margin-bottom:6px}
+.feed-weather-section .weather-card h2{font-family:"Iowan Old Style",Georgia,serif;font-size:24px;font-weight:500;letter-spacing:-.02em}
+.feed-weather-placeholder{display:flex;align-items:center;justify-content:space-between;gap:18px;border:1px solid #ececef;border-radius:22px;padding:17px 18px;background:#fafafa}
+.feed-weather-placeholder>div{display:grid;gap:4px}.feed-weather-placeholder span{font-size:9px;letter-spacing:.16em;color:#999;font-weight:700}.feed-weather-placeholder strong{font-size:15px}
+.feed-weather-placeholder button{border:0;background:#eeeef0;border-radius:99px;padding:9px 12px;font-size:12px}
+.feed-now-empty{padding:24px 2px}
+.feed-ongoing{margin-top:30px}
+.idea-deliverable{display:grid;gap:4px;margin:13px 0 0;padding:11px 12px;border-radius:13px;background:#f7f7f8}
+.idea-deliverable span{font-size:8px;letter-spacing:.16em;color:#999;font-weight:750}.idea-deliverable strong{font-size:13px;line-height:1.35}
+.idea-produced-section{margin-top:30px}.idea-workspace-card.done{background:#fafafa}.idea-workspace-card.done strong{color:#555}
+.idea-workspace-form.working{opacity:1!important;pointer-events:none}
+.send,.surface-refresh{position:relative;overflow:visible}
+.send.is-working::before,.surface-refresh.is-working::before{
+  content:"";position:absolute;inset:-5px;border-radius:inherit;padding:2px;
+  background:conic-gradient(from 0deg,rgba(115,160,255,.95),rgba(183,126,224,.9),rgba(255,174,112,.92),rgba(115,160,255,.95));
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);
+  -webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;
+  animation:minds-ai-ring 1.15s linear infinite
+}
+@keyframes minds-ai-ring{to{transform:rotate(360deg)}}
