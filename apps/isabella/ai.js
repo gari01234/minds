@@ -88,7 +88,7 @@ function feedPreferenceSignature(state){
   });
   let h=2166136261;
   for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
-  return 'feed9-'+(h>>>0).toString(16);
+  return 'feed10-'+(h>>>0).toString(16);
 }
 async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
@@ -104,7 +104,7 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?9:surface==='idea'?2:1,
+      surface_version:surface==='feed'?10:surface==='idea'?2:1,
       preference_signature:String(x.preference_signature||x.metadata?.preference_signature||'').trim()||null,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
@@ -138,7 +138,7 @@ async function startFeedRefresh(state,{force=false,currentItems=[]}={}){
   const signature=feedPreferenceSignature(state);
   const cached=await loadSurface('feed','isabella',{allowStale:true});
   const newest=cached[0]?.generated_at?Date.parse(cached[0].generated_at):0;
-  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=9&&String(x?.metadata?.preference_signature||'')===signature);
+  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=10&&String(x?.metadata?.preference_signature||'')===signature);
   if(!force&&cacheMatches&&newest&&Date.now()-newest<2*60*60*1000){
     return {accepted:false,skipped:true,generation_id:cached[0]?.metadata?.generation_id||null,signature,items:cached};
   }

@@ -226,7 +226,7 @@ function show(name){
   if(name==='ideas')renderIdeas();
   if(name==='readings')ensureReadings();
 }
-function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':'ISABELLA'}
+function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':agent==='minds'?'MINDS':'ISABELLA'}
 function feedStoryKey(item){
   const source=String(item?.source_url||item?.metadata?.source_url||'').trim();
   const title=String(item?.title||'').trim().toLowerCase();
@@ -247,14 +247,16 @@ function surfaceCard(item,surface){
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
   const storyKey=feedStoryKey(item);
+  const operational=weather||kind==='commitment'||kind==='pending';
+  const feedStory=surface==='feed'&&agent==='isabella'&&!operational;
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''}" data-agent="${esc(agent)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span></div>
     <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
-      ${news?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
-      ${news&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
-      ${!news&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
+      ${feedStory?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
+      ${feedStory&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
+      ${!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':improvement?'Revisar mejora':'Hablar con Isabella'}</button>`:''}
     </div>
   </article>`;
 }
@@ -282,14 +284,31 @@ function dedupeFeedItems(items){
   return (items||[]).filter(Boolean).filter((x,i,arr)=>{
     const key=feedStoryKey(x)||String(x.id||x.title||'');
     return arr.findIndex(y=>(feedStoryKey(y)||String(y.id||y.title||''))===key)===i;
-  }).slice(0,12);
+  }).slice(0,24);
+}
+function fixedTodayFeedItems(){
+  const td=today();
+  const events=(state.events||[]).filter(x=>x.date===td).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))).map(x=>({
+    id:'today-event-'+x.id,agent:'minds',section:'today',kind:'commitment',title:(x.start?x.start+' · ':'')+x.title,
+    body:[x.projectId?project(x.projectId):'',x.categoryId?cat(x.categoryId):'',x.duration?x.duration+' min':''].filter(Boolean).join(' · '),
+    icon:'',action_prompt:''
+  }));
+  const tasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort(taskOrder).map(x=>({
+    id:'today-task-'+x.id,agent:'minds',section:'today',kind:'pending',title:x.title,
+    body:[x.projectId?project(x.projectId):'',x.categoryId?cat(x.categoryId):'',x.reminderTime?'Recordatorio '+x.reminderTime:''].filter(Boolean).join(' · '),
+    icon:'',action_prompt:''
+  }));
+  return [...events,...tasks].slice(0,10);
 }
 function renderFeedItems(items){
-  const box=$('#feedList');if(!box)return;feedItems=dedupeFeedItems(items);
-  if(!feedItems.length){box.innerHTML='<div class="surface-empty">No pude construir una edición estable del Feed ahora mismo. Puedes actualizarla sin perder la edición anterior.</div>';return}
+  const box=$('#feedList');if(!box)return;
   const sectionOf=x=>{const s=String(x?.section||x?.metadata?.section||'for_me').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'};
-  const todayItems=feedItems.filter(x=>sectionOf(x)==='today'),newsItems=feedItems.filter(x=>sectionOf(x)==='news'),forMeItems=feedItems.filter(x=>sectionOf(x)==='for_me');
-  box.innerHTML=(todayItems.length?'<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
+  const generated=dedupeFeedItems(items).filter(x=>sectionOf(x)!=='today');
+  const todayItems=fixedTodayFeedItems();
+  feedItems=dedupeFeedItems([...todayItems,...generated]);
+  const newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10),forMeItems=generated.filter(x=>sectionOf(x)==='for_me');
+  const todayHtml=todayItems.length?todayItems.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty surface-day-clear">No tienes eventos ni tareas pendientes para hoy.</div>';
+  box.innerHTML='<section class="feed-section"><h2 class="feed-section-title">Hoy</h2>'+todayHtml+'</section>'+
     (newsItems.length?'<section class="feed-section"><h2 class="feed-section-title">Noticias</h2>'+newsItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'')+
     (forMeItems.length?'<section class="feed-section"><h2 class="feed-section-title">Para mí</h2>'+forMeItems.map(x=>surfaceCard(x,'feed')).join('')+'</section>':'');
   bindSurfaceActions();

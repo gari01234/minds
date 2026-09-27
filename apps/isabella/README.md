@@ -67,3 +67,10 @@ La función `isabella-feed` persiste la edición directamente en Supabase y devu
 El Feed deja de usar una petición HTTP larga. `isabella-feed` crea un trabajo en `minds_feed_jobs`, responde de inmediato y continúa la investigación mediante `EdgeRuntime.waitUntil`. El navegador sigue el estado del trabajo y reemplaza la portada cuando la nueva edición ya está materializada en Supabase.
 
 La interfaz conserva y muestra la última edición disponible aunque haya vencido mientras se revalida en segundo plano. MINDS también inicia un prewarm del Feed después de sincronizar, como máximo una vez cada tres horas, para que la generación pueda ocurrir mientras el usuario está usando Chat, Calendario u otra sección.
+
+
+### Build 32 — Hoy determinista, 10 noticias y profundidad dentro del Feed
+
+`Hoy` deja de ser contenido editorial generado por IA. Se deriva directamente de los eventos y tareas de la fecha actual, de modo que un refresh de noticias no puede borrarlo ni cambiarlo. Las tarjetas externas de Isabella abren `Leer más` dentro del propio Feed; el chat personal de Isabella deja de ser el destino por defecto para noticias, arquitectura, arte y otros contenidos editoriales.
+
+La sección Noticias admite hasta diez tarjetas por edición. `Para mí` queda reservada para señales personalizadas no operativas: proyectos, entidades seguidas, arquitectura, arte, cultura y otras conexiones derivadas del contexto e intereses del usuario.

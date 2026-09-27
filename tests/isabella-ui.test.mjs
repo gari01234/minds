@@ -37,7 +37,7 @@ test('Feed keeps Hoy, Noticias and Para mí as explicit information layers',()=>
   assert.ok(app.includes('feed-section-title">Para mí'));
   assert.ok(ai.includes("functions.invoke('isabella-feed'"));
   assert.ok(ai.includes('preference_signature'));
-  assert.ok(ai.includes("surface_version:surface==='feed'?9"));
+  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
   assert.ok(ai.includes('source_url'));
 });
 
@@ -261,7 +261,7 @@ test('Build 24 gives Isabella a warmer conversational voice without changing sur
 test('Build 25 invalidates old Feed editions and hydrates news detail into the article',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(ai.includes("surface_version:surface==='feed'?9"));
+  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
   assert.ok(ai.includes('feedPreferenceSignature'));
   assert.ok(app.includes('function hydrateFeedStory'));
   assert.ok(app.includes('function renderFeedOverview'));
@@ -367,8 +367,8 @@ test('Build 30 Feed renders cached content before slow generation and reloads se
   assert.ok(app.includes("status.textContent=force?'Actualizando…':'Completando en segundo plano…'"));
   assert.ok(app.includes("loadSurface?.('feed','sofia',{allowStale:true})"));
   assert.ok(ai.includes("const cached=await loadSurface('feed','isabella',{allowStale:true})"));
-  assert.ok(ai.includes("surface_version:surface==='feed'?9"));
-  assert.ok(ai.includes("return 'feed9-'"));
+  assert.ok(ai.includes("surface_version:surface==='feed'?10"));
+  assert.ok(ai.includes("return 'feed10-'"));
 });
 
 
@@ -383,5 +383,18 @@ test('Build 31 Feed refresh is asynchronous and keeps stale content usable',()=>
   assert.ok(app.includes('Se terminará de actualizar en segundo plano'));
   assert.ok(app.includes("window.addEventListener('isabella:synced'"));
   assert.ok(app.includes('maybePrewarmFeed'));
-  assert.ok(ai.includes("return 'feed9-'"));
+  assert.ok(ai.includes("return 'feed10-'"));
+});
+
+
+test('Build 32 keeps Hoy deterministic and Feed exploration inside Feed',()=>{
+  const app=read('apps/isabella/app.js');
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('function fixedTodayFeedItems'));
+  assert.ok(app.includes("filter(x=>x.date===td"));
+  assert.ok(app.includes("filter(x=>sectionOf(x)!=='today')"));
+  assert.ok(app.includes("const feedStory=surface==='feed'&&agent==='isabella'&&!operational"));
+  assert.ok(app.includes('Leer más'));
+  assert.ok(app.includes("newsItems=generated.filter(x=>sectionOf(x)==='news').slice(0,10)"));
+  assert.ok(ai.includes("return 'feed10-'"));
 });
