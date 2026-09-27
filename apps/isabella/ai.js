@@ -88,7 +88,7 @@ function feedPreferenceSignature(state){
   });
   let h=2166136261;
   for(let i=0;i<raw.length;i++){h^=raw.charCodeAt(i);h=Math.imul(h,16777619)}
-  return 'feed7-'+(h>>>0).toString(16);
+  return 'feed8-'+(h>>>0).toString(16);
 }
 async function saveSurface(surface,agent,items){
   if(!sb||!Array.isArray(items)||!items.length)return items||[];
@@ -104,7 +104,7 @@ async function saveSurface(surface,agent,items){
       source:x.source||null,
       section:(()=>{const s=String(x.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
       kind:String(x.kind||'').trim()||null,
-      surface_version:surface==='feed'?7:surface==='idea'?2:1,
+      surface_version:surface==='feed'?8:surface==='idea'?2:1,
       preference_signature:String(x.preference_signature||x.metadata?.preference_signature||'').trim()||null,
       generation_id:generationId,
       details:Array.isArray(x.details)?x.details.slice(0,8):[],
@@ -136,7 +136,7 @@ async function feed(state,{force=false,currentItems=[]}={}){
   if(!sb)return [];
   const signature=feedPreferenceSignature(state);
   const cached=await loadSurface('feed','isabella');
-  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=7&&String(x?.metadata?.preference_signature||'')===signature);
+  const cacheMatches=cached.length&&cached.every(x=>Number(x?.metadata?.surface_version||0)>=8&&String(x?.metadata?.preference_signature||'')===signature);
   if(!force&&cacheMatches)return cached;
   const weakSignals=(state.feedSignals||[]).slice(-30).map(x=>({kind:x.kind,title:x.title,entities:x.entities||[],at:x.at}));
   const currentTitles=(currentItems||[]).map(x=>String(x?.title||'').trim()).filter(Boolean).slice(0,12);
@@ -151,15 +151,10 @@ async function feed(state,{force=false,currentItems=[]}={}){
     if(force)throw new Error(data?.detail||data?.error||error?.message||'No pude actualizar el Feed.');
     return cached;
   }
-  const items=(Array.isArray(data?.items)?data.items:[]).map(x=>({...x,
-    section:(()=>{const s=String(x?.section||'').toLowerCase();return s==='today'?'today':s==='news'?'news':'for_me'})(),
-    preference_signature:signature
-  }));
-  if(items.length<3){
-    if(force)throw new Error('La nueva edición no llegó completa.');
-    return cached.length?cached:items;
-  }
-  return saveSurface('feed','isabella',items);
+  const fresh=await loadSurface('feed','isabella');
+  if(fresh.length)return fresh;
+  if(force)throw new Error('La edición se generó pero no apareció en el Feed.');
+  return cached;
 }
 async function feedStory(item,state,question='',history=[]){
   const sourceUrl=String(item?.source_url||item?.metadata?.source_url||'').trim();

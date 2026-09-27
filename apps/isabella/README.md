@@ -53,3 +53,10 @@ El Feed usa una Edge Function especializada (`isabella-feed`) con un presupuesto
 Isabella puede hacer preguntas ocasionales y no sensibles para reducir huecos útiles de memoria. La cadencia y el opt-in se controlan desde «Proactividad de Isabella». Las respuestas siguen entrando por la conversación normal y solo se conservan si el sistema de memoria las considera útiles.
 
 Ideas puede incluir una autoevaluación de Isabella. Si el usuario acepta una mejora de comportamiento o workflow, Isabella prepara una propuesta confirmable y la regla queda en preferencias compartidas. No se permite que el agente autoedite o despliegue código desde su propio chat.
+
+
+### Build 30 — Feed progresivo y persistencia en servidor
+
+El Feed ya no espera a terminar una generación completa para mostrar algo: primero recupera y pinta de inmediato cualquier edición válida de Isabella o Sofía y después completa la portada en segundo plano. La actualización de Sofía no bloquea el refresh de noticias.
+
+La función `isabella-feed` persiste la edición directamente en Supabase y devuelve una respuesta mínima al navegador. Esto elimina el punto frágil anterior en el que Safari tenía que recibir una respuesta grande y volver a insertarla desde el cliente. La generación inicial se reduce a 4–6 tarjetas compactas; el contexto largo se investiga al abrir una noticia. La constelación extensa rota por muestras de entidades en lugar de intentar revisar decenas de nombres en cada refresh.

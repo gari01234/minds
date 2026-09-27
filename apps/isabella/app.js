@@ -286,24 +286,34 @@ function renderFeedItems(items){
 }
 async function renderFeed(force=false){
   const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
-  const previous=[...feedItems];
+  let visible=[...feedItems];
   if(force&&refresh){refresh.disabled=true;refresh.classList.add('refreshing');refresh.textContent='…'}
-  if(status&&force)status.textContent='Actualizando…';
-  if(!previous.length)box.innerHTML='<div class="surface-loading">Preparando tu Feed…</div>';
+  if(!visible.length){
+    box.innerHTML='<div class="surface-loading">Abriendo tu Feed…</div>';
+    try{
+      const [cachedA,cachedB]=await Promise.all([
+        window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],
+        window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]
+      ]);
+      visible=dedupeFeedItems([...(cachedA||[]),...(cachedB||[])]);
+      if(visible.length)renderFeedItems(visible);
+    }catch{}
+  }
+  const hasIsabella=visible.some(x=>String(x?.agent||'')==='isabella');
+  if(status&&(force||!hasIsabella))status.textContent=force?'Actualizando…':'Completando Feed…';
   try{
-    const [a,b]=await Promise.all([window.ISABELLA_AI?.feed?.(state,{force,currentItems:previous})||[],window.ISABELLA_AI?.sofiaSurface?.('feed',{force})||[]]);
+    const [a,b]=await Promise.all([
+      window.ISABELLA_AI?.feed?.(state,{force,currentItems:visible})||[],
+      window.ISABELLA_AI?.sofiaSurface?.('feed',{force:false})||[]
+    ]);
     const fresh=dedupeFeedItems([...(a||[]),...(b||[])]);
-    if(fresh.length>=3)renderFeedItems(fresh);
-    else if(previous.length)renderFeedItems(dedupeFeedItems([...fresh,...previous]));
-    else if(fresh.length)renderFeedItems(fresh);
-    else{
-      const [cachedA,cachedB]=await Promise.all([window.ISABELLA_AI?.loadSurface?.('feed','isabella')||[],window.ISABELLA_AI?.loadSurface?.('feed','sofia')||[]]);
-      renderFeedItems(dedupeFeedItems([...(cachedA||[]),...(cachedB||[])]));
-    }
-    if(status&&force){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
+    if(fresh.length)renderFeedItems(fresh);
+    else if(visible.length)renderFeedItems(visible);
+    else box.innerHTML='<div class="surface-empty">No encontré una edición disponible ahora mismo.</div>';
+    if(status&&(force||!hasIsabella)){status.textContent='Actualizado ahora';setTimeout(()=>{if(status.textContent==='Actualizado ahora')status.textContent=''},1800)}
   }catch(err){
-    if(previous.length)renderFeedItems(previous);else box.innerHTML='<div class="surface-empty">No pude actualizar el Feed ahora mismo. Tu edición anterior no se ha borrado.</div>';
-    if(status&&force){status.textContent='No pude actualizar';setTimeout(()=>{if(status.textContent==='No pude actualizar')status.textContent=''},2600)}
+    if(visible.length)renderFeedItems(visible);else box.innerHTML='<div class="surface-empty">No pude completar el Feed ahora mismo.</div>';
+    if(status){status.textContent='No pude actualizar';setTimeout(()=>{if(status.textContent==='No pude actualizar')status.textContent=''},2600)}
   }finally{
     feedBusy=false;
     if(refresh){refresh.disabled=false;refresh.classList.remove('refreshing');refresh.textContent='↻'}
