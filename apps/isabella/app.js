@@ -847,7 +847,7 @@ function renderMessages(forceBottom=false){
   const snapshot=captureAssistantScroll();
   box.innerHTML=state.messages.map(m=>{
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${esc(m.reaction)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">☺︎</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">☺︎</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
@@ -887,7 +887,19 @@ function positionReactionPopover(pop,menu,el){
     menu.style.left=mleft+'px';menu.style.top=mtop+'px';
   }
 }
-const REACTION_QUICK=['❤️','👍','👎','😂','‼️','❓'];
+const REACTION_QUICK=[
+  {value:'❤️',label:'<3',tone:'love',aria:'Me encanta'},
+  {value:'👍',label:'YE!',tone:'yes',aria:'Sí / genial'},
+  {value:'😂',label:'HA!',tone:'laugh',aria:'Me hizo reír'},
+  {value:'👌',label:'OK',tone:'ok',aria:'Perfecto'},
+  {value:'👎',label:'NOPE',tone:'nope',aria:'No / no me convence'},
+  {value:'😀',label:':)',tone:'smile',aria:'Me alegra'}
+];
+function typographicReaction(value,compact=false){
+  const r=REACTION_QUICK.find(x=>x.value===value);
+  if(!r)return `<span class="reaction-native-emoji">${esc(value||'')}</span>`;
+  return `<span class="minds-reaction-token tone-${r.tone} ${compact?'is-compact':''}" aria-hidden="true">${esc(r.label)}</span>`;
+}
 const REACTION_CATEGORIES=[
   {id:'recent',label:'Recientes',icon:'🕘',items:['👍','❤️','😂','👏','🙏','🔥','✨','✅','👀','💯','🎉','🤝']},
   {id:'faces',label:'Caras',icon:'☺︎',items:['😀','😃','😄','😁','😆','😅','😂','🤣','😊','🙂','😉','😍','🥰','🤩','🥳','😎','🤔','😮','😯','😲','🥹','😢','😭','😤','😡','😱','😴','🫠','🫡']},
@@ -929,7 +941,7 @@ function openReactionPicker(id){
   closeReactionPicker();closeEmojiReactionSheet();try{navigator.vibrate?.(8)}catch{}el.classList.add('reaction-target');
   const backdrop=document.createElement('div');backdrop.className='reaction-backdrop';
   const pop=document.createElement('div');pop.className='reaction-popover imessage-reactions';
-  pop.innerHTML=`<div class="reaction-row reaction-quick-row">${REACTION_QUICK.map(x=>`<button type="button" data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}" aria-label="Reaccionar ${x}">${x}</button>`).join('')}<button type="button" class="reaction-more" aria-label="Más emojis">＋</button></div>`;
+  pop.innerHTML=`<div class="reaction-row reaction-quick-row">${REACTION_QUICK.map(x=>`<button type="button" data-inline-reaction="${x.value}" class="minds-reaction-choice ${m.reaction===x.value?'selected':''}" aria-label="${esc(x.aria)}">${typographicReaction(x.value,false)}</button>`).join('')}<button type="button" class="reaction-more" aria-label="Más emojis">＋</button></div>`;
   document.body.append(backdrop,pop);requestAnimationFrame(()=>positionReactionPopover(pop,null,el));
   backdrop.onclick=closeReactionPicker;
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
