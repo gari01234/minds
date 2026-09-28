@@ -545,13 +545,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.27.45'));
+  assert.ok(shell.includes('Build 2026.09.28.46'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=41'));
-  assert.ok(index.includes('shell.js?v=45'));
-  assert.ok(index.includes('app.js?v=54'));
+  assert.ok(index.includes('app.css?v=42'));
+  assert.ok(index.includes('shell.js?v=46'));
+  assert.ok(index.includes('app.js?v=55'));
   assert.ok(index.includes('ai.js?v=36'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v52'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v53'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -650,4 +650,28 @@ test('Build 45 reserves image geometry to avoid late-load scroll jumps',()=>{
   assert.ok(css.includes('aspect-ratio:4/3;'));
   assert.ok(css.includes('aspect-ratio:1/1;'));
   assert.ok(css.includes('height:auto!important;'));
+});
+
+
+test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
+  const shell=read('apps/isabella/shell.js'),app=read('apps/isabella/app.js'),work=read('apps/isabella/work.js'),index=read('apps/isabella/index.html');
+  assert.ok(shell.includes('data-nav="work"'));
+  assert.ok(shell.includes('data-work-view="desktop"'));
+  assert.ok(shell.includes('data-work-view="planner"'));
+  assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
+  assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
+  assert.ok(index.includes('work.js?v=1'));
+  assert.ok(work.includes("storage.from('minds-work').upload"));
+  assert.ok(work.includes("from('minds_work_folders')"));
+  assert.ok(work.includes("from('minds_work_buckets')"));
+});
+
+test('Build 46 Planner reuses Isabella tasks instead of duplicating todos',()=>{
+  const work=read('apps/isabella/work.js'),sync=read('apps/isabella/sync.js');
+  assert.ok(work.includes("from('isabella_tasks')"));
+  assert.ok(work.includes('project_id:project.id'));
+  assert.ok(work.includes('work_bucket_id'));
+  assert.ok(work.includes('checklist'));
+  assert.ok(work.includes('priority'));
+  assert.ok(sync.includes('window.ISABELLA_SYNC_NOW'));
 });

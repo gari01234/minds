@@ -39,6 +39,25 @@ document.body.innerHTML = `
       </div>
     </section>
 
+    <section id="workScreen" class="screen work-screen" data-screen="work">
+      <div class="work-shell">
+        <div class="work-head">
+          <div><div class="eyebrow">MINDS · WORK</div><h1 id="workProjectTitle">Bernried</h1></div>
+          <div class="work-project-switch" aria-label="Proyecto">
+            <button data-work-project="bernried" class="active">Bernried</button>
+            <button data-work-project="schwarz">Schwarz</button>
+          </div>
+        </div>
+        <div class="work-tabs" role="tablist">
+          <button data-work-view="desktop" class="active">Desktop</button>
+          <button data-work-view="planner">Planner</button>
+        </div>
+        <div id="workStatus" class="work-status" aria-live="polite"></div>
+        <div id="workBody" class="work-body"><div class="surface-loading">Abriendo Work…</div></div>
+        <input id="workFileInput" class="hidden" type="file" multiple>
+      </div>
+    </section>
+
     <section id="calendarScreen" class="screen" data-screen="calendar">
       <div class="cal-toolbar"><button id="backButton" class="text-btn">‹ Isabella</button><div class="segments"><button data-view="day">Día</button><button data-view="week">Semana</button><button class="active" data-view="month">Mes</button></div><button id="todayButton" class="text-btn right">Hoy</button></div>
       <div class="cal-nav"><button id="prevButton" class="round">‹</button><div id="calTitle" class="cal-title"></div><button id="nextButton" class="round">›</button></div>
@@ -89,12 +108,13 @@ document.body.innerHTML = `
     <button class="main-nav-item active" data-nav="assistant" aria-label="Chat"><span class="nav-icon">◯</span><span class="nav-label">Chat</span></button>
     <button class="main-nav-item" data-nav="feed" aria-label="Feed"><span class="nav-icon">▤</span><span class="nav-label">Feed</span></button>
     <button class="main-nav-item" data-nav="ideas" aria-label="Ideas"><span class="nav-icon">◌</span><span class="nav-label">Ideas</span></button>
+    <button class="main-nav-item" data-nav="work" aria-label="Work"><span class="nav-icon">▱</span><span class="nav-label">Work</span></button>
     <button class="main-nav-item" data-nav="calendar" aria-label="Calendario"><span class="nav-icon">□</span><span class="nav-label">Calendario</span></button>
     <button class="main-nav-item" data-nav="readings" aria-label="Readings"><span class="nav-icon">≡</span><span class="nav-label">Readings</span></button>
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
-  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.27.45</div></aside>
+  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.28.46</div></aside>
   <div id="focusMode" class="focus hidden" role="dialog" aria-modal="true"><div class="focus-head"><div class="focus-name">Isabella</div><button id="focusClose" class="round">×</button></div><div class="focus-center"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="focusStatus" class="focus-status">Escuchando…</div><textarea id="focusTranscript" class="focus-transcript" rows="5" readonly placeholder="Tu transcripción aparecerá aquí."></textarea></div><div class="focus-actions"><button id="focusKeyboard">Cancelar</button><button id="focusStop" class="dark">Detener</button></div></div>
   <div id="modalBackdrop" class="backdrop hidden"></div><div id="modal" class="modal hidden"><div class="modal-head"><div id="modalTitle" class="modal-title"></div><button id="closeModal" class="round">×</button></div><div id="modalBody"></div></div>
 </div>`;

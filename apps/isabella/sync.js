@@ -272,5 +272,6 @@ async function syncNow(opts={}){
   }catch(e){setStatus('Error de sincronización: '+apiError(e))}
   finally{syncing=false}
 }
+window.ISABELLA_SYNC_NOW=()=>syncNow({});
 init();
 })();

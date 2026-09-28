@@ -230,7 +230,7 @@ async function afterSync(){
   if(!nudged)await maybeCuriosityQuestion();
 }
 function show(name){
-  const allowed=['assistant','feed','ideas','calendar','readings'];
+  const allowed=['assistant','feed','ideas','work','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
   const previous=state.screen;
   if(name==='calendar'&&previous!=='calendar')state.date=today();
@@ -249,6 +249,7 @@ function show(name){
   if(name==='calendar')renderCalendar();
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
+  if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);
   if(name==='readings')ensureReadings();
 }
 function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':agent==='minds'?'MINDS':'ISABELLA'}
