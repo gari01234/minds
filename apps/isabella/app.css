@@ -1063,3 +1063,104 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   }
   .emoji-grid{grid-template-columns:repeat(6,minmax(0,1fr))}
 }
+
+
+/* Build 52 — MINDS typographic reaction language */
+.reaction-popover.imessage-reactions{
+  padding:8px 10px!important;
+  border-radius:28px!important;
+}
+.reaction-popover.imessage-reactions .reaction-quick-row{gap:2px!important}
+.reaction-popover.imessage-reactions .reaction-quick-row .minds-reaction-choice{
+  width:auto!important;min-width:43px!important;height:46px!important;
+  padding:0 5px!important;border-radius:14px!important;overflow:visible!important
+}
+.reaction-popover.imessage-reactions .reaction-quick-row .minds-reaction-choice:nth-child(5){min-width:58px!important}
+.reaction-popover.imessage-reactions .reaction-quick-row .minds-reaction-choice.selected{
+  background:rgba(232,232,237,.92)!important;
+  transform:translateY(-1px) scale(1.025)!important
+}
+.reaction-popover.imessage-reactions .reaction-quick-row .reaction-more{
+  width:34px!important;min-width:34px!important;height:34px!important;
+  margin-left:2px!important;font-size:21px!important;align-self:center
+}
+
+.minds-reaction-token{
+  --rx:#111;position:relative;display:inline-grid;place-items:center;
+  min-width:1.4em;line-height:.9;
+  font-family:"Marker Felt","Bradley Hand","Segoe Print","Comic Sans MS",cursive;
+  font-weight:800;font-size:25px;letter-spacing:-1.4px;
+  color:var(--rx);white-space:nowrap;transform:rotate(-2deg);
+  text-shadow:0 .4px 0 currentColor;
+  -webkit-user-select:none!important;user-select:none!important
+}
+.minds-reaction-token::before,.minds-reaction-token::after{
+  content:"";position:absolute;display:block;pointer-events:none
+}
+.minds-reaction-token.tone-love{--rx:#ff3c7f;font-size:29px;letter-spacing:-3px;transform:rotate(-6deg)}
+.minds-reaction-token.tone-love::before{
+  width:7px;height:3px;border-radius:4px;background:currentColor;left:-7px;top:7px;transform:rotate(38deg)
+}
+.minds-reaction-token.tone-love::after{
+  width:7px;height:3px;border-radius:4px;background:currentColor;right:-7px;bottom:5px;transform:rotate(54deg)
+}
+.minds-reaction-token.tone-yes{--rx:#2285ee;transform:rotate(2deg);letter-spacing:-1.8px}
+.minds-reaction-token.tone-yes::before{
+  width:3px;height:8px;border-radius:3px;background:currentColor;left:-4px;top:-5px;transform:rotate(-30deg)
+}
+.minds-reaction-token.tone-yes::after{
+  width:3px;height:8px;border-radius:3px;background:currentColor;right:-4px;bottom:-5px;transform:rotate(-38deg)
+}
+
+/* Deliberately no decorative lines around HA! */
+.minds-reaction-token.tone-laugh{--rx:#ff9f18;transform:rotate(-7deg);letter-spacing:-1.2px}
+.minds-reaction-token.tone-laugh::before,.minds-reaction-token.tone-laugh::after{display:none!important}
+
+.minds-reaction-token.tone-ok{--rx:#079447;transform:rotate(4deg);letter-spacing:-2px}
+.minds-reaction-token.tone-ok::before{
+  content:"✓";background:none;left:50%;top:-13px;transform:translateX(-50%) rotate(-7deg);
+  font-family:inherit;font-size:15px;font-weight:900
+}
+.minds-reaction-token.tone-ok::after{
+  width:26px;height:3px;border-radius:4px;background:currentColor;left:50%;bottom:-7px;transform:translateX(-50%) rotate(-10deg)
+}
+.minds-reaction-token.tone-nope{--rx:#7c35ee;font-size:22px;letter-spacing:-2px;transform:rotate(-5deg)}
+.minds-reaction-token.tone-nope::before{
+  width:4px;height:4px;border-radius:50%;background:currentColor;left:-7px;top:-5px
+}
+.minds-reaction-token.tone-nope::after{
+  width:29px;height:6px;border-top:3px solid currentColor;border-bottom:2px solid currentColor;
+  left:50%;bottom:-9px;transform:translateX(-50%) rotate(-4deg)
+}
+.minds-reaction-token.tone-smile{--rx:#ff7b22;font-size:30px;letter-spacing:-4px;transform:rotate(8deg)}
+.minds-reaction-token.tone-smile::before{
+  width:3px;height:8px;border-radius:4px;background:currentColor;left:-5px;top:-3px;transform:rotate(-35deg)
+}
+.minds-reaction-token.tone-smile::after{
+  width:3px;height:8px;border-radius:4px;background:currentColor;right:-6px;bottom:-2px;transform:rotate(34deg)
+}
+
+.minds-reaction-token.is-compact{
+  font-size:15px!important;letter-spacing:-.8px!important;transform:none!important
+}
+.minds-reaction-token.is-compact::before,.minds-reaction-token.is-compact::after{display:none!important}
+.message-reaction-badge:has(.minds-reaction-token){
+  min-width:34px;height:25px;padding:0 7px;background:rgba(248,248,250,.98)
+}
+.reaction-native-emoji{font-family:-apple-system,BlinkMacSystemFont,"Apple Color Emoji","Segoe UI Emoji",sans-serif}
+
+@media(max-width:420px){
+  .reaction-popover.imessage-reactions{padding:7px 7px!important}
+  .reaction-popover.imessage-reactions .reaction-quick-row{gap:0!important}
+  .reaction-popover.imessage-reactions .reaction-quick-row .minds-reaction-choice{
+    min-width:41px!important;height:43px!important;padding:0 3px!important
+  }
+  .reaction-popover.imessage-reactions .reaction-quick-row .minds-reaction-choice:nth-child(5){min-width:53px!important}
+  .minds-reaction-token{font-size:23px}
+  .minds-reaction-token.tone-love{font-size:27px}
+  .minds-reaction-token.tone-nope{font-size:20px}
+  .minds-reaction-token.tone-smile{font-size:27px}
+  .reaction-popover.imessage-reactions .reaction-quick-row .reaction-more{
+    width:31px!important;min-width:31px!important;height:31px!important;font-size:19px!important
+  }
+}
