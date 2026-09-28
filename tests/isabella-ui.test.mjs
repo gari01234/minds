@@ -41,13 +41,15 @@ test('Feed is a situational surface with weather and Now, not an editorial news 
   assert.ok(ai.includes("return 'feed11-'"));
 });
 
-test('message reactions stay attached to messages instead of opening a large modal',()=>{
+test('message reactions use a compact quick pill and dedicated emoji sheet',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('reaction-popover'));
-  assert.ok(app.includes("const quick=['❤️','👍','👎','😂','‼️','❓']"));
+  assert.ok(app.includes("const REACTION_QUICK=['❤️','👍','👎','😂','‼️','❓']"));
+  assert.ok(app.includes('function openEmojiReactionSheet(id)'));
   assert.ok(!app.includes("modal('Reaccionar'"));
-  assert.ok(css.includes('.reaction-chip'));
+  assert.ok(css.includes('.message-reaction-badge'));
+  assert.ok(css.includes('.emoji-reaction-sheet'));
 });
 
 test('Feed exposes preferences and expandable weather',()=>{
@@ -264,16 +266,14 @@ test('Build 41 hydrates situational detail with personal context',()=>{
   assert.ok(app.includes('Buscando contexto y antecedentes'));
 });
 
-test('Build 27 uses a deterministic word and emoji picker instead of WebKit selection',()=>{
+test('Chat now relies on native WebKit text selection instead of a custom word picker',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes('function segmentMessageText'));
-  assert.ok(app.includes('function openMessageTextPicker'));
-  assert.ok(app.includes('new Intl.Segmenter'));
-  assert.ok(app.includes('Copiar selección'));
-  assert.ok(!app.includes('range.selectNodeContents'));
-  assert.ok(!app.includes('message-selection-active'));
-  assert.ok(css.includes('.message-token.selected'));
+  assert.ok(!app.includes('function segmentMessageText'));
+  assert.ok(!app.includes('function openMessageTextPicker'));
+  assert.ok(!css.includes('.message-token.selected'));
+  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(css.includes('-webkit-touch-callout:default!important'));
 });
 
 test('Build 27 docks the same Isabella ORB in the top bar instead of floating over chat',()=>{
@@ -750,12 +750,12 @@ test('Build 48 suppresses repeated proactive reminders',()=>{
 });
 
 
-test('Build 49 keeps native partial text selection and separates message actions',()=>{
+test('Build 50 keeps native partial text selection and separates message actions',()=>{
   const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
   assert.ok(app.includes("e.target.closest?.('.message,.message-actions,.composer-wrap"));
-  assert.ok(css.includes('#assistantScreen,.assistant-scroll,.messages,.message,.message-text,.message-text *'));
   assert.ok(css.includes('-webkit-user-select:text!important'));
-  assert.ok(app.includes("m.reaction?esc(m.reaction):'☺︎'"));
+  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+  assert.ok(app.includes('class="message-reaction-badge"'));
   assert.ok(app.includes('data-message-reply'));
 });
 
