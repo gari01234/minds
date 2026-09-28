@@ -169,7 +169,7 @@ test('Build 27 opens at the latest message without relying on Safari native sele
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('function scrollAssistantToLatest'));
-  assert.ok(app.includes("if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
+  assert.ok(app.includes("if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
   assert.ok(app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
   assert.ok(app.includes("selectstart',e=>e.preventDefault()"));
   assert.ok(css.includes('.message-text-picker'));
@@ -618,7 +618,8 @@ test('Build 44 preserves the reading position while chat rerenders',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes('function captureAssistantScroll'));
   assert.ok(app.includes('function restoreAssistantScroll'));
-  assert.ok(app.includes('requestAnimationFrame(()=>restoreAssistantScroll(snapshot,forceBottom))'));
+  assert.ok(app.includes('restoreAssistantScroll(snapshot,forceBottom);'));
+  assert.ok(app.includes("if(!forceBottom&&!snapshot?.nearBottom)requestAnimationFrame(()=>restoreAssistantScroll(snapshot,false))"));
 });
 
 test('Build 44 Enter inserts a newline and command-enter sends',()=>{
