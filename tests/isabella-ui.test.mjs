@@ -853,14 +853,13 @@ test('Build 52 keeps HA free of decorative rays',()=>{
 });
 
 
-test('Build 53 refines the approved typographic reactions and uses plus as trigger',()=>{
+test('Build 54 keeps plus as the reaction trigger and uses traced SVG artwork',()=>{
   const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
   assert.ok(app.includes('aria-label="Reaccionar">＋</button>'));
   assert.ok(!app.includes('aria-label="Reaccionar">☺︎</button>'));
-  assert.ok(app.includes('minds-smile-colon'));
-  assert.ok(app.includes('minds-smile-arc'));
-  assert.ok(css.includes('font-family:"Noteworthy","Chalkboard SE"'));
-  assert.ok(css.includes('.minds-smile-arc'));
+  assert.ok(app.includes('const REACTION_ART={'));
+  assert.ok(app.includes('minds-reaction-art'));
+  assert.ok(css.includes('.minds-reaction-art'));
 });
 
 
