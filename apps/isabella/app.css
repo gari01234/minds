@@ -631,19 +631,6 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
   body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 }
 .message,.message .message-text,.message .message-text *{-webkit-user-select:text!important;user-select:text!important;-webkit-touch-callout:default!important}
-.message-text-picker-open{overflow:hidden}
-.message-text-picker-backdrop{position:fixed;inset:0;z-index:130;background:rgba(0,0,0,.18);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
-.message-text-picker{position:fixed;z-index:132;left:50%;bottom:0;transform:translateX(-50%);width:min(100%,820px);max-height:72dvh;overflow:auto;background:#fff;border-radius:28px 28px 0 0;padding:18px 22px calc(22px + var(--safe));box-shadow:0 -18px 70px rgba(0,0,0,.16)}
-.message-text-picker-head{display:flex;align-items:center;justify-content:space-between}
-.message-text-picker-title{font-family:"Iowan Old Style","Palatino Linotype",Georgia,serif;font-size:30px;margin-top:3px}
-.message-text-picker-help{font-size:12px;line-height:1.4;color:#999;margin:10px 0 16px}
-.message-token-area{font-size:20px;line-height:1.65;padding:16px 14px;border-radius:18px;background:#f7f7f8;white-space:pre-wrap;overflow-wrap:anywhere;touch-action:none;-webkit-user-select:none;user-select:none}
-.message-token{border-radius:5px;padding:1px 0;transition:background .08s,color .08s}
-.message-token.selected{background:#111;color:#fff}
-.message-text-picker-actions{display:grid;grid-template-columns:1fr 1.4fr;gap:10px;margin-top:16px}
-.message-text-picker-actions button:disabled{opacity:.38}
-
-
 /* Build 29 — visible Feed refresh, curiosity controls, self-improvement */
 .surface-head-actions{align-items:center}
 .surface-refresh-status{font-size:10px;color:#aaa;min-width:72px;text-align:right}
