@@ -245,7 +245,7 @@ function show(name){
   document.body.dataset.section=name;
   syncOrbCompact();
   save();
-  if(name==='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
+  if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
   if(name==='calendar')renderCalendar();
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
@@ -807,7 +807,10 @@ function renderMessages(forceBottom=false){
     m.quickReplies=[];save();renderMessages();
     handle(q.value);
   });
-  requestAnimationFrame(()=>restoreAssistantScroll(snapshot,forceBottom));
+  requestAnimationFrame(()=>{
+    restoreAssistantScroll(snapshot,forceBottom);
+    if(!forceBottom&&!snapshot?.nearBottom)requestAnimationFrame(()=>restoreAssistantScroll(snapshot,false));
+  });
 }
 function closeReactionPicker(){
   document.querySelector('.reaction-popover')?.remove();
@@ -1889,7 +1892,12 @@ function categoriesPanel(){
 window.addEventListener('isabella:synced',()=>{void afterSync()});
 window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
-  replaceState:(next)=>{state={...base,...next};state.messages=normalizeMessages(state.messages);save();renderMessages(true);renderToday();renderCalendar();show(state.screen||'assistant')},
+  replaceState:(next)=>{
+    const visibleScreen=state.screen||'assistant';
+    state={...base,...next,screen:visibleScreen};
+    state.messages=normalizeMessages(state.messages);
+    save();renderMessages(false);renderToday();renderCalendar();
+  },
   addAssistantMessage:(text)=>say('assistant',text),
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},

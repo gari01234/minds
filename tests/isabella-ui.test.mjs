@@ -545,13 +545,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.27.44'));
+  assert.ok(shell.includes('Build 2026.09.27.45'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=40'));
-  assert.ok(index.includes('shell.js?v=44'));
-  assert.ok(index.includes('app.js?v=53'));
+  assert.ok(index.includes('app.css?v=41'));
+  assert.ok(index.includes('shell.js?v=45'));
+  assert.ok(index.includes('app.js?v=54'));
   assert.ok(index.includes('ai.js?v=36'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v51'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v52'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -625,4 +625,28 @@ test('Build 44 Enter inserts a newline and command-enter sends',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes("e.key==='Enter'&&(e.metaKey||e.ctrlKey)"));
   assert.ok(!app.includes("e.key==='Enter'&&!e.shiftKey"));
+});
+
+
+test('Build 45 uses one authoritative Chat scroll container',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('.messages{\n  max-height:none!important;'));
+  assert.ok(css.includes('overflow:visible!important;'));
+  assert.ok(css.includes('.assistant-scroll{\n  overflow-y:auto!important;'));
+  assert.ok(css.includes('scroll-behavior:auto!important;'));
+});
+
+test('Build 45 sync cannot force Chat to the bottom while the user is reading',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("if(name==='assistant'&&previous!=='assistant')"));
+  assert.ok(app.includes("const visibleScreen=state.screen||'assistant'"));
+  assert.ok(app.includes('save();renderMessages(false);renderToday();renderCalendar();'));
+  assert.ok(!app.includes('renderMessages(true);renderToday();renderCalendar();show(state.screen'));
+});
+
+test('Build 45 reserves image geometry to avoid late-load scroll jumps',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('aspect-ratio:4/3;'));
+  assert.ok(css.includes('aspect-ratio:1/1;'));
+  assert.ok(css.includes('height:auto!important;'));
 });
