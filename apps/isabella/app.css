@@ -1261,3 +1261,31 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .minds-reaction-token.tone-nope{font-size:22px!important}
   .minds-reaction-token.tone-smile{width:39px!important;min-width:39px!important;height:40px!important}
 }
+
+
+/* Build 54 — reaction artwork traced from the approved original concept */
+.minds-reaction-choice{
+  min-width:0!important;width:auto!important;
+  padding:0 5px!important;height:47px!important;
+  display:grid!important;place-items:center!important
+}
+.minds-reaction-art{
+  display:block;overflow:visible;flex:none;
+  transform:none!important;filter:none!important
+}
+.minds-reaction-art path{vector-effect:none}
+.minds-reaction-choice:nth-child(1){padding-left:6px!important;padding-right:5px!important}
+.minds-reaction-choice:nth-child(2){padding-left:5px!important;padding-right:5px!important}
+.minds-reaction-choice:nth-child(3){padding-left:5px!important;padding-right:5px!important}
+.minds-reaction-choice:nth-child(4){padding-left:5px!important;padding-right:5px!important}
+.minds-reaction-choice:nth-child(5){padding-left:5px!important;padding-right:5px!important}
+.minds-reaction-choice:nth-child(6){padding-left:5px!important;padding-right:6px!important}
+.message-reaction-badge:has(.minds-reaction-art){
+  min-width:32px;height:25px;padding:0 6px;background:rgba(248,248,250,.98)
+}
+.message-reaction-badge .minds-reaction-art{max-width:34px;max-height:22px}
+@media(max-width:420px){
+  .reaction-popover.imessage-reactions{padding:7px 8px!important}
+  .reaction-popover.imessage-reactions .reaction-quick-row{gap:1px!important}
+  .minds-reaction-choice{height:45px!important;padding-left:4px!important;padding-right:4px!important}
+}

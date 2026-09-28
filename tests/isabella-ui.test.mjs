@@ -549,13 +549,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.29.53'));
+  assert.ok(shell.includes('Build 2026.09.29.54'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=48'));
-  assert.ok(index.includes('shell.js?v=53'));
-  assert.ok(index.includes('app.js?v=61'));
+  assert.ok(index.includes('app.css?v=49'));
+  assert.ok(index.includes('shell.js?v=54'));
+  assert.ok(index.includes('app.js?v=62'));
   assert.ok(index.includes('ai.js?v=38'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v60'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v61'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -861,4 +861,16 @@ test('Build 53 refines the approved typographic reactions and uses plus as trigg
   assert.ok(app.includes('minds-smile-arc'));
   assert.ok(css.includes('font-family:"Noteworthy","Chalkboard SE"'));
   assert.ok(css.includes('.minds-smile-arc'));
+});
+
+
+test('Build 54 renders the approved reactions as reference-traced SVG artwork',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(app.includes('const REACTION_ART={'));
+  assert.ok(app.includes('class="minds-reaction-art tone-'));
+  assert.ok(app.includes('fill-rule="evenodd"'));
+  assert.ok(app.includes("love:{w:79,h:82,color:'#e85780'"));
+  assert.ok(app.includes("smile:{w:65,h:92,color:'#ea8250'"));
+  assert.ok(css.includes('reaction artwork traced from the approved original concept'));
+  assert.ok(css.includes('.minds-reaction-art'));
 });
