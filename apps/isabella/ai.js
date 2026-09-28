@@ -12,7 +12,7 @@ function compact(state){
     ...(state.events||[]).filter(x=>x.date>=td).slice(0,30).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)})),
     ...(state.tasks||[]).filter(x=>x.date&&x.date>=td&&!x.done&&!x.archivedAt).sort((a,b)=>(a.date+String(Number(a.sortOrder||0)).padStart(6,'0')).localeCompare(b.date+String(Number(b.sortOrder||0)).padStart(6,'0'))).slice(0,30).map(x=>({kind:'task',id:x.id,date:x.date,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}))
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,30);
-  const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null})).filter(m=>m.content);
+  const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',content:String(m.replyTo.text||'').trim()}:null})).filter(m=>m.content);
   return {
     current_date:td,
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
@@ -40,9 +40,10 @@ async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
+  const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
   const personalVoice=options.surface?String(message):`VOZ DE ISABELLA:
 Responde como una asistente personal que conoce el contexto de Gari y mantiene continuidad entre conversaciones. Conserva la profundidad y precisión factual, pero evita sonar como informe por defecto. En conversación casual, responde primero a la persona y luego al contenido: puedes usar una observación breve, una complicidad ligera o humor suave cuando surja de forma natural. Habla en primera persona cuando corresponda, usa lenguaje cotidiano y cálido, y deja que la respuesta tenga ritmo conversacional. No adules, no finjas sentimientos o experiencias, no fuerces bromas, no uses el nombre de Gari repetidamente y no sacrifiques rigor por cercanía. Si el tema exige precisión, seguridad o una explicación extensa, mantén toda la información necesaria pero con una voz humana y directa.
-
+${replyContext}
 MENSAJE DE GARI:
 ${message}`;
   const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:personalVoice,context:compact(state),background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});

@@ -544,13 +544,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.48'));
+  assert.ok(shell.includes('Build 2026.09.28.49'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=44'));
-  assert.ok(index.includes('shell.js?v=48'));
-  assert.ok(index.includes('app.js?v=57'));
-  assert.ok(index.includes('ai.js?v=37'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v55'"));
+  assert.ok(index.includes('app.css?v=45'));
+  assert.ok(index.includes('shell.js?v=49'));
+  assert.ok(index.includes('app.js?v=58'));
+  assert.ok(index.includes('ai.js?v=38'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v56'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -747,4 +747,41 @@ test('Build 48 suppresses repeated proactive reminders',()=>{
   assert.ok(app.includes('recentlyCoveredProactive'));
   assert.ok(app.includes('proactiveNudgeBusy'));
   assert.ok(ai.includes('un recordatorio por tema es suficiente'));
+});
+
+
+test('Build 49 keeps native partial text selection and separates message actions',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(app.includes("e.target.closest?.('.message,.message-actions,.composer-wrap"));
+  assert.ok(css.includes('#assistantScreen,.assistant-scroll,.messages,.message,.message-text,.message-text *'));
+  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(app.includes("m.reaction?esc(m.reaction):'☺︎'"));
+  assert.ok(app.includes('data-message-reply'));
+});
+
+test('Build 49 persists reactions and reply references in conversation metadata',()=>{
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(sync.includes('reaction:m.reaction||null'));
+  assert.ok(sync.includes('reply_to:m.replyTo?.id'));
+  assert.ok(sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key'})"));
+  assert.ok(!sync.includes("ignoreDuplicates:true"));
+  assert.ok(sync.includes('metadata:m.metadata||{}'));
+});
+
+test('Build 49 supports quoted replies that Isabella can resolve',()=>{
+  const shell=read('apps/isabella/shell.js'),app=read('apps/isabella/app.js'),ai=read('apps/isabella/ai.js');
+  assert.ok(shell.includes('id="chatReplyPreview"'));
+  assert.ok(app.includes('function setReplyTarget(id)'));
+  assert.ok(app.includes('message-reply-reference'));
+  assert.ok(app.includes("say('user',text||'📷 Foto',{attachments:copy,replyTo})"));
+  assert.ok(ai.includes('Gari está respondiendo específicamente a este mensaje previo'));
+  assert.ok(ai.includes('reply_to:m.replyTo?.id'));
+});
+
+test('Build 49 contains expanded reactions within an Apple-like bounded panel',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('.reaction-popover.imessage-reactions.expanded'));
+  assert.ok(css.includes('width:min(360px,calc(100vw - 20px))'));
+  assert.ok(css.includes('grid-template-columns:repeat(6,minmax(0,1fr))'));
+  assert.ok(css.includes('overflow-x:hidden'));
 });

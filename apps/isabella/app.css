@@ -932,3 +932,76 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .work-bucket-scroll{flex:1;overflow-y:auto;overscroll-behavior:contain;padding-right:2px}
   .work-add-task{flex:none}
 }
+
+
+/* Build 49 — native text selection, quoted replies, persistent Apple-like reactions */
+.swipe-area{touch-action:auto!important}
+#assistantScreen,.assistant-scroll,.messages,.message,.message-text,.message-text *{
+  -webkit-user-select:text!important;
+  user-select:text!important;
+  -webkit-touch-callout:default!important;
+  touch-action:auto!important;
+}
+.message-actions,.message-actions *,.chat-reply-preview,.chat-reply-preview *{
+  -webkit-user-select:none!important;
+  user-select:none!important;
+  -webkit-touch-callout:none!important;
+}
+.message-actions{gap:4px;margin:6px 0 -2px 3px;min-height:22px}
+.message-react,.message-reply{
+  width:28px;height:26px;border:0;background:transparent;color:#94949a;
+  padding:0;border-radius:13px;display:grid;place-items:center;cursor:pointer;
+  font-size:17px;line-height:1
+}
+.message-react:hover,.message-reply:hover{background:#ececef;color:#555}
+.message-reply{font-size:18px}
+
+.message-reply-reference{
+  border-left:2px solid rgba(47,111,176,.42);
+  margin:0 0 8px;padding:3px 0 3px 9px;
+  display:grid;gap:2px;max-width:100%;
+  color:#777;font-size:11px;line-height:1.3
+}
+.message-reply-reference strong{font-size:10px;color:#666;font-weight:650}
+.message-reply-reference span{
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  overflow:hidden;white-space:normal
+}
+.message.user .message-reply-reference{border-left-color:rgba(17,17,17,.28);color:#666}
+
+.chat-reply-preview{
+  width:calc(100% - 8px);margin:0 auto 7px;padding:9px 11px;
+  background:rgba(246,246,248,.97);border:1px solid #e5e5e8;border-radius:15px;
+  display:grid;grid-template-columns:1fr 28px;gap:8px;align-items:center;
+  box-shadow:0 5px 18px rgba(0,0,0,.04)
+}
+.chat-reply-preview.hidden{display:none!important}
+.chat-reply-preview>div{display:grid;gap:2px;min-width:0}
+.chat-reply-preview strong{font-size:10px;color:#555}
+.chat-reply-preview span{font-size:11px;color:#808086;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chat-reply-preview button{border:0;background:transparent;color:#888;font-size:20px;width:28px;height:28px;border-radius:50%}
+
+.reaction-popover.imessage-reactions{box-sizing:border-box!important;overflow:hidden!important}
+.reaction-popover.imessage-reactions.expanded{
+  width:min(360px,calc(100vw - 20px))!important;
+  max-width:min(360px,calc(100vw - 20px))!important;
+  border-radius:28px!important;
+  padding:10px!important
+}
+.reaction-popover.imessage-reactions .reaction-quick-row{width:100%;justify-content:center;gap:2px}
+.reaction-popover.imessage-reactions.expanded .reaction-quick-row{justify-content:space-between}
+.reaction-popover.imessage-reactions .reaction-row-more{
+  width:100%!important;max-width:none!important;
+  grid-template-columns:repeat(6,minmax(0,1fr))!important;
+  gap:4px!important;padding:9px 2px 2px!important;margin-top:7px;
+  border-top:1px solid rgba(0,0,0,.06);
+  max-height:220px;overflow-y:auto;overflow-x:hidden;
+  overscroll-behavior:contain;-webkit-overflow-scrolling:touch
+}
+.reaction-popover.imessage-reactions .reaction-row-more button{
+  min-width:0!important;width:100%!important;height:42px!important
+}
+@media(max-width:420px){
+  .reaction-popover.imessage-reactions.expanded{width:calc(100vw - 18px)!important;max-width:calc(100vw - 18px)!important}
+  .reaction-popover.imessage-reactions .reaction-row-more{grid-template-columns:repeat(6,minmax(0,1fr))!important}
+}

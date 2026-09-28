@@ -30,7 +30,7 @@ async function signedAssetUrl(bucket,path,expires=3600){
 }
 function messageRenderKey(messages){
   return JSON.stringify((messages||[]).map(m=>[
-    m.id,m.role,m.text,m.reaction,
+    m.id,m.role,m.text,m.reaction,m.replyTo?.id||'',m.replyTo?.text||'',
     (m.attachments||[]).map(a=>[a.path,a.name]),
     (m.artifacts||[]).map(a=>[a.id,a.storage_path,a.kind,a.title]),
     (m.sources||[]).map(s=>[s.url,s.title]),
@@ -774,9 +774,28 @@ window.addEventListener('message',e=>{
   $('#readingsScreen')?.classList.toggle('sofia-chat-active',open);
   document.body.classList.toggle('sofia-chat-open',open);
 });
+let pendingReplyTo=null;
+function replyAuthor(reply){return reply?.role==='assistant'?'Isabella':'Tú'}
+function replySnippet(text){return String(text||'').replace(/\s+/g,' ').trim().slice(0,180)}
+function renderReplyPreview(){
+  const box=$('#chatReplyPreview');if(!box)return;
+  if(!pendingReplyTo){box.classList.add('hidden');box.innerHTML='';return}
+  box.classList.remove('hidden');
+  box.innerHTML=`<div><strong>Respondiendo a ${esc(replyAuthor(pendingReplyTo))}</strong><span>${esc(replySnippet(pendingReplyTo.text))}</span></div><button type="button" data-cancel-reply aria-label="Cancelar respuesta">×</button>`;
+  box.querySelector('[data-cancel-reply]')?.addEventListener('click',()=>{pendingReplyTo=null;renderReplyPreview()});
+}
+function setReplyTarget(id){
+  const m=state.messages.find(x=>x.id===id);if(!m)return;
+  pendingReplyTo={id:String(m.id||''),role:m.role==='assistant'?'assistant':'user',text:String(m.text||'')};
+  renderReplyPreview();
+  setTimeout(()=>$('#chatInput')?.focus(),0);
+}
+function clearReplyTarget(){pendingReplyTo=null;renderReplyPreview()}
 function say(role,text,meta={}){
   state.messages.push({
     id:uid(),role,text,at:new Date().toISOString(),reaction:null,
+    replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
+    metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
     sources:Array.isArray(meta.sources)?meta.sources:[],
     attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Foto')})).filter(x=>x.path):[],
     artifacts:Array.isArray(meta.artifacts)?meta.artifacts.slice(0,8).map(x=>({id:String(x?.id||''),kind:String(x?.kind||''),title:String(x?.title||'Artefacto'),mime_type:String(x?.mime_type||''),storage_path:String(x?.storage_path||'')})).filter(x=>x.storage_path):[],
@@ -826,7 +845,10 @@ function renderMessages(forceBottom=false){
     return;
   }
   const snapshot=captureAssistantScroll();
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">${m.reaction?esc(m.reaction):'♡'}</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>{
+    const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">${m.reaction?esc(m.reaction):'☺︎'}</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+  }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
@@ -850,6 +872,7 @@ function closeReactionPicker(){
 function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
   m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
+  setTimeout(()=>window.ISABELLA_SYNC_NOW?.({pushOnly:true}),0);
 }
 function closeTextPicker(){
   document.querySelector('.message-text-picker-backdrop')?.remove();
@@ -940,7 +963,7 @@ function openReactionPicker(id){
   const quick=['❤️','👍','👎','😂','‼️','❓'],more=['😮','😢','👏','🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🤝','💪','🎉','⭐','🚀','📌','🧠','🏗️','📚'];
   const backdrop=document.createElement('div');backdrop.className='reaction-backdrop';
   const pop=document.createElement('div');pop.className='reaction-popover imessage-reactions';
-  pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}</div>`;
+  pop.innerHTML=`<div class="reaction-row reaction-quick-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}</div>`;
   document.body.append(backdrop,pop);requestAnimationFrame(()=>positionReactionPopover(pop,null,el));
   backdrop.onclick=closeReactionPicker;
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
@@ -950,6 +973,10 @@ function bindMessageReactions(){
   $$('[data-message-react]').forEach(b=>{
     if(b.dataset.reactionBound)return;b.dataset.reactionBound='1';
     b.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(b.dataset.messageReact)});
+  });
+  $$('[data-message-reply]').forEach(b=>{
+    if(b.dataset.replyBound)return;b.dataset.replyBound='1';
+    b.addEventListener('click',e=>{e.stopPropagation();setReplyTarget(b.dataset.messageReply)});
   });
 }
 
@@ -1250,12 +1277,12 @@ function applyProposal(p){
   }
   save();renderCalendar();closeModal();say('assistant','Listo. Ya quedó agregado.');
 }
-async function handle(text,attachments=[]){
+async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
-  say('user',text||'📷 Foto',{attachments:copy});orb('thinking','Pensando…');setWorking($('#sendButton'),true);
+  say('user',text||'📷 Foto',{attachments:copy,replyTo});clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy});
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo});
       state.pendingIntent=null;
       if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
@@ -1337,8 +1364,9 @@ function bind(){
  imageInput.onchange=()=>{const next=[...imageInput.files||[]].filter(f=>String(f.type||'').startsWith('image/'));pendingChatFiles=[...pendingChatFiles,...next].slice(0,3);imageInput.value='';renderPendingChatFiles()};
  const send=async()=>{
    const t=i.value.trim();if(!t&&!pendingChatFiles.length)return;
+   const replyTo=pendingReplyTo?{...pendingReplyTo}:null;
    const files=[...pendingChatFiles];pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();$('#sendButton').disabled=true;attachButton.disabled=true;
-   try{const attachments=files.length?await uploadChatImages(files):[];await handle(t,attachments)}
+   try{const attachments=files.length?await uploadChatImages(files):[];await handle(t,attachments,replyTo)}
    catch(e){say('assistant',e?.message||'No pude enviar la foto.')}
    finally{$('#sendButton').disabled=false;attachButton.disabled=false}
  };
@@ -1361,7 +1389,7 @@ function bind(){
  ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
  ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
  $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
-function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
+function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;if(e.target.closest?.('.message,.message-actions,.composer-wrap,.generated-artifact,a,button,input,textarea')){on=false;return}const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
   let recorder=null,stream=null,chunks=[],discard=false,fallbackRec=null,phase='idle';
