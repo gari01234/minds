@@ -165,14 +165,14 @@ test('Build 21 removes redundant surface headings and Readings explainer',()=>{
   assert.ok(!theory.includes('La memoria de lectura vive aquí'));
 });
 
-test('Build 27 opens at the latest message without relying on Safari native selection',()=>{
+test('Chat opens at the latest message while preserving native text selection',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('function scrollAssistantToLatest'));
   assert.ok(app.includes("if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0)"));
-  assert.ok(app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
-  assert.ok(app.includes("selectstart',e=>e.preventDefault()"));
-  assert.ok(css.includes('.message-text-picker'));
+  assert.ok(app.includes('data-message-react'));
+  assert.ok(!app.includes("selectstart',e=>e.preventDefault()"));
+  assert.ok(css.includes('user-select:text!important'));
 });
 
 
@@ -202,16 +202,15 @@ test('Build 41 Feed settings are limited to weather and attentional policy',()=>
   assert.ok(ai.includes('feed_instructions'));
 });
 
-test('Build 24 uses a long-press message context with reactions and text actions',()=>{
+test('Message reactions use an explicit action instead of hijacking long-press selection',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes("setTimeout(()=>{timer=null;if(!moved)openReactionPicker"));
-  assert.ok(app.includes('Seleccionar texto'));
-  assert.ok(app.includes('Copiar'));
-  assert.ok(app.includes('selectMessageText'));
-  assert.ok(app.includes('copyMessageText'));
+  assert.ok(app.includes('class="message-react"'));
+  assert.ok(app.includes('function openReactionPicker'));
+  assert.ok(!app.includes("setTimeout(()=>{timer=null;if(!moved)openReactionPicker"));
+  assert.ok(!app.includes("contextmenu',e=>{e.preventDefault();openReactionPicker"));
   assert.ok(css.includes('.reaction-backdrop'));
-  assert.ok(css.includes('.message-action-menu'));
+  assert.ok(css.includes('.message-react'));
   assert.ok(css.includes('overflow-wrap:anywhere!important'));
 });
 
