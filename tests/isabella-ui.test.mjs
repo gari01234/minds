@@ -544,13 +544,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.50'));
+  assert.ok(shell.includes('Build 2026.09.28.51'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=46'));
-  assert.ok(index.includes('shell.js?v=50'));
+  assert.ok(index.includes('shell.js?v=51'));
   assert.ok(index.includes('app.js?v=59'));
   assert.ok(index.includes('ai.js?v=38'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v57'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v58'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -818,4 +818,12 @@ test('Build 50 renders reactions as attached message badges',()=>{
   const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
   assert.ok(app.includes('message-reaction-badge'));
   assert.ok(css.includes('.message-reaction-badge'));
+});
+
+
+test('Build 51 preserves local-only chat messages on initial server sync',()=>{
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(sync.includes('function mergeConversationMessages'));
+  assert.ok(sync.includes('mergeConversationMessages(remoteMessages,local.messages||[])'));
+  assert.ok(sync.includes('if(opts.initial)await pushConversation(next.messages||[])'));
 });

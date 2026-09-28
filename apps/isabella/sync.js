@@ -195,9 +195,10 @@ async function pullState(local,maps){
   const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
+  const mergedMessages=mergeConversationMessages(remoteMessages,local.messages||[]);
   const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?{...(local.feedPreferences||{}),...pref.value}:local.feedPreferences;
   const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(local.assistantPreferences||{}),...assistantPref.value}:local.assistantPreferences;
-  return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:remoteMessages.length?remoteMessages:local.messages};
+  return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:local.messages};
 }
 async function updateMessageMetadata(clientKey,patch){
   if(!user||!clientKey||!patch||typeof patch!=='object')return false;
@@ -215,6 +216,13 @@ async function updateMessageMetadata(clientKey,patch){
     if(ue)throw ue;
     return true;
   }catch(e){setStatus('No pude sincronizar la reacción: '+apiError(e));return false}
+}
+function mergeConversationMessages(remote=[],local=[]){
+  const seen=new Set(),out=[];
+  for(const m of remote||[]){if(!m?.id||seen.has(m.id))continue;seen.add(m.id);out.push(m)}
+  for(const m of local||[]){if(!m?.id||seen.has(m.id))continue;seen.add(m.id);out.push(m)}
+  out.sort((a,b)=>String(a.at||'').localeCompare(String(b.at||'')));
+  return out;
 }
 async function pullConversation(){
   const {data,error}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope',APP_SCOPE).order('updated_at',{ascending:false}).limit(1);
@@ -283,6 +291,7 @@ async function syncNow(opts={}){
     if(opts.initial||opts.pullOnly){
       const next=await pullState(local,maps);
       hydrating=true;app.replaceState(next);hydrating=false;
+      if(opts.initial)await pushConversation(next.messages||[]);
     }else{
       await pushState(local,maps);
       if(!opts.pushOnly){
