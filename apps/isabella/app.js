@@ -9,6 +9,34 @@ const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const today=()=>iso(new Date());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clone=x=>x==null?null:JSON.parse(JSON.stringify(x));
+const signedAssetCache=new Map();
+let lastMessagesRenderKey='';
+function cachedSignedAsset(bucket,path){
+  const key=`${bucket}:${path}`,hit=signedAssetCache.get(key);
+  if(!hit||hit.expiresAt<=Date.now()){if(hit)signedAssetCache.delete(key);return ''}
+  return hit.url||'';
+}
+async function signedAssetUrl(bucket,path,expires=3600){
+  if(!path)return '';
+  const cached=cachedSignedAsset(bucket,path);if(cached)return cached;
+  const sb=window.MINDS_SUPABASE;if(!sb)return '';
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return '';
+    const {data}=await sb.storage.from(bucket).createSignedUrl(path,expires);
+    const url=data?.signedUrl||'';
+    if(url)signedAssetCache.set(`${bucket}:${path}`,{url,expiresAt:Date.now()+Math.max(60,expires-120)*1000});
+    return url;
+  }catch{return ''}
+}
+function messageRenderKey(messages){
+  return JSON.stringify((messages||[]).map(m=>[
+    m.id,m.role,m.text,m.reaction,
+    (m.attachments||[]).map(a=>[a.path,a.name]),
+    (m.artifacts||[]).map(a=>[a.id,a.storage_path,a.kind,a.title]),
+    (m.sources||[]).map(s=>[s.url,s.title]),
+    (m.quickReplies||[]).map(q=>[q.label,q.value])
+  ]));
+}
 const activeTask=t=>!t.done&&!t.archivedAt;
 const MEMORY_KINDS=new Set(['fact','person','routine','episodic','preference','context']);
 const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'preference',interaction:'preference',constraint:'context',goal:'context',priority:'context',value:'preference',project:'context',relation:'context',relationship:'person',work:'context',identity:'fact',note:'context',other:'context'};
@@ -796,10 +824,16 @@ function restoreAssistantScroll(snapshot,force=false){
 }
 function scrollAssistantToLatest(force=false){restoreAssistantScroll({nearBottom:true},force)}
 function renderMessages(forceBottom=false){
-  const box=$('#messages'),snapshot=captureAssistantScroll();
+  const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
+  const nextRenderKey=messageRenderKey(state.messages);
   syncOrbCompact();
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>`<img data-chat-image-path="${esc(a.path||'')}" alt="${esc(a.name||'Foto')}">`).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  if(nextRenderKey===lastMessagesRenderKey){
+    if(forceBottom)requestAnimationFrame(()=>scrollAssistantToLatest(true));
+    return;
+  }
+  const snapshot=captureAssistantScroll();
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{

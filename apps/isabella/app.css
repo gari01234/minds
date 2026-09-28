@@ -839,3 +839,57 @@ body.isabella-orb-docked .assistant-scroll{padding-top:0!important}
 body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spacing:.18em}
 .work-screen{background:#fff}.work-shell{flex:1;min-height:0;display:flex;flex-direction:column;padding:16px 24px 18px}.work-head{width:min(100%,920px);margin:0 auto;display:flex;justify-content:space-between;gap:18px;align-items:end}.work-head h1{font-family:"Iowan Old Style",Georgia,serif;font-size:36px;line-height:1;margin:6px 0 0}.work-project-switch,.work-tabs{display:flex;gap:4px}.work-project-switch button,.work-tabs button,.work-toolbar-actions button,.work-planner-toolbar button{border:0;background:#f4f4f5;border-radius:999px;padding:8px 12px;font-size:11px;cursor:pointer}.work-project-switch button.active,.work-tabs button.active{background:#111;color:#fff}.work-tabs{width:min(100%,920px);margin:14px auto 0;border-bottom:1px solid #eee;padding-bottom:10px}.work-status{width:min(100%,920px);min-height:18px;margin:4px auto 0;font-size:10px;color:#999}.work-body{width:min(100%,920px);margin:0 auto;flex:1;min-height:0;overflow:auto;padding:4px 0 24px;transition:background .15s}.work-body.is-dragging{background:#fafafa;outline:2px dashed #d8d8dc;outline-offset:-8px}.work-desktop-toolbar,.work-planner-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0 10px}.work-breadcrumb{display:flex;align-items:center;gap:6px;min-width:0;overflow:auto}.work-breadcrumb button{border:0;background:transparent;padding:5px 0;font-size:12px;white-space:nowrap;cursor:pointer}.work-breadcrumb span{color:#bbb}.work-toolbar-actions{display:flex;gap:6px;flex:none}.work-drop-hint{border:1px dashed #dddde1;border-radius:16px;padding:13px 15px;color:#aaa;font-size:11px;margin:4px 0 12px}.work-files{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}.work-file{border:1px solid #ececef;background:#fff;border-radius:16px;min-height:118px;padding:14px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;cursor:pointer}.work-file:hover{background:#fafafa}.work-file-icon{font-size:25px;line-height:1;margin-bottom:auto;color:#777}.work-file strong{font-size:13px;line-height:1.3;margin-top:16px;word-break:break-word}.work-file small{font-size:9px;color:#999;margin-top:4px}.work-folder{background:#fbfbfc}.work-empty{padding:40px 4px;color:#aaa;font-size:13px}.work-empty-wide{grid-column:1/-1}.work-planner-toolbar>div{display:flex;align-items:baseline;gap:9px}.work-planner-toolbar span{font-size:10px;color:#999}.work-board{display:flex;align-items:flex-start;gap:12px;overflow-x:auto;padding:4px 0 18px;min-height:420px}.work-bucket{flex:0 0 260px;background:#f6f6f7;border-radius:17px;padding:10px}.work-bucket header{display:flex;justify-content:space-between;align-items:center;padding:3px 4px 9px}.work-bucket header strong{font-size:13px}.work-bucket header button{border:0;background:transparent;color:#999}.work-task-list{display:grid;gap:7px}.work-task{border:1px solid #e7e7ea;background:#fff;border-radius:12px;padding:11px;text-align:left;display:grid;gap:6px;cursor:pointer}.work-task strong{font-size:12px;line-height:1.35}.work-task small{font-size:9px;color:#999}.work-task.is-done{opacity:.52}.work-add-task{width:100%;margin-top:8px;border:0;background:transparent;color:#777;text-align:left;padding:8px;font-size:11px}.work-task-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}.work-task-form input,.work-task-form select,.work-task-form textarea{width:100%;border:1px solid #e4e4e7;border-radius:12px;padding:10px;background:#fff}.work-check-head{display:flex;justify-content:space-between;align-items:center;margin-top:8px;font-size:12px}.work-check-head button{border:0;background:transparent}.work-check-row{display:grid;grid-template-columns:auto 1fr auto;gap:7px;align-items:center;margin-top:6px}.work-check-row input[type="checkbox"]{width:18px}.work-check-row button{border:0;background:transparent;font-size:18px;color:#aaa}
 @media(max-width:520px){.main-nav{width:calc(100% - 18px);padding:4px}.main-nav-item{height:43px}.nav-label{font-size:7px}.work-shell{padding:10px 16px 12px}.work-head{align-items:start;flex-direction:column;gap:10px}.work-head h1{font-size:32px}.work-files{grid-template-columns:repeat(2,minmax(0,1fr))}.work-file{min-height:112px}.work-task-grid{grid-template-columns:1fr}}
+
+
+/* Build 47 — responsive MINDS desktop */
+@media(min-width:900px){
+  .app{width:100%;max-width:none}
+  .topbar{padding-left:40px;padding-right:40px}
+  .main-nav{width:min(620px,calc(100% - 48px));margin-bottom:12px}
+  .surface-head,.surface-list{width:min(100%,900px)}
+  .work-shell{padding:18px 38px 20px}
+  .work-head,.work-tabs,.work-status,.work-body{width:min(100%,1600px);max-width:none}
+  .work-files{grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .work-board{min-height:0;padding-bottom:24px}
+  .work-bucket{flex-basis:285px}
+  .calendar-content{width:100%}
+  .readings-topline{padding-left:36px;padding-right:36px}
+}
+@media(min-width:1400px){
+  .work-head,.work-tabs,.work-status,.work-body{width:calc(100% - 48px);max-width:1760px}
+  .work-bucket{flex-basis:300px}
+}
+
+/* Planner cards inspired by the information density of Microsoft Planner */
+.work-task-card{border:1px solid #e2e2e5;background:#fff;border-radius:13px;margin-bottom:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.06);cursor:pointer;outline:none}
+.work-task-card:focus-visible{box-shadow:0 0 0 2px #111}
+.work-task-card.is-done{opacity:.56}
+.work-task-cover{display:block;width:100%;height:128px;object-fit:cover;background:#f2f2f3}
+.work-task-title-row{display:grid;grid-template-columns:22px 1fr;gap:8px;align-items:start;padding:12px 12px 8px}
+.work-task-title-row strong{font-size:12px;line-height:1.42;font-weight:520}
+.work-task-toggle{border:0;background:transparent;padding:0;font-size:20px;line-height:18px;color:#555;cursor:pointer}
+.work-card-checks{display:grid;gap:5px;padding:1px 13px 9px 42px}
+.work-card-checks>div{display:grid;grid-template-columns:14px 1fr;gap:5px;font-size:10px;line-height:1.35;color:#555}
+.work-card-checks>div.done{color:#aaa;text-decoration:line-through}
+.work-card-checks .work-check-more{display:block;color:#999}
+.work-task-card footer{border-top:1px solid #eee;padding:8px 11px;display:grid;gap:5px}
+.work-task-chips{display:flex;flex-wrap:wrap;gap:8px;font-size:9px;color:#666}
+.work-task-card footer small{font-size:9px;color:#999}
+.work-due.is-overdue{color:#d83e4b;background:#fff0f1;border:1px solid #ffc9cd;border-radius:5px;padding:2px 5px}
+.work-completed{margin-top:10px;border-top:1px solid #e5e5e8;padding-top:8px}
+.work-completed summary{font-size:10px;color:#777;cursor:pointer;display:flex;justify-content:space-between;padding:5px 3px 9px}
+.work-task-detail-section{border-top:1px solid #ececef;padding-top:12px;margin-top:4px}
+#workTaskAttachments{display:grid;gap:7px;margin-top:7px}
+.work-attachment-row{display:grid;grid-template-columns:42px 1fr auto;gap:9px;align-items:center;border:1px solid #ececef;border-radius:11px;padding:7px}
+.work-attachment-row>img{width:42px;height:42px;border-radius:8px;object-fit:cover;background:#f3f3f4}
+.work-attachment-row>span{width:42px;text-align:center;font-size:19px;color:#888}
+.work-attachment-row div{display:grid;gap:2px;min-width:0}
+.work-attachment-row strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.work-attachment-row small{font-size:9px;color:#999}
+.work-attachment-row button{border:0;background:transparent;color:#999;font-size:18px}
+.work-attachment-empty{font-size:10px;color:#aaa;padding:7px 0}
+.modal:has(.work-task-form){width:min(980px,94vw);max-width:none}
+.work-task-form{max-width:none}
+@media(max-width:899px){
+  .work-task-cover{height:112px}
+}

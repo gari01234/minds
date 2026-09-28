@@ -545,13 +545,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.46'));
+  assert.ok(shell.includes('Build 2026.09.28.47'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=42'));
-  assert.ok(index.includes('shell.js?v=46'));
-  assert.ok(index.includes('app.js?v=55'));
+  assert.ok(index.includes('app.css?v=43'));
+  assert.ok(index.includes('shell.js?v=47'));
+  assert.ok(index.includes('app.js?v=56'));
   assert.ok(index.includes('ai.js?v=36'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v53'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v54'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -660,7 +660,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=1'));
+  assert.ok(index.includes('work.js?v=2'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -674,4 +674,37 @@ test('Build 46 Planner reuses Isabella tasks instead of duplicating todos',()=>{
   assert.ok(work.includes('checklist'));
   assert.ok(work.includes('priority'));
   assert.ok(sync.includes('window.ISABELLA_SYNC_NOW'));
+});
+
+
+test('Build 47 keeps chat images stable across background rerenders',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('const signedAssetCache=new Map()'));
+  assert.ok(app.includes('messageRenderKey'));
+  assert.ok(app.includes('if(nextRenderKey===lastMessagesRenderKey)'));
+  assert.ok(app.includes("cachedSignedAsset('isabella-uploads',path)"));
+  assert.ok(app.includes("signedAssetUrl('isabella-uploads',path,3600)"));
+});
+
+test('Build 47 uses the requested navigation order',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>')+6);
+  const order=['data-nav="assistant"','data-nav="calendar"','data-nav="feed"','data-nav="ideas"','data-nav="readings"','data-nav="work"'].map(x=>nav.indexOf(x));
+  assert.ok(order.every((x,i)=>x>=0&&(i===0||x>order[i-1])));
+});
+
+test('Build 47 makes Work and MINDS responsive on desktop',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('@media(min-width:900px)'));
+  assert.ok(css.includes('.app{width:100%;max-width:none}'));
+  assert.ok(css.includes('width:min(100%,1600px)'));
+});
+
+test('Build 47 Planner supports checklist previews and real task attachments',()=>{
+  const work=read('apps/isabella/work.js');
+  assert.ok(work.includes('work-card-checks'));
+  assert.ok(work.includes('workTaskAttachmentInput'));
+  assert.ok(work.includes("storage.from('minds-work').upload"));
+  assert.ok(work.includes('Erledigte Aufgaben'));
+  assert.ok(work.includes('Ohne Bucket'));
 });

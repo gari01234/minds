@@ -3,7 +3,8 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
-let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'desktop',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],bound=false;
+let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'desktop',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],bound=false,pendingTaskFiles=[],editingAttachments=[];
+const workSignedCache=new Map();
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
 function sourceKind(file){const n=String(file?.name||'').toLowerCase(),m=String(file?.type||'');if(n.endsWith('.eml')||n.endsWith('.msg')||m==='message/rfc822')return'email';if(m.startsWith('image/'))return'image';if(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$/i.test(n))return'document';return'file'}
@@ -76,27 +77,106 @@ async function loadPlanner(){
   buckets=b||[];
   const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order').eq('project_id',project.id).is('archived_at',null).order('sort_order');if(te)throw te;tasks=t||[];
 }
-function taskMeta(t){const parts=[];if(t.due_date)parts.push(new Date(t.due_date+'T12:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}));if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');if(t.assignee)parts.push(t.assignee);const ck=Array.isArray(t.checklist)?t.checklist:[],done=ck.filter(x=>x?.done).length;if(ck.length)parts.push(`${done}/${ck.length}`);return parts.join(' · ')}
+function localIso(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
+function taskMeta(t){
+  const parts=[];if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');if(t.assignee)parts.push(t.assignee);
+  return parts.join(' · ')
+}
+function taskChecklist(t){return Array.isArray(t.checklist)?t.checklist:[]}
+function taskAttachments(t){return Array.isArray(t.attachments)?t.attachments:[]}
+function taskCard(t){
+  const checks=taskChecklist(t),done=checks.filter(x=>x?.done).length,attachments=taskAttachments(t);
+  const firstImage=attachments.find(a=>a?.path&&String(a?.mime||a?.type||'').startsWith('image/')),cached=firstImage?cachedWorkUrl(firstImage.path):'';
+  const due=t.due_date?new Date(t.due_date+'T12:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'';
+  const overdue=!!(t.due_date&&t.due_date<localIso()&&!t.completed_at);
+  return `<article class="work-task-card ${t.completed_at?'is-done':''}" data-work-task="${t.id}" tabindex="0">
+    ${firstImage?`<img class="work-task-cover" ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-work-task-image="${esc(firstImage.path)}" alt="${esc(firstImage.name||t.title)}">`:''}
+    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong></div>
+    ${checks.length?`<div class="work-card-checks">${checks.slice(0,5).map(x=>`<div class="${x.done?'done':''}"><span>${x.done?'●':'○'}</span><span>${esc(x.text||'')}</span></div>`).join('')}${checks.length>5?`<div class="work-check-more">+${checks.length-5} weitere</div>`:''}</div>`:''}
+    <footer>
+      <div class="work-task-chips">${due?`<span class="work-due ${overdue?'is-overdue':''}">▣ ${esc(due)}</span>`:''}${checks.length?`<span>☑ ${done}/${checks.length}</span>`:''}${attachments.length?`<span>⌕ ${attachments.length}</span>`:''}</div>
+      ${taskMeta(t)?`<small>${esc(taskMeta(t))}</small>`:''}
+    </footer>
+  </article>`
+}
+async function hydratePlannerImages(root=document){
+  const imgs=[...root.querySelectorAll?.('[data-work-task-image],[data-work-edit-image]')||[]].filter(x=>!x.dataset.loaded);
+  await Promise.all(imgs.map(async img=>{const path=img.dataset.workTaskImage||img.dataset.workEditImage;if(!path)return;const url=await workSignedUrl(path);if(url&&img.isConnected){img.src=url;img.dataset.loaded='1'}}));
+}
 async function renderPlanner(){
-  await loadPlanner();const body=$('#workBody');
-  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen</span></div><button data-work-add-bucket>＋ Bucket</button></div><div class="work-board">${buckets.map(b=>`<section class="work-bucket"><header><strong>${esc(b.name)}</strong><button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button></header><div class="work-task-list">${tasks.filter(t=>t.work_bucket_id===b.id).map(t=>`<button class="work-task ${t.completed_at?'is-done':''}" data-work-task="${t.id}"><strong>${esc(t.title)}</strong><small>${esc(taskMeta(t))}</small></button>`).join('')}</div><button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe</button></section>`).join('')}</div>`;
-  $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());$$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});$$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));$$('[data-work-task]').forEach(b=>b.onclick=()=>editTask(tasks.find(t=>t.id===b.dataset.workTask)||null,null));
+  await loadPlanner();const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
+  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><button data-work-add-bucket>＋ Bucket</button></div>
+    <div class="work-board">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket">
+      <header><strong>${esc(b.name)}</strong>${b.virtual?'':`<button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button>`}</header>
+      <div class="work-task-list">${open.map(taskCard).join('')}</div>
+      ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list">${done.map(taskCard).join('')}</div></details>`:''}
+      ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
+    </section>`}).join('')}</div>`;
+  $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
+  $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
+  $$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));
+  $$('[data-work-task]').forEach(card=>{card.onclick=e=>{if(e.target.closest('[data-work-toggle]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}}});
+  $$('[data-work-toggle]').forEach(b=>b.onclick=e=>{e.stopPropagation();void toggleTask(b.dataset.workToggle)});
+  void hydratePlannerImages(body);
+}
+async function toggleTask(id){
+  const t=tasks.find(x=>x.id===id);if(!t)return;const done=!t.completed_at;
+  const {error}=await sb.from('isabella_tasks').update({completed_at:done?new Date().toISOString():null,work_status:done?'completed':'not_started',updated_at:new Date().toISOString()}).eq('id',id);
+  if(!error){await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_NOW?.(),0)}
 }
 async function addBucket(){const name=window.prompt('Nombre del Bucket');if(!name?.trim())return;const next=(buckets.at(-1)?.sort_order||0)+10;const {error}=await sb.from('minds_work_buckets').insert({project_id:project.id,name:name.trim(),sort_order:next});if(!error)await renderPlanner()}
 async function editBucket(id){const b=buckets.find(x=>x.id===id);if(!b)return;const name=window.prompt('Nombre del Bucket',b.name);if(!name?.trim()||name.trim()===b.name)return;const {error}=await sb.from('minds_work_buckets').update({name:name.trim(),updated_at:new Date().toISOString()}).eq('id',id);if(!error)await renderPlanner()}
-function checklistRows(items=[]){return (items||[]).map(x=>`<div class="work-check-row"><input type="checkbox" data-work-check-done ${x?.done?'checked':''}><input data-work-check-text value="${esc(x?.text||'')}" placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button></div>`).join('')}
+function checklistRows(items=[]){return (items||[]).map(x=>`<div class="work-check-row" data-check-id="${esc(x?.id||'')}"><input type="checkbox" data-work-check-done ${x?.done?'checked':''}><input data-work-check-text value="${esc(x?.text||'')}" placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button></div>`).join('')}
 function bindChecklist(){$$('[data-work-check-remove]').forEach(b=>b.onclick=()=>b.closest('.work-check-row')?.remove())}
+function attachmentEditorMarkup(){
+  const existing=editingAttachments.map((a,i)=>`<div class="work-attachment-row">${a?.path&&String(a?.mime||'').startsWith('image/')?`<img ${cachedWorkUrl(a.path)?`src="${esc(cachedWorkUrl(a.path))}" data-loaded="1"`:''} data-work-edit-image="${esc(a.path)}" alt="">`:'<span>⌕</span>'}<div><strong>${esc(a?.name||'Anlage')}</strong><small>${a?.path?'gespeichert':'Teams-Referenz · Original noch nicht importiert'}</small></div></div>`).join('');
+  const pending=pendingTaskFiles.map((f,i)=>`<div class="work-attachment-row is-pending"><span>＋</span><div><strong>${esc(f.name)}</strong><small>se guarda al guardar la Aufgabe</small></div><button type="button" data-remove-pending="${i}">×</button></div>`).join('');
+  return existing+pending||'<div class="work-attachment-empty">Noch keine Anlagen</div>';
+}
+function renderAttachmentEditor(){
+  const box=$('#workTaskAttachments');if(!box)return;box.innerHTML=attachmentEditorMarkup();
+  $$('[data-remove-pending]').forEach(b=>b.onclick=()=>{pendingTaskFiles.splice(Number(b.dataset.removePending),1);renderAttachmentEditor()});
+  void hydratePlannerImages(box);
+}
 function editTask(task,bucketId){
-  const t=task||{title:'',due_date:'',start_date:'',priority:'normal',work_status:'not_started',assignee:'',notes:'',labels:[],checklist:[]},bucket=t.work_bucket_id||bucketId||buckets[0]?.id||'';
-  window.ISABELLA_APP?.openModal?.(task?'Aufgabe':'Neue Aufgabe',`<div class="form work-task-form"><label>Titel<input id="workTaskTitle" value="${esc(t.title||'')}"></label><div class="work-task-grid"><label>Bucket<select id="workTaskBucket">${buckets.map(b=>`<option value="${b.id}" ${b.id===bucket?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><label>Status<select id="workTaskStatus"><option value="not_started" ${t.work_status==='not_started'?'selected':''}>Nicht begonnen</option><option value="in_progress" ${t.work_status==='in_progress'?'selected':''}>In Bearbeitung</option><option value="waiting" ${t.work_status==='waiting'?'selected':''}>Warten</option><option value="completed" ${t.work_status==='completed'?'selected':''}>Erledigt</option></select></label></div><div class="work-task-grid"><label>Start<input id="workTaskStart" type="date" value="${esc(t.start_date||'')}"></label><label>Fällig<input id="workTaskDue" type="date" value="${esc(t.due_date||'')}"></label></div><div class="work-task-grid"><label>Priorität<select id="workTaskPriority"><option value="low" ${t.priority==='low'?'selected':''}>Niedrig</option><option value="normal" ${t.priority==='normal'?'selected':''}>Normal</option><option value="important" ${t.priority==='important'?'selected':''}>Wichtig</option><option value="urgent" ${t.priority==='urgent'?'selected':''}>Dringend</option></select></label><label>Zuständig<input id="workTaskAssignee" value="${esc(t.assignee||'')}"></label></div><label>Labels<input id="workTaskLabels" value="${esc((Array.isArray(t.labels)?t.labels:[]).join(', '))}" placeholder="TGA, Bauherr, Freigabe"></label><label>Notizen<textarea id="workTaskNotes" rows="3">${esc(t.notes||'')}</textarea></label><div class="work-check-head"><span>Checklist</span><button id="workAddCheck" type="button">＋ Punkt</button></div><div id="workChecklist">${checklistRows(t.checklist)}</div><button id="workSaveTask" class="primary">Speichern</button></div>`);
-  bindChecklist();$('#workAddCheck').onclick=()=>{const row=document.createElement('div');row.className='work-check-row';row.innerHTML='<input type="checkbox" data-work-check-done><input data-work-check-text placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button>';$('#workChecklist').appendChild(row);bindChecklist()};$('#workSaveTask').onclick=()=>void saveTask(task);
+  pendingTaskFiles=[];editingAttachments=[...taskAttachments(task||{})];
+  const t=task||{title:'',due_date:'',start_date:'',priority:'normal',work_status:'not_started',assignee:'',notes:'',labels:[],checklist:[]},bucket=t.work_bucket_id||bucketId||'';
+  window.ISABELLA_APP?.openModal?.(task?'Aufgabe':'Neue Aufgabe',`<div class="form work-task-form">
+    <label class="work-task-title-field">Titel<input id="workTaskTitle" value="${esc(t.title||'')}"></label>
+    <div class="work-task-grid"><label>Bucket<select id="workTaskBucket"><option value="">Ohne Bucket</option>${buckets.map(b=>`<option value="${b.id}" ${b.id===bucket?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><label>Status<select id="workTaskStatus"><option value="not_started" ${t.work_status==='not_started'?'selected':''}>Nicht begonnen</option><option value="in_progress" ${t.work_status==='in_progress'?'selected':''}>In Bearbeitung</option><option value="waiting" ${t.work_status==='waiting'?'selected':''}>Warten</option><option value="completed" ${t.work_status==='completed'?'selected':''}>Erledigt</option></select></label></div>
+    <div class="work-task-grid"><label>Start<input id="workTaskStart" type="date" value="${esc(t.start_date||'')}"></label><label>Fällig<input id="workTaskDue" type="date" value="${esc(t.due_date||'')}"></label></div>
+    <div class="work-task-grid"><label>Priorität<select id="workTaskPriority"><option value="low" ${t.priority==='low'?'selected':''}>Niedrig</option><option value="normal" ${t.priority==='normal'?'selected':''}>Normal</option><option value="important" ${t.priority==='important'?'selected':''}>Wichtig</option><option value="urgent" ${t.priority==='urgent'?'selected':''}>Dringend</option></select></label><label>Zuständig<input id="workTaskAssignee" value="${esc(t.assignee||'')}"></label></div>
+    <label>Labels<input id="workTaskLabels" value="${esc((Array.isArray(t.labels)?t.labels:[]).join(', '))}" placeholder="TGA, Bauherr, Freigabe"></label>
+    <label>Notizen<textarea id="workTaskNotes" rows="4">${esc(t.notes||'')}</textarea></label>
+    <div class="work-task-detail-section"><div class="work-check-head"><span>Checklist</span><button id="workAddCheck" type="button">＋ Punkt</button></div><div id="workChecklist">${checklistRows(t.checklist)}</div></div>
+    <div class="work-task-detail-section"><div class="work-check-head"><span>Anlagen</span><button id="workAddAttachment" type="button">＋ Bild / Datei</button></div><input id="workTaskAttachmentInput" class="hidden" type="file" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx"><div id="workTaskAttachments"></div></div>
+    <button id="workSaveTask" class="primary">Speichern</button>
+  </div>`);
+  bindChecklist();renderAttachmentEditor();
+  $('#workAddCheck').onclick=()=>{const row=document.createElement('div');row.className='work-check-row';row.dataset.checkId=Math.random().toString(36).slice(2);row.innerHTML='<input type="checkbox" data-work-check-done><input data-work-check-text placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button>';$('#workChecklist').appendChild(row);bindChecklist()};
+  const attachmentInput=$('#workTaskAttachmentInput');$('#workAddAttachment').onclick=()=>attachmentInput.click();attachmentInput.onchange=()=>{pendingTaskFiles.push(...[...(attachmentInput.files||[])]);attachmentInput.value='';renderAttachmentEditor()};
+  $('#workSaveTask').onclick=()=>void saveTask(task);
 }
 async function saveTask(existing){
   const title=$('#workTaskTitle').value.trim();if(!title)return;const status=$('#workTaskStatus').value;
-  const checklist=$$('.work-check-row').map(r=>({id:Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
+  const checklist=$$('.work-check-row').map(r=>({id:r.dataset.checkId||Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
   const row={title,project_id:project.id,work_bucket_id:$('#workTaskBucket').value||null,work_status:status,priority:$('#workTaskPriority').value,start_date:$('#workTaskStart').value||null,due_date:$('#workTaskDue').value||null,assignee:$('#workTaskAssignee').value.trim()||null,labels:$('#workTaskLabels').value.split(',').map(x=>x.trim()).filter(Boolean),notes:$('#workTaskNotes').value,checklist,completed_at:status==='completed'?(existing?.completed_at||new Date().toISOString()):null,updated_at:new Date().toISOString()};
-  let error;if(existing)({error}=await sb.from('isabella_tasks').update(row).eq('id',existing.id));else({error}=await sb.from('isabella_tasks').insert({...row,sort_order:tasks.length*10}));
-  if(error){setStatus('No pude guardar la Aufgabe.');return}window.ISABELLA_APP?.closeModal?.();await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_NOW?.(),0);
+  let savedId=existing?.id||null,error=null;
+  if(existing)({error}=await sb.from('isabella_tasks').update(row).eq('id',existing.id));
+  else{const res=await sb.from('isabella_tasks').insert({...row,sort_order:tasks.length*10}).select('id').single();error=res.error;savedId=res.data?.id||null}
+  if(error||!savedId){setStatus('No pude guardar la Aufgabe.');return}
+  if(pendingTaskFiles.length){
+    const session=await getSession(),next=[...editingAttachments];
+    if(session){
+      for(const file of pendingTaskFiles){
+        const path=`${session.user.id}/${project.client_key}/tasks/${savedId}/${Date.now()}-${Math.random().toString(36).slice(2,7)}-${safeName(file.name)}`;
+        const {error:ue}=await sb.storage.from('minds-work').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+        if(!ue)next.push({id:Math.random().toString(36).slice(2),name:file.name,path,mime:file.type||'application/octet-stream',size:file.size,created_at:new Date().toISOString()});
+      }
+      await sb.from('isabella_tasks').update({attachments:next,updated_at:new Date().toISOString()}).eq('id',savedId);
+    }
+  }
+  pendingTaskFiles=[];editingAttachments=[];window.ISABELLA_APP?.closeModal?.();await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_NOW?.(),0);
 }
 window.MINDS_WORK={render};
 })();
