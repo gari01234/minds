@@ -199,6 +199,23 @@ async function pullState(local,maps){
   const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(local.assistantPreferences||{}),...assistantPref.value}:local.assistantPreferences;
   return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:remoteMessages.length?remoteMessages:local.messages};
 }
+async function updateMessageMetadata(clientKey,patch){
+  if(!user||!clientKey||!patch||typeof patch!=='object')return false;
+  try{
+    const cid=await conversationId();
+    const {data,error}=await sb.from('conversation_messages')
+      .select('metadata')
+      .eq('user_id',user.id).eq('conversation_id',cid).eq('client_key',String(clientKey))
+      .maybeSingle();
+    if(error)throw error;
+    const next={...(data?.metadata||{}),...patch,app:APP_SCOPE};
+    const {error:ue}=await sb.from('conversation_messages')
+      .update({metadata:next})
+      .eq('user_id',user.id).eq('conversation_id',cid).eq('client_key',String(clientKey));
+    if(ue)throw ue;
+    return true;
+  }catch(e){setStatus('No pude sincronizar la reacción: '+apiError(e));return false}
+}
 async function pullConversation(){
   const {data,error}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope',APP_SCOPE).order('updated_at',{ascending:false}).limit(1);
   if(error||!data?.length)return[];
@@ -283,5 +300,6 @@ async function syncNow(opts={}){
 }
 window.ISABELLA_SYNC_NOW=(opts={})=>syncNow(opts);
 window.ISABELLA_SYNC_PULL_NOW=()=>syncNow({pullOnly:true});
+window.ISABELLA_SYNC_MESSAGE_META=(clientKey,patch)=>updateMessageMetadata(clientKey,patch);
 init();
 })();

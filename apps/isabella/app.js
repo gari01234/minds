@@ -847,7 +847,7 @@ function renderMessages(forceBottom=false){
   const snapshot=captureAssistantScroll();
   box.innerHTML=state.messages.map(m=>{
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">${m.reaction?esc(m.reaction):'☺︎'}</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${esc(m.reaction)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">☺︎</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
@@ -872,79 +872,9 @@ function closeReactionPicker(){
 function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
   m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
-  setTimeout(()=>window.ISABELLA_SYNC_NOW?.({pushOnly:true}),0);
-}
-function closeTextPicker(){
-  document.querySelector('.message-text-picker-backdrop')?.remove();
-  document.querySelector('.message-text-picker')?.remove();
-  document.body.classList.remove('message-text-picker-open');
-}
-function segmentMessageText(text){
-  const value=String(text||'');
-  try{
-    if(Intl?.Segmenter){
-      const seg=new Intl.Segmenter(undefined,{granularity:'word'});
-      return [...seg.segment(value)].map(x=>({text:x.segment,index:x.index,selectable:/\S/u.test(x.segment)}));
-    }
-  }catch{}
-  const out=[];let m;
-  const re=/\s+|[\p{L}\p{N}_]+|[^\s]/gu;
-  while((m=re.exec(value)))out.push({text:m[0],index:m.index,selectable:/\S/u.test(m[0])});
-  return out;
-}
-function openMessageTextPicker(id){
-  const m=state.messages.find(x=>x.id===id);if(!m)return;
-  closeReactionPicker();closeTextPicker();
-  const text=String(m.text||''),segments=segmentMessageText(text);
-  const backdrop=document.createElement('div');backdrop.className='message-text-picker-backdrop';
-  const sheet=document.createElement('section');sheet.className='message-text-picker';sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');
-  sheet.innerHTML=`<div class="message-text-picker-head"><div><div class="eyebrow">ISABELLA</div><div class="message-text-picker-title">Seleccionar</div></div><button class="round" data-picker-close aria-label="Cerrar">×</button></div>
-    <div class="message-text-picker-help">Toca una palabra o emoji y arrastra para ampliar la selección.</div>
-    <div class="message-token-area">${segments.map((s,i)=>s.selectable?`<span class="message-token" data-token-index="${i}">${esc(s.text)}</span>`:esc(s.text)).join('')}</div>
-    <div class="message-text-picker-actions"><button class="secondary" data-picker-all>Todo</button><button class="primary" data-picker-copy disabled>Copiar selección</button></div>`;
-  document.body.append(backdrop,sheet);document.body.classList.add('message-text-picker-open');
-  let anchor=null,end=null,dragging=false;
-  const tokens=[...sheet.querySelectorAll('[data-token-index]')],copy=sheet.querySelector('[data-picker-copy]');
-  const selectedRange=()=>anchor===null||end===null?null:[Math.min(anchor,end),Math.max(anchor,end)];
-  const update=()=>{
-    const range=selectedRange();
-    tokens.forEach(t=>{const i=Number(t.dataset.tokenIndex);t.classList.toggle('selected',!!range&&i>=range[0]&&i<=range[1])});
-    copy.disabled=!range;
-  };
-  const tokenAtPoint=(x,y)=>document.elementFromPoint(x,y)?.closest?.('[data-token-index]');
-  const area=sheet.querySelector('.message-token-area');
-  area.addEventListener('pointerdown',e=>{
-    const t=e.target.closest?.('[data-token-index]');if(!t)return;
-    e.preventDefault();dragging=true;anchor=Number(t.dataset.tokenIndex);end=anchor;update();
-    try{area.setPointerCapture?.(e.pointerId)}catch{}
-  });
-  area.addEventListener('pointermove',e=>{
-    if(!dragging)return;e.preventDefault();
-    const t=tokenAtPoint(e.clientX,e.clientY);if(t){end=Number(t.dataset.tokenIndex);update()}
-  });
-  const stop=()=>{dragging=false};
-  area.addEventListener('pointerup',stop);area.addEventListener('pointercancel',stop);
-  backdrop.onclick=closeTextPicker;sheet.querySelector('[data-picker-close]').onclick=closeTextPicker;
-  sheet.querySelector('[data-picker-all]').onclick=()=>{const selectable=segments.map((s,i)=>s.selectable?i:null).filter(i=>i!==null);if(!selectable.length)return;anchor=selectable[0];end=selectable[selectable.length-1];update()};
-  copy.onclick=async()=>{
-    const range=selectedRange();if(!range)return;
-    const start=segments[range[0]].index,last=segments[range[1]],selected=text.slice(start,last.index+last.text.length);
-    try{await navigator.clipboard.writeText(selected)}
-    catch{
-      const ta=document.createElement('textarea');ta.value=selected;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch{}ta.remove();
-    }
-    copy.textContent='Copiado';setTimeout(closeTextPicker,260);
-  };
-}
-function selectMessageText(id){openMessageTextPicker(id)}
-
-async function copyMessageText(id){
-  const m=state.messages.find(x=>x.id===id);if(!m)return;
-  try{await navigator.clipboard.writeText(String(m.text||''))}
-  catch{
-    const ta=document.createElement('textarea');ta.value=String(m.text||'');ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy')}catch{}ta.remove();
-  }
-  closeReactionPicker();
+  const patch={reaction:m.reaction||null};
+  if(window.ISABELLA_SYNC_MESSAGE_META)setTimeout(()=>window.ISABELLA_SYNC_MESSAGE_META(id,patch),0);
+  else setTimeout(()=>window.ISABELLA_SYNC_NOW?.({pushOnly:true}),0);
 }
 function positionReactionPopover(pop,menu,el){
   const r=el.getBoundingClientRect(),vw=innerWidth,vh=innerHeight;
@@ -957,17 +887,53 @@ function positionReactionPopover(pop,menu,el){
     menu.style.left=mleft+'px';menu.style.top=mtop+'px';
   }
 }
+const REACTION_QUICK=['❤️','👍','👎','😂','‼️','❓'];
+const REACTION_CATEGORIES=[
+  {id:'recent',label:'Recientes',icon:'🕘',items:['👍','❤️','😂','👏','🙏','🔥','✨','✅','👀','💯','🎉','🤝']},
+  {id:'faces',label:'Caras',icon:'☺︎',items:['😀','😃','😄','😁','😆','😅','😂','🤣','😊','🙂','😉','😍','🥰','🤩','🥳','😎','🤔','😮','😯','😲','🥹','😢','😭','😤','😡','😱','😴','🫠','🫡']},
+  {id:'gestures',label:'Gestos',icon:'👍',items:['👍','👎','👌','🤌','✌️','🤞','🫶','👏','🙌','👐','🤝','🙏','💪','👀','👉','👈','☝️','✋']},
+  {id:'hearts',label:'Corazones',icon:'♥︎',items:['❤️','🩷','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘']},
+  {id:'symbols',label:'Símbolos',icon:'✨',items:['‼️','❓','❗','❔','✅','❌','💯','⭐','✨','🔥','💡','📌','🎉','🚀','🧠','🏗️','📚','📝','📎','⏰']}
+];
+
+function closeEmojiReactionSheet(){
+  document.querySelector('.emoji-reaction-sheet')?.remove();
+  document.querySelector('.emoji-reaction-sheet-backdrop')?.remove();
+  document.body.classList.remove('emoji-reaction-sheet-open');
+}
+function openEmojiReactionSheet(id){
+  const m=state.messages.find(x=>x.id===id);if(!m)return;
+  closeReactionPicker();closeEmojiReactionSheet();
+  const backdrop=document.createElement('div');backdrop.className='emoji-reaction-sheet-backdrop';
+  const sheet=document.createElement('section');sheet.className='emoji-reaction-sheet';sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label','Reaccionar con un emoji');
+  sheet.innerHTML=`<div class="emoji-sheet-grabber"></div>
+    <div class="emoji-sheet-head"><strong>Reaccionar</strong><button type="button" data-emoji-close aria-label="Cerrar">×</button></div>
+    <div class="emoji-sheet-tabs" role="tablist">${REACTION_CATEGORIES.map((c,i)=>`<button type="button" role="tab" data-emoji-category="${c.id}" class="${i===0?'active':''}" aria-label="${esc(c.label)}">${c.icon}</button>`).join('')}</div>
+    <div class="emoji-sheet-body"></div>`;
+  document.body.append(backdrop,sheet);document.body.classList.add('emoji-reaction-sheet-open');
+  const body=sheet.querySelector('.emoji-sheet-body');
+  const paint=cat=>{
+    body.innerHTML=`<div class="emoji-category-title">${esc(cat.label)}</div><div class="emoji-grid">${cat.items.map(x=>`<button type="button" data-emoji-reaction="${x}" class="${m.reaction===x?'selected':''}" aria-label="Reaccionar ${x}">${x}</button>`).join('')}</div>`;
+    body.querySelectorAll('[data-emoji-reaction]').forEach(b=>b.onclick=()=>{applyReaction(id,b.dataset.emojiReaction||null);closeEmojiReactionSheet()});
+  };
+  paint(REACTION_CATEGORIES[0]);
+  sheet.querySelectorAll('[data-emoji-category]').forEach(b=>b.onclick=()=>{
+    sheet.querySelectorAll('[data-emoji-category]').forEach(x=>x.classList.toggle('active',x===b));
+    paint(REACTION_CATEGORIES.find(c=>c.id===b.dataset.emojiCategory)||REACTION_CATEGORIES[0]);
+  });
+  backdrop.onclick=closeEmojiReactionSheet;
+  sheet.querySelector('[data-emoji-close]').onclick=closeEmojiReactionSheet;
+}
 function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
-  closeReactionPicker();try{navigator.vibrate?.(10)}catch{}el.classList.add('reaction-target');
-  const quick=['❤️','👍','👎','😂','‼️','❓'],more=['😮','😢','👏','🙌','😊','🥰','😍','🤩','🥳','🙂','😉','🤔','🫡','🙏','💡','🔥','✨','💯','✅','❌','👀','🤝','💪','🎉','⭐','🚀','📌','🧠','🏗️','📚'];
+  closeReactionPicker();closeEmojiReactionSheet();try{navigator.vibrate?.(8)}catch{}el.classList.add('reaction-target');
   const backdrop=document.createElement('div');backdrop.className='reaction-backdrop';
   const pop=document.createElement('div');pop.className='reaction-popover imessage-reactions';
-  pop.innerHTML=`<div class="reaction-row reaction-quick-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}</div>`;
+  pop.innerHTML=`<div class="reaction-row reaction-quick-row">${REACTION_QUICK.map(x=>`<button type="button" data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}" aria-label="Reaccionar ${x}">${x}</button>`).join('')}<button type="button" class="reaction-more" aria-label="Más emojis">＋</button></div>`;
   document.body.append(backdrop,pop);requestAnimationFrame(()=>positionReactionPopover(pop,null,el));
   backdrop.onclick=closeReactionPicker;
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
-  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);requestAnimationFrame(()=>positionReactionPopover(pop,null,el))});
+  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();openEmojiReactionSheet(id)});
 }
 function bindMessageReactions(){
   $$('[data-message-react]').forEach(b=>{

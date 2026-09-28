@@ -544,13 +544,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.49'));
+  assert.ok(shell.includes('Build 2026.09.28.50'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=45'));
-  assert.ok(index.includes('shell.js?v=49'));
-  assert.ok(index.includes('app.js?v=58'));
+  assert.ok(index.includes('app.css?v=46'));
+  assert.ok(index.includes('shell.js?v=50'));
+  assert.ok(index.includes('app.js?v=59'));
   assert.ok(index.includes('ai.js?v=38'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v56'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v57'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -784,4 +784,38 @@ test('Build 49 contains expanded reactions within an Apple-like bounded panel',(
   assert.ok(css.includes('width:min(360px,calc(100vw - 20px))'));
   assert.ok(css.includes('grid-template-columns:repeat(6,minmax(0,1fr))'));
   assert.ok(css.includes('overflow-x:hidden'));
+});
+
+
+test('Build 50 reserves long press for native iOS text selection',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(!app.includes('function openMessageTextPicker'));
+  assert.ok(!css.includes('custom reaction menu by default, native selection only after explicit Select text'));
+  assert.ok(css.includes('.message,.message .message-text,.message .message-text *{'));
+  assert.ok(css.includes('-webkit-user-select:text!important'));
+  assert.ok(css.includes('-webkit-touch-callout:default!important'));
+});
+
+test('Build 50 uses separate quick reactions and compact emoji sheet',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(app.includes('const REACTION_QUICK='));
+  assert.ok(app.includes('function openEmojiReactionSheet(id)'));
+  assert.ok(app.includes('REACTION_CATEGORIES'));
+  assert.ok(css.includes('.emoji-reaction-sheet'));
+  assert.ok(css.includes('.emoji-sheet-tabs'));
+  assert.ok(css.includes('.emoji-grid'));
+});
+
+test('Build 50 persists reaction metadata directly instead of waiting for full-state sync',()=>{
+  const app=read('apps/isabella/app.js'),sync=read('apps/isabella/sync.js');
+  assert.ok(app.includes('ISABELLA_SYNC_MESSAGE_META'));
+  assert.ok(sync.includes('async function updateMessageMetadata'));
+  assert.ok(sync.includes("update({metadata:next})"));
+  assert.ok(sync.includes('window.ISABELLA_SYNC_MESSAGE_META'));
+});
+
+test('Build 50 renders reactions as attached message badges',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(app.includes('message-reaction-badge'));
+  assert.ok(css.includes('.message-reaction-badge'));
 });
