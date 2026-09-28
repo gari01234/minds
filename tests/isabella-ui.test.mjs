@@ -45,7 +45,12 @@ test('message reactions use a compact quick pill and dedicated emoji sheet',()=>
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('reaction-popover'));
-  assert.ok(app.includes("const REACTION_QUICK=['❤️','👍','👎','😂','‼️','❓']"));
+  assert.ok(app.includes("label:'<3'"));
+  assert.ok(app.includes("label:'YE!'"));
+  assert.ok(app.includes("label:'HA!'"));
+  assert.ok(app.includes("label:'OK'"));
+  assert.ok(app.includes("label:'NOPE'"));
+  assert.ok(app.includes("label:':)'"));
   assert.ok(app.includes('function openEmojiReactionSheet(id)'));
   assert.ok(!app.includes("modal('Reaccionar'"));
   assert.ok(css.includes('.message-reaction-badge'));
@@ -544,13 +549,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.51'));
+  assert.ok(shell.includes('Build 2026.09.29.52'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=46'));
-  assert.ok(index.includes('shell.js?v=51'));
-  assert.ok(index.includes('app.js?v=59'));
+  assert.ok(index.includes('app.css?v=47'));
+  assert.ok(index.includes('shell.js?v=52'));
+  assert.ok(index.includes('app.js?v=60'));
   assert.ok(index.includes('ai.js?v=38'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v58'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v59'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -826,4 +831,23 @@ test('Build 51 preserves local-only chat messages on initial server sync',()=>{
   assert.ok(sync.includes('function mergeConversationMessages'));
   assert.ok(sync.includes('mergeConversationMessages(remoteMessages,local.messages||[])'));
   assert.ok(sync.includes('if(opts.initial)await pushConversation(next.messages||[])'));
+});
+
+
+test('Build 52 maps the six typographic reactions to stable emoji values',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  for(const value of ["value:'❤️'","value:'👍'","value:'😂'","value:'👌'","value:'👎'","value:'😀'"])assert.ok(app.includes(value));
+  assert.ok(app.includes('function typographicReaction'));
+  assert.ok(app.includes('data-inline-reaction="${x.value}"'));
+  assert.ok(css.includes('.minds-reaction-token.tone-love'));
+  assert.ok(css.includes('.minds-reaction-token.tone-yes'));
+  assert.ok(css.includes('.minds-reaction-token.tone-laugh'));
+  assert.ok(css.includes('.minds-reaction-token.tone-ok'));
+  assert.ok(css.includes('.minds-reaction-token.tone-nope'));
+  assert.ok(css.includes('.minds-reaction-token.tone-smile'));
+});
+
+test('Build 52 keeps HA free of decorative rays',()=>{
+  const css=read('apps/isabella/app.css');
+  assert.ok(css.includes('.minds-reaction-token.tone-laugh::before,.minds-reaction-token.tone-laugh::after{display:none!important}'));
 });
