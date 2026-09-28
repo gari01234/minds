@@ -175,22 +175,6 @@ function init(){
   renderCalendar();
   show(state.screen);
 }
-async function maybeDailyBrief(){
-  try{
-    const now=new Date(),d=today();
-    if(now.getHours()<8)return false;
-    const key='isabella-daily-brief-date';
-    if(localStorage.getItem(key)===d)return false;
-    if(!window.ISABELLA_AI?.brief)return false;
-    const result=await window.ISABELLA_AI.brief(state);
-    if(result?.reply){
-      localStorage.setItem(key,d);
-      say('assistant',result.reply);
-      return true;
-    }
-  }catch{}
-  return false;
-}
 async function maybeProactiveNudge(){
   try{
     if(!window.ISABELLA_AI?.nudge)return false;
@@ -448,18 +432,11 @@ function closeIdeaWorkspace(){
 function artifactMarkup(a,compact=false){
   const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
   if(!path)return '';
-  if(kind==='image')return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`;
+  if(kind==='image'){const cached=cachedSignedAsset('minds-artifacts',path);return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`}
   const label=kind==='docx'?'WORD':kind==='pdf'?'PDF':kind.toUpperCase();
   return `<a class="generated-artifact generated-file ${compact?'compact':''}" data-artifact-file="${esc(path)}" href="#" target="_blank" rel="noopener"><span>${esc(label)}</span><strong>${esc(title)}</strong><em>Abrir archivo ↗</em></a>`;
 }
-async function artifactSignedUrl(path,expires=3600){
-  const sb=window.MINDS_SUPABASE;if(!sb||!path)return '';
-  try{
-    const {data:{session}}=await sb.auth.getSession();if(!session)return '';
-    const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,expires);
-    return data?.signedUrl||'';
-  }catch{return ''}
-}
+async function artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}
 async function openArtifactImage(path,title='Imagen'){
   const url=await artifactSignedUrl(path,3600);if(!url)return;
   modal(title,`<div class="artifact-image-viewer"><img src="${esc(url)}" alt="${esc(title)}"></div>`);
@@ -834,6 +811,7 @@ function renderMessages(forceBottom=false){
   }
   const snapshot=captureAssistantScroll();
   box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{
@@ -1336,15 +1314,11 @@ async function uploadChatImages(files){
 async function hydrateChatImages(){
   const imgs=[...document.querySelectorAll('img[data-chat-image-path]')].filter(x=>!x.dataset.loaded);
   if(!imgs.length)return;
-  const sb=window.MINDS_SUPABASE;if(!sb)return;
-  try{
-    const {data:{session}}=await sb.auth.getSession();if(!session)return;
-    await Promise.all(imgs.map(async img=>{
-      const path=img.dataset.chatImagePath;if(!path)return;
-      const {data}=await sb.storage.from('isabella-uploads').createSignedUrl(path,3600);
-      if(data?.signedUrl){img.src=data.signedUrl;img.dataset.loaded='1'}
-    }));
-  }catch{}
+  await Promise.all(imgs.map(async img=>{
+    const path=img.dataset.chatImagePath;if(!path)return;
+    const signed=await signedAssetUrl('isabella-uploads',path,3600);
+    if(signed&&img.isConnected){img.src=signed;img.dataset.loaded='1'}
+  }));
 }
 
 function bind(){

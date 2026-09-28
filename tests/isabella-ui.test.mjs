@@ -684,6 +684,8 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
   assert.ok(app.includes('if(nextRenderKey===lastMessagesRenderKey)'));
   assert.ok(app.includes("cachedSignedAsset('isabella-uploads',path)"));
   assert.ok(app.includes("signedAssetUrl('isabella-uploads',path,3600)"));
+  assert.ok(app.includes('lastMessagesRenderKey=nextRenderKey'));
+  assert.ok(app.includes("artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}"));
 });
 
 test('Build 47 uses the requested navigation order',()=>{
