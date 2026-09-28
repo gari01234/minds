@@ -46,6 +46,7 @@ function nextTaskOrder(date){const key=date||null,xs=state.tasks.filter(t=>(t.da
 function mutation(entityType,action,before,after,source='manual'){
   const entityKey=(after||before)?.id;
   if(!entityKey)return;
+  if(after&&['task','event'].includes(String(entityType||'')))after.updatedAt=new Date().toISOString();
   if(['event','task','project'].includes(String(entityType||'')))try{localStorage.setItem('isabella-feed-dirty','1')}catch{}
   try{window.dispatchEvent(new CustomEvent('isabella:mutation',{detail:{entityType,entityKey,action,source,before:clone(before),after:clone(after)}}))}catch{}
 }
@@ -175,17 +176,32 @@ function init(){
   renderCalendar();
   show(state.screen);
 }
+let proactiveNudgeBusy=false;
+function proactiveTerms(text){
+  return new Set(normalizeText(String(text||'')).split(/\s+/).filter(x=>x.length>3&&!['tienes','sobre','para','esta','este','unos','conviene','claro','claros','quieres','quieras','ahora'].includes(x)));
+}
+function proactiveSimilarity(a,b){
+  const A=proactiveTerms(a),B=proactiveTerms(b);if(!A.size||!B.size)return 0;
+  let hit=0;for(const x of A)if(B.has(x))hit++;
+  return hit/Math.min(A.size,B.size);
+}
+function recentlyCoveredProactive(reply){
+  const recent=(state.messages||[]).filter(m=>m.role==='assistant').slice(-12);
+  return recent.some(m=>proactiveSimilarity(reply,m.text)>=0.62);
+}
 async function maybeProactiveNudge(){
+  if(proactiveNudgeBusy)return false;
   try{
     if(!window.ISABELLA_AI?.nudge)return false;
-    const key='isabella-last-nudge-at';
-    const last=Number(localStorage.getItem(key)||0),now=Date.now();
+    const key='isabella-last-nudge-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
     if(now-last<6*60*60*1000)return false;
+    proactiveNudgeBusy=true;
+    localStorage.setItem(key,String(now));
     const result=await window.ISABELLA_AI.nudge(state);
     const reply=String(result?.reply||'').trim();
-    localStorage.setItem(key,String(now));
-    if(reply&&reply!=='NO_NUDGE'&&!/^NO_NUDGE[.!]?$/i.test(reply)){say('assistant',reply);return true}
+    if(reply&&reply!=='NO_NUDGE'&&!/^NO_NUDGE[.!]?$/i.test(reply)&&!recentlyCoveredProactive(reply)){say('assistant',reply);return true}
   }catch{}
+  finally{proactiveNudgeBusy=false}
   return false;
 }
 async function maybeCuriosityQuestion(){
@@ -810,7 +826,7 @@ function renderMessages(forceBottom=false){
     return;
   }
   const snapshot=captureAssistantScroll();
-  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.reaction?`<span class="reaction-chip">${esc(m.reaction)}</span>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
+  box.innerHTML=state.messages.map(m=>`<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">${m.reaction?esc(m.reaction):'♡'}</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
@@ -912,9 +928,11 @@ function positionReactionPopover(pop,menu,el){
   const w=Math.min(pop.offsetWidth||350,vw-24),left=Math.max(12,Math.min(vw-w-12,r.left+(r.width-w)/2));
   let top=r.top-(pop.offsetHeight||66)-14;if(top<12)top=Math.min(vh-(pop.offsetHeight||66)-12,r.bottom+12);
   pop.style.left=left+'px';pop.style.top=top+'px';
-  const mw=Math.min(menu.offsetWidth||290,vw-32),mleft=Math.max(16,Math.min(vw-mw-16,el.classList.contains('user')?r.right-mw:r.left));
-  let mtop=r.bottom+14;if(mtop+(menu.offsetHeight||110)>vh-16)mtop=Math.max(16,r.top-(menu.offsetHeight||110)-14);
-  menu.style.left=mleft+'px';menu.style.top=mtop+'px';
+  if(menu){
+    const mw=Math.min(menu.offsetWidth||290,vw-32),mleft=Math.max(16,Math.min(vw-mw-16,el.classList.contains('user')?r.right-mw:r.left));
+    let mtop=r.bottom+14;if(mtop+(menu.offsetHeight||110)>vh-16)mtop=Math.max(16,r.top-(menu.offsetHeight||110)-14);
+    menu.style.left=mleft+'px';menu.style.top=mtop+'px';
+  }
 }
 function openReactionPicker(id){
   const m=state.messages.find(x=>x.id===id),el=document.querySelector(`.message[data-message-id="${CSS.escape(String(id))}"]`);if(!m||!el)return;
@@ -923,29 +941,15 @@ function openReactionPicker(id){
   const backdrop=document.createElement('div');backdrop.className='reaction-backdrop';
   const pop=document.createElement('div');pop.className='reaction-popover imessage-reactions';
   pop.innerHTML=`<div class="reaction-row">${quick.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}<button class="reaction-more" aria-label="Más reacciones">＋</button></div><div class="reaction-row reaction-row-more is-hidden">${more.map(x=>`<button data-inline-reaction="${x}" class="${m.reaction===x?'selected':''}">${x}</button>`).join('')}</div>`;
-  const menu=document.createElement('div');menu.className='message-action-menu';
-  menu.innerHTML=`<button data-message-action="copy">Copiar</button><button data-message-action="select">Seleccionar texto</button>${m.reaction?'<button data-message-action="remove">Quitar reacción</button>':''}`;
-  document.body.append(backdrop,pop,menu);requestAnimationFrame(()=>positionReactionPopover(pop,menu,el));
+  document.body.append(backdrop,pop);requestAnimationFrame(()=>positionReactionPopover(pop,null,el));
   backdrop.onclick=closeReactionPicker;
   pop.querySelectorAll('[data-inline-reaction]').forEach(b=>b.onclick=e=>{e.stopPropagation();applyReaction(id,b.dataset.inlineReaction||null)});
-  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);requestAnimationFrame(()=>positionReactionPopover(pop,menu,el))});
-  menu.querySelector('[data-message-action="copy"]')?.addEventListener('click',()=>copyMessageText(id));
-  menu.querySelector('[data-message-action="select"]')?.addEventListener('click',()=>selectMessageText(id));
-  menu.querySelector('[data-message-action="remove"]')?.addEventListener('click',()=>applyReaction(id,null));
+  pop.querySelector('.reaction-more')?.addEventListener('click',e=>{e.stopPropagation();const row=pop.querySelector('.reaction-row-more'),opening=row.classList.contains('is-hidden');row.classList.toggle('is-hidden',!opening);pop.classList.toggle('expanded',opening);requestAnimationFrame(()=>positionReactionPopover(pop,null,el))});
 }
 function bindMessageReactions(){
-  $$('#messages .message[data-message-id]').forEach(el=>{
-    if(el.dataset.reactionBound)return;el.dataset.reactionBound='1';
-    let timer=null,sx=0,sy=0,moved=false;
-    const cancel=()=>{if(timer){clearTimeout(timer);timer=null}};
-    el.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;cancel();timer=setTimeout(()=>{timer=null;if(!moved)openReactionPicker(el.dataset.messageId)},430)},{passive:true});
-    el.addEventListener('touchmove',e=>{if(e.touches.length!==1)return;const t=e.touches[0];if(Math.abs(t.clientX-sx)>10||Math.abs(t.clientY-sy)>10){moved=true;cancel()}},{passive:true});
-    el.addEventListener('touchend',cancel,{passive:true});
-    el.addEventListener('touchcancel',cancel,{passive:true});
-    el.addEventListener('contextmenu',e=>{e.preventDefault();openReactionPicker(el.dataset.messageId)});
-    el.addEventListener('selectstart',e=>e.preventDefault());
-    el.addEventListener('dblclick',e=>{if(getSelection()?.toString())return;e.preventDefault();openReactionPicker(el.dataset.messageId)});
-    el.querySelector('.reaction-chip')?.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(el.dataset.messageId)});
+  $$('[data-message-react]').forEach(b=>{
+    if(b.dataset.reactionBound)return;b.dataset.reactionBound='1';
+    b.addEventListener('click',e=>{e.stopPropagation();openReactionPicker(b.dataset.messageReact)});
   });
 }
 
@@ -1472,7 +1476,7 @@ function week(){
   const s=startWeek(fromIso(state.date));let h='<div class="week">';
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
-    h+=`<div class="wday"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
@@ -1491,10 +1495,31 @@ function bindCalendarItems(){
     el.addEventListener('touchstart',e=>{if(e.target.closest('.task-check'))return;if(e.touches.length!==1)return;const t=e.touches[0];sx=t.clientX;sy=t.clientY;moved=false;e.stopPropagation()},{passive:true});
     el.addEventListener('touchmove',e=>{const t=e.touches[0];if(Math.abs(t.clientX-sx)>12||Math.abs(t.clientY-sy)>12)moved=true;e.stopPropagation()},{passive:true});
     el.addEventListener('touchend',e=>{if(e.target.closest('.task-check'))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.dragActive==='1'||el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')toggleTaskDone(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
-    el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(e.target.closest('.drag-handle,.task-check'))return;editItem(el.dataset.kind,el.dataset.id)});
+    el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(e.target.closest('.drag-handle,.task-check'))return;editItem(el.dataset.kind,el.dataset.id)});
   });
+  initWeekDateDrag();
   initTaskDrag();
   initEventDrag();
+}
+function initWeekDateDrag(){
+  if(state.view!=='week')return;
+  $$('.week .task-item[draggable="true"]').forEach(card=>{
+    card.addEventListener('dragstart',e=>{
+      card.dataset.justDragged='1';card.classList.add('dragging');
+      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',card.dataset.id||'')}catch{}
+    });
+    card.addEventListener('dragend',()=>{card.classList.remove('dragging');setTimeout(()=>{card.dataset.justDragged='0'},120)});
+  });
+  $$('.week .wday[data-week-date]').forEach(day=>{
+    day.addEventListener('dragover',e=>{if(!e.dataTransfer)return;e.preventDefault();e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target')});
+    day.addEventListener('dragleave',e=>{if(!day.contains(e.relatedTarget))day.classList.remove('week-drop-target')});
+    day.addEventListener('drop',e=>{
+      e.preventDefault();day.classList.remove('week-drop-target');
+      const id=e.dataTransfer?.getData('text/plain'),t=state.tasks.find(x=>x.id===id),date=day.dataset.weekDate;
+      if(!t||!date||t.date===date)return;
+      const before=clone(t);t.date=date;t.sortOrder=nextTaskOrder(date);mutation('task','move_date',before,t,'manual');save();renderCalendar();
+    });
+  });
 }
 function itemBy(kind,id){return (kind==='task'?state.tasks:state.events).find(x=>x.id===id)}
 function itemActions(kind,id){

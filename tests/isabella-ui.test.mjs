@@ -545,13 +545,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.28.47'));
+  assert.ok(shell.includes('Build 2026.09.28.48'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=43'));
-  assert.ok(index.includes('shell.js?v=47'));
-  assert.ok(index.includes('app.js?v=56'));
-  assert.ok(index.includes('ai.js?v=36'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v54'"));
+  assert.ok(index.includes('app.css?v=44'));
+  assert.ok(index.includes('shell.js?v=48'));
+  assert.ok(index.includes('app.js?v=57'));
+  assert.ok(index.includes('ai.js?v=37'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v55'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -660,7 +660,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=2'));
+  assert.ok(index.includes('work.js?v=3'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -709,4 +709,43 @@ test('Build 47 Planner supports checklist previews and real task attachments',()
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes('Erledigte Aufgaben'));
   assert.ok(work.includes('Ohne Bucket'));
+});
+
+
+test('Build 48 supports dragging week tasks to another day',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('data-week-date='));
+  assert.ok(app.includes('function initWeekDateDrag()'));
+  assert.ok(app.includes("mutation('task','move_date'"));
+});
+
+test('Build 48 keeps manual task edits from being dropped during sync',()=>{
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(sync.includes('queuedSync'));
+  assert.ok(sync.includes('if(opts.initial||opts.pullOnly)'));
+  assert.ok(sync.includes('window.ISABELLA_SYNC_PULL_NOW'));
+});
+
+test('Build 48 Planner supports drag between buckets and task deletion',()=>{
+  const work=read('apps/isabella/work.js');
+  assert.ok(work.includes('draggable="true"'));
+  assert.ok(work.includes('function moveTaskToBucket'));
+  assert.ok(work.includes('function deleteWorkTask'));
+  assert.ok(work.includes('workDeleteTask'));
+  assert.ok(work.includes('work-bucket-scroll'));
+});
+
+test('Build 48 uses explicit reaction controls and normal text selection',()=>{
+  const app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(app.includes('data-message-react'));
+  assert.ok(!app.includes("el.addEventListener('selectstart',e=>e.preventDefault())"));
+  assert.ok(css.includes('user-select:text!important'));
+  assert.ok(css.includes('.message-react'));
+});
+
+test('Build 48 suppresses repeated proactive reminders',()=>{
+  const app=read('apps/isabella/app.js'),ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('recentlyCoveredProactive'));
+  assert.ok(app.includes('proactiveNudgeBusy'));
+  assert.ok(ai.includes('un recordatorio por tema es suficiente'));
 });

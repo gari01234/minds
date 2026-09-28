@@ -4,7 +4,7 @@ const APP_SCOPE='isabella';
 const app=window.ISABELLA_APP;
 const $=s=>document.querySelector(s);
 const authButton=$('#authButton'),status=$('#syncStatus');
-let user=null,syncing=false,timer=null,hydrating=false;
+let user=null,syncing=false,timer=null,hydrating=false,queuedSync=null;
 const setStatus=t=>{if(status)status.textContent=t};
 const localDateTime=(date,time)=>new Date(date+'T'+(time||'09:00')+':00');
 const pad=n=>String(n).padStart(2,'0');
@@ -174,7 +174,7 @@ async function conversationId(){
 async function pushConversation(messages){
   if(!messages.length)return;
   const cid=await conversationId(),now=new Date().toISOString();
-  const rows=messages.map((m,i)=>({user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],metadata:{app:APP_SCOPE,attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},created_at:m.at||now}));
+  const rows=messages.map((m,i)=>({user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],metadata:{app:APP_SCOPE,reaction:m.reaction||null,sources:Array.isArray(m.sources)?m.sources.slice(0,8):[],attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},created_at:m.at||now}));
   const {error}=await sb.from('conversation_messages').upsert(rows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true});
   if(error)throw error;
   await sb.from('conversations').update({updated_at:now}).eq('id',cid).eq('user_id',user.id).eq('app_scope',APP_SCOPE);
@@ -237,7 +237,8 @@ async function recordActivity(detail){
   }
 }
 async function syncNow(opts={}){
-  if(!user||syncing)return;
+  if(!user)return;
+  if(syncing){queuedSync={...(queuedSync||{}),...opts};return}
   syncing=true;setStatus('Sincronizando…');
   try{
     let local=app.getState();
@@ -262,16 +263,25 @@ async function syncNow(opts={}){
     }
     hydrating=true;app.replaceState(local);hydrating=false;
     const maps=await ensureTaxonomy(local);
-    await pushState(local,maps);
-    if(!opts.pushOnly){
+    if(opts.initial||opts.pullOnly){
       const next=await pullState(local,maps);
       hydrating=true;app.replaceState(next);hydrating=false;
+    }else{
+      await pushState(local,maps);
+      if(!opts.pushOnly){
+        const next=await pullState(local,maps);
+        hydrating=true;app.replaceState(next);hydrating=false;
+      }
     }
     setStatus('Memoria sincronizada · Supabase');
     try{window.dispatchEvent(new CustomEvent('isabella:synced',{detail:{initial:!!opts.initial}}))}catch{}
   }catch(e){setStatus('Error de sincronización: '+apiError(e))}
-  finally{syncing=false}
+  finally{
+    syncing=false;
+    if(queuedSync){const next=queuedSync;queuedSync=null;setTimeout(()=>syncNow(next),0)}
+  }
 }
-window.ISABELLA_SYNC_NOW=()=>syncNow({});
+window.ISABELLA_SYNC_NOW=(opts={})=>syncNow(opts);
+window.ISABELLA_SYNC_PULL_NOW=()=>syncNow({pullOnly:true});
 init();
 })();

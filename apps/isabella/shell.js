@@ -42,7 +42,7 @@ document.body.innerHTML = `
     <section id="workScreen" class="screen work-screen" data-screen="work">
       <div class="work-shell">
         <div class="work-head">
-          <div><div class="eyebrow">MINDS · WORK</div><h1 id="workProjectTitle">Bernried</h1></div>
+          <div><h1 id="workProjectTitle">Bernried</h1></div>
           <div class="work-project-switch" aria-label="Proyecto">
             <button data-work-project="bernried" class="active">Bernried</button>
             <button data-work-project="schwarz">Schwarz</button>
@@ -114,7 +114,7 @@ document.body.innerHTML = `
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
-  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.28.47</div></aside>
+  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="routines">Rutinas</button><button data-action="skills">Habilidades</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div class="drawer-note">Build 2026.09.28.48</div></aside>
   <div id="focusMode" class="focus hidden" role="dialog" aria-modal="true"><div class="focus-head"><div class="focus-name">Isabella</div><button id="focusClose" class="round">×</button></div><div class="focus-center"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="focusStatus" class="focus-status">Escuchando…</div><textarea id="focusTranscript" class="focus-transcript" rows="5" readonly placeholder="Tu transcripción aparecerá aquí."></textarea></div><div class="focus-actions"><button id="focusKeyboard">Cancelar</button><button id="focusStop" class="dark">Detener</button></div></div>
   <div id="modalBackdrop" class="backdrop hidden"></div><div id="modal" class="modal hidden"><div class="modal-head"><div id="modalTitle" class="modal-title"></div><button id="closeModal" class="round">×</button></div><div id="modalBody"></div></div>
 </div>`;
