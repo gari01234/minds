@@ -26,7 +26,7 @@ export function checkpointBatch(rows:any[],maxChars=100000){
 export async function memoryCheckpoint(sb:any,apiKey:string,agent:string,conversationId:string,usage:(p:any,m:any)=>Promise<void>){
   try{
     if(!sb||!conversationId)return {status:'idle'};
-    const last=checked(await sb.from('minds_memory_flushes').select('checkpoint_message_at,checkpoint_message_id,summary,open_loops').eq('agent',agent).eq('conversation_id',conversationId).eq('status','active').order('checkpoint_message_at',{ascending:false}).order('checkpoint_message_id',{ascending:false}).limit(1).maybeSingle(),'checkpoint_read');
+    const last=checked(await sb.from('minds_memory_flushes').select('id,checkpoint_message_at,checkpoint_message_id,summary,open_loops').eq('agent',agent).eq('conversation_id',conversationId).eq('status','active').order('checkpoint_message_at',{ascending:false}).order('checkpoint_message_id',{ascending:false}).limit(1).maybeSingle(),'checkpoint_read');
     let q=sb.from('conversation_messages').select('id,role,content,created_at').eq('conversation_id',conversationId).order('created_at',{ascending:true}).order('id',{ascending:true}).limit(100);
     if(last?.checkpoint_message_at){
       const at=last.checkpoint_message_at,id=last.checkpoint_message_id||'00000000-0000-0000-0000-000000000000';
@@ -45,6 +45,6 @@ export async function memoryCheckpoint(sb:any,apiKey:string,agent:string,convers
     const parsed=JSON.parse(String(raw).replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/,''));
     if(!String(parsed.summary||'').trim())throw new Error('empty_checkpoint');
     const saved=checked(await sb.rpc('minds_save_memory_checkpoint',{p_agent:agent,p_conversation_id:conversationId,p_message_ids:batch.map(m=>m.id),p_summary:parsed.summary,p_open_loops:Array.isArray(parsed.open_loops)?parsed.open_loops:[]}),'checkpoint_commit');
-    return {status:'saved',summary:saved.summary,open_loops:saved.open_loops,checkpoint_message_at:saved.checkpoint_message_at,message_count:batch.length};
+    return {status:'saved',id:saved.id,summary:saved.summary,open_loops:saved.open_loops,checkpoint_message_at:saved.checkpoint_message_at,message_count:batch.length};
   }catch(e){return {status:'error',detail:e instanceof Error?e.message:String(e)}}
 }

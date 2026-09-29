@@ -168,6 +168,18 @@ function proposalFromTool(name: string, a: any) {
     max_triggers:Math.max(1,Math.min(12,Number(a.max_triggers||3))),
     expires_days:Math.max(1,Math.min(365,Number(a.expires_days||90)))
   };
+  if (name === "propose_commitment") return {
+    action:"create",
+    kind:"commitment",
+    title:String(a.title||"").trim(),
+    objective:String(a.objective||"").trim(),
+    scope:["global","personal","project","theory","other"].includes(String(a.scope||""))?String(a.scope):"global",
+    project:String(a.project||"").trim()||null,
+    completion_criteria:String(a.completion_criteria||"").trim()||null,
+    source_flush_id:String(a.source_flush_id||"").trim()||null,
+    source_open_loop:String(a.source_open_loop||"").trim()||null,
+    source_kind:a.source_flush_id&&a.source_open_loop?"checkpoint":"user"
+  };
   if (name === "propose_project_claim") return {
     action:"create",
     kind:"work_claim",
@@ -406,6 +418,21 @@ const calendarTools = [
       max_triggers:{type:"integer"},
       expires_days:{type:"integer"}
     },required:["trigger_text","reminder_text"]}
+  },
+  {
+    type:"function",
+    name:"propose_commitment",
+    description:"Propose a durable MINDS Commitment: something the user wants kept alive across conversations even when no immediate task or clock time exists. A Commitment is not a task, routine or standing reminder and never executes actions by itself. Use only when the user explicitly asks to keep something alive/open, or when you surface a genuinely important open matter for review. Never create one silently from memory_checkpoint.open_loops. If the user explicitly elevates an exact open loop from memory_checkpoint, preserve its provenance with source_flush_id=memory_checkpoint.id and source_open_loop equal to the exact stored string.",
+    strict:false,
+    parameters:{type:"object",properties:{
+      title:{type:"string",description:"Short human-readable name."},
+      objective:{type:"string",description:"What MINDS should keep alive over time."},
+      scope:{type:"string",enum:["global","personal","project","theory","other"]},
+      project:{type:"string",description:"Optional project name, e.g. Bernried or Schwarz."},
+      completion_criteria:{type:"string",description:"Optional condition that would make this no longer open."},
+      source_flush_id:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: memory_checkpoint.id."},
+      source_open_loop:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: exact stored text."}
+    },required:["title","objective"]}
   },
   {
     type:"function",
@@ -970,6 +997,65 @@ function workMatch(value:any,terms:string[]){
   const hay=normalizeText(typeof value==="string"?value:JSON.stringify(value||""));
   return !terms.length||terms.some(t=>hay.includes(t));
 }
+function continuityTerms(value:string){
+  const stop=new Set(["esto","eso","aquello","tema","proyecto","sobre","para","como","cuando","donde","quiero","tenemos","tengo","seguir","sigue","vivo","viva","abierto","abierta","pendiente","compromiso","commitment","mission"]);
+  return normalizeText(value).split(/[^a-z0-9áéíóúüñäöüß]+/i).filter((x:string)=>x.length>2&&!stop.has(x)).slice(0,14);
+}
+function commitmentScore(row:any,terms:string[],projectName:string|null){
+  const p:any=row?.isabella_projects;
+  const hay=normalizeText([row?.title,row?.objective,row?.completion_criteria,p?.name,p?.client_key].filter(Boolean).join(" "));
+  let score=terms.filter(t=>hay.includes(t)).length*2;
+  if(projectName&&p?.name&&normalizeText(p.name)===normalizeText(projectName))score+=5;
+  if(row?.status==="active")score+=1;
+  return score;
+}
+function commitmentView(row:any){
+  const p:any=row?.isabella_projects;
+  return {
+    id:row.id,title:row.title,objective:row.objective,scope:row.scope,status:row.status,
+    project:p?.name||null,completion_criteria:row.completion_criteria||null,updated_at:row.updated_at,
+    provenance:{class:"user_reviewed_commitment",accepted:true,source_kind:row.source_kind,source_open_loop:row.source_open_loop||null,open_loop_is_derived:!!row.source_open_loop}
+  };
+}
+async function commitmentRows(req:Request,statuses:string[]=["active","waiting","paused"]){
+  const sb=supabaseClient(req);if(!sb)return [];
+  const result=await sb.from("minds_commitments")
+    .select("id,title,objective,scope,status,completion_criteria,source_kind,source_open_loop,updated_at,project_id,isabella_projects(name,client_key)")
+    .in("status",statuses).order("updated_at",{ascending:false}).limit(80);
+  return checked(result,"commitments_query")||[];
+}
+async function commitmentMatches(req:Request,message:string,projectName:string|null){
+  try{
+    const rows=await commitmentRows(req);
+    const terms=continuityTerms(message);
+    const explicit=/\b(compromis|commitment|mission|pendient|abiert|mant[eé]n|mantener|vivo|viva|seguimos|continuidad|no perder)\w*\b/i.test(String(message||""));
+    return rows.map((row:any)=>({row,score:commitmentScore(row,terms,projectName)}))
+      .filter((x:any)=>x.score>0||explicit)
+      .sort((a:any,b:any)=>b.score-a.score||new Date(b.row.updated_at).getTime()-new Date(a.row.updated_at).getTime())
+      .slice(0,6).map((x:any)=>commitmentView(x.row));
+  }catch{return []}
+}
+async function searchCommitments(req:Request,args:any,userMessage:string){
+  try{
+    const allowed=new Set(["active","waiting","paused","completed","cancelled"]);
+    const requested=Array.isArray(args?.statuses)?args.statuses.map((x:any)=>String(x)).filter((x:string)=>allowed.has(x)):["active","waiting","paused"];
+    const statuses=requested.length?requested:["active","waiting","paused"];
+    let rows=await commitmentRows(req,statuses);
+    const project=String(args?.project||"").trim();
+    if(project)rows=rows.filter((row:any)=>{
+      const p:any=row?.isabella_projects;
+      return normalizeText(p?.name)===normalizeText(project)||normalizeText(p?.client_key)===normalizeText(project);
+    });
+    const query=String(args?.query||userMessage||"").trim();
+    const terms=continuityTerms(query);
+    rows=rows.map((row:any)=>({row,score:commitmentScore(row,terms,project||null)}))
+      .filter((x:any)=>!terms.length||x.score>0)
+      .sort((a:any,b:any)=>b.score-a.score||new Date(b.row.updated_at).getTime()-new Date(a.row.updated_at).getTime())
+      .slice(0,20).map((x:any)=>commitmentView(x.row));
+    return {status:"ok",query,project:project||null,commitments:rows,provenance:{class:"user_reviewed_commitment",accepted:true}};
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+
 async function searchWork(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
@@ -1126,12 +1212,12 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
-  search_memory:"allow",search_calendar:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",
+  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",create_chat_reminder:"confirm",
-  update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",
+  update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",propose_commitment:"confirm",
   propose_project_claim:"confirm",propose_skill:"confirm"
 };
 function policyMode(name:string){return ACTION_POLICY[name]||"deny"}
@@ -1278,7 +1364,7 @@ Deno.serve(async (req: Request) => {
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const initialSemantic=!background&&!!route.deep_memory;
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
-  const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
+  const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req, effectiveMessage),
     longTermRecall(req, effectiveMessage,budget.lexical),
     recentActivity(req,budget.activity),
@@ -1289,6 +1375,7 @@ Deno.serve(async (req: Request) => {
     personalModel(req,budget.claims),
     personalModelPolicy(req),
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
+    background?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
     !background&&route.project?searchWork(req,{project:route.project,query:effectiveMessage}):Promise.resolve(null),
     !background&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
@@ -1310,6 +1397,10 @@ Las reglas críticas de mutación están reforzadas en código: las acciones per
 STANDING INTENTS:
 CONTEXTO PRIVADO puede contener standing_intent_matches. Son recordatorios prospectivos que el usuario aprobó previamente. Si aparece uno, intégralo una sola vez de forma natural en esta respuesta. No lo repitas en turnos posteriores salvo una nueva activación y no lo conviertas automáticamente en una tarea.
 
+CONTINUITY CORE:
+CONTEXTO PRIVADO puede contener active_commitments. Un Commitment es un objetivo abierto que el usuario revisó y aprobó para que MINDS lo mantenga vivo a lo largo del tiempo. No es una Task, Routine ni Standing Intent y no autoriza ninguna acción por sí mismo. Úsalo como contexto operativo: una tarea puede contribuir a un Commitment sin completarlo automáticamente.
+memory_checkpoint.open_loops contiene candidatos derivados de la conversación, no compromisos aceptados. Nunca promociones un open_loop silenciosamente. Si el usuario dice explícitamente que no quiere perder algo, que lo mantengamos vivo, o confirma que un asunto abierto merece continuidad, usa propose_commitment y deja que la interfaz lo revise. Si elevas exactamente un open_loop visible en memory_checkpoint, conserva su procedencia usando memory_checkpoint.id y el texto exacto del open_loop. Usa search_commitments cuando el usuario pregunte qué sigue abierto, qué estamos manteniendo vivo o haga referencia a un objetivo persistente que no aparezca ya en active_commitments.
+
 SKILLS:
 Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. No cargues una skill para saludos, preguntas triviales o conversación general. Puedes cargar más de una solo si realmente son complementarias.
 Si el usuario te corrige repetidamente sobre el mismo procedimiento, o pide explícitamente convertir una forma de trabajar en habilidad reutilizable, usa propose_skill. Una Skill propuesta no queda activa hasta que el usuario la revise y confirme.
@@ -1324,6 +1415,7 @@ Tienes consult_sofia para pedir a Sofía contexto intelectual de Readings, highl
 Tienes create_artifact para producir imágenes, Word (.docx) y PDF reales. Isabella sigue siendo la única interlocutora: crear un archivo no cambia de agente ni abre automáticamente Ideas. Los artefactos generados permanecen visibles en el hilo donde nacieron y también en ••• → Artefactos; cuando le expliques al usuario dónde encontrarlos, usa esa ruta concreta y no hables de una sección genérica que no pueda localizar.
 Tienes offer_quick_replies para mostrar 2–4 respuestas rápidas cuando una pregunta pueda resolverse con opciones breves; úsala para reducir fricción, no como decoración.
 Tienes search_memory para recuerdos antiguos o relaciones personales que no estén ya claras en la conversación.
+Tienes search_commitments para consultar objetivos abiertos ya aprobados y propose_commitment para preparar uno nuevo cuando algo deba permanecer vivo entre conversaciones. Un Commitment no ejecuta acciones y siempre requiere revisión antes de crearse.
 Tienes search_calendar para consultar agenda/tareas más allá del resumen inmediato.
 Tienes create_event, update_event, delete_event, create_task, update_task, complete_task, archive_task y delete_task para preparar cambios. Tienes create_routine para preparar una automatización recurrente propia de Isabella y create_chat_reminder para un único mensaje futuro dentro del chat. Tienes update_feed_preferences únicamente para ajustar la localidad habitual del clima o una regla explícita sobre qué situaciones personales merecen emerger en el Feed. El Feed NO es un news feed ni una lista de intereses. Tienes update_assistant_behavior para adoptar una mejora de comportamiento o workflow solo después de que el usuario la acepte explícitamente. Estas herramientas NO ejecutan directamente: la interfaz pedirá confirmación. Nunca digas que algo ya quedó hecho si solo preparaste una propuesta.
 Si el usuario pide una tarea pequeña o inmediata —por ejemplo redactar un email, producir una imagen concreta o preparar un archivo Word/PDF— resuélvela aquí. Usa create_artifact solo cuando haya pedido una imagen real o un archivo; no conviertas automáticamente estas peticiones en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
@@ -1399,6 +1491,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     route,
     reply_context:context.reply_context||null,
     standing_intent_matches:standingIntents||[],
+    active_commitments:commitments||[],
     routed_work_context:routedWork,
     routed_sofia_context:routedSofia,
     memory_checkpoint:memoryCheckpoint,
@@ -1443,6 +1536,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       description:"Consult Sofía selectively when the user's request materially depends on their Readings, highlights, notes, authors, theory threads or intellectual memory. Do not use for ordinary personal, calendar or operational requests.",
       strict:false,
       parameters:{type:"object",properties:{query:{type:"string"}},required:["query"]}
+    },
+    {
+      type:"function",
+      name:"search_commitments",
+      description:"Search user-approved MINDS Commitments: persistent objectives that remain open across conversations. Use when the user asks what is still open/alive or refers to an ongoing objective not already present in active_commitments.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        query:{type:"string"},
+        project:{type:"string"},
+        statuses:{type:"array",items:{type:"string",enum:["active","waiting","paused","completed","cancelled"]}}
+      }}
     },
     {
       type:"function",
@@ -1539,6 +1643,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result?.artifact?{status:"created",artifact:{id:result.artifact.id,kind:result.artifact.kind,title:result.artifact.title}}:result)});
       }else if(call.name==="consult_sofia"){
         const result=await consultSofia(req,args,effectiveMessage);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="search_commitments"){
+        const result=await searchCommitments(req,args,effectiveMessage);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work"){
         const result=await searchWork(req,args);

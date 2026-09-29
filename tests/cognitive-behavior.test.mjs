@@ -22,6 +22,7 @@ function proposalUI(){
 }
 for(const [proposal,field] of [
   [{kind:'standing_intent',trigger_text:'Dachentwässerung',reminder_text:'Revisar acuerdo'},'standingTrigger'],
+  [{kind:'commitment',title:'Continuidad',objective:'Mantener vivo este tema',scope:'global'},'commitmentObjective'],
   [{kind:'work_claim',project:'Bernried',statement:'Una afirmación de prueba'},'claimStatement'],
   [{kind:'skill_proposal',name:'Protocolo',instructions:'Verificar las fuentes'},'skillInstructions']]){
   test(`approval edit cancel and confirm work for ${proposal.kind}`,async()=>{
@@ -44,7 +45,9 @@ test('router recognizes inflections, project followups, and leaves a greeting li
   assert.equal(c.cognitiveBudget('Hola',[],false).depth,'light');assert.equal(c.cognitiveBudget('Analiza el proyecto'.repeat(70),[],false).compact,180000);
   assert.equal(c.userMessage('VOZ DE ISABELLA:\ntexto de estilo\nMENSAJE DE GARI:\nHola'),'Hola');
   assert.equal(c.workMatch({statement:'Revisar Dachentwässerung'},['puedes','dachentwässerung','bernried']),true);
-  assert.equal(c.policyMode('propose_project_claim'),'confirm');assert.equal(c.policyMode('propose_skill'),'confirm');assert.equal(c.policyMode('unknown'),'deny');
+  assert.equal(c.policyMode('propose_project_claim'),'confirm');assert.equal(c.policyMode('propose_skill'),'confirm');assert.equal(c.policyMode('propose_commitment'),'confirm');assert.equal(c.policyMode('search_commitments'),'allow');assert.equal(c.policyMode('unknown'),'deny');
+  const cp=c.proposalFromTool('propose_commitment',{title:'Continuidad',objective:'No perder X',scope:'global',source_flush_id:'flush',source_open_loop:'Open X'});assert.equal(cp.kind,'commitment');assert.equal(cp.source_kind,'checkpoint');
+  assert.ok(c.commitmentScore({title:'Bernried coordinación',objective:'Mantener decisiones vivas',status:'active',isabella_projects:{name:'Bernried'}},['decisiones'],'Bernried')>=7);
 });
 test('memory checkpoint covers every selected message and fails without advancing',async()=>{
   const c=edge('isabella-chat');let request,commit;

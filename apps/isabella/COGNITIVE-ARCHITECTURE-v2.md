@@ -46,3 +46,14 @@ Deep recall has a source-preserving escalation path: lexical, semantic and entit
 Memory checkpoints process contiguous messages ordered by `(created_at,id)` without cutting off older rows or truncating individual messages. The checkpoint and episodic memory commit in one transaction. Sofía checkpoints stay in the intellectual namespace. Persistent conversation context no longer accumulates per-turn snapshots; one-time cleanup preserves all original items and archives the old conversation.
 
 105 Node tests passed at release preparation, including 11 behavioral tests, and rolled-back SQL integration tests passed under authenticated and service roles. The live heartbeat completed the context migration and cron was restored. Automated deployment does not substitute for an authenticated browser conversation or observing tomorrow's scheduled delivery.
+
+
+## Build 58 — Continuity Core v0.1
+
+MINDS now distinguishes durable **Commitments** from tasks, routines and standing intents. A Commitment represents something the user explicitly reviewed and chose to keep alive across conversations; it does not execute actions by itself. The canonical state lives in `minds_commitments`, while `minds_commitment_events` preserves its causal history.
+
+Creation is reviewed and idempotent through `minds_create_commitment`. Direct authenticated inserts are not exposed. Optional project links are validated against user ownership. If a Commitment is elevated from a checkpoint `open_loop`, the RPC validates that the exact string exists in the referenced user-owned checkpoint and records an `open_loop_linked` event. The open loop remains derived provenance; confirmation promotes the objective to a user-reviewed Commitment, not the checkpoint text to factual memory.
+
+Isabella receives a small relevance-ranked set of active Commitments as transient context and can search them explicitly with `search_commitments`. She can propose a new Commitment with `propose_commitment`, but the proposal remains pending until the user reviews it in the existing confirmation UI. Checkpoint `open_loops` are never converted automatically.
+
+This release intentionally does **not** add autonomous execution, a Missions dashboard, automatic historical migration, heartbeat-triggered Commitment transitions or Shadow Agency. Those remain later layers on top of this primitive.

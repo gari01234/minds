@@ -42,9 +42,25 @@ begin
  begin
   perform public.minds_save_memory_checkpoint('isabella',conv,ids[2:100],'Incomplete','[]');raise exception 'TEST skipped oldest checkpoint message';
  exception when others then if SQLERRM='TEST skipped oldest checkpoint message' then raise;end if;end;
- c:=public.minds_save_memory_checkpoint('isabella',conv,ids,'All messages covered','[]');
+ c:=public.minds_save_memory_checkpoint('isabella',conv,ids,'All messages covered','["Open X"]');
  perform public.minds_save_memory_checkpoint('isabella',conv,ids,'Retry','[]');
  if (select count(*) from public.minds_memory_flushes where conversation_id=conv)<>1 or (select count(*) from public.isabella_memories where metadata->>'flush_id'=c->>'id')<>1 then raise exception 'TEST checkpoint atomicity/idempotency';end if;
+ before_n:=(select count(*) from public.minds_commitments);
+ begin
+  perform public.minds_create_commitment(jsonb_build_object('title','Unreviewed','objective','Should fail'),gen_random_uuid(),false);
+  raise exception 'TEST expected commitment confirmation rejection';
+ exception when others then if SQLERRM='TEST expected commitment confirmation rejection' then raise;end if;end;
+ begin
+  perform public.minds_create_commitment(jsonb_build_object('title','Bad loop','objective','Should fail','source_flush_id',c->>'id','source_open_loop','Missing loop'),gen_random_uuid(),true);
+  raise exception 'TEST expected open loop provenance rejection';
+ exception when others then if SQLERRM='TEST expected open loop provenance rejection' then raise;end if;end;
+ if (select count(*) from public.minds_commitments)<>before_n then raise exception 'TEST orphaned commitment after rejected provenance';end if;
+ req:=gen_random_uuid();
+ s:=public.minds_create_commitment(jsonb_build_object('title','Continuity','objective','Keep X alive','scope','project','project_id',project,'source_flush_id',c->>'id','source_open_loop','Open X'),req,true);
+ perform set_config('minds.test_commitment',s->>'id',true);
+ c:=public.minds_create_commitment(jsonb_build_object('title','Retry changed','objective','Must not overwrite'),req,true);
+ if c->>'objective'<>'Keep X alive' or (select count(*) from public.minds_commitments)<>before_n+1 then raise exception 'TEST commitment idempotency';end if;
+ if (select count(*) from public.minds_commitment_events where commitment_id=(s->>'id')::uuid)<>2 then raise exception 'TEST commitment provenance history';end if;
  if not public.minds_lock_conversation(conv,req) then raise exception 'TEST lease acquire';end if;
  if public.minds_lock_conversation(conv,gen_random_uuid()) then raise exception 'TEST overlapping lease';end if;
  perform public.minds_unlock_conversation(conv,req);
@@ -58,6 +74,15 @@ select set_config('request.jwt.claim.sub','f0000000-0000-4000-8000-000000000002'
 do $$
 begin
  if exists(select 1 from public.minds_work_claims where id=current_setting('minds.test_claim')::uuid) then raise exception 'TEST cross-user read';end if;
+ if exists(select 1 from public.minds_commitments where id=current_setting('minds.test_commitment')::uuid) then raise exception 'TEST cross-user commitment read';end if;
+ begin
+  perform public.minds_create_commitment(jsonb_build_object('title','Other user','objective','No','scope','project','project_id',current_setting('minds.test_project')),gen_random_uuid(),true);raise exception 'TEST cross-user commitment project write';
+ exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
+ if has_function_privilege('anon','public.minds_create_commitment(jsonb,uuid,boolean)','EXECUTE') then raise exception 'TEST anonymous commitment RPC';end if;
+ begin
+  insert into public.minds_commitments(title,objective,request_id) values('Direct insert','Must be blocked',gen_random_uuid());
+  raise exception 'TEST expected direct commitment insert rejection';
+ exception when others then if SQLERRM='TEST expected direct commitment insert rejection' then raise;end if;end;
  begin
   perform public.minds_save_work_claim(jsonb_build_object('project_id',current_setting('minds.test_project'),'statement','Other user'),'[]',gen_random_uuid(),true);raise exception 'TEST cross-user project write';
  exception when others then if SQLERRM='TEST cross-user project write' then raise;end if;end;
@@ -85,5 +110,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;

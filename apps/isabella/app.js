@@ -994,6 +994,7 @@ function proposalLabel(p){
     return ['Mejorar Isabella',add?('adoptar '+add+(add===1?' regla':' reglas')):'',remove?('retirar '+remove):''].filter(Boolean).join(' · ');
   }
   if(p.kind==='standing_intent')return ['Recordar cuando',p.trigger_text,p.project||''].filter(Boolean).join(' · ');
+  if(p.kind==='commitment')return ['Mantener vivo',p.title,p.project||p.scope||''].filter(Boolean).join(' · ');
   if(p.kind==='work_claim')return ['Guardar conocimiento',p.project,p.claim_type,p.statement].filter(Boolean).join(' · ');
   if(p.kind==='skill_proposal')return ['Crear Skill',p.agent==='sofia'?'Sofía':'Isabella',p.name].filter(Boolean).join(' · ');
   const action=p.action||'create';
@@ -1020,6 +1021,21 @@ function proposalEditor(p,onDone){
     </div>`);
     $('#proposalEditCancel').onclick=()=>onDone?.(null);
     $('#proposalEditSave').onclick=()=>onDone?.({...p,trigger_text:$('#standingTrigger').value.trim(),reminder_text:$('#standingReminder').value.trim(),project:$('#standingProject').value.trim()||null,trigger_terms:$('#standingTerms').value.split(/[,\n]+/).map(x=>x.trim()).filter(Boolean),cooldown_hours:Number($('#standingCooldown').value === '' ? 24 : $('#standingCooldown').value),max_triggers:Number($('#standingMax').value||3),expires_days:Number($('#standingExpiry').value||90)});
+    return;
+  }
+  if(p.kind==='commitment'){
+    const sourceNote=p.source_open_loop?'<div class="small">Origen: asunto abierto detectado en un checkpoint. Al confirmar se conservará esa procedencia sin convertirla en hecho.</div><blockquote>'+esc(p.source_open_loop)+'</blockquote>':'';
+    modal('Revisar continuidad',`<div class="form proposal-editor">
+      <div class="small">Un Commitment mantiene un objetivo vivo entre conversaciones. No crea tareas, rutinas ni acciones por sí mismo.</div>
+      ${sourceNote}
+      <label>Nombre<input id="commitmentTitle" value="${esc(p.title||'')}" placeholder="Qué mantener vivo"></label>
+      <label>Objetivo<textarea id="commitmentObjective" rows="5">${esc(p.objective||'')}</textarea></label>
+      <div class="form-grid-2"><label>Ámbito<select id="commitmentScope">${[['global','Global'],['personal','Personal'],['project','Proyecto'],['theory','Theory'],['other','Otro']].map(([v,l])=>`<option value="${v}" ${v===(p.scope||'global')?'selected':''}>${l}</option>`).join('')}</select></label><label>Proyecto (opcional)<input id="commitmentProject" value="${esc(p.project||'')}" placeholder="Bernried, Schwarz…"></label></div>
+      <label>Criterio de cierre (opcional)<textarea id="commitmentCriteria" rows="3">${esc(p.completion_criteria||'')}</textarea></label>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Mantener vivo</button></div>
+    </div>`);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,title:$('#commitmentTitle').value.trim(),objective:$('#commitmentObjective').value.trim(),scope:$('#commitmentScope').value,project:$('#commitmentProject').value.trim()||null,completion_criteria:$('#commitmentCriteria').value.trim()||null});
     return;
   }
   if(p.kind==='work_claim'){
@@ -1164,6 +1180,7 @@ function reviewedProposal(original,corrected){
 }
 function proposalDetails(p){
   if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
+  if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
   if(p.kind==='work_claim')return `<p class="small">Estado: ${esc(p.status||'proposed')} · Procedencia: ${esc(p.provenance_class||'inferred')}</p>${p.evidence_excerpt?`<blockquote>${esc(p.evidence_excerpt)}</blockquote>`:''}${p.supersedes_id?'<p class="small">Sustituirá una formulación anterior y conservará su historia.</p>':''}`;
   if(p.kind==='skill_proposal')return `<p>${esc(p.description||'')}</p><details open><summary>Instrucciones de la habilidad</summary><p style="white-space:pre-wrap;max-height:35vh;overflow:auto">${esc(p.instructions||'')}</p></details>`;
   return '';
@@ -1171,7 +1188,7 @@ function proposalDetails(p){
 window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=>{if(q)confirmProposal(q);else closeModal()})};
 function confirmProposal(p){
   p={...p,request_id:p.request_id||crypto.randomUUID()};
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
@@ -1239,6 +1256,28 @@ async function createStandingIntentProposal(p){
   closeModal();
   say('assistant',error?'No pude guardar esa memoria futura todavía: '+error.message:'Listo. Lo guardaré como memoria futura y te lo recordaré cuando vuelva a aparecer esa situación.');
 }
+async function createCommitmentProposal(p){
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para mantener esto vivo entre conversaciones.');return}
+  const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
+  const proj=p.project?await dbWorkProjectByName(p.project):null;
+  if(p.project&&!proj){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude identificar el proyecto. Corrige su nombre antes de guardar.');return}
+  if(!String(p.title||'').trim()||!String(p.objective||'').trim()){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','El Commitment necesita un nombre y un objetivo.');return}
+  const payload={
+    agent:'isabella',
+    title:String(p.title).trim(),
+    objective:String(p.objective).trim(),
+    scope:proj?'project':String(p.scope||'global'),
+    project_id:proj?.id||null,
+    completion_criteria:String(p.completion_criteria||'').trim()||null,
+    source_kind:p.source_flush_id&&p.source_open_loop?'checkpoint':'user',
+    source_flush_id:p.source_flush_id||null,
+    source_open_loop:p.source_open_loop||null,
+    metadata:{source:'isabella_chat'}
+  };
+  const {data,error}=await sb.rpc('minds_create_commitment',{p_commitment:payload,p_request_id:p.request_id||crypto.randomUUID(),p_confirmed:true});
+  if(error){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude mantenerlo vivo todavía: '+error.message);return}
+  closeModal();say('assistant',`Listo. Mantendré “${data?.title||p.title}” vivo como Commitment de MINDS. No lo convertiré automáticamente en tareas ni acciones.`);
+}
 async function createWorkClaimProposal(p){
   const sb=window.MINDS_SUPABASE;if(!sb){closeModal();return}
   const proj=await dbWorkProjectByName(p.project);
@@ -1305,6 +1344,7 @@ function applyAssistantPreferencesProposal(p){
 function applyProposal(p){
   if(p.kind==='routine')return createRoutineProposal(p)
   if(p.kind==='standing_intent')return createStandingIntentProposal(p)
+  if(p.kind==='commitment')return createCommitmentProposal(p)
   if(p.kind==='work_claim')return createWorkClaimProposal(p)
   if(p.kind==='skill_proposal')return createSkillProposal(p)
   if(p.kind==='feed_preferences'){applyFeedPreferencesProposal(p);return}
