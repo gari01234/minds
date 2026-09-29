@@ -549,13 +549,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.29.55'));
+  assert.ok(shell.includes('Build 2026.09.29.56'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=50'));
-  assert.ok(index.includes('shell.js?v=55'));
-  assert.ok(index.includes('app.js?v=63'));
-  assert.ok(index.includes('ai.js?v=39'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v62'"));
+  assert.ok(index.includes('shell.js?v=56'));
+  assert.ok(index.includes('app.js?v=64'));
+  assert.ok(index.includes('ai.js?v=40'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v63'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -885,4 +885,15 @@ test('Build 55 exposes prospective memory, personal skills and MINDS Doctor',()=
   assert.ok(app.includes('async function createWorkClaimProposal'));
   assert.ok(app.includes('async function createSkillProposal'));
   assert.ok(ai.includes("minds_user_skills"));
+});
+
+
+test('Build 56 shows Isabella and Sofia skills together and labels new adaptive usage',()=>{
+  const ai=read('apps/isabella/ai.js'),app=read('apps/isabella/app.js');
+  assert.ok(ai.includes("sb.from('sofia_skills')"));
+  assert.ok(ai.includes("agent:'sofia'"));
+  assert.ok(app.includes("SOFÍA"));
+  assert.ok(app.includes("decision_router:'Router adaptativo'"));
+  assert.ok(app.includes("memory_flush:'Checkpoint de memoria'"));
+  assert.ok(app.includes("work_file_read:'Lectura Work'"));
 });

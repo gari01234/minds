@@ -65,14 +65,18 @@ async function listSkills(){
   if(!sb)return [];
   const {data:{session}}=await sb.auth.getSession();
   if(!session)return [];
-  const [systemQ,userQ]=await Promise.all([
+  const [isabellaQ,isabellaUserQ,sofiaQ,sofiaUserQ]=await Promise.all([
     sb.from('isabella_skills').select('slug,name,description,preferred_tools,version').eq('enabled',true).order('name',{ascending:true}),
-    sb.from('minds_user_skills').select('slug,name,description,preferred_tools,version').eq('agent','isabella').eq('enabled',true).order('name',{ascending:true})
+    sb.from('minds_user_skills').select('slug,name,description,preferred_tools,version').eq('agent','isabella').eq('enabled',true).order('name',{ascending:true}),
+    sb.from('sofia_skills').select('slug,name,description,preferred_tools,version').eq('enabled',true).order('name',{ascending:true}),
+    sb.from('minds_user_skills').select('slug,name,description,preferred_tools,version').eq('agent','sofia').eq('enabled',true).order('name',{ascending:true})
   ]);
   const map=new Map();
-  for(const x of systemQ.data||[])map.set(x.slug,{...x,source:'system'});
-  for(const x of userQ.data||[])map.set(x.slug,{...x,source:'personal'});
-  return [...map.values()].sort((a,b)=>String(a.name).localeCompare(String(b.name)));
+  for(const x of isabellaQ.data||[])map.set('isabella:'+x.slug,{...x,agent:'isabella',source:'system'});
+  for(const x of isabellaUserQ.data||[])map.set('isabella:'+x.slug,{...x,agent:'isabella',source:'personal'});
+  for(const x of sofiaQ.data||[])map.set('sofia:'+x.slug,{...x,agent:'sofia',source:'system'});
+  for(const x of sofiaUserQ.data||[])map.set('sofia:'+x.slug,{...x,agent:'sofia',source:'personal'});
+  return [...map.values()].sort((a,b)=>String(a.agent).localeCompare(String(b.agent))||String(a.name).localeCompare(String(b.name)));
 }
 function parseSurface(raw){
   const text=String(raw||'').trim().replace(/^\s*```(?:json)?/i,'').replace(/```\s*$/i,'').trim();

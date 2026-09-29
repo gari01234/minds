@@ -1832,7 +1832,7 @@ async function aiUsagePanel(){
     const rows=data||[],fmt=n=>new Intl.NumberFormat('es-ES',{notation:n>=100000?'compact':'standard',maximumFractionDigits:1}).format(n||0);
     const totals=rows.reduce((a,x)=>{a.input+=Number(x.input_tokens||0);a.cached+=Number(x.cached_input_tokens||0);a.output+=Number(x.output_tokens||0);a.total+=Number(x.total_tokens||0);return a},{input:0,cached:0,output:0,total:0}),groups={};
     for(const x of rows){const k=String(x.feature||'otro');groups[k]=groups[k]||{calls:0,tokens:0};groups[k].calls++;groups[k].tokens+=Number(x.total_tokens||0)}
-    const labels={isabella_chat:'Chat Isabella',isabella_background:'Procesos de Isabella',isabella_embedding:'Memoria semántica',situational_feed:'Feed',feed_detail:'Detalle del Feed',ideas_generation:'Ideas',idea_worker:'Trabajos de Ideas',artifact_image:'Imágenes',sofia_chat:'Chat Sofía',sofia_background:'Procesos de Sofía',research:'Investigación',routine:'Rutinas'};
+    const labels={isabella_chat:'Chat Isabella',isabella_background:'Procesos de Isabella',isabella_embedding:'Memoria semántica',decision_router:'Router adaptativo',memory_flush:'Checkpoint de memoria',work_file_read:'Lectura Work',situational_feed:'Feed',feed_detail:'Detalle del Feed',ideas_generation:'Ideas',idea_worker:'Trabajos de Ideas',artifact_image:'Imágenes',sofia_chat:'Chat Sofía',sofia_background:'Procesos de Sofía',research:'Investigación',routine:'Rutinas'};
     const breakdown=Object.entries(groups).sort((a,b)=>b[1].tokens-a[1].tokens).map(([k,v])=>`<div class="usage-row"><span>${esc(labels[k]||k)}</span><strong>${fmt(v.tokens)} tok.</strong><em>${v.calls} llamada${v.calls===1?'':'s'}</em></div>`).join(''),hit=totals.input?Math.round(totals.cached/totals.input*100):0;
     modal('Uso IA',`<div class="usage-panel"><div class="usage-summary"><div><span>TOKENS · 7 DÍAS</span><strong>${fmt(totals.total)}</strong></div><div><span>CACHÉ DE INPUT</span><strong>${hit}%</strong></div></div><div class="small">Medición interna disponible desde Build 42. El gasto exacto sigue estando en OpenAI; aquí vemos qué parte de MINDS consume los tokens.</div><div class="usage-breakdown">${breakdown||'<div class="small">Todavía no hay llamadas medidas.</div>'}</div></div>`);
   }catch{modal('Uso IA','<div class="small">No pude leer el consumo ahora mismo.</div>')}
@@ -1975,7 +1975,7 @@ async function skillsPanel(){
   try{
     const items=await window.ISABELLA_AI?.listSkills?.();
     const list=Array.isArray(items)?items:[];
-    const body=list.length?list.map(s=>`<div class="skill-row"><div class="row-main"><b>${esc(s.name)}</b><div class="small" style="margin-top:5px">${esc(s.description)}</div><div class="skill-meta">${s.source==='personal'?'PERSONAL · ':''}v${Number(s.version||1)} · ${esc((s.preferred_tools||[]).join(' · '))}</div></div></div>`).join(''):'<div class="small">Todavía no hay habilidades activas.</div>';
+    const body=list.length?list.map(s=>`<div class="skill-row"><div class="row-main"><div class="skill-agent-label">${s.agent==='sofia'?'SOFÍA':'ISABELLA'}${s.source==='personal'?' · PERSONAL':''}</div><b>${esc(s.name)}</b><div class="small" style="margin-top:5px">${esc(s.description)}</div><div class="skill-meta">v${Number(s.version||1)}${(s.preferred_tools||[]).length?' · '+esc((s.preferred_tools||[]).join(' · ')):''}</div></div></div>`).join(''):'<div class="small">Todavía no hay habilidades activas.</div>';
     modal('Habilidades',body);
   }catch{
     modal('Habilidades','<div class="small">No pude cargar las habilidades ahora mismo.</div>');
