@@ -549,13 +549,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.29.54'));
+  assert.ok(shell.includes('Build 2026.09.29.55'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=49'));
-  assert.ok(index.includes('shell.js?v=54'));
-  assert.ok(index.includes('app.js?v=62'));
-  assert.ok(index.includes('ai.js?v=38'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v61'"));
+  assert.ok(index.includes('app.css?v=50'));
+  assert.ok(index.includes('shell.js?v=55'));
+  assert.ok(index.includes('app.js?v=63'));
+  assert.ok(index.includes('ai.js?v=39'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v62'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -872,4 +872,17 @@ test('Build 54 renders the approved reactions as reference-traced SVG artwork',(
   assert.ok(app.includes("smile:{w:65,h:92,color:'#ea8250'"));
   assert.ok(css.includes('reaction artwork traced from the approved original concept'));
   assert.ok(css.includes('.minds-reaction-art'));
+});
+
+
+test('Build 55 exposes prospective memory, personal skills and MINDS Doctor',()=>{
+  const app=read('apps/isabella/app.js'),shell=read('apps/isabella/shell.js'),ai=read('apps/isabella/ai.js');
+  assert.ok(shell.includes('data-action="intents"'));
+  assert.ok(shell.includes('data-action="doctor"'));
+  assert.ok(app.includes('async function standingIntentsPanel'));
+  assert.ok(app.includes('async function doctorPanel'));
+  assert.ok(app.includes('async function createStandingIntentProposal'));
+  assert.ok(app.includes('async function createWorkClaimProposal'));
+  assert.ok(app.includes('async function createSkillProposal'));
+  assert.ok(ai.includes("minds_user_skills"));
 });

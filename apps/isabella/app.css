@@ -1289,3 +1289,21 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .reaction-popover.imessage-reactions .reaction-quick-row{gap:1px!important}
   .minds-reaction-choice{height:45px!important;padding-left:4px!important;padding-right:4px!important}
 }
+
+
+/* Build 55 — prospective memory, Skill Workshop and MINDS Doctor */
+.form-grid-2,.form-grid-3{display:grid;gap:10px}
+.form-grid-2{grid-template-columns:repeat(2,minmax(0,1fr))}
+.form-grid-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+.intent-row{display:flex;gap:10px;align-items:flex-start;padding:14px 0;border-bottom:1px solid rgba(0,0,0,.07)}
+.intent-row .row-main{flex:1;display:grid;gap:5px}
+.intent-row>button{border:0;background:#f2f2f4;border-radius:999px;padding:8px 10px}
+.intent-row.snoozed,.intent-row.completed,.intent-row.expired{opacity:.58}
+.doctor-panel{display:grid;gap:18px}
+.doctor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.doctor-card{display:flex;gap:10px;align-items:flex-start;padding:13px;border:1px solid rgba(0,0,0,.07);border-radius:16px;background:#fafafa}
+.health-dot{width:9px;height:9px;border-radius:50%;margin-top:5px;background:#999;flex:none}
+.health-dot.ok{background:#43a047}.health-dot.warn{background:#e6a700}.health-dot.error{background:#d84343}
+.doctor-log{display:grid;grid-template-columns:minmax(100px,.7fr) 1fr auto;gap:10px;align-items:start;padding:9px 0;border-bottom:1px solid rgba(0,0,0,.06);font-size:12px}
+.doctor-log time{color:#8a8a8f;white-space:nowrap}
+@media(max-width:620px){.form-grid-2,.form-grid-3,.doctor-grid{grid-template-columns:1fr}.doctor-log{grid-template-columns:1fr}.doctor-log time{white-space:normal}}

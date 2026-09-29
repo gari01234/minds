@@ -975,6 +975,50 @@ function setWorking(el,on){if(el)el.classList.toggle('is-working',!!on)}
 function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que tengo hoy|agenda de hoy/.test(n)){const d=today(),e=state.events.filter(x=>x.date===d),t=state.tasks.filter(x=>x.date===d&&activeTask(x));return `Hoy tienes ${e.length} ${e.length===1?'evento':'eventos'} y ${t.length} ${t.length===1?'tarea pendiente':'tareas pendientes'}.`}if(/calendario|agenda/.test(n)){show('calendar');return 'Te abro el calendario.'}return 'Te escucho. Para usar la IA, conecta la memoria desde el menú •••.'}
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:normalizeMemoryKind(m.kind),content:m.content,confidence:Number(m.confidence??.7),status:'active',source:'ai',metadata:{}})}save()}
 function proposalLabel(p){
+  if(p.kind==='standing_intent'){
+    modal('Revisar memoria futura',`<div class="form proposal-editor">
+      <div class="small">Esto no tiene una hora fija. Isabella lo recordará cuando vuelva a aparecer esta situación, con cooldown y límite de activaciones.</div>
+      <label>Cuando ocurra<textarea id="standingTrigger" rows="3">${esc(p.trigger_text||'')}</textarea></label>
+      <label>Recordarme<textarea id="standingReminder" rows="3">${esc(p.reminder_text||'')}</textarea></label>
+      <label>Proyecto (opcional)<input id="standingProject" value="${esc(p.project||'')}" placeholder="Bernried, Schwarz…"></label>
+      <label>Palabras de activación<input id="standingTerms" value="${esc((p.trigger_terms||[]).join(', '))}" placeholder="dachentwässerung, entwässerung"></label>
+      <div class="form-grid-3"><label>Cooldown (h)<input id="standingCooldown" type="number" min="0" value="${Number(p.cooldown_hours||24)}"></label><label>Máx. avisos<input id="standingMax" type="number" min="1" max="12" value="${Number(p.max_triggers||3)}"></label><label>Caduca (días)<input id="standingExpiry" type="number" min="1" max="365" value="${Number(p.expires_days||90)}"></label></div>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos datos</button></div>
+    </div>`);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,trigger_text:$('#standingTrigger').value.trim(),reminder_text:$('#standingReminder').value.trim(),project:$('#standingProject').value.trim()||null,trigger_terms:$('#standingTerms').value.split(/[,\n]+/).map(x=>x.trim()).filter(Boolean),cooldown_hours:Number($('#standingCooldown').value||24),max_triggers:Number($('#standingMax').value||3),expires_days:Number($('#standingExpiry').value||90)});
+    return;
+  }
+  if(p.kind==='work_claim'){
+    modal('Revisar conocimiento de proyecto',`<div class="form proposal-editor">
+      <div class="small">Una fuente puede afirmar algo sin que MINDS lo trate automáticamente como verdad. Revisa el estado y la procedencia antes de guardarlo.</div>
+      <label>Proyecto<input id="claimProject" value="${esc(p.project||'')}"></label>
+      <label>Claim<textarea id="claimStatement" rows="4">${esc(p.statement||'')}</textarea></label>
+      <div class="form-grid-2"><label>Tipo<select id="claimType">${['fact','decision','requirement','deadline','dependency','open_question','assumption','constraint','other'].map(x=>`<option value="${x}" ${x===p.claim_type?'selected':''}>${x}</option>`).join('')}</select></label><label>Estado<select id="claimStatus"><option value="proposed" ${p.status!=='confirmed'?'selected':''}>Propuesto</option><option value="confirmed" ${p.status==='confirmed'?'selected':''}>Confirmado</option></select></label></div>
+      <div class="form-grid-2"><label>Disciplina<input id="claimDiscipline" value="${esc(p.discipline||'')}"></label><label>Tema<input id="claimTopic" value="${esc(p.topic||'')}"></label></div>
+      <label>Procedencia<select id="claimProvenance">${['user','project_source','external','inferred'].map(x=>`<option value="${x}" ${x===p.provenance_class?'selected':''}>${x}</option>`).join('')}</select></label>
+      ${p.evidence_excerpt?`<label>Evidencia<textarea id="claimEvidence" rows="3">${esc(p.evidence_excerpt)}</textarea></label>`:''}
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Guardar claim</button></div>
+    </div>`);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,project:$('#claimProject').value.trim(),statement:$('#claimStatement').value.trim(),claim_type:$('#claimType').value,status:$('#claimStatus').value,discipline:$('#claimDiscipline').value.trim()||null,topic:$('#claimTopic').value.trim()||null,provenance_class:$('#claimProvenance').value,evidence_excerpt:$('#claimEvidence')?.value.trim()||p.evidence_excerpt||null});
+    return;
+  }
+  if(p.kind==='skill_proposal'){
+    modal('Revisar nueva Skill',`<div class="form proposal-editor">
+      <div class="small">La Skill será personal y versionable. No se activa hasta que confirmes esta revisión.</div>
+      <label>Agente<select id="skillAgent"><option value="isabella" ${p.agent!=='sofia'?'selected':''}>Isabella</option><option value="sofia" ${p.agent==='sofia'?'selected':''}>Sofía</option></select></label>
+      <label>Nombre<input id="skillName" value="${esc(p.name||'')}"></label>
+      <label>Slug<input id="skillSlug" value="${esc(p.slug||'')}"></label>
+      <label>Descripción<textarea id="skillDescription" rows="3">${esc(p.description||'')}</textarea></label>
+      <label>Instrucciones<textarea id="skillInstructions" rows="7">${esc(p.instructions||'')}</textarea></label>
+      <label>Tools preferidas<input id="skillTools" value="${esc((p.preferred_tools||[]).join(', '))}"></label>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Crear Skill</button></div>
+    </div>`);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>onDone?.({...p,agent:$('#skillAgent').value,name:$('#skillName').value.trim(),slug:$('#skillSlug').value.trim(),description:$('#skillDescription').value.trim(),instructions:$('#skillInstructions').value.trim(),preferred_tools:$('#skillTools').value.split(/[,\n]+/).map(x=>x.trim()).filter(Boolean)});
+    return;
+  }
   if(p.kind==='routine'){
     const days=p.schedule_kind==='weekly'&&Array.isArray(p.weekdays)&&p.weekdays.length?(' · '+p.weekdays.map(d=>['dom','lun','mar','mié','jue','vie','sáb'][Number(d)]||d).join(', ')):'';
     if(p.schedule_kind==='once')return ['Programar recordatorio',p.title,p.date,p.time||'09:00'].filter(Boolean).join(' · ');
@@ -993,6 +1037,9 @@ function proposalLabel(p){
     const add=(p.add_rules||[]).length,remove=(p.remove_rules||[]).length;
     return ['Mejorar Isabella',add?('adoptar '+add+(add===1?' regla':' reglas')):'',remove?('retirar '+remove):''].filter(Boolean).join(' · ');
   }
+  if(p.kind==='standing_intent')return ['Recordar cuando',p.trigger_text,p.project||''].filter(Boolean).join(' · ');
+  if(p.kind==='work_claim')return ['Guardar conocimiento',p.project,p.claim_type,p.statement].filter(Boolean).join(' · ');
+  if(p.kind==='skill_proposal')return ['Crear Skill',p.agent==='sofia'?'Sofía':'Isabella',p.name].filter(Boolean).join(' · ');
   const action=p.action||'create';
   const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
@@ -1110,7 +1157,7 @@ function proposalEditor(p,onDone){
   };
 }
 function confirmProposal(p){
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div></div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(q);else confirmProposal(p)});
@@ -1161,6 +1208,53 @@ async function createRoutineProposal(p){
   const once=schedule.kind==='once';
   say('assistant',`Listo. ${once?'Programé el recordatorio':'Programé la rutina'} “${data.title}”. Isabella escribirá aquí desde el servidor aunque MINDS esté cerrado; la próxima ejecución quedó prevista para ${new Date(data.next_run_at).toLocaleString('es-ES')}. Las notificaciones del sistema son opcionales y solo hacen falta si quieres además un aviso fuera del chat.`);
 }
+async function dbWorkProjectByName(name){
+  const sb=window.MINDS_SUPABASE;if(!sb)return null;
+  const key=String(name||'').trim().toLowerCase();if(!key)return null;
+  const {data}=await sb.from('isabella_projects').select('id,name,client_key').eq('archived',false);
+  return (data||[]).find(x=>String(x.client_key||'').toLowerCase()===key)||(data||[]).find(x=>String(x.name||'').toLowerCase()===key)||null;
+}
+async function createStandingIntentProposal(p){
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para guardar esta memoria futura.');return}
+  const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
+  const proj=p.project?await dbWorkProjectByName(p.project):null;
+  const expires=new Date(Date.now()+Math.max(1,Number(p.expires_days||90))*86400000).toISOString();
+  const {error}=await sb.from('minds_standing_intents').insert({user_id:session.user.id,trigger_text:p.trigger_text,reminder_text:p.reminder_text,trigger_terms:p.trigger_terms||[],project_id:proj?.id||null,cooldown_minutes:Math.max(0,Number(p.cooldown_hours||24))*60,max_triggers:Math.max(1,Number(p.max_triggers||3)),expires_at:expires,metadata:{source:'isabella_chat'}});
+  closeModal();
+  say('assistant',error?'No pude guardar esa memoria futura todavía: '+error.message:'Listo. Lo guardaré como memoria futura y te lo recordaré cuando vuelva a aparecer esa situación.');
+}
+async function createWorkClaimProposal(p){
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();return}
+  const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
+  const proj=await dbWorkProjectByName(p.project);if(!proj){closeModal();say('assistant','No pude identificar ese proyecto de Work.');return}
+  const row={user_id:session.user.id,project_id:proj.id,claim_type:p.claim_type||'fact',statement:p.statement,subject:p.subject||null,topic:p.topic||null,discipline:p.discipline||null,status:p.status==='confirmed'?'confirmed':'proposed',confidence:Number(p.confidence??.8),provenance_class:p.provenance_class||'inferred',confirmed_at:p.status==='confirmed'?new Date().toISOString():null,metadata:{source:'isabella_chat'}};
+  const {data,error}=await sb.from('minds_work_claims').insert(row).select('id').single();
+  if(!error&&data?.id&&(p.source_file_id||p.evidence_excerpt)){
+    await sb.from('minds_work_evidence').insert({user_id:session.user.id,project_id:proj.id,claim_id:data.id,source_kind:p.source_file_id?'work_file':'conversation',source_file_id:p.source_file_id||null,excerpt:p.evidence_excerpt||null,stance:'supports',trust_level:p.status==='confirmed'?'confirmed':p.provenance_class==='inferred'?'derived':'reported',metadata:{}});
+  }
+  closeModal();
+  say('assistant',error?'No pude guardar ese conocimiento todavía: '+error.message:`Listo. Guardé el claim en ${proj.name} como ${row.status==='confirmed'?'confirmado':'propuesto'}, conservando su procedencia.`);
+}
+async function createSkillProposal(p){
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();return}
+  const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
+  const slug=String(p.slug||p.name||'skill').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)||'skill';
+  const proposalRow={user_id:session.user.id,agent:p.agent==='sofia'?'sofia':'isabella',slug,name:p.name||slug,description:p.description||'',instructions:p.instructions||'',preferred_tools:p.preferred_tools||[],status:'accepted',evidence:p.evidence_summary?[{summary:p.evidence_summary}]:[],metadata:{source:'isabella_chat'}};
+  const {data:proposal,error:pe}=await sb.from('minds_skill_proposals').insert(proposalRow).select('id').single();
+  if(pe){closeModal();say('assistant','No pude guardar la propuesta de Skill: '+pe.message);return}
+  const {data:existing}=await sb.from('minds_user_skills').select('id,version').eq('agent',proposalRow.agent).eq('slug',slug).maybeSingle();
+  let skillId=existing?.id||null,version=Number(existing?.version||0)+1;
+  if(existing?.id){
+    const {error}=await sb.from('minds_user_skills').update({name:proposalRow.name,description:proposalRow.description,instructions:proposalRow.instructions,preferred_tools:proposalRow.preferred_tools,version,enabled:true,source_proposal_id:proposal.id,updated_at:new Date().toISOString()}).eq('id',existing.id);
+    if(error){closeModal();say('assistant','No pude actualizar la Skill: '+error.message);return}
+  }else{
+    const {data,error}=await sb.from('minds_user_skills').insert({user_id:session.user.id,agent:proposalRow.agent,slug,name:proposalRow.name,description:proposalRow.description,instructions:proposalRow.instructions,preferred_tools:proposalRow.preferred_tools,version:1,enabled:true,source_proposal_id:proposal.id,metadata:{source:'workshop'}}).select('id').single();
+    if(error){closeModal();say('assistant','No pude crear la Skill: '+error.message);return}
+    skillId=data.id;version=1;
+  }
+  await sb.from('minds_skill_proposals').update({status:'applied',applied_skill_id:skillId,applied_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',proposal.id);
+  closeModal();say('assistant',`Listo. La Skill “${proposalRow.name}” quedó activa para ${proposalRow.agent==='sofia'?'Sofía':'Isabella'} como v${version}.`);
+}
 function applyFeedPreferencesProposal(p){
   const prefs={...base.feedPreferences,...(state.feedPreferences||{})};
   const key=s=>String(s||'').trim().toLocaleLowerCase();
@@ -1208,6 +1302,9 @@ function applyAssistantPreferencesProposal(p){
 }
 function applyProposal(p){
   if(p.kind==='routine'){createRoutineProposal(p);return}
+  if(p.kind==='standing_intent'){void createStandingIntentProposal(p);return}
+  if(p.kind==='work_claim'){void createWorkClaimProposal(p);return}
+  if(p.kind==='skill_proposal'){void createSkillProposal(p);return}
   if(p.kind==='feed_preferences'){applyFeedPreferencesProposal(p);return}
   if(p.kind==='assistant_preferences'){applyAssistantPreferencesProposal(p);return}
   const action=p.action||'create';
@@ -1712,7 +1809,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='skills')skillsPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 async function artifactsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
   modal('Artefactos','<div class="surface-loading">Cargando artefactos…</div>');
@@ -1825,12 +1922,60 @@ async function routinesPanel(){
     document.querySelectorAll('[data-routine-delete]').forEach(x=>x.onclick=async()=>{await sb.from('isabella_routines').delete().eq('id',x.dataset.routineDelete);routinesPanel()});
   }catch(e){modal('Rutinas','<div class="small">No pude cargar las rutinas ahora mismo.</div>')}
 }
+async function standingIntentsPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Memoria futura','<div class="small">Conecta la memoria para verla.</div>');return}
+  modal('Memoria futura','<div class="small">Cargando…</div>');
+  try{
+    const {data,error}=await sb.from('minds_standing_intents').select('id,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,project_id,isabella_projects(name)').order('created_at',{ascending:false});if(error)throw error;
+    const rows=data||[];
+    const body=rows.length?rows.map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}${x.trigger_count||0}/${x.max_triggers||3} activaciones · cooldown ${Math.round(Number(x.cooldown_minutes||0)/60)} h${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div></div><button data-intent-toggle="${x.id}" data-intent-status="${x.status}">${x.status==='active'?'Pausar':'Activar'}</button><button data-intent-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small">Todavía no hay recordatorios contextuales.</div>';
+    modal('Memoria futura',`<div class="small" style="margin-bottom:12px">Recordatorios que se activan por una situación, no por una hora.</div>${body}`);
+    document.querySelectorAll('[data-intent-toggle]').forEach(b=>b.onclick=async()=>{const status=b.dataset.intentStatus==='active'?'snoozed':'active';await sb.from('minds_standing_intents').update({status,updated_at:new Date().toISOString()}).eq('id',b.dataset.intentToggle);standingIntentsPanel()});
+    document.querySelectorAll('[data-intent-delete]').forEach(b=>b.onclick=async()=>{await sb.from('minds_standing_intents').delete().eq('id',b.dataset.intentDelete);standingIntentsPanel()});
+  }catch{modal('Memoria futura','<div class="small">No pude cargarla ahora mismo.</div>')}
+}
+function healthDot(status){return status==='ok'?'<span class="health-dot ok"></span>':status==='warn'?'<span class="health-dot warn"></span>':'<span class="health-dot error"></span>'}
+async function doctorPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Estado de MINDS','<div class="small">Conecta la memoria para diagnosticar MINDS.</div>');return}
+  modal('Estado de MINDS','<div class="surface-loading">Comprobando sistemas…</div>');
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    const since=new Date(Date.now()-24*3600000).toISOString();
+    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ]=await Promise.all([
+      sb.from('minds_agent_runs').select('feature,status,error,started_at,completed_at,latency_ms,route,metadata').gte('started_at',since).order('started_at',{ascending:false}).limit(120),
+      sb.from('isabella_routines').select('title,enabled,last_run_at,next_run_at,last_error').eq('enabled',true),
+      sb.from('minds_heartbeat_events').select('event_type,severity,title,status,last_seen_at').order('last_seen_at',{ascending:false}).limit(20),
+      sb.from('minds_memory_flushes').select('agent,created_at').order('created_at',{ascending:false}).limit(5),
+      sb.from('minds_user_skills').select('id,agent,enabled').eq('enabled',true),
+      sb.from('minds_work_claims').select('id,status').limit(500),
+      sb.from('minds_work_files').select('id,index_status').limit(500),
+      sb.from('isabella_embeddings').select('source_id').limit(1000),
+      sb.from('minds_ai_usage').select('feature,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(300)
+    ]);
+    const runs=runsQ.data||[],routines=routinesQ.data||[],heart=heartQ.data||[],usage=usageQ.data||[];
+    const latest=f=>runs.find(x=>x.feature===f),chat=latest('isabella_chat'),hb=latest('heartbeat');
+    const routineErrors=routines.filter(x=>x.last_error),recentHeartbeat=hb&&Date.now()-new Date(hb.started_at).getTime()<45*60000;
+    const sofiaSeen=usage.some(x=>String(x.feature||'').startsWith('sofia_'));
+    const cards=[
+      ['Isabella Chat',chat?.status==='error'?'error':chat?'ok':'warn',chat?('Última ejecución '+new Date(chat.started_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'})):'Sin ejecución en 24 h'],
+      ['Rutinas',routineErrors.length?'error':'ok',routineErrors.length?routineErrors.length+' con error':routines.length+' activas'],
+      ['Heartbeat',recentHeartbeat&&hb?.status==='success'?'ok':hb?.status==='error'?'error':'warn',recentHeartbeat?'Monitor activo':'Sin chequeo reciente'],
+      ['Active Memory',(embedQ.data||[]).length?'ok':'warn',(embedQ.data||[]).length+' fragmentos semánticos · '+(flushQ.data||[]).length+' checkpoints recientes'],
+      ['Sofía',sofiaSeen?'ok':'warn',sofiaSeen?'Con actividad reciente':'Sin llamadas en 24 h (normal si no hizo falta)'],
+      ['Work',filesQ.error?'error':'ok',`${(filesQ.data||[]).length} archivos · ${(claimsQ.data||[]).length} claims estructurados`],
+      ['Skills personales',skillsQ.error?'error':'ok',`${(skillsQ.data||[]).length} activas`]
+    ];
+    const errors=runs.filter(x=>x.status==='error').slice(0,8);
+    const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
+    modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);
+  }catch(e){modal('Estado de MINDS','<div class="small">No pude completar el diagnóstico ahora mismo.</div>')}
+}
 async function skillsPanel(){
   modal('Habilidades','<div class="small">Cargando habilidades…</div>');
   try{
     const items=await window.ISABELLA_AI?.listSkills?.();
     const list=Array.isArray(items)?items:[];
-    const body=list.length?list.map(s=>`<div class="skill-row"><div class="row-main"><b>${esc(s.name)}</b><div class="small" style="margin-top:5px">${esc(s.description)}</div><div class="skill-meta">v${Number(s.version||1)} · ${esc((s.preferred_tools||[]).join(' · '))}</div></div></div>`).join(''):'<div class="small">Todavía no hay habilidades activas.</div>';
+    const body=list.length?list.map(s=>`<div class="skill-row"><div class="row-main"><b>${esc(s.name)}</b><div class="small" style="margin-top:5px">${esc(s.description)}</div><div class="skill-meta">${s.source==='personal'?'PERSONAL · ':''}v${Number(s.version||1)} · ${esc((s.preferred_tools||[]).join(' · '))}</div></div></div>`).join(''):'<div class="small">Todavía no hay habilidades activas.</div>';
     modal('Habilidades',body);
   }catch{
     modal('Habilidades','<div class="small">No pude cargar las habilidades ahora mismo.</div>');
