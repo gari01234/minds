@@ -252,12 +252,14 @@ test('Build 24 news detail can render immediate context and optional verified me
   assert.ok(ai.includes('async function feedStory'));
 });
 
-test('Build 24 gives Isabella a warmer conversational voice without changing surface prompts',()=>{
+test('Isabella keeps its conversational voice in server instructions',()=>{
+  const server=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(server.includes('PERSONALIDAD:'));
+  assert.ok(server.includes('humor ligero'));
+  assert.ok(server.includes('No seas burocrática'));
   const ai=read('apps/isabella/ai.js');
-  assert.ok(ai.includes('VOZ DE ISABELLA'));
-  assert.ok(ai.includes('humor suave'));
-  assert.ok(ai.includes('no sacrifiques rigor por cercanía'));
-  assert.ok(ai.includes('options.surface'));
+  assert.ok(ai.includes('message:String(message)'));
+  assert.ok(!ai.includes('VOZ DE ISABELLA'));
 });
 
 
@@ -549,13 +551,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.29.56'));
+  assert.ok(shell.includes('Build 2026.09.29.57'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=50'));
-  assert.ok(index.includes('shell.js?v=56'));
-  assert.ok(index.includes('app.js?v=64'));
-  assert.ok(index.includes('ai.js?v=40'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v63'"));
+  assert.ok(index.includes('app.css?v=51'));
+  assert.ok(index.includes('shell.js?v=57'));
+  assert.ok(index.includes('app.js?v=65'));
+  assert.ok(index.includes('ai.js?v=41'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v64'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -664,7 +666,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=3'));
+  assert.ok(index.includes('work.js?v=4'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -897,3 +899,4 @@ test('Build 56 shows Isabella and Sofia skills together and labels new adaptive 
   assert.ok(app.includes("memory_flush:'Checkpoint de memoria'"));
   assert.ok(app.includes("work_file_read:'Lectura Work'"));
 });
+

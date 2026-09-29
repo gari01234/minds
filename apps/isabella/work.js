@@ -32,8 +32,39 @@ async function render(){
     if(!session){$('#workBody').innerHTML='<div class="work-empty">Conecta la memoria de MINDS para abrir Work.</div>';return}
     project=await loadProject();paintChrome();
     if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
-    if(view==='planner')await renderPlanner();else await renderDesktop();
+    if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
   }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
+}
+let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='';
+const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
+const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
+function knowledgeFlags(c){
+  const evidence=c.minds_work_evidence||[];
+  return {contradiction:c.status==='disputed'||evidence.some(e=>e.stance==='contradicts'),expired:!!c.valid_to&&new Date(c.valid_to)<new Date(),unreviewed:c.status==='proposed',noEvidence:!evidence.length};
+}
+async function renderKnowledge(){
+  const q=await sb.from('minds_work_claims').select('*,minds_work_evidence(*)').eq('project_id',project.id).order('updated_at',{ascending:false});
+  if(q.error)throw q.error;knowledgeRows=q.data||[];
+  const fq=await sb.from('minds_work_files').select('id,name,storage_path').eq('project_id',project.id);if(fq.error)throw fq.error;files=fq.data||[];
+  paintKnowledge();
+}
+function paintKnowledge(){
+  const filtered=knowledgeRows.filter(c=>{
+    const f=knowledgeFlags(c),q=knowledgeQuery.toLocaleLowerCase();
+    return (!q||[c.statement,c.subject,c.topic,c.discipline].join(' ').toLocaleLowerCase().includes(q))&&(knowledgeFilter==='all'||knowledgeFilter==='review'&&(f.unreviewed||f.contradiction||f.expired)||knowledgeFilter==='active'&&!['superseded','rejected','resolved'].includes(c.status));
+  });
+  $('#workBody').innerHTML=`<div class="work-knowledge"><div class="work-desktop-toolbar"><div><strong>Conocimiento de ${esc(project.name)}</strong><p class="small">Afirmaciones, decisiones y preguntas con su evidencia e historia. Confirmar una revisión no convierte una fuente en certeza.</p></div><button data-knowledge-new>＋ Añadir</button></div>
+    <div class="knowledge-filters"><input id="knowledgeSearch" aria-label="Buscar conocimiento" placeholder="Buscar tema, disciplina o decisión…" value="${esc(knowledgeQuery)}"><select id="knowledgeFilter" aria-label="Estado del conocimiento">${[['active','Activo'],['review','Por revisar'],['all','Todo e historial']].map(([v,l])=>`<option value="${v}" ${knowledgeFilter===v?'selected':''}>${l}</option>`).join('')}</select></div>
+    ${filtered.map(c=>{const f=knowledgeFlags(c);return `<article class="knowledge-card"><div class="knowledge-meta"><b>${esc(knowledgeStates[c.status]||c.status)}</b><span>${esc(c.claim_type)} · ${esc(provenanceNames[c.provenance_class]||c.provenance_class)}</span>${f.contradiction?'<span class="knowledge-attention">Contradicción por revisar</span>':''}${f.expired?'<span class="knowledge-attention">Vigencia vencida</span>':''}</div><p>${esc(c.statement)}</p><div class="small">${esc([c.discipline,c.topic,c.subject].filter(Boolean).join(' · '))}</div>
+      <details><summary>${(c.minds_work_evidence||[]).length} evidencias · Historia</summary>${(c.minds_work_evidence||[]).map(e=>`<blockquote><b>${esc(e.stance==='contradicts'?'Contradice':e.stance==='context'?'Contexto':'Apoya')}</b><p>${esc(e.excerpt||'Sin extracto')}</p><small>${esc(e.trust_level)} · ${esc(JSON.stringify(e.locator||{}))}</small>${e.source_file_id?`<button data-evidence-file="${esc(e.source_file_id)}">Abrir ${esc(files.find(x=>x.id===e.source_file_id)?.name||'fuente')}</button>`:''}</blockquote>`).join('')||'<p class="small">Sin evidencia vinculada.</p>'}
+      <p class="small">Revisado: ${c.confirmed_at?new Date(c.confirmed_at).toLocaleString('es-ES'):'Pendiente'}${c.valid_to?' · Válido hasta '+new Date(c.valid_to).toLocaleDateString('es-ES'):''}</p>${c.supersedes_id?'<p class="small">Sustituye una formulación anterior.</p>':''}${c.superseded_by?'<p class="small">Hay una formulación posterior.</p>':''}${(c.metadata?.previous_versions||[]).slice().reverse().map(v=>`<p class="small">${esc(knowledgeStates[v.status]||v.status)} · ${esc(v.statement)}</p>`).join('')}</details>
+      <div class="knowledge-actions"><button data-knowledge-edit="${c.id}">Revisar</button><button data-knowledge-replace="${c.id}">Proponer sustitución</button></div></article>`}).join('')||'<div class="work-empty">No hay conocimiento que coincida con este filtro. Puedes añadirlo aquí o pedirle a Isabella que prepare una propuesta a partir de un documento.</div>'}</div>`;
+  $('#knowledgeSearch').onchange=e=>{knowledgeQuery=e.target.value;paintKnowledge()};
+  $('#knowledgeFilter').onchange=e=>{knowledgeFilter=e.target.value;paintKnowledge()};
+  $('[data-knowledge-new]').onclick=()=>window.MINDS_PROPOSALS?.edit({kind:'work_claim',project:project.name,status:'proposed',claim_type:'fact',provenance_class:'user'});
+  $$('[data-knowledge-edit]').forEach(b=>b.onclick=()=>{const c=knowledgeRows.find(x=>x.id===b.dataset.knowledgeEdit);window.MINDS_PROPOSALS?.edit({...c,kind:'work_claim',project:project.name,evidence_excerpt:null})});
+  $$('[data-knowledge-replace]').forEach(b=>b.onclick=()=>{const c=knowledgeRows.find(x=>x.id===b.dataset.knowledgeReplace);window.MINDS_PROPOSALS?.edit({kind:'work_claim',project:project.name,statement:c.statement,claim_type:c.claim_type,topic:c.topic,discipline:c.discipline,provenance_class:c.provenance_class,status:'confirmed',supersedes_id:c.id})});
+  $$('[data-evidence-file]').forEach(b=>b.onclick=()=>void openFile(b.dataset.evidenceFile));
 }
 async function loadFolders(){const {data,error}=await sb.from('minds_work_folders').select('id,parent_id,name,sort_order,created_at').eq('project_id',project.id).order('sort_order').order('name');if(error)throw error;folders=data||[]}
 function folderTrail(){const out=[];let id=folderId,guard=0;while(id&&guard++<30){const f=folders.find(x=>x.id===id);if(!f)break;out.unshift(f);id=f.parent_id}return out}
@@ -205,5 +236,5 @@ async function saveTask(existing){
   }
   pendingTaskFiles=[];editingAttachments=[];window.ISABELLA_APP?.closeModal?.();await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
-window.MINDS_WORK={render};
+window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work'}:null};
 })();

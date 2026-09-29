@@ -1,0 +1,2 @@
+drop policy if exists minds_agent_runs_update_own on public.minds_agent_runs;
+create policy minds_agent_runs_update_own on public.minds_agent_runs for update using (user_id=auth.uid()) with check (user_id=auth.uid());

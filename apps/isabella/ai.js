@@ -14,6 +14,7 @@ function compact(state){
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,30);
   const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',content:String(m.replyTo.text||'').trim()}:null})).filter(m=>m.content);
   return {
+    work_context:window.MINDS_WORK?.context?.()||null,
     current_date:td,
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
     today_events:todayEvents,
@@ -41,12 +42,7 @@ async function ask(message,state,options={}){
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
   const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
-  const personalVoice=options.surface?String(message):`VOZ DE ISABELLA:
-Responde como una asistente personal que conoce el contexto de Gari y mantiene continuidad entre conversaciones. Conserva la profundidad y precisión factual, pero evita sonar como informe por defecto. En conversación casual, responde primero a la persona y luego al contenido: puedes usar una observación breve, una complicidad ligera o humor suave cuando surja de forma natural. Habla en primera persona cuando corresponda, usa lenguaje cotidiano y cálido, y deja que la respuesta tenga ritmo conversacional. No adules, no finjas sentimientos o experiencias, no fuerces bromas, no uses el nombre de Gari repetidamente y no sacrifiques rigor por cercanía. Si el tema exige precisión, seguridad o una explicación extensa, mantén toda la información necesaria pero con una voz humana y directa.
-${replyContext}
-MENSAJE DE GARI:
-${message}`;
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:personalVoice,context:compact(state),background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};
@@ -67,10 +63,11 @@ async function listSkills(){
   if(!session)return [];
   const [isabellaQ,isabellaUserQ,sofiaQ,sofiaUserQ]=await Promise.all([
     sb.from('isabella_skills').select('slug,name,description,preferred_tools,version').eq('enabled',true).order('name',{ascending:true}),
-    sb.from('minds_user_skills').select('slug,name,description,preferred_tools,version').eq('agent','isabella').eq('enabled',true).order('name',{ascending:true}),
+    sb.from('minds_user_skills').select('id,slug,name,description,instructions,preferred_tools,version,enabled').eq('agent','isabella').order('name',{ascending:true}),
     sb.from('sofia_skills').select('slug,name,description,preferred_tools,version').eq('enabled',true).order('name',{ascending:true}),
-    sb.from('minds_user_skills').select('slug,name,description,preferred_tools,version').eq('agent','sofia').eq('enabled',true).order('name',{ascending:true})
+    sb.from('minds_user_skills').select('id,slug,name,description,instructions,preferred_tools,version,enabled').eq('agent','sofia').order('name',{ascending:true})
   ]);
+  for(const q of [isabellaQ,isabellaUserQ,sofiaQ,sofiaUserQ])if(q.error)throw q.error;
   const map=new Map();
   for(const x of isabellaQ.data||[])map.set('isabella:'+x.slug,{...x,agent:'isabella',source:'system'});
   for(const x of isabellaUserQ.data||[])map.set('isabella:'+x.slug,{...x,agent:'isabella',source:'personal'});

@@ -1,0 +1,19 @@
+project_id = "lodexwyyynlarkqgkyhy"
+
+[functions.isabella-chat]
+verify_jwt = true
+entrypoint = "./functions/isabella-chat/index.ts"
+import_map = "./functions/isabella-chat/deno.json"
+
+[functions.sofia-chat]
+verify_jwt = true
+entrypoint = "./functions/sofia-chat/index.ts"
+import_map = "./functions/sofia-chat/deno.json"
+
+[functions.isabella-heartbeat]
+verify_jwt = false
+entrypoint = "./functions/isabella-heartbeat/index.ts"
+
+[functions.isabella-routine-runner]
+verify_jwt = false
+entrypoint = "./functions/isabella-routine-runner/index.ts"
