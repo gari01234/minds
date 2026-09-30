@@ -924,8 +924,9 @@ test('Build 60 persists explicit task and event mutations without stale bulk ove
   assert.ok(sync.includes("await persistEntityMutation(detail)"));
   assert.ok(sync.includes("upsert(tasks,{onConflict:'user_id,client_key',ignoreDuplicates:true})"));
   assert.ok(sync.includes("upsert(events,{onConflict:'user_id,client_key',ignoreDuplicates:true})"));
-  assert.ok(sync.includes("tasks:mergeRemoteEntities(remoteTasks,local.tasks||[],'task')"));
-  assert.ok(sync.includes("events:mergeRemoteEntities(remoteEvents,local.events||[],'event')"));
+  assert.ok(sync.includes("mergePulledEntityState(remoteTasks,remoteEvents,app.getState(),local)"));
+  assert.ok(sync.includes("tasks:mergeRemoteEntities(remoteTasks,freshest.tasks||[],'task')"));
+  assert.ok(sync.includes("events:mergeRemoteEntities(remoteEvents,freshest.events||[],'event')"));
   assert.ok(sync.includes("updatedAt:t.updated_at||null"));
   assert.ok(sync.includes("updatedAt:e.updated_at||null"));
 });
