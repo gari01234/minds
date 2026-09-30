@@ -115,3 +115,18 @@ Source taint propagates through dependency chains: if a downstream Planning or M
 This release also closes a calendar synchronization race discovered after Build 60. Explicit Task/Event mutations already persisted atomically, but a pull started before the mutation could finish later with an older server snapshot and temporarily replace the newer local entity until refresh. Reconciliation now compares per-entity `updatedAt` revisions as well as the in-flight mutation guard. A remote snapshot can replace local state only when it is at least as recent; an older remote row can no longer visually undo a newer local date change. Moving a task by editing its date also receives a fresh sort order in the destination day.
 
 Build 62 still does not allow specialist mutation, persistent specialist memory, automatic permission promotion, background swarms or hidden specialist-to-specialist conversations outside the explicit dependency graph. Isabella remains the orchestration and permission boundary.
+
+
+## Build 63 — Coherence & Sync Integrity
+
+Build 63 is a corrective release focused on consistency before further agentic expansion. It resolves four regressions observed in authenticated production use: stale calendar repaint after a successful task move, temporal greetings inherited from historical context, repeated curiosity questions about already resolved preferences, and legacy interest-feed state surviving after the Feed product model had changed.
+
+Task/Event persistence remains atomic as introduced in Build 60, but synchronization no longer treats a snapshot captured at the beginning of a network cycle as authoritative UI state. A pull now reconciles its remote rows against `app.getState()` at completion time. Per-entity `updatedAt` ordering and the in-flight mutation guard still apply, so an old pull cannot visually undo a newer local edit even when that edit occurred after the sync request began. The pre-pull unconditional `replaceState(capturedSnapshot)` path has been removed.
+
+Feed preferences now have one canonical shape: `mode=situational_personal`, optional weather locality, and explicit situational instructions. Legacy `topics`, `customTopics`, `following` and `followGraph` are normalized to empty arrays on load, hydration and persistence. This prevents old browser state from resurrecting the retired architecture/art/news discovery model. The situational Feed remains allowed to consult external information only when it materially affects an active personal, operational or project dependency.
+
+Proactivity is serialized. Only one post-sync proactive cycle may run at a time, curiosity has its own in-flight lock, and its cadence timestamp is reserved before the network call rather than after it. Candidate curiosity questions are also checked against prior assistant questions. The curiosity prompt explicitly excludes Feed content categories and requires checking recent context and long-term memory before asking a preference question that may already be resolved.
+
+Temporal context is now explicit end-to-end. The browser sends current local time and daypart, while `isabella-chat` independently computes server-side local date/time for the supplied IANA timezone and exposes that server result as authoritative context. Historical greetings are explicitly non-authoritative; Isabella must not infer the present daypart from an earlier “buenas noches” or similar conversational residue.
+
+Build 63 intentionally adds no new autonomous or multi-agent capability. Its purpose is to restore coherent behavior before continuing the agent roadmap.

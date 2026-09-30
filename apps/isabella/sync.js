@@ -14,6 +14,10 @@ const timeOf=d=>`${pad(d.getHours())}:${pad(d.getMinutes())}`;
 const MEMORY_KINDS=new Set(['fact','person','routine','episodic','preference','context']);
 const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'preference',interaction:'preference',constraint:'context',goal:'context',priority:'context',value:'preference',project:'context',relation:'context',relationship:'person',work:'context',identity:'fact',note:'context',other:'context'};
 function normalizeMemoryKind(kind){const k=String(kind||'context').trim().toLowerCase();return MEMORY_KINDS.has(k)?k:(MEMORY_KIND_ALIASES[k]||'context')}
+function canonicalFeedPreferences(value={}){
+  const p=value&&typeof value==='object'?value:{};
+  return {mode:'situational_personal',instructions:String(p.instructions||'').trim(),weatherLocation:String(p.weatherLocation||'').trim(),topics:[],customTopics:[],following:[],followGraph:[]};
+}
 function apiError(e){return e?.message||String(e||'Error desconocido')}
 async function init(){
   if(!sb||!app){setStatus('Memoria local · Supabase no disponible');if(authButton)authButton.textContent='Memoria local';return}
@@ -128,6 +132,17 @@ function mergeRemoteEntities(remote=[],local=[],kind='task'){
   for(const x of local||[])if(x?.id&&!seen.has(x.id))out.push(x);
   return out;
 }
+function mergePulledEntityState(remoteTasks,remoteEvents,current,syncSnapshot){
+  const deletedTaskIds=new Set(syncSnapshot?.deletedTaskIds||[]),deletedEventIds=new Set(syncSnapshot?.deletedEventIds||[]);
+  const freshest={
+    ...current,
+    tasks:(current?.tasks||[]).filter(x=>!deletedTaskIds.has(x.id)),
+    events:(current?.events||[]).filter(x=>!deletedEventIds.has(x.id)),
+    deletedTaskIds:[...new Set([...(current?.deletedTaskIds||[]),...(syncSnapshot?.deletedTaskIds||[])])],
+    deletedEventIds:[...new Set([...(current?.deletedEventIds||[]),...(syncSnapshot?.deletedEventIds||[])])]
+  };
+  return {...freshest,tasks:mergeRemoteEntities(remoteTasks,freshest.tasks||[],'task'),events:mergeRemoteEntities(remoteEvents,freshest.events||[],'event')};
+}
 async function persistEntityMutation(detail){
   const kind=String(detail?.entityType||'');
   if(!['task','event'].includes(kind)||!detail?.entityKey)return;
@@ -179,7 +194,7 @@ async function pushState(state,maps){
     const {error}=await sb.from('isabella_preferences').upsert({
       user_id:user.id,
       preference_key:'feed',
-      value:state.feedPreferences,
+      value:canonicalFeedPreferences(state.feedPreferences),
       status:'confirmed',
       confidence:1,
       evidence:[{source:'isabella_client',at:new Date().toISOString()}],
@@ -233,9 +248,10 @@ async function pullState(local,maps){
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
   const mergedMessages=mergeConversationMessages(remoteMessages,local.messages||[]);
-  const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?{...(local.feedPreferences||{}),...pref.value}:local.feedPreferences;
-  const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(local.assistantPreferences||{}),...assistantPref.value}:local.assistantPreferences;
-  return {...local,tasks:mergeRemoteEntities(remoteTasks,local.tasks||[],'task'),events:mergeRemoteEntities(remoteEvents,local.events||[],'event'),memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:local.messages};
+  const freshest=mergePulledEntityState(remoteTasks,remoteEvents,app.getState(),local);
+  const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?canonicalFeedPreferences(pref.value):canonicalFeedPreferences(freshest.feedPreferences);
+  const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(freshest.assistantPreferences||{}),...assistantPref.value}:freshest.assistantPreferences;
+  return {...freshest,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:freshest.messages};
 }
 async function updateMessageMetadata(clientKey,patch){
   if(!user||!clientKey||!patch||typeof patch!=='object')return false;
@@ -300,11 +316,11 @@ async function syncNow(opts={}){
   if(syncing){queuedSync={...(queuedSync||{}),...opts};return}
   syncing=true;setStatus('Sincronizando…');
   try{
-    let local=app.getState();
     const {data:deleted,error:de}=await sb.from('isabella_deleted_items').select('entity_type,client_key').eq('user_id',user.id);
     if(de)throw de;
     const deletedTasks=new Set((deleted||[]).filter(x=>x.entity_type==='task').map(x=>x.client_key));
     const deletedEvents=new Set((deleted||[]).filter(x=>x.entity_type==='event').map(x=>x.client_key));
+    let local=app.getState();
     local={
       ...local,
       tasks:(local.tasks||[]).filter(x=>!deletedTasks.has(x.id)),
@@ -317,10 +333,10 @@ async function syncNow(opts={}){
         sb.from('isabella_preferences').select('value,status').eq('user_id',user.id).eq('preference_key','feed').maybeSingle(),
         sb.from('isabella_preferences').select('value,status').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle()
       ]);
-      if(feedPref?.status!=='rejected'&&feedPref?.value&&typeof feedPref.value==='object')local.feedPreferences={...(local.feedPreferences||{}),...feedPref.value};
+      if(feedPref?.status!=='rejected'&&feedPref?.value&&typeof feedPref.value==='object')local.feedPreferences=canonicalFeedPreferences(feedPref.value);
       if(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')local.assistantPreferences={...(local.assistantPreferences||{}),...assistantPref.value};
     }
-    hydrating=true;app.replaceState(local);hydrating=false;
+    local.feedPreferences=canonicalFeedPreferences(local.feedPreferences);
     const maps=await ensureTaxonomy(local);
     if(opts.initial||opts.pullOnly){
       const next=await pullState(local,maps);

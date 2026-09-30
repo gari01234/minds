@@ -1,8 +1,16 @@
 (()=>{'use strict';
 const sb=window.MINDS_SUPABASE;
 function dateISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`}
+function localTemporal(){
+  const d=new Date(),p=n=>String(n).padStart(2,'0'),h=d.getHours();
+  return {
+    current_local_datetime:`${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(h)}:${p(d.getMinutes())}`,
+    current_local_time:`${p(h)}:${p(d.getMinutes())}`,
+    current_daypart:h<5?'night':h<12?'morning':h<18?'afternoon':h<22?'evening':'night'
+  };
+}
 function compact(state){
-  const td=dateISO();
+  const td=dateISO(),temporal=localTemporal();
   const catName=id=>(state.categories||[]).find(x=>x.id===id)?.name||id||null;
   const projectName=id=>(state.projects||[]).find(x=>x.id===id)?.name||id||null;
   const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)}));
@@ -16,6 +24,7 @@ function compact(state){
   return {
     work_context:window.MINDS_WORK?.context?.()||null,
     current_date:td,
+    ...temporal,
     timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
     today_events:todayEvents,
     today_tasks:todayTasks,
@@ -55,7 +64,7 @@ async function nudge(state){
   return ask("Evalúa si existe exactamente un seguimiento personal u operativo que valga la pena traerme ahora: algo pendiente, una respuesta esperada, una tarea que estoy dejando atrás, una cita cercana o algo significativo que te conté y que razonablemente merezca seguimiento. Revisa también los mensajes recientes: si Isabella ya recordó ese mismo evento, tarea o asunto recientemente, NO lo repitas aunque puedas reformularlo; un recordatorio por tema es suficiente salvo que exista un cambio material. Si no hay nada suficientemente útil, responde exactamente NO_NUDGE. Si sí lo hay, escribe solo un mensaje breve y natural, sin crear ni modificar nada.",state,{background:true});
 }
 async function curiosity(state){
-  return ask("Quiero conocer mejor al usuario para poder ayudarle mejor en el futuro. Revisa lo que ya sé y decide si existe UNA pregunta sencilla, natural y realmente útil que todavía no esté respondida. Prioriza preferencias de trabajo, organización, comunicación, concentración, ocio, arquitectura/arte, Feed, rutinas o qué tipo de ayuda desea de Isabella. No preguntes por salud, religión, política, sexualidad, finanzas, contraseñas, ubicación exacta ni otros datos sensibles. No hagas una entrevista ni expliques por qué necesitas datos. Si no hay una pregunta con valor claro, responde exactamente NO_QUESTION. Si sí la hay, escribe únicamente una pregunta breve y conversacional.",state,{background:true});
+  return ask("Evalúa si falta UNA preferencia operativa concreta que de verdad mejoraría cómo Isabella ayuda al usuario. Antes de preguntar, revisa la conversación reciente, las reglas de comportamiento confirmadas y la memoria disponible; usa search_memory si existe una posibilidad razonable de que esa preferencia ya se haya hablado. No vuelvas a preguntar una preferencia ya respondida aunque no esté formulada como regla. No preguntes por categorías de contenido del Feed, noticias, arquitectura, arte, tecnología u ocio: el Feed ya está definido como situacional, personal y productivo, no como un feed de intereses. Tampoco reabras cómo proteger bloques de concentración si ya existe una preferencia sobre cuándo Isabella puede escribir. No preguntes por salud, religión, política, sexualidad, finanzas, contraseñas, ubicación exacta ni otros datos sensibles. Si no hay una pregunta nueva, claramente útil y todavía no resuelta, responde exactamente NO_QUESTION. Si sí la hay, escribe únicamente una pregunta breve y conversacional.",state,{background:true});
 }
 async function listSkills(){
   if(!sb)return [];

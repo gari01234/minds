@@ -74,6 +74,15 @@ function setOrbPalette(){
   const h=new Date().getHours();
   o.dataset.period=h<7?'dawn':h<12?'morning':h<18?'day':h<22?'evening':'night';
 }
+function canonicalFeedPreferences(value={}){
+  const p=value&&typeof value==='object'?value:{};
+  return {
+    mode:'situational_personal',
+    instructions:String(p.instructions||'').trim(),
+    weatherLocation:String(p.weatherLocation||'').trim(),
+    topics:[],customTopics:[],following:[],followGraph:[]
+  };
+}
 const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[
   {id:'casa',name:'Casa',color:'#5A9EC1'},
   {id:'trabajo',name:'Trabajo',color:'#6D7278'},
@@ -88,6 +97,7 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
   curiosityCadenceHours:30,
   behaviorRules:[]
 },feedPreferences:{
+  mode:'situational_personal',
   instructions:'',
   topics:[],
   customTopics:[],
@@ -116,17 +126,10 @@ function normalizeMessages(items){
 let state=load();
 function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
-  const x={...base,...raw,assistantPreferences:{...base.assistantPreferences,...(raw.assistantPreferences||{})},feedPreferences:{...base.feedPreferences,...(raw.feedPreferences||{})}};
+  const x={...base,...raw,assistantPreferences:{...base.assistantPreferences,...(raw.assistantPreferences||{})},feedPreferences:canonicalFeedPreferences(raw.feedPreferences||{})};
   x.assistantPreferences.behaviorRules=Array.isArray(x.assistantPreferences.behaviorRules)?x.assistantPreferences.behaviorRules:[];
   x.assistantPreferences.curiosityEnabled=x.assistantPreferences.curiosityEnabled!==false;
   x.assistantPreferences.curiosityCadenceHours=Math.max(12,Math.min(168,Number(x.assistantPreferences.curiosityCadenceHours||30)));
-  x.feedPreferences.topics=Array.isArray(x.feedPreferences.topics)?x.feedPreferences.topics:[...base.feedPreferences.topics];
-  x.feedPreferences.customTopics=Array.isArray(x.feedPreferences.customTopics)?x.feedPreferences.customTopics:[];
-  x.feedPreferences.following=Array.isArray(x.feedPreferences.following)?x.feedPreferences.following:[];
-  x.feedPreferences.followGraph=Array.isArray(x.feedPreferences.followGraph)?x.feedPreferences.followGraph:[];
-  if(!x.feedPreferences.followGraph.length&&x.feedPreferences.following.length){
-    x.feedPreferences.followGraph=x.feedPreferences.following.map(name=>({id:uid(),name:String(name),type:'other',focus:'',active:true}));
-  }
   x.feedThreads=x.feedThreads&&typeof x.feedThreads==='object'&&!Array.isArray(x.feedThreads)?x.feedThreads:{};
   x.feedSignals=Array.isArray(x.feedSignals)?x.feedSignals:[];
   x.memory=(Array.isArray(x.memory)?x.memory:[]).map((m,i)=>{if(typeof m!=='object')return {id:'memory-'+i,kind:'context',content:String(m),status:'active',confidence:1,source:'local'};return {...m,kind:normalizeMemoryKind(m.kind),status:m.status==='deleted'?'deleted':(m.status||'active')}});
@@ -176,7 +179,7 @@ function init(){
   renderCalendar();
   show(state.screen);
 }
-let proactiveNudgeBusy=false;
+let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false;
 function proactiveTerms(text){
   return new Set(normalizeText(String(text||'')).split(/\s+/).filter(x=>x.length>3&&!['tienes','sobre','para','esta','este','unos','conviene','claro','claros','quieres','quieras','ahora'].includes(x)));
 }
@@ -188,6 +191,10 @@ function proactiveSimilarity(a,b){
 function recentlyCoveredProactive(reply){
   const recent=(state.messages||[]).filter(m=>m.role==='assistant').slice(-12);
   return recent.some(m=>proactiveSimilarity(reply,m.text)>=0.62);
+}
+function recentlyCoveredCuriosity(reply){
+  const recent=(state.messages||[]).filter(m=>m.role==='assistant'&&String(m.text||'').includes('?')).slice(-80);
+  return recent.some(m=>proactiveSimilarity(reply,m.text)>=0.5);
 }
 async function maybeProactiveNudge(){
   if(proactiveNudgeBusy)return false;
@@ -205,6 +212,7 @@ async function maybeProactiveNudge(){
   return false;
 }
 async function maybeCuriosityQuestion(){
+  if(curiosityBusy)return false;
   try{
     const prefs=state.assistantPreferences||base.assistantPreferences;
     if(prefs.curiosityEnabled===false||!window.ISABELLA_AI?.curiosity)return false;
@@ -212,10 +220,12 @@ async function maybeCuriosityQuestion(){
     const key='isabella-last-curiosity-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
     const cadence=Math.max(12,Math.min(168,Number(prefs.curiosityCadenceHours||30)))*60*60*1000;
     if(now-last<cadence)return false;
-    const result=await window.ISABELLA_AI.curiosity(state),reply=String(result?.reply||'').trim();
+    curiosityBusy=true;
     localStorage.setItem(key,String(now));
-    if(reply&&reply!=='NO_QUESTION'&&!/^NO_QUESTION[.!]?$/i.test(reply)){say('assistant',reply);return true}
+    const result=await window.ISABELLA_AI.curiosity(state),reply=String(result?.reply||'').trim();
+    if(reply&&reply!=='NO_QUESTION'&&!/^NO_QUESTION[.!]?$/i.test(reply)&&!recentlyCoveredCuriosity(reply)){say('assistant',reply);return true}
   }catch{}
+  finally{curiosityBusy=false}
   return false;
 }
 async function maybePrewarmFeed(){
@@ -251,11 +261,15 @@ async function maybeReactivateIdeas(){
   }catch{}
 }
 async function afterSync(){
-  void maybePrewarmFeed();
-  void maybePrewarmResearch();
-  void maybeReactivateIdeas();
-  const nudged=await maybeProactiveNudge();
-  if(!nudged)await maybeCuriosityQuestion();
+  if(proactiveCycleBusy)return;
+  proactiveCycleBusy=true;
+  try{
+    void maybePrewarmFeed();
+    void maybePrewarmResearch();
+    void maybeReactivateIdeas();
+    const nudged=await maybeProactiveNudge();
+    if(!nudged)await maybeCuriosityQuestion();
+  }finally{proactiveCycleBusy=false}
 }
 function show(name){
   const allowed=['assistant','feed','ideas','work','calendar','readings'];
@@ -2147,7 +2161,7 @@ function feedFollowRow(node={}){
   </div>`;
 }
 function feedPreferencesPanel(){
-  const prefs=state.feedPreferences||base.feedPreferences;
+  const prefs=canonicalFeedPreferences(state.feedPreferences||base.feedPreferences);
   modal('Ajustar Feed',`<div class="form feed-preferences">
     <div class="small">El Feed ya no se cura por temas ni noticias. Isabella reevalúa tu situación y solo muestra señales que merecen atención ahora.</div>
     <label>Lugar habitual para el clima <span class="small">(opcional; no se inferirá una localidad que no hayas confirmado)</span><input id="weatherLocation" value="${esc(prefs.weatherLocation||'')}" placeholder="Ciudad o localidad"></label>
@@ -2155,7 +2169,7 @@ function feedPreferencesPanel(){
     <button id="saveFeedPreferences" class="primary">Guardar</button>
   </div>`);
   $('#saveFeedPreferences').onclick=()=>{
-    state.feedPreferences={...prefs,instructions:$('#feedInstructions').value.trim(),weatherLocation:$('#weatherLocation').value.trim()};
+    state.feedPreferences=canonicalFeedPreferences({...prefs,instructions:$('#feedInstructions').value.trim(),weatherLocation:$('#weatherLocation').value.trim()});
     save();closeModal();renderFeed(true);
   };
 }
@@ -2183,7 +2197,7 @@ window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
   replaceState:(next)=>{
     const visibleScreen=state.screen||'assistant';
-    state={...base,...next,screen:visibleScreen};
+    state={...base,...next,screen:visibleScreen,assistantPreferences:{...base.assistantPreferences,...(next?.assistantPreferences||{})},feedPreferences:canonicalFeedPreferences(next?.feedPreferences||{})};
     state.messages=normalizeMessages(state.messages);
     save();renderMessages(false);renderToday();renderCalendar();
   },

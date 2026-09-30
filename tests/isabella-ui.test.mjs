@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.62'));
+  assert.ok(shell.includes('Build 2026.09.30.63'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=62'));
-  assert.ok(index.includes('app.js?v=70'));
-  assert.ok(index.includes('sync.js?v=pwa24'));
-  assert.ok(index.includes('ai.js?v=41'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v69'"));
+  assert.ok(index.includes('shell.js?v=63'));
+  assert.ok(index.includes('app.js?v=71'));
+  assert.ok(index.includes('sync.js?v=pwa25'));
+  assert.ok(index.includes('ai.js?v=42'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v70'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1000,4 +1000,61 @@ test('Build 62 orchestrates bounded specialists with explicit evidence routing',
   for(const forbidden of ['create_task','update_task','delete_task','create_event','update_event','remember_information','record_personal_model_claim']){
     assert.ok(!runtime.includes(forbidden),forbidden+' leaked into specialist runtime');
   }
+});
+
+
+test('Build 63 merges a completed stale pull against the live app state, not its captured snapshot',()=>{
+  const sync=read('apps/isabella/sync.js');
+  const start=sync.indexOf('function entityRevisionTime');
+  const end=sync.indexOf('async function persistEntityMutation',start);
+  assert.ok(start>0&&end>start);
+  const source=sync.slice(start,end);
+  const make=new Function('pendingEntityMutations',source+';return {mergePulledEntityState};');
+  const {mergePulledEntityState}=make(new Set());
+  const captured={tasks:[{id:'t1',date:'2026-09-30',updatedAt:'2026-09-30T14:00:00.000Z'}],events:[],deletedTaskIds:[],deletedEventIds:[]};
+  const live={tasks:[{id:'t1',date:'2026-10-01',updatedAt:'2026-09-30T14:01:00.000Z'}],events:[],deletedTaskIds:[],deletedEventIds:[]};
+  const remote=[{id:'t1',date:'2026-09-30',updatedAt:'2026-09-30T14:00:30.000Z'}];
+  assert.equal(mergePulledEntityState(remote,[],live,captured).tasks[0].date,'2026-10-01');
+  assert.ok(sync.includes('mergePulledEntityState(remoteTasks,remoteEvents,app.getState(),local)'));
+  assert.ok(!sync.includes('hydrating=true;app.replaceState(local);hydrating=false'));
+});
+
+test('Build 63 permanently canonicalizes Feed preferences to situational personal mode',()=>{
+  const app=read('apps/isabella/app.js'),sync=read('apps/isabella/sync.js');
+  const start=app.indexOf('function canonicalFeedPreferences');
+  const end=app.indexOf('const base=',start);
+  const source=app.slice(start,end);
+  const make=new Function(source+';return canonicalFeedPreferences;'),canonical=make();
+  const clean=canonical({instructions:'Solo lo útil',weatherLocation:'Landsberg am Lech',topics:['Noticias'],following:['X'],followGraph:[{name:'X'}]});
+  assert.equal(clean.mode,'situational_personal');
+  assert.deepEqual(clean.topics,[]);
+  assert.deepEqual(clean.following,[]);
+  assert.deepEqual(clean.followGraph,[]);
+  assert.equal(clean.instructions,'Solo lo útil');
+  assert.ok(sync.includes('value:canonicalFeedPreferences(state.feedPreferences)'));
+  assert.ok(sync.includes('canonicalFeedPreferences(pref.value)'));
+});
+
+test('Build 63 serializes proactive curiosity and refuses resolved legacy Feed questions',()=>{
+  const app=read('apps/isabella/app.js'),ai=read('apps/isabella/ai.js');
+  assert.ok(app.includes('let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false'));
+  assert.ok(app.includes('if(proactiveCycleBusy)return'));
+  assert.ok(app.includes('if(curiosityBusy)return false'));
+  assert.ok(app.indexOf("localStorage.setItem(key,String(now));")<app.indexOf("window.ISABELLA_AI.curiosity(state)"));
+  assert.ok(app.includes('recentlyCoveredCuriosity(reply)'));
+  assert.ok(ai.includes('No preguntes por categorías de contenido del Feed'));
+  assert.ok(ai.includes('usa search_memory'));
+  assert.ok(ai.includes('current_local_time'));
+  assert.ok(ai.includes('current_daypart'));
+});
+
+test('Build 63 makes server-local time authoritative over historical greetings',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('function localTemporalContext'));
+  assert.ok(chat.includes('COHERENCIA TEMPORAL:'));
+  assert.ok(chat.includes('current_local_datetime:temporal.current_local_datetime'));
+  assert.ok(chat.includes('current_local_time:temporal.current_local_time'));
+  assert.ok(chat.includes('current_daypart:temporal.current_daypart'));
+  assert.ok(chat.includes('Los saludos y referencias temporales de mensajes anteriores son históricos'));
+  assert.ok(chat.includes('El Feed de MINDS es situacional, personal y productivo'));
 });
