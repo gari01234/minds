@@ -109,11 +109,21 @@ function eventRow(e,maps){
   const start=localDateTime(e.date,e.start),end=new Date(start.getTime()+((e.duration||60)*60000));
   return {user_id:user.id,client_key:e.id,title:e.title,starts_at:start.toISOString(),ends_at:end.toISOString(),all_day:!!e.allDay,category_id:maps.catByKey.get(e.categoryId)?.id||null,project_id:maps.projByKey.get(e.projectId)?.id||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updated_at:e.updatedAt||new Date().toISOString()};
 }
+function entityRevisionTime(x){
+  const n=Date.parse(String(x?.updatedAt||''));return Number.isFinite(n)?n:0;
+}
+function shouldKeepLocalEntity(kind,local,remote){
+  if(!local)return false;
+  if(pendingEntityMutations.has(kind+':'+local.id))return true;
+  const localRevision=entityRevisionTime(local),remoteRevision=entityRevisionTime(remote);
+  return localRevision>0&&localRevision>remoteRevision;
+}
 function mergeRemoteEntities(remote=[],local=[],kind='task'){
   const localById=new Map((local||[]).filter(x=>x?.id).map(x=>[x.id,x])),seen=new Set();
   const out=(remote||[]).map(x=>{
     seen.add(x.id);
-    return pendingEntityMutations.has(kind+':'+x.id)&&localById.has(x.id)?localById.get(x.id):x;
+    const localEntity=localById.get(x.id);
+    return shouldKeepLocalEntity(kind,localEntity,x)?localEntity:x;
   });
   for(const x of local||[])if(x?.id&&!seen.has(x.id))out.push(x);
   return out;

@@ -85,6 +85,7 @@ begin
  if has_function_privilege('anon','public.minds_create_commitment(jsonb,uuid,boolean)','EXECUTE') then raise exception 'TEST anonymous commitment RPC';end if;
  if has_function_privilege('authenticated','public.minds_publish_continuity_signal(uuid,jsonb)','EXECUTE') then raise exception 'TEST continuity publisher exposed';end if;
  if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='delegate_specialist' and mode='allow' and enabled) then raise exception 'TEST specialist delegation policy';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='orchestrate_specialists' and mode='allow' and enabled) then raise exception 'TEST specialist orchestration policy';end if;
  if has_function_privilege('authenticated','public.minds_record_shadow_decision(uuid,uuid,text,jsonb,jsonb)','EXECUTE') then raise exception 'TEST shadow recorder exposed';end if;
  if has_function_privilege('anon','public.minds_resolve_shadow_decision(uuid,text,jsonb)','EXECUTE') then raise exception 'TEST anonymous shadow resolve';end if;
  begin
@@ -141,5 +142,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, shadow agency, specialist policy, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;

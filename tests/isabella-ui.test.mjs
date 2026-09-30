@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.61'));
+  assert.ok(shell.includes('Build 2026.09.30.62'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=61'));
-  assert.ok(index.includes('app.js?v=69'));
-  assert.ok(index.includes('sync.js?v=pwa23'));
+  assert.ok(index.includes('shell.js?v=62'));
+  assert.ok(index.includes('app.js?v=70'));
+  assert.ok(index.includes('sync.js?v=pwa24'));
   assert.ok(index.includes('ai.js?v=41'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v68'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v69'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -962,4 +962,42 @@ test('Build 61 adds a bounded invisible specialist runtime without visible agent
   assert.ok(!runtime.includes('remember_information'));
   assert.ok(app.includes("card('Especialistas internos'"));
   assert.ok(!shell.includes('data-action="specialists"'));
+});
+
+
+test('Build 62 prevents an older pull from visually reverting a newer local task move',()=>{
+  const sync=read('apps/isabella/sync.js');
+  const start=sync.indexOf('function entityRevisionTime');
+  const end=sync.indexOf('async function persistEntityMutation',start);
+  assert.ok(start>0&&end>start);
+  const source=sync.slice(start,end);
+  const make=new Function('pendingEntityMutations',source+';return {mergeRemoteEntities};');
+  const pending=new Set(),{mergeRemoteEntities}=make(pending);
+  const oldRemote={id:'t1',date:'2026-09-30',updatedAt:'2026-09-30T10:00:00.000Z'};
+  const movedLocal={id:'t1',date:'2026-10-01',updatedAt:'2026-09-30T10:01:00.000Z'};
+  assert.equal(mergeRemoteEntities([oldRemote],[movedLocal],'task')[0].date,'2026-10-01');
+  const newerRemote={...oldRemote,date:'2026-10-02',updatedAt:'2026-09-30T10:02:00.000Z'};
+  assert.equal(mergeRemoteEntities([newerRemote],[movedLocal],'task')[0].date,'2026-10-02');
+  pending.add('task:t1');
+  assert.equal(mergeRemoteEntities([newerRemote],[movedLocal],'task')[0].date,'2026-10-01');
+});
+
+test('Build 62 orchestrates bounded specialists with explicit evidence routing',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('async function orchestrateSpecialists'));
+  assert.ok(chat.includes('name:"orchestrate_specialists"'));
+  assert.ok(chat.includes('specialist_plan_hint:specialistPlanHint(effectiveMessage,route)'));
+  assert.ok(chat.includes('Dependencies must reference earlier steps'));
+  assert.ok(chat.includes('Research cannot receive private upstream memos'));
+  assert.ok(chat.includes('withheld_upstream'));
+  assert.ok(chat.includes('fileIds=(index?.files||[]).map'));
+  assert.ok(chat.includes('3-specialistDelegations.length'));
+  assert.ok(chat.includes('specialistCache=new Map'));
+  assert.ok(chat.includes('specialist_orchestrations:specialistOrchestrations'));
+  const start=chat.indexOf('async function delegateSpecialist');
+  const end=chat.indexOf('function deriveIntentTerms',start);
+  const runtime=chat.slice(start,end);
+  for(const forbidden of ['create_task','update_task','delete_task','create_event','update_event','remember_information','record_personal_model_claim']){
+    assert.ok(!runtime.includes(forbidden),forbidden+' leaked into specialist runtime');
+  }
 });

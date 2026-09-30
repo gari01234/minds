@@ -1722,7 +1722,7 @@ function editItem(kind,id){
     item.projectId=$('#editProject').value||null;
     item.notes=$('#editNotes').value||'';
     if(kind==='event'){item.start=$('#editTime').value||item.start;item.duration=Math.max(5,Number($('#editDuration').value||item.duration||60))}
-    else {item.reminderTime=item.date?($('#editReminder').value||null):null;if(item.sortOrder==null)item.sortOrder=nextTaskOrder(item.date)}
+    else {item.reminderTime=item.date?($('#editReminder').value||null):null;if((before.date||null)!==(item.date||null)||item.sortOrder==null)item.sortOrder=nextTaskOrder(item.date)}
     mutation(kind,'update',before,item,'manual');save();renderCalendar();closeModal();
   };
   $('#editDelete').onclick=()=>deleteItem(kind,id);
@@ -2014,7 +2014,8 @@ function doctorCards(q,now=Date.now()){
   const routines=rows('routinesQ'),bad=routines.filter(r=>r.last_error),late=routines.filter(r=>r.next_run_at&&new Date(r.next_run_at).getTime()<now-10*60000);
   const shadow=rows('shadowQ'),shadowExact=shadow.filter(x=>x.status==='accepted').length,shadowEdited=shadow.filter(x=>x.status==='edited').length,shadowRejected=shadow.filter(x=>x.status==='rejected').length;
   const specialistRuns=rows('runsQ').filter(r=>String(r.feature||'').startsWith('specialist_'));
-  const specialistErrors=specialistRuns.filter(r=>r.status==='error'||stale(r));
+  const orchestrationRuns=rows('runsQ').filter(r=>r.feature==='isabella_specialist_orchestration');
+  const specialistErrors=[...specialistRuns,...orchestrationRuns].filter(r=>r.status==='error'||stale(r));
   const specialistCounts=specialistRuns.reduce((acc,r)=>{const key=String(r.feature||'').replace(/^specialist_/,'');acc[key]=(acc[key]||0)+1;return acc},{});
   const specialistDetail=Object.entries(specialistCounts).map(([k,v])=>k+' '+v).join(' · ');
   const card=(name,keys,status,detail)=>[name,error(...keys)?'error':status,error(...keys)||detail];
@@ -2027,7 +2028,7 @@ function doctorCards(q,now=Date.now()){
     card('Sofía',['runsQ','usageQ'],stale(latest('sofia_chat'))||latest('sofia_chat')?.status==='error'?'error':usage.some(x=>String(x.feature).startsWith('sofia_'))?'ok':'idle',usage.some(x=>String(x.feature).startsWith('sofia_'))?'Con actividad reciente':'Sin llamadas recientes; normal si no hizo falta'),
     card('Work',['filesQ','claimsQ'],'ok',rows('filesQ').length+' archivos · '+rows('claimsQ').length+' afirmaciones'),
     card('Skills personales',['skillsQ'],'ok',rows('skillsQ').length+' activas'),
-    card('Especialistas internos',['runsQ'],specialistErrors.length?'error':specialistRuns.length?'ok':'idle',specialistRuns.length?(specialistRuns.length+' delegaciones · '+specialistDetail):'Aún sin delegaciones; normal si no hicieron falta'),
+    card('Especialistas internos',['runsQ'],specialistErrors.length?'error':specialistRuns.length||orchestrationRuns.length?'ok':'idle',specialistRuns.length||orchestrationRuns.length?(specialistRuns.length+' delegaciones · '+orchestrationRuns.length+' orquestaciones'+(specialistDetail?' · '+specialistDetail:'')):'Aún sin delegaciones; normal si no hicieron falta'),
     card('Shadow Agency',['shadowQ'],shadow.length?'ok':'idle',shadow.length?shadow.length+' observaciones · '+shadowExact+' tal cual · '+shadowEdited+' corregidas · '+shadowRejected+' rechazadas':'Aún sin observaciones')
   ];
 }
