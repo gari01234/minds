@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.60'));
+  assert.ok(shell.includes('Build 2026.09.30.61'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=60'));
-  assert.ok(index.includes('app.js?v=68'));
+  assert.ok(index.includes('shell.js?v=61'));
+  assert.ok(index.includes('app.js?v=69'));
   assert.ok(index.includes('sync.js?v=pwa23'));
   assert.ok(index.includes('ai.js?v=41'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v67'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v68'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -937,4 +937,29 @@ test('Build 60 resolves Shadow Agency observations from reviewed proposals',()=>
   assert.ok(chat.includes("request_id:proposal.request_id||crypto.randomUUID()"));
   assert.ok(app.includes("card('Shadow Agency'"));
   assert.ok(app.includes("from('minds_shadow_decisions')"));
+});
+
+
+test('Build 61 adds a bounded invisible specialist runtime without visible agent switching',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const app=read('apps/isabella/app.js');
+  const shell=read('apps/isabella/shell.js');
+  const start=chat.indexOf('async function delegateSpecialist');
+  const end=chat.indexOf('function deriveIntentTerms',start);
+  const runtime=chat.slice(start,end);
+  assert.ok(start>0&&end>start);
+  assert.ok(chat.includes('const SPECIALIST_ROLES=new Set(["research","work","planning","memory","document"])'));
+  assert.ok(chat.includes('specialist_candidates:specialistCandidates(effectiveMessage,route)'));
+  assert.ok(chat.includes('name:"delegate_specialist"'));
+  assert.ok(chat.includes('specialistDelegations.length>=3'));
+  assert.ok(chat.includes('specialistFingerprints.has(fingerprint)'));
+  assert.ok(chat.includes('startAgentRun(req,"specialist_"+specialist'));
+  assert.ok(chat.includes('Sofía NO forma parte de este runtime'));
+  assert.ok(runtime.includes('specialist==="research"?[{type:"web_search"'));
+  assert.ok(!runtime.includes('create_task'));
+  assert.ok(!runtime.includes('update_task'));
+  assert.ok(!runtime.includes('create_event'));
+  assert.ok(!runtime.includes('remember_information'));
+  assert.ok(app.includes("card('Especialistas internos'"));
+  assert.ok(!shell.includes('data-action="specialists"'));
 });

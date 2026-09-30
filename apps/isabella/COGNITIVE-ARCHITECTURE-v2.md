@@ -83,3 +83,20 @@ Build 60 intentionally does not derive an autonomy score or automatically promot
 The same release hardens calendar persistence. Manual or assistant-reviewed Task/Event edits are now persisted as atomic entity mutations immediately when they occur. Full-state synchronization may insert missing entities but cannot overwrite an existing Task/Event row with a stale client snapshot. While an atomic mutation is in flight, pull reconciliation preserves that local entity, and server `updated_at` is retained when hydrating the client. The full-state path therefore becomes a convergence mechanism instead of an implicit last-writer-wins authority.
 
 This release still does not add invisible specialist agents, automatic autonomy promotion or autonomous execution. The next planned layer is **Build 61 — Invisible Specialist Runtime v0.1**: Isabella remains the single visible interlocutor while bounded internal specialists can handle research, Work/project retrieval, planning, document review and memory operations underneath her orchestration. Sofía remains the deliberate visible exception because her intellectual role is itself part of the MINDS interface.
+
+
+## Build 61 — Invisible Specialist Runtime v0.1
+
+Build 61 introduces a bounded internal delegation runtime beneath Isabella without adding new visible agents or navigation. Isabella remains the sole conversational interface and the sole component allowed to turn analysis into user-facing proposals. The runtime exposes five read-only specialist roles: `research`, `work`, `planning`, `memory` and `document`.
+
+Delegation is selective rather than automatic fan-out. The existing typed router derives `specialist_candidates` from the actual turn and passes them as advisory context; Isabella may call `delegate_specialist` only when an additional specialized pass materially improves a complex answer. Simple turns stay single-agent. The runtime enforces a maximum of three delegations per turn and deduplicates identical requests to prevent tool loops.
+
+Each delegation runs as an isolated OpenAI response outside Isabella's persistent conversation object. It receives a narrow objective plus only the evidence required by its role. Research can use web search; Work receives project retrieval; planning receives calendar/tasks and relevant Commitments; memory receives Active Memory retrieval and Commitments; document review receives selected Work files or, when no file id has yet been chosen, a bounded file index. Specialist calls have no mutation tools. They cannot create or modify Tasks, Events, Routines, Standing Intents, Commitments, Work claims, personal memory, preferences or Skills.
+
+Specialist output returns to Isabella as a transient memo. The memo itself is not stored as memory or project truth. Execution metadata is recorded through `minds_agent_runs` under features such as `specialist_work` or `specialist_planning`, linked to the parent Isabella run in route/metadata. Usage is recorded separately by specialist role. `Estado de MINDS` shows only aggregate recent specialist activity and errors, not the hidden memos.
+
+Source discipline is preserved. Research, Work and document delegations taint the resulting context as source-derived so they cannot be silently promoted to autobiographical facts. Work/document specialists must preserve claim status and provenance and must not treat a source assertion as a confirmed project fact merely because it was retrieved or reviewed. Planning and memory specialists remain read-only and advisory.
+
+Sofía is explicitly outside this runtime. She remains the visible intellectual identity attached to Readings/Theory and is consulted through the existing `consult_sofia` bridge. Build 61 therefore implements invisible specialization without turning MINDS into a collection of interchangeable personas.
+
+Build 61 does not yet implement specialist-to-specialist communication, persistent specialist memory, autonomous permission promotion, background multi-agent swarms or automatic execution of specialist recommendations. Those remain later layers and must preserve Isabella as the orchestration boundary.
