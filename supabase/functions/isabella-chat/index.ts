@@ -56,6 +56,7 @@ function directTextStreamEligible(message:string,route:any,attachments:any[],bac
   if(background||attachments.length||simpleAgendaMutation(message))return false;
   if(String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
+  if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con)\b/i.test(normalizeText(message)))return false;
   return true;
 }
 function parseOpenAISse(buffer:string,onEvent:(event:any)=>void){
@@ -1114,6 +1115,84 @@ async function searchCommitments(req:Request,args:any,userMessage:string){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
+function commitmentWorkspaceView(row:any,items:any[]=[]){
+  return {
+    id:row.id,commitment_id:row.commitment_id,project_id:row.project_id||null,title:row.title,
+    objective_snapshot:row.objective_snapshot,completion_criteria_snapshot:row.completion_criteria_snapshot||null,
+    status:row.status,summary:row.summary||"",updated_at:row.updated_at,
+    items:(items||[]).slice(-24).map((x:any)=>({
+      id:x.id,kind:x.kind,status:x.status,content:x.content,provenance_class:x.provenance_class,
+      source_kind:x.source_kind,source_ref:x.source_ref||null,created_at:x.created_at
+    })),
+    epistemic_status:"operational_scratchpad_not_memory"
+  };
+}
+async function commitmentWorkspaceContext(req:Request,commitments:any[]){
+  try{
+    const ids=(commitments||[]).map((x:any)=>String(x?.id||"")).filter(Boolean);
+    if(!ids.length)return [];
+    const sb=supabaseClient(req);if(!sb)return [];
+    const {data:workspaces,error}=await sb.from("minds_commitment_workspaces")
+      .select("id,commitment_id,project_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at")
+      .in("commitment_id",ids).in("status",["active","paused"]).order("updated_at",{ascending:false}).limit(12);
+    if(error||!workspaces?.length)return [];
+    const workspaceIds=workspaces.map((x:any)=>x.id);
+    const {data:items}=await sb.from("minds_commitment_workspace_items")
+      .select("id,workspace_id,kind,status,content,provenance_class,source_kind,source_ref,created_at")
+      .in("workspace_id",workspaceIds).order("created_at",{ascending:true}).limit(240);
+    return workspaces.map((w:any)=>commitmentWorkspaceView(w,(items||[]).filter((x:any)=>x.workspace_id===w.id)));
+  }catch{return []}
+}
+async function ensureCommitmentWorkspace(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const commitmentId=String(args?.commitment_id||"").trim();if(!commitmentId)return {status:"invalid"};
+    const result=await sb.rpc("minds_ensure_commitment_workspace",{p_commitment_id:commitmentId});
+    return checked(result,"ensure_commitment_workspace");
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+async function readCommitmentWorkspace(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const workspaceId=String(args?.workspace_id||"").trim(),commitmentId=String(args?.commitment_id||"").trim();
+    let q=sb.from("minds_commitment_workspaces")
+      .select("id,commitment_id,project_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at");
+    q=workspaceId?q.eq("id",workspaceId):commitmentId?q.eq("commitment_id",commitmentId):q.eq("id","00000000-0000-0000-0000-000000000000");
+    const {data:workspace,error}=await q.maybeSingle();
+    if(error||!workspace)return {status:"missing"};
+    const {data:items,itemError}=await sb.from("minds_commitment_workspace_items")
+      .select("id,workspace_id,kind,status,content,provenance_class,source_kind,source_ref,created_at")
+      .eq("workspace_id",workspace.id).order("created_at",{ascending:true}).limit(120);
+    if(itemError)return {status:"error",detail:itemError.message};
+    return {status:"ok",workspace:commitmentWorkspaceView(workspace,items||[])};
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+async function appendCommitmentWorkspaceItem(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const result=await sb.rpc("minds_append_commitment_workspace_item",{
+      p_workspace_id:String(args?.workspace_id||""),
+      p_kind:String(args?.kind||"note"),
+      p_content:String(args?.content||""),
+      p_provenance_class:String(args?.provenance_class||"agent"),
+      p_source_kind:String(args?.source_kind||"conversation"),
+      p_source_ref:args?.source_ref?String(args.source_ref):null,
+      p_metadata:args?.metadata&&typeof args.metadata==="object"?args.metadata:{}
+    });
+    return checked(result,"append_commitment_workspace_item");
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+async function updateCommitmentWorkspaceSummary(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const result=await sb.rpc("minds_update_commitment_workspace_summary",{
+      p_workspace_id:String(args?.workspace_id||""),
+      p_summary:String(args?.summary||"")
+    });
+    return checked(result,"update_commitment_workspace_summary");
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+
 async function searchWork(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
@@ -1270,7 +1349,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
-  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
@@ -1642,6 +1721,7 @@ Deno.serve(async (req: Request) => {
     !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background||fastAgenda?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
+  const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
   const recent = mergeRecentConversations(recentDb, context.recent_local_conversation || [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -1675,6 +1755,13 @@ CONTINUITY CORE:
 CONTEXTO PRIVADO puede contener active_commitments. Un Commitment es un objetivo abierto que el usuario revisó y aprobó para que MINDS lo mantenga vivo a lo largo del tiempo. No es una Task, Routine ni Standing Intent y no autoriza ninguna acción por sí mismo. Úsalo como contexto operativo: una tarea puede contribuir a un Commitment sin completarlo automáticamente.
 Un Commitment puede incluir last_continuity cuando el Continuity Engine haya relacionado un cambio observable con él. Ese objeto es trazabilidad del sistema, no una nueva instrucción del usuario ni prueba de que la conclusión del cambio sea verdadera. Si explica por qué un asunto volvió a estar activo, puedes usar esa causa de forma natural cuando sea útil; no la repitas mecánicamente.
 memory_checkpoint.open_loops contiene candidatos derivados de la conversación, no compromisos aceptados. Nunca promociones un open_loop silenciosamente. Si el usuario dice explícitamente que no quiere perder algo, que lo mantengamos vivo, o confirma que un asunto abierto merece continuidad, usa propose_commitment y deja que la interfaz lo revise. Si elevas exactamente un open_loop visible en memory_checkpoint, conserva su procedencia usando memory_checkpoint.id y el texto exacto del open_loop. Usa search_commitments cuando el usuario pregunte qué sigue abierto, qué estamos manteniendo vivo o haga referencia a un objetivo persistente que no aparezca ya en active_commitments.
+
+MISSION / COMMITMENT WORKSPACES:
+CONTEXTO PRIVADO puede contener commitment_workspaces. Son scratchpads operativos ligados a Commitments ya aprobados; NO son memoria autobiográfica, claims confirmados de Work ni instrucciones nuevas del usuario. Úsalos para conservar progreso de trabajo entre turnos: planes, hallazgos, fuentes, preguntas, decisiones propuestas y notas.
+Abre un workspace con open_commitment_workspace solo cuando exista un Commitment aprobado y el usuario realmente pida avanzar trabajo de varias etapas o cuando el trabajo vaya a requerir continuidad operativa. No abras uno por mencionar un Commitment, pedir su estado o hacer una tarea trivial.
+Antes de trabajar sobre un workspace existente, usa su summary/items del contexto o read_commitment_workspace si falta detalle. Tras un avance material, puedes usar write_commitment_workspace para conservar únicamente resultados operativos durables; no vuelques conversaciones ni memos completos. Marca correctamente la procedencia. Los hallazgos de web son external; Work/document son project_source; inferencias siguen siendo inferred/agent.
+Una entrada kind=decision siempre queda en status proposed por enforcement del servidor: el workspace no puede confirmar decisiones por sí mismo. Nunca promociones automáticamente una entrada del workspace a personal memory, Work claim confirmado, Task/Event o acción externa. Si el usuario quiere convertir algo en una acción persistente, usa la herramienta normal y respeta confirmación/Shadow Agency.
+Usa update_commitment_workspace_summary para mantener una síntesis breve del estado de trabajo solo después de un avance material. El summary es una vista operativa, no una fuente de verdad.
 
 SKILLS:
 Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo no trivial que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. En turnos ligeros el catálogo puede omitirse deliberadamente para reducir latencia. No cargues una skill para saludos, conversación general ni operaciones directas y completas de calendario/tareas como crear una tarea con título y fecha ya dados, moverla, completarla o borrarla; usa directamente las herramientas de agenda. Puedes cargar más de una solo si realmente son complementarias.
@@ -1780,6 +1867,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     reply_context:context.reply_context||null,
     standing_intent_matches:standingIntents||[],
     active_commitments:commitments||[],
+    commitment_workspaces:missionWorkspaces||[],
     routed_work_context:routedWork,
     routed_sofia_context:routedSofia,
     memory_checkpoint:memoryCheckpoint,
@@ -1931,6 +2019,37 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       description:"Consult Sofía selectively when the user's request materially depends on their Readings, highlights, notes, authors, theory threads or intellectual memory. Do not use for ordinary personal, calendar or operational requests.",
       strict:false,
       parameters:{type:"object",properties:{query:{type:"string"}},required:["query"]}
+    },
+    {
+      type:"function",
+      name:"open_commitment_workspace",
+      description:"Open or refresh one internal operational workspace for a user-approved Commitment when the user is actually advancing multi-step work. Does not execute external actions.",
+      strict:false,
+      parameters:{type:"object",properties:{commitment_id:{type:"string"}},required:["commitment_id"]}
+    },
+    {
+      type:"function",
+      name:"read_commitment_workspace",
+      description:"Read the operational scratchpad linked to a Commitment. Workspace content is working context, not accepted memory or confirmed project truth.",
+      strict:false,
+      parameters:{type:"object",properties:{workspace_id:{type:"string"},commitment_id:{type:"string"}}}
+    },
+    {
+      type:"function",
+      name:"write_commitment_workspace",
+      description:"Append one durable working item to a Commitment workspace or refresh its short operational summary. Decisions are always stored as proposed. Do not write raw transcripts or entire specialist memos.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        workspace_id:{type:"string"},
+        operation:{type:"string",enum:["append_item","update_summary"]},
+        kind:{type:"string",enum:["plan","finding","source","question","decision","note"]},
+        content:{type:"string"},
+        summary:{type:"string"},
+        provenance_class:{type:"string",enum:["user","project_source","external","inferred","agent"]},
+        source_kind:{type:"string",enum:["user","conversation","work","document","web","specialist","system"]},
+        source_ref:{type:"string"},
+        metadata:{type:"object"}
+      },required:["workspace_id","operation"]}
     },
     {
       type:"function",
@@ -2086,6 +2205,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       }else if(call.name==="consult_sofia"){
         const result=await consultSofia(req,args,effectiveMessage);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="open_commitment_workspace"){
+        const result=await ensureCommitmentWorkspace(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="read_commitment_workspace"){
+        const result=await readCommitmentWorkspace(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="write_commitment_workspace"){
+        const result=args?.operation==="update_summary"
+          ?await updateCommitmentWorkspaceSummary(req,args)
+          :await appendCommitmentWorkspaceItem(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_commitments"){
         const result=await searchCommitments(req,args,effectiveMessage);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
@@ -2130,7 +2260,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,

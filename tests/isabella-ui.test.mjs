@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.66'));
+  assert.ok(shell.includes('Build 2026.09.30.67'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=66'));
-  assert.ok(index.includes('app.js?v=72'));
+  assert.ok(index.includes('shell.js?v=67'));
+  assert.ok(index.includes('app.js?v=73'));
   assert.ok(index.includes('sync.js?v=pwa25'));
   assert.ok(index.includes('ai.js?v=44'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v73'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v74'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1211,4 +1211,41 @@ test('Build 66 never persists partial streamed text and final result remains can
   assert.ok(chat.includes('reply:finalText.trim()'));
   assert.ok(chat.includes('standing_intent_delivery'));
   assert.ok(chat.includes('await closeConversation(supabaseClient(req),streamConversation)'));
+});
+
+
+test('Build 67 adds user-isolated Commitment workspaces with controlled mutation RPCs',()=>{
+  const migration=read('supabase/migrations/20260930221237_commitment_workspaces_v01.sql');
+  assert.ok(migration.includes('create table if not exists public.minds_commitment_workspaces'));
+  assert.ok(migration.includes('create table if not exists public.minds_commitment_workspace_items'));
+  assert.ok(migration.includes('alter table public.minds_commitment_workspaces enable row level security'));
+  assert.ok(migration.includes('revoke insert,update,delete on public.minds_commitment_workspaces from authenticated,anon'));
+  assert.ok(migration.includes('revoke insert,update,delete on public.minds_commitment_workspace_items from authenticated,anon'));
+  assert.ok(migration.includes('function public.minds_ensure_commitment_workspace'));
+  assert.ok(migration.includes('function public.minds_append_commitment_workspace_item'));
+  assert.ok(migration.includes("v_status:=case when p_kind='decision' then 'proposed' else 'working' end"));
+  assert.ok(migration.includes("when p_source_kind in ('work','document') then 'project_source'"));
+});
+
+test('Build 67 gives Isabella operational workspace tools without promoting scratchpad state to truth',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('async function commitmentWorkspaceContext'));
+  assert.ok(chat.includes('name:"open_commitment_workspace"'));
+  assert.ok(chat.includes('name:"read_commitment_workspace"'));
+  assert.ok(chat.includes('name:"write_commitment_workspace"'));
+  assert.ok(chat.includes('commitment_workspaces:missionWorkspaces'));
+  assert.ok(chat.includes('operational_scratchpad_not_memory'));
+  assert.ok(chat.includes('Una entrada kind=decision siempre queda en status proposed'));
+  assert.ok(chat.includes('Nunca promociones automáticamente una entrada del workspace a personal memory'));
+  assert.ok(chat.includes('commitment_workspace_used:'));
+});
+
+test('Build 67 keeps mission work out of direct text streaming and visible inside Continuity',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const app=read('apps/isabella/app.js');
+  assert.ok(chat.includes('mantener vivo|avanza|avanzar|retoma|retomar'));
+  assert.ok(app.includes('data-mission-workspace'));
+  assert.ok(app.includes('async function missionWorkspacePanel'));
+  assert.ok(app.includes("card('Mission Workspaces'"));
+  assert.ok(app.includes('Este workspace es un scratchpad operativo'));
 });

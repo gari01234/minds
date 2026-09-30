@@ -169,3 +169,20 @@ Tool-bearing and context-heavy turns deliberately refuse direct text streaming w
 Standing Intents retain their delivery semantics in the streaming path. If the model fails to integrate an activated reminder, the server appends and streams the reminder before emitting the final canonical result. OpenAI Conversation leases are held for the duration of the stream and released only after completion or failure, preventing concurrent-turn corruption.
 
 Usage and agent-run metadata now distinguish `direct_stream=true` and `ttft_streamed=true`, allowing MINDS to compare perceived latency against the buffered path in production. Build 66 does not yet stream intermediate claims from evidence-dependent research; those turns expose progress through Isabella's working state but remain buffered until their evidentiary pipeline is complete.
+
+
+## Build 67 — Mission / Commitment Workspaces v0.1
+
+Build 67 turns a user-approved Commitment into an optional operational container when it begins to require real multi-turn work. A Commitment still represents the objective that MINDS has been asked to keep alive; a Mission Workspace is the temporary working state used to advance that objective. The two are deliberately separate so intermediate agent reasoning does not become autobiographical memory or accepted project truth.
+
+Each Commitment can have at most one workspace. Opening it snapshots the Commitment title, objective, completion criterion and project association while preserving the Commitment itself as the source of authority. The workspace stores a short operational summary plus append-only working items of type `plan`, `finding`, `source`, `question`, `decision` or `note`. Items carry provenance class and source kind. Work/document evidence is forced to `project_source`; web evidence is forced to `external`. A workspace decision is always persisted as `proposed`, never silently confirmed.
+
+Authenticated clients can read their own workspace state but cannot directly insert, update or delete workspace rows. Mutations go through narrowly scoped RPCs that derive `auth.uid()`, verify ownership and enforce the epistemic rules above. Cross-user access is covered by the rolled-back SQL integrity suite. Opening and writing workspace state are internal Isabella policies with `allow` mode because they do not perform external actions or alter the user's accepted memory; they only maintain the scratchpad of an already approved Commitment.
+
+Isabella receives relevant existing workspaces alongside `active_commitments`. She may open one only when the user is actually advancing a user-approved Commitment and the work has enough scope to benefit from continuity across turns. Mentioning a Commitment, asking its status or handling a trivial one-shot task is not sufficient. Once work is underway, Isabella can read the scratchpad, append only durable intermediate results and refresh a concise operational summary. Raw chat transcripts and entire specialist memos should not be copied into the workspace.
+
+Mission Workspaces integrate with specialist orchestration without giving specialists mutation authority. Isabella remains the orchestration boundary: specialist results can be distilled into workspace findings with explicit provenance, while external actions, Tasks/Events, personal memory and confirmed Work claims still use their existing confirmation/review paths. The workspace therefore survives conversational turns but does not independently execute anything.
+
+Continuidad now shows when a Commitment has an active Mission Workspace and exposes its current operational summary and item history. `••• → Estado de MINDS` also reports active/paused Mission Workspaces and item counts. No new top-level navigation or agent identity is introduced.
+
+Build 67 is intentionally synchronous. It gives future durable agents somewhere explicit to keep progress, dependencies and working evidence, but it does not yet continue work after the originating request has ended. That transition belongs to Build 68 — Durable Agent Runtime.

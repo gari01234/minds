@@ -61,6 +61,19 @@ begin
  c:=public.minds_create_commitment(jsonb_build_object('title','Retry changed','objective','Must not overwrite'),req,true);
  if c->>'objective'<>'Keep X alive' or (select count(*) from public.minds_commitments)<>before_n+1 then raise exception 'TEST commitment idempotency';end if;
  if (select count(*) from public.minds_commitment_events where commitment_id=(s->>'id')::uuid)<>2 then raise exception 'TEST commitment provenance history';end if;
+ s:=public.minds_ensure_commitment_workspace(current_setting('minds.test_commitment')::uuid);
+ if s->>'status'<>'ok' then raise exception 'TEST commitment workspace create';end if;
+ perform set_config('minds.test_workspace',s->'workspace'->>'id',true);
+ c:=public.minds_append_commitment_workspace_item((s->'workspace'->>'id')::uuid,'decision','Use option A','agent','conversation',null,'{}');
+ if c->'item'->>'status'<>'proposed' then raise exception 'TEST workspace decision auto-confirmed';end if;
+ c:=public.minds_append_commitment_workspace_item((s->'workspace'->>'id')::uuid,'finding','Project source says X','external','work','source-1','{}');
+ if c->'item'->>'provenance_class'<>'project_source' then raise exception 'TEST workspace provenance mapping';end if;
+ c:=public.minds_update_commitment_workspace_summary((s->'workspace'->>'id')::uuid,'Working summary');
+ if c->'workspace'->>'summary'<>'Working summary' then raise exception 'TEST workspace summary';end if;
+ begin
+  insert into public.minds_commitment_workspace_items(workspace_id,kind,content) values((s->'workspace'->>'id')::uuid,'note','Direct write');
+  raise exception 'TEST expected direct workspace write rejection';
+ exception when others then if SQLERRM='TEST expected direct workspace write rejection' then raise;end if;end;
  s:=public.minds_create_commitment(jsonb_build_object('title','Waiting continuity','objective','Keep Bernried coordination alive','scope','project','project_id',project,'status','waiting'),gen_random_uuid(),true);
  perform set_config('minds.test_waiting_commitment',s->>'id',true);
  s:=public.minds_create_commitment(jsonb_build_object('title','Paused continuity','objective','Keep Bernried coordination paused','scope','project','project_id',project,'status','paused'),gen_random_uuid(),true);
@@ -79,6 +92,12 @@ do $$
 begin
  if exists(select 1 from public.minds_work_claims where id=current_setting('minds.test_claim')::uuid) then raise exception 'TEST cross-user read';end if;
  if exists(select 1 from public.minds_commitments where id=current_setting('minds.test_commitment')::uuid) then raise exception 'TEST cross-user commitment read';end if;
+ if exists(select 1 from public.minds_commitment_workspaces where id=current_setting('minds.test_workspace')::uuid) then raise exception 'TEST cross-user workspace read';end if;
+ if (public.minds_ensure_commitment_workspace(current_setting('minds.test_commitment')::uuid)->>'status')<>'missing' then raise exception 'TEST cross-user workspace open';end if;
+ if has_function_privilege('anon','public.minds_ensure_commitment_workspace(uuid)','EXECUTE') then raise exception 'TEST anonymous workspace open';end if;
+ if not has_function_privilege('authenticated','public.minds_ensure_commitment_workspace(uuid)','EXECUTE') then raise exception 'TEST authenticated workspace open missing';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='open_commitment_workspace' and mode='allow' and enabled) then raise exception 'TEST workspace open policy';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='write_commitment_workspace' and mode='allow' and enabled) then raise exception 'TEST workspace write policy';end if;
  begin
   perform public.minds_create_commitment(jsonb_build_object('title','Other user','objective','No','scope','project','project_id',current_setting('minds.test_project')),gen_random_uuid(),true);raise exception 'TEST cross-user commitment project write';
  exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
@@ -142,5 +161,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, mission workspaces, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;

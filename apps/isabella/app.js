@@ -1891,22 +1891,42 @@ async function continuityPanel(){
   modal('Continuidad','<div class="surface-loading">Leyendo lo que sigue vivo…</div>');
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
-    const [commitQ,eventQ]=await Promise.all([
+    const [commitQ,eventQ,workspaceQ,itemQ]=await Promise.all([
       sb.from('minds_commitments').select('id,title,objective,scope,status,completion_criteria,source_kind,source_open_loop,metadata,created_at,updated_at,project_id,isabella_projects(name)').order('updated_at',{ascending:false}).limit(100),
-      sb.from('minds_commitment_events').select('commitment_id,event_type,body,from_status,to_status,source_kind,source,metadata,created_at').order('created_at',{ascending:false}).limit(300)
+      sb.from('minds_commitment_events').select('commitment_id,event_type,body,from_status,to_status,source_kind,source,metadata,created_at').order('created_at',{ascending:false}).limit(300),
+      sb.from('minds_commitment_workspaces').select('id,commitment_id,status,summary,updated_at').order('updated_at',{ascending:false}).limit(100),
+      sb.from('minds_commitment_workspace_items').select('workspace_id,kind,status,created_at').order('created_at',{ascending:false}).limit(500)
     ]);
-    if(commitQ.error)throw commitQ.error;if(eventQ.error)throw eventQ.error;
-    const rows=commitQ.data||[],events=eventQ.data||[],latest=new Map();
+    if(commitQ.error)throw commitQ.error;if(eventQ.error)throw eventQ.error;if(workspaceQ.error)throw workspaceQ.error;if(itemQ.error)throw itemQ.error;
+    const rows=commitQ.data||[],events=eventQ.data||[],workspaces=workspaceQ.data||[],workspaceItems=itemQ.data||[],latest=new Map(),workspaceByCommitment=new Map(workspaces.map(w=>[w.commitment_id,w]));
     for(const e of events)if(!latest.has(e.commitment_id))latest.set(e.commitment_id,e);
     const rank={active:0,waiting:1,paused:2,completed:3,cancelled:4};
     rows.sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime());
     const cards=rows.map(x=>{
-      const e=latest.get(x.id),last=x?.metadata?.last_continuity||null,projectName=x.isabella_projects?.name||null;
+      const e=latest.get(x.id),last=x?.metadata?.last_continuity||null,projectName=x.isabella_projects?.name||null,workspace=workspaceByCommitment.get(x.id);
+      const missionCount=workspace?workspaceItems.filter(i=>i.workspace_id===workspace.id).length:0;
+      const mission=workspace?`<button class="continuity-cause" data-mission-workspace="${esc(workspace.id)}"><span>MISSION WORKSPACE · ${esc(workspace.status.toUpperCase())}</span><b>${missionCount} entradas de trabajo</b>${workspace.summary?`<p>${esc(workspace.summary)}</p>`:''}<small>Actualizado ${new Date(workspace.updated_at).toLocaleString('es-ES')}</small></button>`:'';
       const why=last?.signal_title?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO RELEVANTE</span><b>${esc(last.signal_title)}</b>${last.signal_body?`<p>${esc(last.signal_body)}</p>`:''}<small>${esc(last.reason||'')} · ${new Date(last.linked_at||last.occurred_at||x.updated_at).toLocaleString('es-ES')}</small></div>`:(e&&['reactivated','signal_linked'].includes(e.event_type)?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO</span><b>${esc(e.body||e.event_type)}</b><small>${new Date(e.created_at).toLocaleString('es-ES')}</small></div>`:'');
-      return `<article class="commitment-card ${esc(x.status)}"><div class="commitment-card-head"><span class="commitment-status">${esc(commitmentStatusLabel(x.status))}</span><span class="commitment-project">${esc(projectName||x.scope||'global')}</span></div><h3>${esc(x.title)}</h3><p>${esc(x.objective)}</p>${x.completion_criteria?`<div class="commitment-criteria"><span>CIERRE</span>${esc(x.completion_criteria)}</div>`:''}${x.source_open_loop?'<div class="small">Nació de un open loop que tú decidiste elevar.</div>':''}${why}</article>`;
+      return `<article class="commitment-card ${esc(x.status)}"><div class="commitment-card-head"><span class="commitment-status">${esc(commitmentStatusLabel(x.status))}</span><span class="commitment-project">${esc(projectName||x.scope||'global')}</span></div><h3>${esc(x.title)}</h3><p>${esc(x.objective)}</p>${x.completion_criteria?`<div class="commitment-criteria"><span>CIERRE</span>${esc(x.completion_criteria)}</div>`:''}${x.source_open_loop?'<div class="small">Nació de un open loop que tú decidiste elevar.</div>':''}${mission}${why}</article>`;
     }).join('');
     modal('Continuidad',`<div class="continuity-intro">Aquí puedes inspeccionar lo que MINDS mantiene vivo. Nada entra en esta lista sin tu revisión; los cambios del sistema pueden reactivar un Commitment en espera, pero no uno que hayas pausado.</div><div class="commitment-list">${cards||'<div class="empty-panel">Todavía no has decidido mantener ningún asunto vivo. Puedes decirle a Isabella “esto no quiero perderlo” cuando algo merezca continuidad.</div>'}</div>`);
+    document.querySelectorAll('[data-mission-workspace]').forEach(b=>b.onclick=()=>void missionWorkspacePanel(b.dataset.missionWorkspace));
   }catch(e){modal('Continuidad','<div class="small">No pude cargar la continuidad ahora mismo.</div>')}
+}
+async function missionWorkspacePanel(id){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  modal('Mission Workspace','<div class="surface-loading">Leyendo trabajo activo…</div>');
+  try{
+    const [wQ,iQ]=await Promise.all([
+      sb.from('minds_commitment_workspaces').select('id,commitment_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at').eq('id',id).single(),
+      sb.from('minds_commitment_workspace_items').select('id,kind,status,content,provenance_class,source_kind,source_ref,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(200)
+    ]);
+    if(wQ.error)throw wQ.error;if(iQ.error)throw iQ.error;
+    const w=wQ.data,items=iQ.data||[];
+    const labels={plan:'PLAN',finding:'HALLAZGO',source:'FUENTE',question:'PREGUNTA',decision:'DECISIÓN PROPUESTA',note:'NOTA'};
+    const itemRows=items.map(x=>`<div class="doctor-log"><b>${esc(labels[x.kind]||x.kind.toUpperCase())} · ${esc(x.status)}</b><span>${esc(x.content)}</span><time>${esc(x.provenance_class)} · ${esc(x.source_kind)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
+    modal('Mission Workspace',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>CIERRE</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${w.summary?`<div class="continuity-cause"><span>ESTADO OPERATIVO</span><p>${esc(w.summary)}</p></div>`:''}<div class="small">Este workspace es un scratchpad operativo. Sus hallazgos y decisiones propuestas no son memoria personal ni verdad confirmada de proyecto.</div></div><div class="small section-label">Trabajo acumulado</div>${itemRows||'<div class="empty-panel">El workspace está abierto, pero todavía no contiene avances registrados.</div>'}`);
+  }catch{modal('Mission Workspace','<div class="small">No pude leer este workspace ahora mismo.</div>')}
 }
 async function artifactsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
@@ -2040,6 +2060,7 @@ function doctorCards(q,now=Date.now()){
   const stale=r=>r?.status==='running'&&now-new Date(r.started_at).getTime()>10*60000;
   const routines=rows('routinesQ'),bad=routines.filter(r=>r.last_error),late=routines.filter(r=>r.next_run_at&&new Date(r.next_run_at).getTime()<now-10*60000);
   const shadow=rows('shadowQ'),shadowExact=shadow.filter(x=>x.status==='accepted').length,shadowEdited=shadow.filter(x=>x.status==='edited').length,shadowRejected=shadow.filter(x=>x.status==='rejected').length;
+  const missions=rows('missionsQ'),missionItems=rows('missionItemsQ');
   const specialistRuns=rows('runsQ').filter(r=>String(r.feature||'').startsWith('specialist_'));
   const orchestrationRuns=rows('runsQ').filter(r=>r.feature==='isabella_specialist_orchestration');
   const specialistErrors=[...specialistRuns,...orchestrationRuns].filter(r=>r.status==='error'||stale(r));
@@ -2056,6 +2077,7 @@ function doctorCards(q,now=Date.now()){
     card('Work',['filesQ','claimsQ'],'ok',rows('filesQ').length+' archivos · '+rows('claimsQ').length+' afirmaciones'),
     card('Skills personales',['skillsQ'],'ok',rows('skillsQ').length+' activas'),
     card('Especialistas internos',['runsQ'],specialistErrors.length?'error':specialistRuns.length||orchestrationRuns.length?'ok':'idle',specialistRuns.length||orchestrationRuns.length?(specialistRuns.length+' delegaciones · '+orchestrationRuns.length+' orquestaciones'+(specialistDetail?' · '+specialistDetail:'')):'Aún sin delegaciones; normal si no hicieron falta'),
+    card('Mission Workspaces',['missionsQ','missionItemsQ'],missions.length?'ok':'idle',missions.length?missions.length+' activos/pausados · '+missionItems.length+' entradas':'Aún sin workspaces; se abren al avanzar Commitments aprobados'),
     card('Shadow Agency',['shadowQ'],shadow.length?'ok':'idle',shadow.length?shadow.length+' observaciones · '+shadowExact+' tal cual · '+shadowEdited+' corregidas · '+shadowRejected+' rechazadas':'Aún sin observaciones')
   ];
 }
@@ -2065,7 +2087,7 @@ async function doctorPanel(){
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
     const since=new Date(Date.now()-24*3600000).toISOString();
-    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ]=await Promise.all([
+    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ]=await Promise.all([
       sb.from('minds_agent_runs').select('feature,status,error,started_at,completed_at,latency_ms,route,metadata').gte('started_at',since).order('started_at',{ascending:false}).limit(120),
       sb.from('isabella_routines').select('title,enabled,last_run_at,next_run_at,last_error').eq('enabled',true),
       sb.from('minds_heartbeat_events').select('event_type,severity,title,status,last_seen_at').order('last_seen_at',{ascending:false}).limit(20),
@@ -2075,10 +2097,12 @@ async function doctorPanel(){
       sb.from('minds_work_files').select('id,index_status').limit(500),
       sb.from('isabella_embeddings').select('source_id').limit(1000),
       sb.from('minds_ai_usage').select('feature,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(300),
-      sb.from('minds_shadow_decisions').select('action,status,created_at').gte('created_at',new Date(Date.now()-30*86400000).toISOString()).order('created_at',{ascending:false}).limit(500)
+      sb.from('minds_shadow_decisions').select('action,status,created_at').gte('created_at',new Date(Date.now()-30*86400000).toISOString()).order('created_at',{ascending:false}).limit(500),
+      sb.from('minds_commitment_workspaces').select('id,status,updated_at').in('status',['active','paused']).limit(100),
+      sb.from('minds_commitment_workspace_items').select('id,workspace_id,kind,status,created_at').limit(1000)
     ]);
     const runs=runsQ.data||[],routines=routinesQ.data||[],heart=heartQ.data||[],usage=usageQ.data||[];
-    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ});
+    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ});
     const errors=runs.filter(x=>x.status==='error').slice(0,8);
     const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
     modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);
