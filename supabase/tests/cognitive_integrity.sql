@@ -61,6 +61,10 @@ begin
  c:=public.minds_create_commitment(jsonb_build_object('title','Retry changed','objective','Must not overwrite'),req,true);
  if c->>'objective'<>'Keep X alive' or (select count(*) from public.minds_commitments)<>before_n+1 then raise exception 'TEST commitment idempotency';end if;
  if (select count(*) from public.minds_commitment_events where commitment_id=(s->>'id')::uuid)<>2 then raise exception 'TEST commitment provenance history';end if;
+ s:=public.minds_create_commitment(jsonb_build_object('title','Waiting continuity','objective','Keep Bernried coordination alive','scope','project','project_id',project,'status','waiting'),gen_random_uuid(),true);
+ perform set_config('minds.test_waiting_commitment',s->>'id',true);
+ s:=public.minds_create_commitment(jsonb_build_object('title','Paused continuity','objective','Keep Bernried coordination paused','scope','project','project_id',project,'status','paused'),gen_random_uuid(),true);
+ perform set_config('minds.test_paused_commitment',s->>'id',true);
  if not public.minds_lock_conversation(conv,req) then raise exception 'TEST lease acquire';end if;
  if public.minds_lock_conversation(conv,gen_random_uuid()) then raise exception 'TEST overlapping lease';end if;
  perform public.minds_unlock_conversation(conv,req);
@@ -79,6 +83,7 @@ begin
   perform public.minds_create_commitment(jsonb_build_object('title','Other user','objective','No','scope','project','project_id',current_setting('minds.test_project')),gen_random_uuid(),true);raise exception 'TEST cross-user commitment project write';
  exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
  if has_function_privilege('anon','public.minds_create_commitment(jsonb,uuid,boolean)','EXECUTE') then raise exception 'TEST anonymous commitment RPC';end if;
+ if has_function_privilege('authenticated','public.minds_publish_continuity_signal(uuid,jsonb)','EXECUTE') then raise exception 'TEST continuity publisher exposed';end if;
  begin
   insert into public.minds_commitments(title,objective,request_id) values('Direct insert','Must be blocked',gen_random_uuid());
   raise exception 'TEST expected direct commitment insert rejection';
@@ -104,11 +109,18 @@ begin
  if c<>1 then raise exception 'TEST duplicate heartbeat';end if;
  update public.minds_surface_items set lifecycle_state='dismissed',status='dismissed' where metadata->>'heartbeat_event_id'=e::text;
  if (select status from public.minds_heartbeat_events where id=e)<>'dismissed' then raise exception 'TEST feedback lifecycle';end if;
+ x:=public.minds_publish_heartbeat(u,jsonb_build_object('fingerprint','test-continuity-project','event_type','upcoming_event','title','Bernried coordination changed','body','New coordination input','project_id',current_setting('minds.test_project'),'surface',false));
+ if (select status from public.minds_commitments where id=current_setting('minds.test_waiting_commitment')::uuid)<>'active' then raise exception 'TEST continuity waiting reactivation';end if;
+ if (select status from public.minds_commitments where id=current_setting('minds.test_paused_commitment')::uuid)<>'paused' then raise exception 'TEST continuity paused was reactivated';end if;
+ if (select count(*) from public.minds_continuity_signals where user_id=u and fingerprint='heartbeat:test-continuity-project')<>1 then raise exception 'TEST continuity signal publication';end if;
+ if (select count(*) from public.minds_commitment_events where commitment_id=current_setting('minds.test_waiting_commitment')::uuid and event_type='reactivated')<>1 then raise exception 'TEST continuity reactivation history';end if;
+ perform public.minds_publish_heartbeat(u,jsonb_build_object('fingerprint','test-continuity-project','event_type','upcoming_event','title','Bernried coordination changed','body','New coordination input','project_id',current_setting('minds.test_project'),'surface',false));
+ if (select count(*) from public.minds_commitment_events where commitment_id=current_setting('minds.test_waiting_commitment')::uuid and event_type='reactivated')<>1 then raise exception 'TEST continuity duplicate reactivation';end if;
  insert into public.isabella_routines(user_id,title,instruction,schedule) values(u,'TEST','TEST','{"kind":"once","date":"2099-01-01","time":"07:45"}') returning id into r;
  insert into public.minds_routine_deliveries(user_id,routine_id,scheduled_at,status,output,model) values(u,r,now(),'generated','TEST OUTPUT','test') returning id into d;
  x:=public.minds_deliver_routine(d);perform public.minds_deliver_routine(d);
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;

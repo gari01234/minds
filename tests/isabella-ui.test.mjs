@@ -551,13 +551,13 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.29.58'));
+  assert.ok(shell.includes('Build 2026.09.30.59'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=51'));
-  assert.ok(index.includes('shell.js?v=58'));
-  assert.ok(index.includes('app.js?v=66'));
+  assert.ok(index.includes('app.css?v=52'));
+  assert.ok(index.includes('shell.js?v=59'));
+  assert.ok(index.includes('app.js?v=67'));
   assert.ok(index.includes('ai.js?v=41'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v65'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v66'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -900,3 +900,17 @@ test('Build 56 shows Isabella and Sofia skills together and labels new adaptive 
   assert.ok(app.includes("work_file_read:'Lectura Work'"));
 });
 
+
+
+test('Build 59 exposes Continuity and keeps the mobile More drawer scrollable',()=>{
+  const shell=read('apps/isabella/shell.js'),app=read('apps/isabella/app.js'),css=read('apps/isabella/app.css');
+  assert.ok(shell.includes('data-action="continuity"'));
+  assert.ok(app.includes('async function continuityPanel()'));
+  assert.ok(app.includes("from('minds_commitments')"));
+  assert.ok(app.includes("from('minds_commitment_events')"));
+  assert.ok(app.includes("document.body.classList.add('drawer-open')"));
+  assert.ok(css.includes('max-height:calc(100dvh - env(safe-area-inset-top,0px) - 8px)'));
+  assert.ok(css.includes('overflow-y:auto'));
+  assert.ok(css.includes('-webkit-overflow-scrolling:touch'));
+  assert.ok(css.includes('.drawer-head{position:sticky'));
+});

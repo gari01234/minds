@@ -48,6 +48,7 @@ test('router recognizes inflections, project followups, and leaves a greeting li
   assert.equal(c.policyMode('propose_project_claim'),'confirm');assert.equal(c.policyMode('propose_skill'),'confirm');assert.equal(c.policyMode('propose_commitment'),'confirm');assert.equal(c.policyMode('search_commitments'),'allow');assert.equal(c.policyMode('unknown'),'deny');
   const cp=c.proposalFromTool('propose_commitment',{title:'Continuidad',objective:'No perder X',scope:'global',source_flush_id:'flush',source_open_loop:'Open X'});assert.equal(cp.kind,'commitment');assert.equal(cp.source_kind,'checkpoint');
   assert.ok(c.commitmentScore({title:'Bernried coordinación',objective:'Mantener decisiones vivas',status:'active',isabella_projects:{name:'Bernried'}},['decisiones'],'Bernried')>=7);
+  const cv=c.commitmentView({id:'c',title:'Continuidad',objective:'Mantener X',scope:'global',status:'active',updated_at:'2026-09-30T00:00:00Z',metadata:{last_continuity:{signal_title:'Cambio X'}}});assert.equal(cv.last_continuity.signal_title,'Cambio X');
 });
 test('memory checkpoint covers every selected message and fails without advancing',async()=>{
   const c=edge('isabella-chat');let request,commit;

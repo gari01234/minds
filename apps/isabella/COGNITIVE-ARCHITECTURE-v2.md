@@ -57,3 +57,16 @@ Creation is reviewed and idempotent through `minds_create_commitment`. Direct au
 Isabella receives a small relevance-ranked set of active Commitments as transient context and can search them explicitly with `search_commitments`. She can propose a new Commitment with `propose_commitment`, but the proposal remains pending until the user reviews it in the existing confirmation UI. Checkpoint `open_loops` are never converted automatically.
 
 This release intentionally does **not** add autonomous execution, a Missions dashboard, automatic historical migration, heartbeat-triggered Commitment transitions or Shadow Agency. Those remain later layers on top of this primitive.
+
+
+## Build 59 — Continuity Engine v0.1
+
+The Continuity Core now has a deterministic event layer. `minds_continuity_signals` records observable changes independently from Commitments, and `minds_commitment_signal_links` records why a particular signal was considered relevant. Matching is intentionally conservative: explicit links rank first, exact project identity is strong evidence, and otherwise at least two non-generic shared terms are required. A project-scoped Commitment is never matched to a signal from a different project.
+
+Heartbeat publication now emits a continuity signal in the same transaction. Repeated heartbeat fingerprints update the existing signal and cannot duplicate a Commitment link or causal event. Active Commitments receive a `signal_linked` history event. A Commitment in `waiting` may return to `active` and receives a `reactivated` event. `paused`, `completed` and `cancelled` Commitments are not automatically reactivated. Reactivation changes continuity state but does not create a task, execute an action or surface a new interruption.
+
+Each linked change is also summarized in the Commitment's `metadata.last_continuity`, so Isabella can explain why an open matter became current again without treating the signal as a new user instruction or as verified truth. MINDS remains the source of truth; the event is traceability, not authority.
+
+Commitments are now inspectable from **••• → Continuidad**. This is a transparency surface, not a new primary navigation area. It shows the user-reviewed objective, status, project/scope, optional completion criterion and the latest relevant change. The mobile More drawer is independently scrollable, bounded to the visual viewport and keeps its close header sticky so long menus remain escapable on iOS.
+
+This release still does **not** implement attention scoring, automatic notifications from continuity events, Shadow Agency, autonomous execution, Agents API sessions or invisible subagents. The next layer remains Shadow Agency, after the continuity signal model has been observed in real use.

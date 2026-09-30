@@ -1856,8 +1856,31 @@ function initEventDrag(){
     row.addEventListener('touchcancel',finish,{passive:true});
   });
 }
-function openDrawer(){$('#drawer').classList.remove('hidden');$('#drawerBackdrop').classList.remove('hidden')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function commitmentStatusLabel(status){return status==='active'?'Activo':status==='waiting'?'En espera':status==='paused'?'Pausado':status==='completed'?'Completado':status==='cancelled'?'Cancelado':String(status||'')}
+async function continuityPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
+  modal('Continuidad','<div class="surface-loading">Leyendo lo que sigue vivo…</div>');
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    const [commitQ,eventQ]=await Promise.all([
+      sb.from('minds_commitments').select('id,title,objective,scope,status,completion_criteria,source_kind,source_open_loop,metadata,created_at,updated_at,project_id,isabella_projects(name)').order('updated_at',{ascending:false}).limit(100),
+      sb.from('minds_commitment_events').select('commitment_id,event_type,body,from_status,to_status,source_kind,source,metadata,created_at').order('created_at',{ascending:false}).limit(300)
+    ]);
+    if(commitQ.error)throw commitQ.error;if(eventQ.error)throw eventQ.error;
+    const rows=commitQ.data||[],events=eventQ.data||[],latest=new Map();
+    for(const e of events)if(!latest.has(e.commitment_id))latest.set(e.commitment_id,e);
+    const rank={active:0,waiting:1,paused:2,completed:3,cancelled:4};
+    rows.sort((a,b)=>(rank[a.status]??9)-(rank[b.status]??9)||new Date(b.updated_at).getTime()-new Date(a.updated_at).getTime());
+    const cards=rows.map(x=>{
+      const e=latest.get(x.id),last=x?.metadata?.last_continuity||null,projectName=x.isabella_projects?.name||null;
+      const why=last?.signal_title?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO RELEVANTE</span><b>${esc(last.signal_title)}</b>${last.signal_body?`<p>${esc(last.signal_body)}</p>`:''}<small>${esc(last.reason||'')} · ${new Date(last.linked_at||last.occurred_at||x.updated_at).toLocaleString('es-ES')}</small></div>`:(e&&['reactivated','signal_linked'].includes(e.event_type)?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO</span><b>${esc(e.body||e.event_type)}</b><small>${new Date(e.created_at).toLocaleString('es-ES')}</small></div>`:'');
+      return `<article class="commitment-card ${esc(x.status)}"><div class="commitment-card-head"><span class="commitment-status">${esc(commitmentStatusLabel(x.status))}</span><span class="commitment-project">${esc(projectName||x.scope||'global')}</span></div><h3>${esc(x.title)}</h3><p>${esc(x.objective)}</p>${x.completion_criteria?`<div class="commitment-criteria"><span>CIERRE</span>${esc(x.completion_criteria)}</div>`:''}${x.source_open_loop?'<div class="small">Nació de un open loop que tú decidiste elevar.</div>':''}${why}</article>`;
+    }).join('');
+    modal('Continuidad',`<div class="continuity-intro">Aquí puedes inspeccionar lo que MINDS mantiene vivo. Nada entra en esta lista sin tu revisión; los cambios del sistema pueden reactivar un Commitment en espera, pero no uno que hayas pausado.</div><div class="commitment-list">${cards||'<div class="empty-panel">Todavía no has decidido mantener ningún asunto vivo. Puedes decirle a Isabella “esto no quiero perderlo” cuando algo merezca continuidad.</div>'}</div>`);
+  }catch(e){modal('Continuidad','<div class="small">No pude cargar la continuidad ahora mismo.</div>')}
+}
 async function artifactsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
   modal('Artefactos','<div class="surface-loading">Cargando artefactos…</div>');
