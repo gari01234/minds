@@ -496,6 +496,12 @@ function supabaseClient(req: Request) {
   });
 }
 
+function serviceClient() {
+  const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
+  if(!url||!service)return null;
+  return createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+}
+
 async function recordUsage(req:Request,feature:string,model:string,usage:any,metadata:any={}){
   if(!usage)return;
   try{
@@ -506,6 +512,17 @@ async function recordUsage(req:Request,feature:string,model:string,usage:any,met
     const output=Number(usage.output_tokens??usage.completion_tokens??0);
     const total=Number(usage.total_tokens??input+output);
     await sb.from("minds_ai_usage").insert({user_id:user.id,feature,model,input_tokens:input,cached_input_tokens:cached,output_tokens:output,total_tokens:total,metadata});
+  }catch{}
+}
+async function recordShadowDecision(req:Request,action:string,candidate:any,context:any={}){
+  try{
+    if(!candidate?.request_id)return;
+    const userSb=supabaseClient(req),service=serviceClient();if(!userSb||!service)return;
+    const {data:{user}}=await userSb.auth.getUser();if(!user)return;
+    await service.rpc("minds_record_shadow_decision",{
+      p_user:user.id,p_request_id:candidate.request_id,p_action:action,
+      p_candidate:candidate,p_context:context&&typeof context==="object"?context:{}
+    });
   }catch{}
 }
 async function createArtifact(req:Request,args:any){
@@ -1628,7 +1645,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         continue;
       }
       if(proposal){
-        toolProposals.push(proposal);
+        const reviewedProposal={...proposal,request_id:proposal.request_id||crypto.randomUUID()};
+        toolProposals.push(reviewedProposal);
+        if(mode==="confirm")await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
+          run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
+          source_tainted:sourceTainted,round,background:!!background
+        });
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"pending_user_confirmation"})});
       }else if(call.name==="load_skill"){
         const result=await loadSkill(req,String(args.slug||""),conversationInfo.id||null,effectiveMessage);

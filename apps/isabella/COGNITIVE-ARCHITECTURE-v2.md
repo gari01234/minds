@@ -70,3 +70,16 @@ Each linked change is also summarized in the Commitment's `metadata.last_continu
 Commitments are now inspectable from **••• → Continuidad**. This is a transparency surface, not a new primary navigation area. It shows the user-reviewed objective, status, project/scope, optional completion criterion and the latest relevant change. The mobile More drawer is independently scrollable, bounded to the visual viewport and keeps its close header sticky so long menus remain escapable on iOS.
 
 This release still does **not** implement attention scoring, automatic notifications from continuity events, Shadow Agency, autonomous execution, Agents API sessions or invisible subagents. The next layer remains Shadow Agency, after the continuity signal model has been observed in real use.
+
+
+## Build 60 — Shadow Agency v0.1
+
+Shadow Agency adds an observational layer beneath Isabella's existing confirmation policy. When Isabella proposes an action whose policy is still `confirm`, the server records the candidate she would have taken before the user sees the review UI. The record is keyed by a stable server-generated `request_id` and preserves the action, proposal payload and bounded execution context. Recording a shadow decision never executes the action and never modifies `minds_action_policies`.
+
+The user's actual review resolves the observation. Confirming the proposal unchanged records `accepted`; confirming after editing records `edited` together with the reviewed proposal and its changed fields; rejecting records `rejected`. The canonical observations live in `minds_shadow_decisions`. The browser can read its own observations but cannot insert or update them directly. Server-side recording is service-only, while resolution is exposed through a narrowly scoped RPC that derives `auth.uid()` and can mutate only that user's pending observation.
+
+Build 60 intentionally does not derive an autonomy score or automatically promote permissions from these outcomes. Agreement rates can be inspected as evidence, but they are not authority. `••• → Estado de MINDS` shows recent aggregate counts for Shadow Agency so the mechanism remains observable without becoming a primary interface surface.
+
+The same release hardens calendar persistence. Manual or assistant-reviewed Task/Event edits are now persisted as atomic entity mutations immediately when they occur. Full-state synchronization may insert missing entities but cannot overwrite an existing Task/Event row with a stale client snapshot. While an atomic mutation is in flight, pull reconciliation preserves that local entity, and server `updated_at` is retained when hydrating the client. The full-state path therefore becomes a convergence mechanism instead of an implicit last-writer-wins authority.
+
+This release still does not add invisible specialist agents, automatic autonomy promotion or autonomous execution. The next planned layer is **Build 61 — Invisible Specialist Runtime v0.1**: Isabella remains the single visible interlocutor while bounded internal specialists can handle research, Work/project retrieval, planning, document review and memory operations underneath her orchestration. Sofía remains the deliberate visible exception because her intellectual role is itself part of the MINDS interface.

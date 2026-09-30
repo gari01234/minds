@@ -2012,6 +2012,7 @@ function doctorCards(q,now=Date.now()){
   const latest=f=>rows('runsQ').find(r=>r.feature===f),chat=latest('isabella_chat'),hb=latest('heartbeat');
   const stale=r=>r?.status==='running'&&now-new Date(r.started_at).getTime()>10*60000;
   const routines=rows('routinesQ'),bad=routines.filter(r=>r.last_error),late=routines.filter(r=>r.next_run_at&&new Date(r.next_run_at).getTime()<now-10*60000);
+  const shadow=rows('shadowQ'),shadowExact=shadow.filter(x=>x.status==='accepted').length,shadowEdited=shadow.filter(x=>x.status==='edited').length,shadowRejected=shadow.filter(x=>x.status==='rejected').length;
   const card=(name,keys,status,detail)=>[name,error(...keys)?'error':status,error(...keys)||detail];
   const checkpointError=chat?.metadata?.checkpoint_error;
   return [
@@ -2021,7 +2022,8 @@ function doctorCards(q,now=Date.now()){
     card('Active Memory',['embedQ','flushQ'],checkpointError?'error':rows('embedQ').length?'ok':'idle',checkpointError||rows('embedQ').length+' fragmentos · '+rows('flushQ').length+' checkpoints recientes'),
     card('Sofía',['runsQ','usageQ'],stale(latest('sofia_chat'))||latest('sofia_chat')?.status==='error'?'error':usage.some(x=>String(x.feature).startsWith('sofia_'))?'ok':'idle',usage.some(x=>String(x.feature).startsWith('sofia_'))?'Con actividad reciente':'Sin llamadas recientes; normal si no hizo falta'),
     card('Work',['filesQ','claimsQ'],'ok',rows('filesQ').length+' archivos · '+rows('claimsQ').length+' afirmaciones'),
-    card('Skills personales',['skillsQ'],'ok',rows('skillsQ').length+' activas')
+    card('Skills personales',['skillsQ'],'ok',rows('skillsQ').length+' activas'),
+    card('Shadow Agency',['shadowQ'],shadow.length?'ok':'idle',shadow.length?shadow.length+' observaciones · '+shadowExact+' tal cual · '+shadowEdited+' corregidas · '+shadowRejected+' rechazadas':'Aún sin observaciones')
   ];
 }
 async function doctorPanel(){
@@ -2030,7 +2032,7 @@ async function doctorPanel(){
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
     const since=new Date(Date.now()-24*3600000).toISOString();
-    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ]=await Promise.all([
+    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ]=await Promise.all([
       sb.from('minds_agent_runs').select('feature,status,error,started_at,completed_at,latency_ms,route,metadata').gte('started_at',since).order('started_at',{ascending:false}).limit(120),
       sb.from('isabella_routines').select('title,enabled,last_run_at,next_run_at,last_error').eq('enabled',true),
       sb.from('minds_heartbeat_events').select('event_type,severity,title,status,last_seen_at').order('last_seen_at',{ascending:false}).limit(20),
@@ -2039,10 +2041,11 @@ async function doctorPanel(){
       sb.from('minds_work_claims').select('id,status').limit(500),
       sb.from('minds_work_files').select('id,index_status').limit(500),
       sb.from('isabella_embeddings').select('source_id').limit(1000),
-      sb.from('minds_ai_usage').select('feature,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(300)
+      sb.from('minds_ai_usage').select('feature,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(300),
+      sb.from('minds_shadow_decisions').select('action,status,created_at').gte('created_at',new Date(Date.now()-30*86400000).toISOString()).order('created_at',{ascending:false}).limit(500)
     ]);
     const runs=runsQ.data||[],routines=routinesQ.data||[],heart=heartQ.data||[],usage=usageQ.data||[];
-    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ});
+    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ});
     const errors=runs.filter(x=>x.status==='error').slice(0,8);
     const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
     modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);

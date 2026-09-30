@@ -84,6 +84,12 @@ begin
  exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
  if has_function_privilege('anon','public.minds_create_commitment(jsonb,uuid,boolean)','EXECUTE') then raise exception 'TEST anonymous commitment RPC';end if;
  if has_function_privilege('authenticated','public.minds_publish_continuity_signal(uuid,jsonb)','EXECUTE') then raise exception 'TEST continuity publisher exposed';end if;
+ if has_function_privilege('authenticated','public.minds_record_shadow_decision(uuid,uuid,text,jsonb,jsonb)','EXECUTE') then raise exception 'TEST shadow recorder exposed';end if;
+ if has_function_privilege('anon','public.minds_resolve_shadow_decision(uuid,text,jsonb)','EXECUTE') then raise exception 'TEST anonymous shadow resolve';end if;
+ begin
+  update public.minds_shadow_decisions set status='accepted' where false;
+  raise exception 'TEST expected direct shadow update rejection';
+ exception when others then if SQLERRM='TEST expected direct shadow update rejection' then raise;end if;end;
  begin
   insert into public.minds_commitments(title,objective,request_id) values('Direct insert','Must be blocked',gen_random_uuid());
   raise exception 'TEST expected direct commitment insert rejection';
@@ -98,8 +104,20 @@ reset role;
 set local role service_role;
 select set_config('request.jwt.claim.role','service_role',true);
 do $$
-declare x jsonb;e uuid;r uuid;d uuid;c integer;u uuid:='f0000000-0000-4000-8000-000000000001';
+declare x jsonb;e uuid;r uuid;d uuid;c integer;u uuid:='f0000000-0000-4000-8000-000000000001';other_u uuid:='f0000000-0000-4000-8000-000000000002';shadow_req uuid:=gen_random_uuid();shadow_reject uuid:=gen_random_uuid();
 begin
+ x:=public.minds_record_shadow_decision(u,shadow_req,'update_task',jsonb_build_object('kind','task','action','update','title','Move task'),jsonb_build_object('project','TEST PROJECT'));
+ perform public.minds_record_shadow_decision(u,shadow_req,'update_task',jsonb_build_object('kind','task','action','update','title','Retry must not duplicate'),'{}');
+ if (select count(*) from public.minds_shadow_decisions where user_id=u and request_id=shadow_req)<>1 then raise exception 'TEST shadow idempotency';end if;
+ perform public.minds_record_shadow_decision(u,shadow_reject,'create_event',jsonb_build_object('kind','event','action','create','title','Shadow event'),'{}');
+ perform set_config('request.jwt.claim.sub',other_u::text,true);
+ x:=public.minds_resolve_shadow_decision(shadow_req,'accepted',jsonb_build_object('kind','task'));
+ if x->>'status'<>'missing' or (select status from public.minds_shadow_decisions where user_id=u and request_id=shadow_req)<>'pending' then raise exception 'TEST cross-user shadow resolve';end if;
+ perform set_config('request.jwt.claim.sub',u::text,true);
+ x:=public.minds_resolve_shadow_decision(shadow_req,'accepted',jsonb_build_object('kind','task','_review',jsonb_build_object('changed_fields',jsonb_build_array('date'))));
+ if x->>'status'<>'edited' then raise exception 'TEST shadow edited outcome';end if;
+ x:=public.minds_resolve_shadow_decision(shadow_reject,'rejected',jsonb_build_object('kind','event'));
+ if x->>'status'<>'rejected' then raise exception 'TEST shadow rejected outcome';end if;
  x:=public.minds_publish_heartbeat(u,'{"fingerprint":"test-failure","event_type":"routine_failure","title":"TEST","surface":false}');e:=(x->>'id')::uuid;
  if (x->>'surfaced')::boolean then raise exception 'TEST first failure surfaced';end if;
  x:=public.minds_publish_heartbeat(u,'{"fingerprint":"test-failure","event_type":"routine_failure","title":"TEST","surface":true}');
@@ -122,5 +140,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, continuity engine, shadow agency, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;

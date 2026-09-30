@@ -5,6 +5,7 @@ const app=window.ISABELLA_APP;
 const $=s=>document.querySelector(s);
 const authButton=$('#authButton'),status=$('#syncStatus');
 let user=null,syncing=false,timer=null,hydrating=false,queuedSync=null;
+const pendingEntityMutations=new Set();
 const setStatus=t=>{if(status)status.textContent=t};
 const localDateTime=(date,time)=>new Date(date+'T'+(time||'09:00')+':00');
 const pad=n=>String(n).padStart(2,'0');
@@ -99,6 +100,39 @@ async function ensureTaxonomy(state){
   if(pe)throw pe;
   return {cats:cats||[],projs:projs||[],catByKey,projByKey:new Map((projs||[]).map(p=>[p.client_key,p]))};
 }
+function taskRow(t,maps){
+  if(t.done&&!t.completedAt)t.completedAt=new Date().toISOString();
+  if(!t.done)t.completedAt=null;
+  return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date||null,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),reminder_time:t.date?(t.reminderTime||null):null,category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updated_at:t.updatedAt||new Date().toISOString()};
+}
+function eventRow(e,maps){
+  const start=localDateTime(e.date,e.start),end=new Date(start.getTime()+((e.duration||60)*60000));
+  return {user_id:user.id,client_key:e.id,title:e.title,starts_at:start.toISOString(),ends_at:end.toISOString(),all_day:!!e.allDay,category_id:maps.catByKey.get(e.categoryId)?.id||null,project_id:maps.projByKey.get(e.projectId)?.id||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updated_at:e.updatedAt||new Date().toISOString()};
+}
+function mergeRemoteEntities(remote=[],local=[],kind='task'){
+  const localById=new Map((local||[]).filter(x=>x?.id).map(x=>[x.id,x])),seen=new Set();
+  const out=(remote||[]).map(x=>{
+    seen.add(x.id);
+    return pendingEntityMutations.has(kind+':'+x.id)&&localById.has(x.id)?localById.get(x.id):x;
+  });
+  for(const x of local||[])if(x?.id&&!seen.has(x.id))out.push(x);
+  return out;
+}
+async function persistEntityMutation(detail){
+  const kind=String(detail?.entityType||'');
+  if(!['task','event'].includes(kind)||!detail?.entityKey)return;
+  const table=kind==='task'?'isabella_tasks':'isabella_events';
+  if(detail.action==='delete'){
+    const {error}=await sb.from(table).delete().eq('user_id',user.id).eq('client_key',detail.entityKey);
+    if(error)throw error;
+    return;
+  }
+  if(!detail.after)return;
+  const maps=await ensureTaxonomy(app.getState());
+  const row=kind==='task'?taskRow({...detail.after,updatedAt:detail.after.updatedAt||new Date().toISOString()},maps):eventRow({...detail.after,updatedAt:detail.after.updatedAt||new Date().toISOString()},maps);
+  const {error}=await sb.from(table).upsert(row,{onConflict:'user_id,client_key'});
+  if(error)throw error;
+}
 async function pushState(state,maps){
   const tombstones=[
     ...(state.deletedTaskIds||[]).map(client_key=>({user_id:user.id,entity_type:'task',client_key,deleted_at:new Date().toISOString()})),
@@ -108,25 +142,18 @@ async function pushState(state,maps){
     const {error}=await sb.from('isabella_deleted_items').upsert(tombstones,{onConflict:'user_id,entity_type,client_key'});
     if(error)throw error;
   }
-  const tasks=(state.tasks||[]).map(t=>{
-    if(t.done&&!t.completedAt)t.completedAt=new Date().toISOString();
-    if(!t.done)t.completedAt=null;
-    return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date||null,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),reminder_time:t.date?(t.reminderTime||null):null,category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}};
-  });
+  const tasks=(state.tasks||[]).map(t=>taskRow(t,maps));
   if(tasks.length){
-    const {error}=await sb.from('isabella_tasks').upsert(tasks,{onConflict:'user_id,client_key'});
+    const {error}=await sb.from('isabella_tasks').upsert(tasks,{onConflict:'user_id,client_key',ignoreDuplicates:true});
     if(error)throw error;
   }
   if((state.deletedTaskIds||[]).length){
     const {error}=await sb.from('isabella_tasks').delete().eq('user_id',user.id).in('client_key',state.deletedTaskIds);
     if(error)throw error;
   }
-  const events=(state.events||[]).map(e=>{
-    const start=localDateTime(e.date,e.start),end=new Date(start.getTime()+((e.duration||60)*60000));
-    return {user_id:user.id,client_key:e.id,title:e.title,starts_at:start.toISOString(),ends_at:end.toISOString(),all_day:!!e.allDay,category_id:maps.catByKey.get(e.categoryId)?.id||null,project_id:maps.projByKey.get(e.projectId)?.id||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}};
-  });
+  const events=(state.events||[]).map(e=>eventRow(e,maps));
   if(events.length){
-    const {error}=await sb.from('isabella_events').upsert(events,{onConflict:'user_id,client_key'});
+    const {error}=await sb.from('isabella_events').upsert(events,{onConflict:'user_id,client_key',ignoreDuplicates:true});
     if(error)throw error;
   }
   if((state.deletedEventIds||[]).length){
@@ -191,14 +218,14 @@ async function pullState(local,maps){
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
   const deletedTaskIds=new Set(local.deletedTaskIds||[]);
   const deletedEventIds=new Set(local.deletedEventIds||[]);
-  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date||null,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),reminderTime:t.due_date&&t.reminder_time?String(t.reminder_time).slice(0,5):null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{}}));
-  const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{}}});
+  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date||null,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),reminderTime:t.due_date&&t.reminder_time?String(t.reminder_time).slice(0,5):null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updatedAt:t.updated_at||null}));
+  const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updatedAt:e.updated_at||null}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
   const mergedMessages=mergeConversationMessages(remoteMessages,local.messages||[]);
   const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?{...(local.feedPreferences||{}),...pref.value}:local.feedPreferences;
   const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(local.assistantPreferences||{}),...assistantPref.value}:local.assistantPreferences;
-  return {...local,tasks:remoteTasks,events:remoteEvents,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:local.messages};
+  return {...local,tasks:mergeRemoteEntities(remoteTasks,local.tasks||[],'task'),events:mergeRemoteEntities(remoteEvents,local.events||[],'event'),memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:local.messages};
 }
 async function updateMessageMetadata(clientKey,patch){
   if(!user||!clientKey||!patch||typeof patch!=='object')return false;
@@ -233,32 +260,29 @@ async function pullConversation(){
 }
 async function recordProposalFeedback(detail){
   try{
-    await sb.from('isabella_proposal_feedback').insert({
-      user_id:user.id,
-      outcome:detail.outcome,
-      proposal:detail.proposal||{}
-    });
+    const proposal=detail.proposal||{};
+    await sb.from('isabella_proposal_feedback').insert({user_id:user.id,outcome:detail.outcome,proposal});
+    if(proposal.request_id&&['accepted','rejected'].includes(String(detail.outcome||''))){
+      await sb.rpc('minds_resolve_shadow_decision',{p_request_id:proposal.request_id,p_outcome:detail.outcome,p_reviewed:proposal});
+    }
   }catch{}
 }
 async function recordActivity(detail){
+  const pendingKey=String(detail.entityType||'')+':'+String(detail.entityKey||'');
+  if(['task','event'].includes(String(detail.entityType||'')))pendingEntityMutations.add(pendingKey);
   try{
-    const row={
-      user_id:user.id,
-      entity_type:detail.entityType,
-      entity_key:detail.entityKey,
-      action:detail.action,
-      source:detail.source||'manual',
-      before_state:detail.before||null,
-      after_state:detail.after||null
-    };
+    const row={user_id:user.id,entity_type:detail.entityType,entity_key:detail.entityKey,action:detail.action,source:detail.source||'manual',before_state:detail.before||null,after_state:detail.after||null};
     if(detail.action==='delete'){
-      await sb.from('isabella_deleted_items').upsert({user_id:user.id,entity_type:detail.entityType,client_key:detail.entityKey,deleted_at:new Date().toISOString()},{onConflict:'user_id,entity_type,client_key'});
-      const table=detail.entityType==='task'?'isabella_tasks':'isabella_events';
-      await sb.from(table).delete().eq('user_id',user.id).eq('client_key',detail.entityKey);
+      const {error}=await sb.from('isabella_deleted_items').upsert({user_id:user.id,entity_type:detail.entityType,client_key:detail.entityKey,deleted_at:new Date().toISOString()},{onConflict:'user_id,entity_type,client_key'});
+      if(error)throw error;
     }
-    await sb.from('isabella_activity_log').insert(row);
+    await persistEntityMutation(detail);
+    const {error}=await sb.from('isabella_activity_log').insert(row);
+    if(error)throw error;
   }catch(e){
-    setStatus('Cambio local guardado · historial pendiente');
+    setStatus('Cambio local guardado · sincronización pendiente: '+apiError(e));
+  }finally{
+    pendingEntityMutations.delete(pendingKey);
   }
 }
 async function syncNow(opts={}){

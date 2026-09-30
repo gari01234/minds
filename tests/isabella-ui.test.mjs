@@ -551,13 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.59'));
+  assert.ok(shell.includes('Build 2026.09.30.60'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=59'));
-  assert.ok(index.includes('app.js?v=67'));
+  assert.ok(index.includes('shell.js?v=60'));
+  assert.ok(index.includes('app.js?v=68'));
+  assert.ok(index.includes('sync.js?v=pwa23'));
   assert.ok(index.includes('ai.js?v=41'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v66'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v67'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -913,4 +914,27 @@ test('Build 59 exposes Continuity and keeps the mobile More drawer scrollable',(
   assert.ok(css.includes('overflow-y:auto'));
   assert.ok(css.includes('-webkit-overflow-scrolling:touch'));
   assert.ok(css.includes('.drawer-head{position:sticky'));
+});
+
+
+test('Build 60 persists explicit task and event mutations without stale bulk overwrite',()=>{
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(sync.includes('async function persistEntityMutation(detail)'));
+  assert.ok(sync.includes("pendingEntityMutations.add(pendingKey)"));
+  assert.ok(sync.includes("await persistEntityMutation(detail)"));
+  assert.ok(sync.includes("upsert(tasks,{onConflict:'user_id,client_key',ignoreDuplicates:true})"));
+  assert.ok(sync.includes("upsert(events,{onConflict:'user_id,client_key',ignoreDuplicates:true})"));
+  assert.ok(sync.includes("tasks:mergeRemoteEntities(remoteTasks,local.tasks||[],'task')"));
+  assert.ok(sync.includes("events:mergeRemoteEntities(remoteEvents,local.events||[],'event')"));
+  assert.ok(sync.includes("updatedAt:t.updated_at||null"));
+  assert.ok(sync.includes("updatedAt:e.updated_at||null"));
+});
+
+test('Build 60 resolves Shadow Agency observations from reviewed proposals',()=>{
+  const sync=read('apps/isabella/sync.js'),app=read('apps/isabella/app.js'),chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(sync.includes("minds_resolve_shadow_decision"));
+  assert.ok(chat.includes("minds_record_shadow_decision"));
+  assert.ok(chat.includes("request_id:proposal.request_id||crypto.randomUUID()"));
+  assert.ok(app.includes("card('Shadow Agency'"));
+  assert.ok(app.includes("from('minds_shadow_decisions')"));
 });
