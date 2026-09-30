@@ -44,7 +44,7 @@ function normalizeText(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function simpleAgendaMutation(message:string){
+function simpleAgendaMutation(message){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
   const action=/\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|mueve|mover|cambia|cambiar|reprograma|reprogramar|borra|borrar|elimina|eliminar|completa|completar|archiva|archivar|add|create|move|change|delete|remove|complete|archive|erstelle|hinzufügen|verschiebe|ändern|lösche|erledige)\b/i.test(t);
@@ -1245,9 +1245,9 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
   if((attachments||[]).length)score++;
   const deep=/\b(analiza|analizar|investiga|investigar|compara|comparar|estrategia|arquitectura|teor[ií]a|ensayo|proyecto|diseña|diseñar|planifica|planificar|documento|informe|investigaci[oó]n|profund|exhaustiv|complej|sintetiza|síntesis|sintesis|decisi[oó]n)\b/i.test(t);
   if(deep)score+=2;
-  if(background)return {depth:"background",lexical:8,semantic:5,entities:8,claims:16,feedback:6,activity:14,indexBatch:16,rounds:3,compact:64000,reasoning:"low",maxOutput:1500};
-  if(score>=3)return {depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:140000,reasoning:"high",maxOutput:3600};
-  if(score>=1)return {depth:"standard",lexical:14,semantic:10,entities:12,claims:32,feedback:16,activity:24,indexBatch:32,rounds:5,compact:80000,reasoning:"medium",maxOutput:2800};
+  if(background)return {depth:"background",lexical:8,semantic:5,entities:8,claims:16,feedback:6,activity:14,indexBatch:16,rounds:3,compact:120000,reasoning:"low",maxOutput:1500};
+  if(score>=3)return {depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
+  if(score>=1)return {depth:"standard",lexical:14,semantic:10,entities:12,claims:32,feedback:16,activity:24,indexBatch:32,rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   return {depth:"light",lexical:8,semantic:5,entities:8,claims:16,feedback:8,activity:14,indexBatch:20,rounds:3,compact:48000,reasoning:"low",maxOutput:1800};
 }
 

@@ -1074,7 +1074,7 @@ test('Build 64 bounds the OpenAI working conversation while preserving full Supa
 test('Build 64 gives light turns a lower-latency cognitive budget without weakening deep turns',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
   assert.ok(chat.includes('return {depth:"light",lexical:8,semantic:5,entities:8,claims:16,feedback:8,activity:14,indexBatch:20,rounds:3,compact:48000,reasoning:"low",maxOutput:1800}'));
-  assert.ok(chat.includes('depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:140000,reasoning:"high"'));
+  assert.ok(chat.includes('depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:180000,reasoning:"high"'));
   assert.ok(chat.includes('fastAgenda)budget={...budget,depth:"light"'));
   assert.ok(chat.includes('rounds:2,compact:32000,reasoning:"low",maxOutput:1200'));
 });
