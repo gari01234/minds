@@ -91,6 +91,35 @@ async function askFastStream(message,state,options={}){
   if(fallback){options.onTextReset?.();return null}
   return result;
 }
+async function askDirectStream(message,state,options={},replyContext=''){
+  const {data:{session}}=await sb.auth.getSession();if(!session)return null;
+  const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
+  const response=await fetch(cfg.url+'/functions/v1/isabella-chat',{
+    method:'POST',
+    headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
+    body:JSON.stringify({
+      message:String(message),
+      context:{...compact(state),reply_context:replyContext},
+      background:false,attachments:[],stream:true
+    })
+  });
+  if(response.status===409){options.onTextReset?.();return null}
+  if(!response.ok||!response.body)throw new Error('No pude iniciar la respuesta en streaming.');
+  const reader=response.body.getReader(),decoder=new TextDecoder();
+  let buffer='',result=null,streamError=null,streamedText='';
+  while(true){
+    const {done,value}=await reader.read();if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    buffer=parseFastSse(buffer,event=>{
+      if(event?.type==='status')options.onProgress?.(event);
+      else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
+      else if(event?.type==='result')result={...event,streamed_text:streamedText};
+      else if(event?.type==='error')streamError=event.message||'stream_error';
+    });
+  }
+  if(streamError){options.onTextReset?.();throw new Error(streamError)}
+  return result;
+}
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
@@ -103,6 +132,10 @@ async function ask(message,state,options={}){
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
     }catch{/* The full Isabella path remains the safety fallback. */}
+  }
+  if(!options.background&&!attachments.length){
+    const streamed=await askDirectStream(message,state,options,replyContext);
+    if(streamed)return streamed;
   }
   const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
   if(error)throw error;

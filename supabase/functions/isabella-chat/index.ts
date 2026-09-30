@@ -52,6 +52,24 @@ function simpleAgendaMutation(message){
   return action&&object;
 }
 
+function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
+  if(background||attachments.length||simpleAgendaMutation(message))return false;
+  if(String(route?.complexity||"light")!=="light")return false;
+  if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
+  return true;
+}
+function parseOpenAISse(buffer:string,onEvent:(event:any)=>void){
+  let rest=buffer;
+  while(true){
+    const idx=rest.indexOf("\n\n");if(idx<0)break;
+    const block=rest.slice(0,idx);rest=rest.slice(idx+2);
+    const data=block.split("\n").filter(x=>x.startsWith("data:")).map(x=>x.slice(5).trim()).join("\n");
+    if(!data||data==="[DONE]")continue;
+    try{onEvent(JSON.parse(data))}catch{}
+  }
+  return rest;
+}
+
 function localTemporalContext(timeZone:string){
   const zone=String(timeZone||"Europe/Berlin");
   const now=new Date();
@@ -1598,6 +1616,9 @@ Deno.serve(async (req: Request) => {
   const context = body?.context || {};
   const background = !!body?.background;
   const route=await routeRequest(req,effectiveMessage,apiKey,background,context);
+  const wantsStream=body?.stream===true;
+  const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background);
+  if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
   const fastAgenda=!background&&!attachments.length&&route.complexity==="light"&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
   if(fastAgenda)budget={...budget,depth:"light",lexical:4,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
@@ -1783,6 +1804,78 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     }catch(e){
       await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
     }
+  }
+
+  if(directTextStream){
+    const streamConversation=conversationInfo;
+    activeConversation=null;
+    const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
+    const encoder=new TextEncoder();
+    const sse=(type:string,payload:any={})=>encoder.encode(`event: ${type}\ndata: ${JSON.stringify({type,...payload})}\n\n`);
+    const responseStream=new ReadableStream({
+      async start(controller){
+        let finalText="",completed:any=null,buffer="";
+        const startedAt=Date.now();
+        const send=(type:string,payload:any={})=>controller.enqueue(sse(type,payload));
+        try{
+          send("status",{phase:"model",label:"Respondiendo…"});
+          const openai=await fetch("https://api.openai.com/v1/responses",{
+            method:"POST",
+            headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
+            body:JSON.stringify({
+              model,
+              ...(streamConversation.id?{conversation:streamConversation.id}:{}),
+              instructions:transientInstructions(system,JSON.parse(dynamicContext)),
+              reasoning:{effort:budget.reasoning},
+              max_output_tokens:budget.maxOutput,
+              prompt_cache_options:{mode:"implicit",ttl:"30m"},
+              ...(streamConversation.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
+              stream:true,
+              input:[{role:"user",content:[{type:"input_text",text:effectiveMessage}]}]
+            })
+          });
+          if(!openai.ok||!openai.body)throw new Error("OpenAI stream "+openai.status);
+          const reader=openai.body.getReader(),decoder=new TextDecoder();
+          while(true){
+            const {done,value}=await reader.read();if(done)break;
+            buffer+=decoder.decode(value,{stream:true});
+            buffer=parseOpenAISse(buffer,(event:any)=>{
+              if(event?.type==="response.output_text.delta"){
+                const delta=String(event.delta||"");if(!delta)return;
+                finalText+=delta;send("text_delta",{delta});
+              }else if(event?.type==="response.completed"){
+                completed=event.response;
+              }else if(event?.type==="error"){
+                throw new Error(event?.message||"OpenAI stream error");
+              }
+            });
+          }
+          for(const intent of standingIntents||[]){
+            if(!normalizeText(finalText).includes(normalizeText(intent.reminder_text))){
+              const suffix="\n\nMe pediste que te recordara: "+intent.reminder_text;
+              finalText+=suffix;send("text_delta",{delta:suffix});
+            }
+          }
+          if(!finalText.trim())throw new Error("empty_stream_response");
+          await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
+          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:null,sofia_consulted:false,work_consulted:false,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          send("result",{
+            reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
+            standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
+            quick_replies:[],pending_intent:null,sources:[],artifacts:[],conversation_id:streamConversation.id||null,
+            direct_stream:true,streamed_reply:true
+          });
+        }catch(e){
+          const detail=e instanceof Error?e.message:String(e);
+          await finishAgentRun(req,run,"error",{rounds:1,tools:[],direct_stream:true},detail);
+          send("error",{message:detail});
+        }finally{
+          await closeConversation(supabaseClient(req),streamConversation);
+          controller.close();
+        }
+      }
+    });
+    return new Response(responseStream,{headers:{...cors,"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no"}});
   }
 
   const fastAgendaToolNames=new Set(["create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar"]);

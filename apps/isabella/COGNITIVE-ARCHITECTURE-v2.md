@@ -156,3 +156,16 @@ Transport is server-sent events. The browser receives progressive status events 
 This is intentionally not yet universal token streaming for deep conversational answers. Build 65 streams the fast action lifecycle where early progress is safe and useful, while complex answers continue through the existing buffered path. OpenAI Responses streaming semantics are used directly rather than simulated client-side delays. Agent-run and usage logging use the separate `isabella_fast_action` feature so production latency and Shadow acceptance can be compared against Build 64's two-round path.
 
 The architectural invariant remains: speed may remove redundant rounds only when semantic uncertainty is already low. Any unresolved context automatically promotes the turn back to full Isabella.
+
+
+## Build 66 — Full Response Streaming v0.1
+
+Build 66 extends real streaming from the one-round Fast Action path to ordinary Isabella conversation while preserving the existing tool and reasoning architecture. The server accepts an explicit streaming request only when the typed router classifies the turn as light and no attachment, agenda mutation, web lookup, Work context, Sofía context, project context or deep-memory retrieval is required. Eligible turns use the normal Isabella system prompt, temporal context, retrieved lightweight memory, persistent OpenAI Conversation and cognitive budget; only the transport changes.
+
+Eligible responses call the OpenAI Responses API with `stream=true` and forward semantic `response.output_text.delta` events through authenticated server-sent events. The browser renders those deltas into the same ephemeral streaming bubble introduced in Build 65. Partial text is never written to the synchronized conversation state. When the upstream response completes, MINDS emits one canonical result containing the complete reply; only that completed reply is persisted by the normal UI path.
+
+Tool-bearing and context-heavy turns deliberately refuse direct text streaming with an HTTP 409 fallback signal. The browser then invokes the existing buffered Isabella runtime unchanged. This protects multi-round Work, research, document, memory, mutation and specialist flows from being weakened merely to expose earlier text. In other words, Build 66 streams when the answer is already safe to expose incrementally and keeps full orchestration whenever future tool evidence may still change the answer.
+
+Standing Intents retain their delivery semantics in the streaming path. If the model fails to integrate an activated reminder, the server appends and streams the reminder before emitting the final canonical result. OpenAI Conversation leases are held for the duration of the stream and released only after completion or failure, preventing concurrent-turn corruption.
+
+Usage and agent-run metadata now distinguish `direct_stream=true` and `ttft_streamed=true`, allowing MINDS to compare perceived latency against the buffered path in production. Build 66 does not yet stream intermediate claims from evidence-dependent research; those turns expose progress through Isabella's working state but remain buffered until their evidentiary pipeline is complete.

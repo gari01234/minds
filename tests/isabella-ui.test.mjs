@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.65'));
+  assert.ok(shell.includes('Build 2026.09.30.66'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=65'));
+  assert.ok(index.includes('shell.js?v=66'));
   assert.ok(index.includes('app.js?v=72'));
   assert.ok(index.includes('sync.js?v=pwa25'));
-  assert.ok(index.includes('ai.js?v=43'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v72'"));
+  assert.ok(index.includes('ai.js?v=44'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v73'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1164,4 +1164,51 @@ test('Build 65 config keeps the streaming function JWT-protected',()=>{
   assert.ok(cfg.includes('entrypoint = "./functions/isabella-fast-stream/index.ts"'));
   const block=cfg.slice(cfg.indexOf('[functions.isabella-fast-stream]'),cfg.indexOf('[functions.sofia-chat]'));
   assert.ok(block.includes('verify_jwt = true'));
+});
+
+
+test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('function directTextStreamEligible'));
+  assert.ok(chat.includes('wantsStream=body?.stream===true'));
+  assert.ok(chat.includes('response.output_text.delta'));
+  assert.ok(chat.includes('stream:true'));
+  assert.ok(chat.includes('"Content-Type":"text/event-stream; charset=utf-8"'));
+  assert.ok(chat.includes('direct_stream:true'));
+  assert.ok(chat.includes('ttft_streamed:true'));
+  assert.ok(chat.includes('tools:[]'));
+});
+
+test('Build 66 refuses streaming when tools or deep context may be required',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message))return false'));
+  assert.ok(chat.includes('if(String(route?.complexity||"light")!=="light")return false'));
+  assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
+  assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
+  assert.ok(chat.includes('const tools=background?['));
+  assert.ok(chat.includes('name:"orchestrate_specialists"'));
+  assert.ok(chat.includes('name:"read_work_file"'));
+});
+
+test('Build 66 client tries text streaming before buffered Isabella and preserves fallback',()=>{
+  const ai=read('apps/isabella/ai.js');
+  assert.ok(ai.includes('async function askDirectStream'));
+  assert.ok(ai.includes("Accept:'text/event-stream'"));
+  assert.ok(ai.includes('stream:true'));
+  assert.ok(ai.includes('if(response.status===409)'));
+  assert.ok(ai.includes("event?.type==='text_delta'"));
+  const stream=ai.indexOf('askDirectStream(message,state');
+  const buffered=ai.indexOf("sb.functions.invoke('isabella-chat'",stream);
+  assert.ok(stream>0&&buffered>stream);
+});
+
+test('Build 66 never persists partial streamed text and final result remains canonical',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("el.className='message assistant message-streaming'"));
+  assert.ok(app.includes('clearAssistantStream();'));
+  assert.ok(chat.includes('send("result",{'));
+  assert.ok(chat.includes('reply:finalText.trim()'));
+  assert.ok(chat.includes('standing_intent_delivery'));
+  assert.ok(chat.includes('await closeConversation(supabaseClient(req),streamConversation)'));
 });
