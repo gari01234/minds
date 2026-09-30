@@ -130,3 +130,16 @@ Proactivity is serialized. Only one post-sync proactive cycle may run at a time,
 Temporal context is now explicit end-to-end. The browser sends current local time and daypart, while `isabella-chat` independently computes server-side local date/time for the supplied IANA timezone and exposes that server result as authoritative context. Historical greetings are explicitly non-authoritative; Isabella must not infer the present daypart from an earlier “buenas noches” or similar conversational residue.
 
 Build 63 intentionally adds no new autonomous or multi-agent capability. Its purpose is to restore coherent behavior before continuing the agent roadmap.
+
+
+## Build 64 — Fast Path v0.1
+
+Build 64 introduces a bounded low-latency path for ordinary Isabella interactions while preserving the full cognitive architecture for complex work. Production observation before this build showed successful Isabella chat runs at roughly 13.5 seconds median latency, with straightforward task creation commonly requiring three model rounds. The active OpenAI Conversation had also grown to more than one hundred thousand input tokens per model call even for light requests.
+
+The OpenAI Conversation is now explicitly a working window rather than the archive of record. Full conversational history remains in Supabase. When 48 additional persisted messages have accumulated since the current working conversation was created, MINDS creates a fresh OpenAI Conversation, seeds it with the 24 most recent user/assistant messages, archives the previous OpenAI conversation reference in metadata and continues without deleting historical messages. This keeps local conversational continuity while long-range recall continues to come from Active Memory, checkpoints, entities, Commitments and explicit retrieval.
+
+Light turns now use low reasoning effort and a lower compaction threshold; standard and deep requests retain medium/high reasoning and their broader retrieval budgets. A dedicated fast-agenda path recognizes short, explicit task/event mutations. On that path, MINDS skips unrelated long-term recall, model claims, Skills, Commitments, Work prefetch, Sofía and checkpoint generation, while retaining recent conversation, temporal context, taxonomy, standing intents and the narrow set of agenda tools required to understand and prepare the requested mutation.
+
+Skills remain available for non-trivial workflows, but complete one-shot calendar/task operations no longer load the `capturar-compromiso` procedure merely to restate a tool schema already present in the runtime. This removes an unnecessary model round without changing the confirmation policy: persistent mutations still require explicit user review.
+
+Agent-run and AI-usage metadata now records whether a turn used the fast path and whether the OpenAI working conversation rotated, so latency changes can be measured against real production use rather than inferred from architecture alone. Build 64 does not alter the deep Work, research, Readings/Sofía or specialist orchestration paths.

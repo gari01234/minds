@@ -44,6 +44,14 @@ function normalizeText(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function simpleAgendaMutation(message:string){
+  const t=normalizeText(message);
+  if(!t||t.length>320)return false;
+  const action=/\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|mueve|mover|cambia|cambiar|reprograma|reprogramar|borra|borrar|elimina|eliminar|completa|completar|archiva|archivar|add|create|move|change|delete|remove|complete|archive|erstelle|hinzufügen|verschiebe|ändern|lösche|erledige)\b/i.test(t);
+  const object=/\b(tarea|task|termin|cita|reunión|reunion|evento|event|recordatorio|reminder|aufgabe|besprechung|termin)\b/i.test(t);
+  return action&&object;
+}
+
 function localTemporalContext(timeZone:string){
   const zone=String(timeZone||"Europe/Berlin");
   const now=new Date();
@@ -1237,10 +1245,10 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
   if((attachments||[]).length)score++;
   const deep=/\b(analiza|analizar|investiga|investigar|compara|comparar|estrategia|arquitectura|teor[ií]a|ensayo|proyecto|diseña|diseñar|planifica|planificar|documento|informe|investigaci[oó]n|profund|exhaustiv|complej|sintetiza|síntesis|sintesis|decisi[oó]n)\b/i.test(t);
   if(deep)score+=2;
-  if(background)return {depth:"background",lexical:8,semantic:5,entities:8,claims:16,feedback:6,activity:14,indexBatch:16,rounds:3,compact:120000,reasoning:"low",maxOutput:1500};
-  if(score>=3)return {depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
-  if(score>=1)return {depth:"standard",lexical:14,semantic:10,entities:12,claims:32,feedback:16,activity:24,indexBatch:32,rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
-  return {depth:"light",lexical:10,semantic:7,entities:10,claims:24,feedback:10,activity:18,indexBatch:24,rounds:4,compact:120000,reasoning:"medium",maxOutput:2400};
+  if(background)return {depth:"background",lexical:8,semantic:5,entities:8,claims:16,feedback:6,activity:14,indexBatch:16,rounds:3,compact:64000,reasoning:"low",maxOutput:1500};
+  if(score>=3)return {depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:140000,reasoning:"high",maxOutput:3600};
+  if(score>=1)return {depth:"standard",lexical:14,semantic:10,entities:12,claims:32,feedback:16,activity:24,indexBatch:32,rounds:5,compact:80000,reasoning:"medium",maxOutput:2800};
+  return {depth:"light",lexical:8,semantic:5,entities:8,claims:16,feedback:8,activity:14,indexBatch:20,rounds:3,compact:48000,reasoning:"low",maxOutput:1800};
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
@@ -1590,26 +1598,28 @@ Deno.serve(async (req: Request) => {
   const context = body?.context || {};
   const background = !!body?.background;
   const route=await routeRequest(req,effectiveMessage,apiKey,background,context);
+  const fastAgenda=!background&&!attachments.length&&route.complexity==="light"&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
+  if(fastAgenda)budget={...budget,depth:"light",lexical:4,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const initialSemantic=!background&&!!route.deep_memory;
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req, effectiveMessage),
-    longTermRecall(req, effectiveMessage,budget.lexical),
-    recentActivity(req,budget.activity),
-    initialSemantic?semanticRecall(req, effectiveMessage, apiKey,budget.semantic,budget.indexBatch):Promise.resolve([]),
-    recentProposalFeedback(req,budget.feedback),
-    entityRecall(req, effectiveMessage,budget.entities),
-    background?Promise.resolve([]):skillCatalog(req),
-    personalModel(req,budget.claims),
-    personalModelPolicy(req),
+    fastAgenda?Promise.resolve([]):longTermRecall(req, effectiveMessage,budget.lexical),
+    fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
+    initialSemantic&&!fastAgenda?semanticRecall(req, effectiveMessage, apiKey,budget.semantic,budget.indexBatch):Promise.resolve([]),
+    fastAgenda?Promise.resolve([]):recentProposalFeedback(req,budget.feedback),
+    fastAgenda?Promise.resolve([]):entityRecall(req, effectiveMessage,budget.entities),
+    background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req),
+    fastAgenda?Promise.resolve([]):personalModel(req,budget.claims),
+    fastAgenda?Promise.resolve(null):personalModelPolicy(req),
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
-    background?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
-    !background&&route.project?searchWork(req,{project:route.project,query:effectiveMessage}):Promise.resolve(null),
-    !background&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
-    background?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
+    background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
+    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage}):Promise.resolve(null),
+    !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
+    background||fastAgenda?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
   const recent = mergeRecentConversations(recentDb, context.recent_local_conversation || [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
@@ -1646,7 +1656,7 @@ Un Commitment puede incluir last_continuity cuando el Continuity Engine haya rel
 memory_checkpoint.open_loops contiene candidatos derivados de la conversación, no compromisos aceptados. Nunca promociones un open_loop silenciosamente. Si el usuario dice explícitamente que no quiere perder algo, que lo mantengamos vivo, o confirma que un asunto abierto merece continuidad, usa propose_commitment y deja que la interfaz lo revise. Si elevas exactamente un open_loop visible en memory_checkpoint, conserva su procedencia usando memory_checkpoint.id y el texto exacto del open_loop. Usa search_commitments cuando el usuario pregunte qué sigue abierto, qué estamos manteniendo vivo o haga referencia a un objetivo persistente que no aparezca ya en active_commitments.
 
 SKILLS:
-Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. No cargues una skill para saludos, preguntas triviales o conversación general. Puedes cargar más de una solo si realmente son complementarias.
+Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo no trivial que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. En turnos ligeros el catálogo puede omitirse deliberadamente para reducir latencia. No cargues una skill para saludos, conversación general ni operaciones directas y completas de calendario/tareas como crear una tarea con título y fecha ya dados, moverla, completarla o borrarla; usa directamente las herramientas de agenda. Puedes cargar más de una solo si realmente son complementarias.
 Si el usuario te corrige repetidamente sobre el mismo procedimiento, o pide explícitamente convertir una forma de trabajar en habilidad reutilizable, usa propose_skill. Una Skill propuesta no queda activa hasta que el usuario la revise y confirme.
 Catálogo disponible:
 ${JSON.stringify((skills||[]).map((s:any)=>({slug:s.slug,name:s.name,description:s.description,version:s.version})))}
@@ -1775,10 +1785,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     }
   }
 
+  const fastAgendaToolNames=new Set(["create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar"]);
+  const fastAgendaTools=calendarTools.filter((t:any)=>fastAgendaToolNames.has(String(t?.name||"")));
   const tools=background?[
     {type:"web_search",search_context_size:"low"},
     ...calendarTools.filter((t:any)=>["search_memory","search_calendar"].includes(String(t?.name||"")))
-  ]:[
+  ]:fastAgenda?fastAgendaTools:[
     {type:"web_search",search_context_size:"low"},
     {
       type:"function",
@@ -1891,7 +1903,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       })
     });
     payload=await response.json();
-    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic});
+    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated});
     if(!response.ok){
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed"},502);
@@ -2025,7 +2037,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"transient_v1",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,

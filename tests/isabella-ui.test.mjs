@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.63'));
+  assert.ok(shell.includes('Build 2026.09.30.64'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=63'));
+  assert.ok(index.includes('shell.js?v=64'));
   assert.ok(index.includes('app.js?v=71'));
   assert.ok(index.includes('sync.js?v=pwa25'));
   assert.ok(index.includes('ai.js?v=42'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v70'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v71'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1058,4 +1058,55 @@ test('Build 63 makes server-local time authoritative over historical greetings',
   assert.ok(chat.includes('current_daypart:temporal.current_daypart'));
   assert.ok(chat.includes('Los saludos y referencias temporales de mensajes anteriores son históricos'));
   assert.ok(chat.includes('El Feed de MINDS es situacional, personal y productivo'));
+});
+
+
+test('Build 64 bounds the OpenAI working conversation while preserving full Supabase history',()=>{
+  const conv=read('supabase/functions/_shared/conversations.ts');
+  assert.ok(conv.includes('ROTATE_EVERY_MESSAGES=48'));
+  assert.ok(conv.includes("from('conversation_messages').select('id',{count:'exact',head:true})"));
+  assert.ok(conv.includes("reason:'rolling_context_window'"));
+  assert.ok(conv.includes(".slice(-24).map"));
+  assert.ok(conv.includes("openai_rotation_message_count:messageCount"));
+  assert.ok(conv.includes("Full history remains in Supabase"));
+});
+
+test('Build 64 gives light turns a lower-latency cognitive budget without weakening deep turns',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('return {depth:"light",lexical:8,semantic:5,entities:8,claims:16,feedback:8,activity:14,indexBatch:20,rounds:3,compact:48000,reasoning:"low",maxOutput:1800}'));
+  assert.ok(chat.includes('depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:140000,reasoning:"high"'));
+  assert.ok(chat.includes('fastAgenda)budget={...budget,depth:"light"'));
+  assert.ok(chat.includes('rounds:2,compact:32000,reasoning:"low",maxOutput:1200'));
+});
+
+test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const a=chat.indexOf('function normalizeText');
+  const b=chat.indexOf('function localTemporalContext',a);
+  assert.ok(a>=0&&b>a);
+  const source=chat.slice(a,b);
+  const make=new Function(source+';return simpleAgendaMutation;');
+  const simple=make();
+  assert.equal(simple('Agrega para mañana una tarea: comprar una calculadora'),true);
+  assert.equal(simple('Verschiebe die Aufgabe auf morgen'),true);
+  assert.equal(simple('Investiga la arquitectura de Geoffrey Bawa'),false);
+  assert.equal(simple('¿Qué tal?'),false);
+  assert.ok(chat.includes('fastAgenda?fastAgendaTools'));
+  assert.ok(chat.includes('background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req)'));
+  assert.ok(chat.includes('!background&&!fastAgenda&&route.project?searchWork'));
+  const setStart=chat.indexOf('const fastAgendaToolNames=new Set(');
+  const setEnd=chat.indexOf(');',setStart);
+  const fastSet=chat.slice(setStart,setEnd);
+  assert.ok(fastSet.includes('"create_task"'));
+  assert.ok(fastSet.includes('"search_calendar"'));
+  assert.ok(!fastSet.includes('"load_skill"'));
+  assert.ok(!fastSet.includes('"delegate_specialist"'));
+});
+
+test('Build 64 exposes latency-path observability for real production measurement',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('fast_path:fastAgenda'));
+  assert.ok(chat.includes('conversation_rotated:!!conversationInfo.rotated'));
+  assert.ok(chat.includes('conversation_message_count:conversationInfo.messageCount||null'));
+  assert.ok(chat.includes('context_policy:"rolling_transient_v2"'));
 });
