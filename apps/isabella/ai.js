@@ -104,7 +104,7 @@ async function ask(message,state,options={}){
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
     }catch{/* The full Isabella path remains the safety fallback. */}
   }
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments}});
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};
