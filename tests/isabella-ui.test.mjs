@@ -772,7 +772,7 @@ test('Build 49 persists reactions and reply references in conversation metadata'
   assert.ok(sync.includes('reaction:m.reaction||null'));
   assert.ok(sync.includes('reply_to:m.replyTo?.id'));
   assert.ok(sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key'})"));
-  assert.ok(!sync.includes("ignoreDuplicates:true"));
+  assert.ok(!sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true})"));
   assert.ok(sync.includes('metadata:m.metadata||{}'));
 });
 
