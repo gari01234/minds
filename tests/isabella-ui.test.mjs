@@ -1082,7 +1082,7 @@ test('Build 64 gives light turns a lower-latency cognitive budget without weaken
 test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const a=chat.indexOf('function simpleAgendaMutation');
-  const b=chat.indexOf('function localTemporalContext',a);
+  const b=chat.indexOf('function directTextStreamEligible',a);
   assert.ok(a>=0&&b>a);
   const source=chat.slice(a,b);
   const make=new Function('normalizeText',source+';return simpleAgendaMutation;');
