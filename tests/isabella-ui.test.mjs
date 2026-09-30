@@ -952,7 +952,7 @@ test('Build 61 adds a bounded invisible specialist runtime without visible agent
   assert.ok(chat.includes('specialist_candidates:specialistCandidates(effectiveMessage,route)'));
   assert.ok(chat.includes('name:"delegate_specialist"'));
   assert.ok(chat.includes('specialistDelegations.length>=3'));
-  assert.ok(chat.includes('specialistFingerprints.has(fingerprint)'));
+  assert.ok(chat.includes('specialistCache.has(fingerprint)'));
   assert.ok(chat.includes('startAgentRun(req,"specialist_"+specialist'));
   assert.ok(chat.includes('Sofía NO forma parte de este runtime'));
   assert.ok(runtime.includes('specialist==="research"?[{type:"web_search"'));
