@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.64'));
+  assert.ok(shell.includes('Build 2026.09.30.65'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=64'));
-  assert.ok(index.includes('app.js?v=71'));
+  assert.ok(index.includes('shell.js?v=65'));
+  assert.ok(index.includes('app.js?v=72'));
   assert.ok(index.includes('sync.js?v=pwa25'));
-  assert.ok(index.includes('ai.js?v=42'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v71'"));
+  assert.ok(index.includes('ai.js?v=43'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v72'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1109,4 +1109,59 @@ test('Build 64 exposes latency-path observability for real production measuremen
   assert.ok(chat.includes('conversation_rotated:!!conversationInfo.rotated'));
   assert.ok(chat.includes('conversation_message_count:conversationInfo.messageCount||null'));
   assert.ok(chat.includes('context_policy:"rolling_transient_v2"'));
+});
+
+
+test('Build 65 uses a strict one-round create gate before full Isabella',()=>{
+  const ai=read('apps/isabella/ai.js');
+  const start=ai.indexOf('function fastCreateCandidate');
+  const end=ai.indexOf('function parseFastSse',start);
+  assert.ok(start>0&&end>start);
+  const source=ai.slice(start,end);
+  const make=new Function(source+';return fastCreateCandidate;'),fast=make();
+  assert.equal(fast('Agrega para mañana comprar una calculadora'),true);
+  assert.equal(fast('Agrega para el lunes, proyecto Bernried, imprimir planos Wagner'),true);
+  assert.equal(fast('Pon lo de Wagner para el lunes'),false);
+  assert.equal(fast('Agrega la tarea si no choca con el Kick-off'),false);
+  assert.equal(fast('Mueve la tarea de Wagner al lunes'),false);
+  assert.ok(ai.includes("/functions/v1/isabella-fast-stream"));
+  assert.ok(ai.includes("The full Isabella path remains the safety fallback"));
+});
+
+test('Build 65 fast action transport is true SSE and never executes persistent mutations',()=>{
+  const fast=read('supabase/functions/isabella-fast-stream/index.ts');
+  assert.ok(fast.includes('"Content-Type":"text/event-stream; charset=utf-8"'));
+  assert.ok(fast.includes('stream:true'));
+  assert.ok(fast.includes('response.function_call_arguments.delta'));
+  assert.ok(fast.includes('response.output_item.done'));
+  assert.ok(fast.includes('parallel_tool_calls:false'));
+  assert.ok(fast.includes('tool_choice:"required"'));
+  assert.ok(fast.includes('minds_record_shadow_decision'));
+  assert.ok(fast.includes('pending_user_confirmation')===false);
+  assert.ok(!fast.includes('from("isabella_tasks").insert'));
+  assert.ok(!fast.includes("from('isabella_tasks').insert"));
+  assert.ok(!fast.includes('from("isabella_events").insert'));
+  assert.ok(!fast.includes("from('isabella_events').insert"));
+  assert.ok(fast.includes('name:"escalate_to_full_isabella"'));
+});
+
+test('Build 65 streams useful acknowledgement without persisting partial chat text',()=>{
+  const fast=read('supabase/functions/isabella-fast-stream/index.ts');
+  const ai=read('apps/isabella/ai.js');
+  const app=read('apps/isabella/app.js');
+  assert.ok(fast.includes('send("text_delta",{delta:"Entendido. "})'));
+  assert.ok(fast.includes('streamed_reply:true'));
+  assert.ok(ai.includes("event?.type==='text_delta'"));
+  assert.ok(ai.includes('options.onTextDelta?.'));
+  assert.ok(app.includes('function streamAssistantDelta'));
+  assert.ok(app.includes("el.className='message assistant message-streaming'"));
+  assert.ok(app.includes('clearAssistantStream();say('));
+});
+
+test('Build 65 config keeps the streaming function JWT-protected',()=>{
+  const cfg=read('supabase/config.toml');
+  assert.ok(cfg.includes('[functions.isabella-fast-stream]'));
+  assert.ok(cfg.includes('entrypoint = "./functions/isabella-fast-stream/index.ts"'));
+  const block=cfg.slice(cfg.indexOf('[functions.isabella-fast-stream]'),cfg.indexOf('[functions.sofia-chat]'));
+  assert.ok(block.includes('verify_jwt = true'));
 });

@@ -46,12 +46,65 @@ function compact(state){
     }
   };
 }
+function fastCreateCandidate(message){
+  const t=String(message||'').trim().replace(/\s+/g,' ').toLowerCase();
+  if(!t||t.length>320||/[?¿]/.test(t))return false;
+  if(/\b(si|unless|excepto|salvo|depende|cuando tenga sentido|como antes|como hablamos|como dijimos|lo anterior|eso|esto|aquello|lo de)\b/i.test(t))return false;
+  if(/\b(y|además|también|also|und)\s+(agrega|añade|crea|pon|apunta|add|create|erstelle|füge)\b/i.test(t))return false;
+  return /\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|add|create|erstelle|hinzufügen|füge)\b/i.test(t);
+}
+function parseFastSse(buffer,onEvent){
+  let rest=buffer;
+  while(true){
+    const i=rest.indexOf('\n\n');if(i<0)break;
+    const block=rest.slice(0,i);rest=rest.slice(i+2);
+    const data=block.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim()).join('\n');
+    if(!data||data==='[DONE]')continue;
+    try{onEvent(JSON.parse(data))}catch{}
+  }
+  return rest;
+}
+async function askFastStream(message,state,options={}){
+  const {data:{session}}=await sb.auth.getSession();if(!session)return null;
+  const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
+  const response=await fetch(cfg.url+'/functions/v1/isabella-fast-stream',{
+    method:'POST',
+    headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
+    body:JSON.stringify({message:String(message),context:compact(state)})
+  });
+  if(response.status===409)return null;
+  if(!response.ok||!response.body)return null;
+  const reader=response.body.getReader(),decoder=new TextDecoder();
+  let buffer='',result=null,fallback=false,streamError=null,streamedText='';
+  while(true){
+    const {done,value}=await reader.read();if(done)break;
+    buffer+=decoder.decode(value,{stream:true});
+    buffer=parseFastSse(buffer,event=>{
+      if(event?.type==='status')options.onProgress?.(event);
+      else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
+      else if(event?.type==='result')result={...event,streamed_text:streamedText};
+      else if(event?.type==='fallback')fallback=true;
+      else if(event?.type==='error')streamError=event.message||'fast_stream_error';
+    });
+  }
+  if(streamError){options.onTextReset?.();throw new Error(streamError)}
+  if(fallback){options.onTextReset?.();return null}
+  return result;
+}
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
   const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[]}});
+  const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
+  if(!options.background&&!attachments.length&&!options.replyTo&&fastCreateCandidate(message)){
+    try{
+      const fast=await askFastStream(message,state,options);
+      if(fast)return fast;
+      options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
+    }catch{/* The full Isabella path remains the safety fallback. */}
+  }
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};

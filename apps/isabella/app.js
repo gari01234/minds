@@ -805,6 +805,18 @@ function setReplyTarget(id){
   setTimeout(()=>$('#chatInput')?.focus(),0);
 }
 function clearReplyTarget(){pendingReplyTo=null;renderReplyPreview()}
+let liveAssistantStream=null;
+function streamAssistantDelta(_delta,fullText){
+  const box=$('#messages');if(!box)return;
+  if(!liveAssistantStream){
+    const el=document.createElement('div');el.className='message assistant message-streaming';el.setAttribute('aria-live','polite');box.appendChild(el);liveAssistantStream=el;
+  }
+  liveAssistantStream.textContent=String(fullText||'');
+  requestAnimationFrame(()=>scrollAssistantToLatest(true));
+}
+function clearAssistantStream(){
+  liveAssistantStream?.remove();liveAssistantStream=null;
+}
 function say(role,text,meta={}){
   state.messages.push({
     id:uid(),role,text,at:new Date().toISOString(),reaction:null,
@@ -1426,11 +1438,12 @@ async function acknowledgeIntentDelivery(delivery){
 }
 async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
-  say('user',text||'📷 Foto',{attachments:copy,replyTo});clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
+  clearAssistantStream();say('user',text||'📷 Foto',{attachments:copy,replyTo});clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo});
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,onProgress:event=>{if(event?.label)orb('thinking',event.label)},onTextDelta:(delta,full)=>streamAssistantDelta(delta,full),onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
+      clearAssistantStream();
       if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.reply&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
@@ -1439,8 +1452,8 @@ async function handle(text,attachments=[],replyTo=null){
       else if(result?.proposal){state.pendingIntent=null;save();confirmProposal(result.proposal)}
       else save();
     }else say('assistant',localFallback(text));
-  }catch(e){say('assistant',e?.message||localFallback(text))}
-  finally{orb();setWorking($('#sendButton'),false)}
+  }catch(e){clearAssistantStream();say('assistant',e?.message||localFallback(text))}
+  finally{clearAssistantStream();orb();setWorking($('#sendButton'),false)}
 }
 let pendingChatFiles=[];
 const pendingChatUrls=new Map();

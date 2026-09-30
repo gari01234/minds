@@ -5,6 +5,10 @@ verify_jwt = true
 entrypoint = "./functions/isabella-chat/index.ts"
 import_map = "./functions/isabella-chat/deno.json"
 
+[functions.isabella-fast-stream]
+verify_jwt = true
+entrypoint = "./functions/isabella-fast-stream/index.ts"
+
 [functions.sofia-chat]
 verify_jwt = true
 entrypoint = "./functions/sofia-chat/index.ts"

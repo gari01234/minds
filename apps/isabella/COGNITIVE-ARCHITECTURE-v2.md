@@ -143,3 +143,16 @@ Light turns now use low reasoning effort and a lower compaction threshold; stand
 Skills remain available for non-trivial workflows, but complete one-shot calendar/task operations no longer load the `capturar-compromiso` procedure merely to restate a tool schema already present in the runtime. This removes an unnecessary model round without changing the confirmation policy: persistent mutations still require explicit user review.
 
 Agent-run and AI-usage metadata now records whether a turn used the fast path and whether the OpenAI working conversation rotated, so latency changes can be measured against real production use rather than inferred from architecture alone. Build 64 does not alter the deep Work, research, Readings/Sofía or specialist orchestration paths.
+
+
+## Build 65 — One-Round Fast Action + Streaming v0.1
+
+Build 65 adds a deliberately narrow one-round execution path for fully specified create actions. The path is not a lower-quality replacement for Isabella. It is a separate authenticated Edge Function, `isabella-fast-stream`, entered only for short explicit create instructions that contain no question, unresolved reference, conditional clause, multi-action conjunction, attachment or reply-to dependency. Updates, deletes, completions, references such as “lo de Wagner”, conditional instructions and anything that may require Work, memory or planning remain on the full Isabella path.
+
+The Fast Action function exposes only `create_task`, `create_event` and `escalate_to_full_isabella`. It uses one low-reasoning Responses API call with required, non-parallel function selection. The endpoint never writes Task/Event state. A successful model call becomes the same reviewed proposal shape used by Isabella, receives a stable request id, is recorded in Shadow Agency, and still requires the existing user confirmation UI before any persistent mutation can occur. If the narrow model is uncertain, it explicitly escalates and the browser transparently retries the full Isabella path.
+
+Transport is server-sent events. The browser receives progressive status events while the model is resolving the action and a transient assistant acknowledgement as soon as a task/event function call begins. Function arguments themselves are never exposed in the UI. Once the complete function-call item is available, the server builds the proposal deterministically and streams the final acknowledgement plus proposal. Partial streamed text is rendered only in an ephemeral DOM bubble; only the completed final message is written into Isabella's normal local/synced conversation state.
+
+This is intentionally not yet universal token streaming for deep conversational answers. Build 65 streams the fast action lifecycle where early progress is safe and useful, while complex answers continue through the existing buffered path. OpenAI Responses streaming semantics are used directly rather than simulated client-side delays. Agent-run and usage logging use the separate `isabella_fast_action` feature so production latency and Shadow acceptance can be compared against Build 64's two-round path.
+
+The architectural invariant remains: speed may remove redundant rounds only when semantic uncertainty is already low. Any unresolved context automatically promotes the turn back to full Isabella.
