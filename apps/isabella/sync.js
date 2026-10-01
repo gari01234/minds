@@ -4,7 +4,7 @@ const APP_SCOPE='isabella';
 const app=window.ISABELLA_APP;
 const $=s=>document.querySelector(s);
 const authButton=$('#authButton'),status=$('#syncStatus');
-let user=null,syncing=false,timer=null,hydrating=false,queuedSync=null;
+let user=null,syncing=false,timer=null,hydrating=false,queuedSync=null,realtimeChannel=null,realtimeTimer=null;
 const pendingEntityMutations=new Set();
 const setStatus=t=>{if(status)status.textContent=t};
 const localDateTime=(date,time)=>new Date(date+'T'+(time||'09:00')+':00');
@@ -19,14 +19,29 @@ function canonicalFeedPreferences(value={}){
   return {mode:'situational_personal',instructions:String(p.instructions||'').trim(),weatherLocation:String(p.weatherLocation||'').trim(),topics:[],customTopics:[],following:[],followGraph:[]};
 }
 function apiError(e){return e?.message||String(e||'Error desconocido')}
+function stopRealtime(){
+  if(realtimeTimer){clearTimeout(realtimeTimer);realtimeTimer=null}
+  if(realtimeChannel){try{sb.removeChannel(realtimeChannel)}catch{}realtimeChannel=null}
+}
+function startRealtime(){
+  stopRealtime();if(!user||!sb?.channel)return;
+  realtimeChannel=sb.channel('isabella-mission-'+user.id)
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversation_messages',filter:'user_id=eq.'+user.id},payload=>{
+      const row=payload?.new||{};
+      if(row.role!=='assistant'||row?.metadata?.source!=='mission_runtime')return;
+      clearTimeout(realtimeTimer);
+      realtimeTimer=setTimeout(()=>syncNow({pullOnly:true}),120);
+    })
+    .subscribe();
+}
 async function init(){
   if(!sb||!app){setStatus('Memoria local · Supabase no disponible');if(authButton)authButton.textContent='Memoria local';return}
   const {data,error}=await sb.auth.getSession();
   if(error){setStatus('No se pudo leer la sesión');return}
   user=data.session?.user||null;
   paintAuth();
-  if(user) await syncNow({initial:true});
-  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;paintAuth();if(user)setTimeout(()=>syncNow({initial:true}),0)});
+  if(user){await syncNow({initial:true});startRealtime()}
+  sb.auth.onAuthStateChange((_event,session)=>{stopRealtime();user=session?.user||null;paintAuth();if(user)setTimeout(async()=>{await syncNow({initial:true});startRealtime()},0)});
   window.addEventListener('isabella:state',()=>{if(hydrating||!user)return;clearTimeout(timer);timer=setTimeout(()=>syncNow({pushOnly:true}),900)});
   window.addEventListener('isabella:mutation',e=>{if(!user||!e.detail)return;recordActivity(e.detail)});
   window.addEventListener('isabella:proposal-feedback',e=>{if(!user||!e.detail)return;recordProposalFeedback(e.detail)});

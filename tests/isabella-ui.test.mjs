@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.09.30.67'));
+  assert.ok(shell.includes('Build 2026.10.01.68'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=67'));
-  assert.ok(index.includes('app.js?v=73'));
-  assert.ok(index.includes('sync.js?v=pwa25'));
+  assert.ok(index.includes('shell.js?v=68'));
+  assert.ok(index.includes('app.js?v=74'));
+  assert.ok(index.includes('sync.js?v=pwa26'));
   assert.ok(index.includes('ai.js?v=44'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v74'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v75'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1248,4 +1248,77 @@ test('Build 67 keeps mission work out of direct text streaming and visible insid
   assert.ok(app.includes('async function missionWorkspacePanel'));
   assert.ok(app.includes("card('Mission Workspaces'"));
   assert.ok(app.includes('Este workspace es un scratchpad operativo'));
+});
+
+
+test('Build 68 persists bounded Durable Mission Runs with leases, retries and user control',()=>{
+  const m=read('supabase/migrations/20261001064937_durable_mission_runtime_v01.sql');
+  assert.ok(m.includes('create table if not exists public.minds_mission_runs'));
+  assert.ok(m.includes('create table if not exists public.minds_mission_run_events'));
+  assert.ok(m.includes("status in ('queued','running','waiting_for_user','paused','completed','failed','cancelled')"));
+  assert.ok(m.includes('minds_mission_runs_one_live_per_workspace'));
+  assert.ok(m.includes('function public.minds_start_mission_run'));
+  assert.ok(m.includes('function public.minds_claim_mission_runs'));
+  assert.ok(m.includes('function public.minds_apply_mission_step'));
+  assert.ok(m.includes('function public.minds_fail_mission_step'));
+  assert.ok(m.includes("lease_until=now()+interval '4 minutes'"));
+  assert.ok(m.includes("v_outcome='continue' and v_run.iteration>=v_run.max_iterations"));
+  assert.ok(m.includes("v_outcome:='waiting_for_user'"));
+  assert.ok(m.includes("event_type in ('queued','claimed','checkpoint','waiting_for_user'"));
+  assert.ok(m.includes("'minds-mission-runner'"));
+});
+
+test('Build 68 mission runner advances one checkpoint at a time and cannot mutate external user state',()=>{
+  const r=read('supabase/functions/isabella-mission-runner/index.ts');
+  assert.ok(r.includes('minds_claim_mission_runs'));
+  assert.ok(r.includes('minds_apply_mission_step'));
+  assert.ok(r.includes('minds_fail_mission_step'));
+  assert.ok(r.includes('feature:"mission_runtime"'));
+  assert.ok(r.includes('tools:[{type:"web_search"'));
+  assert.ok(r.includes('Advance this mission by one bounded, materially useful checkpoint'));
+  assert.ok(r.includes('Do not create or modify tasks, events, routines, personal memory, Work claims, files or external systems.'));
+  assert.ok(!r.includes('from("isabella_tasks").insert'));
+  assert.ok(!r.includes("from('isabella_tasks').insert"));
+  assert.ok(!r.includes('from("isabella_events").insert'));
+  assert.ok(!r.includes("from('isabella_events').insert"));
+  assert.ok(r.includes('clientKey=\`mission:\${run.id}:\${event}\`'));
+  assert.ok(r.includes('ignoreDuplicates:true'));
+});
+
+test('Build 68 lets Isabella start and control durable Missions only around approved workspaces',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(chat.includes('async function missionRunContext'));
+  assert.ok(chat.includes('name:"start_mission_run"'));
+  assert.ok(chat.includes('name:"read_mission_run"'));
+  assert.ok(chat.includes('name:"control_mission_run"'));
+  assert.ok(chat.includes('active_mission_runs:activeMissionRuns'));
+  assert.ok(chat.includes('Use start_mission_run únicamente cuando ya exista un Commitment aprobado'));
+  assert.ok(chat.includes('No prometas trabajo indefinido'));
+  assert.ok(chat.includes('durable_mission_used:'));
+  assert.ok(chat.includes('avísame cuando|avisame cuando'));
+});
+
+test('Build 68 returns durable outcomes to Isabella through realtime without making partial work memory',()=>{
+  const sync=read('apps/isabella/sync.js');
+  const app=read('apps/isabella/app.js');
+  const realtime=read('supabase/migrations/20261001065451_mission_realtime_delivery_v01.sql');
+  assert.ok(sync.includes("sb.channel('isabella-mission-'"));
+  assert.ok(sync.includes("row?.metadata?.source!=='mission_runtime'"));
+  assert.ok(sync.includes('syncNow({pullOnly:true})'));
+  assert.ok(realtime.includes('alter publication supabase_realtime add table public.conversation_messages'));
+  assert.ok(app.includes('DURABLE MISSION'));
+  assert.ok(app.includes('missionRunControlUI'));
+  assert.ok(app.includes("card('Durable Missions'"));
+  assert.ok(app.includes('no puede ejecutar acciones externas ni confirmar decisiones por sí misma'));
+});
+
+test('Build 68 mission runner is server-authenticated and scheduled independently',()=>{
+  const cfg=read('supabase/config.toml');
+  assert.ok(cfg.includes('[functions.isabella-mission-runner]'));
+  const block=cfg.slice(cfg.indexOf('[functions.isabella-mission-runner]'));
+  assert.ok(block.includes('verify_jwt = false'));
+  const m=read('supabase/migrations/20261001064937_durable_mission_runtime_v01.sql');
+  assert.ok(m.includes("values ('mission_runner',encode(gen_random_bytes(32),'hex'))"));
+  assert.ok(m.includes("(select value from public.isabella_runtime_secrets where key='mission_runner')"));
+  assert.ok(m.includes('revoke all on function public.minds_claim_mission_runs(integer) from public,anon,authenticated'));
 });

@@ -56,7 +56,9 @@ function directTextStreamEligible(message:string,route:any,attachments:any[],bac
   if(background||attachments.length||simpleAgendaMutation(message))return false;
   if(String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
-  if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con)\b/i.test(normalizeText(message)))return false;
+  const normalized=normalizeText(message);
+  if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con|trabaja en segundo plano|avísame cuando|avisame cuando)\b/i.test(normalized))return false;
+  if(normalized.length<90&&/^(sí|si|dale|hazlo|continúa|continua|sigue|reanuda|resume|usa|elige|opción|opcion)\b/i.test(normalized))return false;
   return true;
 }
 function parseOpenAISse(buffer:string,onEvent:(event:any)=>void){
@@ -1193,6 +1195,66 @@ async function updateCommitmentWorkspaceSummary(req:Request,args:any){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
+async function missionRunContext(req:Request){
+  try{
+    const sb=supabaseClient(req);if(!sb)return [];
+    const {data,error}=await sb.from("minds_mission_runs")
+      .select("id,workspace_id,status,phase,iteration,max_iterations,result_summary,blocker_question,last_error,metadata,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,status)")
+      .order("updated_at",{ascending:false}).limit(8);
+    if(error)return [];
+    return (data||[]).map((x:any)=>({
+      id:x.id,workspace_id:x.workspace_id,status:x.status,phase:x.phase,iteration:x.iteration,max_iterations:x.max_iterations,
+      result_summary:x.result_summary||"",blocker_question:x.blocker_question||null,last_error:x.last_error||null,
+      title:(x.minds_commitment_workspaces as any)?.title||null,commitment_id:(x.minds_commitment_workspaces as any)?.commitment_id||null,
+      updated_at:x.updated_at,latest_user_input:x?.metadata?.last_user_input||null
+    }));
+  }catch{return []}
+}
+async function startMissionRun(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    let workspaceId=String(args?.workspace_id||"").trim();
+    if(!workspaceId){
+      const commitmentId=String(args?.commitment_id||"").trim();
+      if(!commitmentId)return {status:"invalid"};
+      const workspace=await ensureCommitmentWorkspace(req,{commitment_id:commitmentId});
+      if(workspace?.status!=="ok"||!workspace?.workspace?.id)return workspace||{status:"workspace_unavailable"};
+      workspaceId=String(workspace.workspace.id);
+    }
+    const result=await sb.rpc("minds_start_mission_run",{
+      p_workspace_id:workspaceId,
+      p_instruction:String(args?.instruction||"").trim(),
+      p_request_id:crypto.randomUUID(),
+      p_max_iterations:Math.max(1,Math.min(Number(args?.max_iterations||4),8))
+    });
+    return checked(result,"start_mission_run");
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+async function readMissionRun(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const id=String(args?.run_id||"").trim();if(!id)return {status:"invalid"};
+    const {data:run,error}=await sb.from("minds_mission_runs")
+      .select("id,workspace_id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,sources,metadata,started_at,completed_at,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,summary)")
+      .eq("id",id).maybeSingle();
+    if(error||!run)return {status:"missing"};
+    const {data:events}=await sb.from("minds_mission_run_events")
+      .select("event_type,payload,created_at").eq("run_id",id).order("created_at",{ascending:true}).limit(80);
+    return {status:"ok",run,events:events||[]};
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+async function controlMissionRun(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const id=String(args?.run_id||"").trim(),action=String(args?.action||"").trim();
+    if(!id||!["pause","resume","cancel"].includes(action))return {status:"invalid"};
+    const rpc=action==="pause"?"minds_pause_mission_run":action==="resume"?"minds_resume_mission_run":"minds_cancel_mission_run";
+    const params=action==="resume"?{p_run_id:id,p_instruction:args?.instruction?String(args.instruction):null}:{p_run_id:id};
+    const result=await sb.rpc(rpc,params);
+    return checked(result,"control_mission_run");
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+
 async function searchWork(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
@@ -1349,7 +1411,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
-  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
@@ -1722,6 +1784,7 @@ Deno.serve(async (req: Request) => {
     background||fastAgenda?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
   const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
+  const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
   const recent = mergeRecentConversations(recentDb, context.recent_local_conversation || [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -1762,6 +1825,13 @@ Abre un workspace con open_commitment_workspace solo cuando exista un Commitment
 Antes de trabajar sobre un workspace existente, usa su summary/items del contexto o read_commitment_workspace si falta detalle. Tras un avance material, puedes usar write_commitment_workspace para conservar únicamente resultados operativos durables; no vuelques conversaciones ni memos completos. Marca correctamente la procedencia. Los hallazgos de web son external; Work/document son project_source; inferencias siguen siendo inferred/agent.
 Una entrada kind=decision siempre queda en status proposed por enforcement del servidor: el workspace no puede confirmar decisiones por sí mismo. Nunca promociones automáticamente una entrada del workspace a personal memory, Work claim confirmado, Task/Event o acción externa. Si el usuario quiere convertir algo en una acción persistente, usa la herramienta normal y respeta confirmación/Shadow Agency.
 Usa update_commitment_workspace_summary para mantener una síntesis breve del estado de trabajo solo después de un avance material. El summary es una vista operativa, no una fuente de verdad.
+
+DURABLE MISSION RUNTIME:
+CONTEXTO PRIVADO puede contener active_mission_runs. Son ejecuciones persistentes de trabajo interno asociadas a Mission Workspaces. Pueden sobrevivir al request actual y continuar mediante checkpoints server-side.
+Usa start_mission_run únicamente cuando ya exista un Commitment aprobado y el usuario pida explícitamente que Isabella continúe trabajando más allá de este turno, trabaje en segundo plano, avance autónomamente una misión o vuelva cuando termine. No inicies trabajo durable por una mención casual, una pregunta de estado o una tarea trivial.
+Un Mission Run solo puede investigar, leer contexto disponible, planificar, sintetizar y escribir scratchpad operativo. No autoriza tareas/eventos, mensajes externos, memoria personal, claims confirmados ni mutaciones de proyecto. Esas acciones siguen usando sus herramientas normales y sus políticas.
+Si active_mission_runs muestra status=waiting_for_user y el usuario responde a la pregunta bloqueante, usa control_mission_run action=resume con esa nueva instrucción. Si pide detener temporalmente usa pause; si quiere terminarlo definitivamente usa cancel. Usa read_mission_run cuando pregunte por progreso detallado.
+No prometas trabajo indefinido: cada run tiene max_iterations y reintentos acotados. Si llega al límite sin completar, vuelve a waiting_for_user. Cuando termina, necesita una decisión o falla definitivamente, el runtime entrega un mensaje proactivo idempotente en el chat de Isabella.
 
 SKILLS:
 Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo no trivial que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. En turnos ligeros el catálogo puede omitirse deliberadamente para reducir latencia. No cargues una skill para saludos, conversación general ni operaciones directas y completas de calendario/tareas como crear una tarea con título y fecha ya dados, moverla, completarla o borrarla; usa directamente las herramientas de agenda. Puedes cargar más de una solo si realmente son complementarias.
@@ -1868,6 +1938,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     standing_intent_matches:standingIntents||[],
     active_commitments:commitments||[],
     commitment_workspaces:missionWorkspaces||[],
+    active_mission_runs:activeMissionRuns||[],
     routed_work_context:routedWork,
     routed_sofia_context:routedSofia,
     memory_checkpoint:memoryCheckpoint,
@@ -2053,6 +2124,36 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     },
     {
       type:"function",
+      name:"start_mission_run",
+      description:"Start bounded durable internal work for an already approved Commitment when the user explicitly wants Isabella to continue beyond this chat request and return later. No external mutations.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        commitment_id:{type:"string"},
+        workspace_id:{type:"string"},
+        instruction:{type:"string",description:"Concrete work to continue autonomously."},
+        max_iterations:{type:"number",description:"Bounded checkpoints, normally 3-5."}
+      },required:["instruction"]}
+    },
+    {
+      type:"function",
+      name:"read_mission_run",
+      description:"Read current durable Mission Run status, checkpoints and event history when the user asks how background work is progressing.",
+      strict:false,
+      parameters:{type:"object",properties:{run_id:{type:"string"}},required:["run_id"]}
+    },
+    {
+      type:"function",
+      name:"control_mission_run",
+      description:"Pause, resume with new user input, or cancel one durable Mission Run. Use resume when answering a blocker raised by a waiting mission.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        run_id:{type:"string"},
+        action:{type:"string",enum:["pause","resume","cancel"]},
+        instruction:{type:"string",description:"For resume, the user's answer or new direction."}
+      },required:["run_id","action"]}
+    },
+    {
+      type:"function",
       name:"search_commitments",
       description:"Search user-approved MINDS Commitments: persistent objectives that remain open across conversations. Use when the user asks what is still open/alive or refers to an ongoing objective not already present in active_commitments.",
       strict:false,
@@ -2216,6 +2317,15 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           ?await updateCommitmentWorkspaceSummary(req,args)
           :await appendCommitmentWorkspaceItem(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="start_mission_run"){
+        const result=await startMissionRun(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="read_mission_run"){
+        const result=await readMissionRun(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="control_mission_run"){
+        const result=await controlMissionRun(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_commitments"){
         const result=await searchCommitments(req,args,effectiveMessage);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
@@ -2260,7 +2370,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,

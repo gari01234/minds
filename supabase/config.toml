@@ -21,3 +21,7 @@ entrypoint = "./functions/isabella-heartbeat/index.ts"
 [functions.isabella-routine-runner]
 verify_jwt = false
 entrypoint = "./functions/isabella-routine-runner/index.ts"
+
+[functions.isabella-mission-runner]
+verify_jwt = false
+entrypoint = "./functions/isabella-mission-runner/index.ts"

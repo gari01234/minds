@@ -1913,19 +1913,36 @@ async function continuityPanel(){
     document.querySelectorAll('[data-mission-workspace]').forEach(b=>b.onclick=()=>void missionWorkspacePanel(b.dataset.missionWorkspace));
   }catch(e){modal('Continuidad','<div class="small">No pude cargar la continuidad ahora mismo.</div>')}
 }
+function missionRunStatusLabel(status){
+  return status==='queued'?'En cola':status==='running'?'Trabajando':status==='waiting_for_user'?'Necesita tu decisión':status==='paused'?'Pausada':status==='completed'?'Completada':status==='failed'?'Con error':status==='cancelled'?'Cancelada':String(status||'');
+}
+async function missionRunControlUI(runId,action,workspaceId){
+  const sb=window.MINDS_SUPABASE;if(!sb||!runId)return;
+  try{
+    const rpc=action==='pause'?'minds_pause_mission_run':action==='resume'?'minds_resume_mission_run':'minds_cancel_mission_run';
+    const params=action==='resume'?{p_run_id:runId,p_instruction:null}:{p_run_id:runId};
+    const {data,error}=await sb.rpc(rpc,params);if(error)throw error;
+    if(data?.status!=='ok')throw new Error(data?.status||'No disponible');
+    await missionWorkspacePanel(workspaceId);
+  }catch(e){say('assistant','No pude cambiar esa Mission ahora mismo: '+(e?.message||String(e)))}
+}
 async function missionWorkspacePanel(id){
   const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
   modal('Mission Workspace','<div class="surface-loading">Leyendo trabajo activo…</div>');
   try{
-    const [wQ,iQ]=await Promise.all([
+    const [wQ,iQ,rQ]=await Promise.all([
       sb.from('minds_commitment_workspaces').select('id,commitment_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at').eq('id',id).single(),
-      sb.from('minds_commitment_workspace_items').select('id,kind,status,content,provenance_class,source_kind,source_ref,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(200)
+      sb.from('minds_commitment_workspace_items').select('id,kind,status,content,provenance_class,source_kind,source_ref,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(200),
+      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,started_at,completed_at,updated_at').eq('workspace_id',id).order('created_at',{ascending:false}).limit(12)
     ]);
-    if(wQ.error)throw wQ.error;if(iQ.error)throw iQ.error;
-    const w=wQ.data,items=iQ.data||[];
+    if(wQ.error)throw wQ.error;if(iQ.error)throw iQ.error;if(rQ.error)throw rQ.error;
+    const w=wQ.data,items=iQ.data||[],runs=rQ.data||[],current=runs.find(x=>['queued','running','waiting_for_user','paused'].includes(x.status))||runs[0]||null;
     const labels={plan:'PLAN',finding:'HALLAZGO',source:'FUENTE',question:'PREGUNTA',decision:'DECISIÓN PROPUESTA',note:'NOTA'};
     const itemRows=items.map(x=>`<div class="doctor-log"><b>${esc(labels[x.kind]||x.kind.toUpperCase())} · ${esc(x.status)}</b><span>${esc(x.content)}</span><time>${esc(x.provenance_class)} · ${esc(x.source_kind)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
-    modal('Mission Workspace',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>CIERRE</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${w.summary?`<div class="continuity-cause"><span>ESTADO OPERATIVO</span><p>${esc(w.summary)}</p></div>`:''}<div class="small">Este workspace es un scratchpad operativo. Sus hallazgos y decisiones propuestas no son memoria personal ni verdad confirmada de proyecto.</div></div><div class="small section-label">Trabajo acumulado</div>${itemRows||'<div class="empty-panel">El workspace está abierto, pero todavía no contiene avances registrados.</div>'}`);
+    const runControls=current&&['queued','running'].includes(current.status)?`<button class="secondary" data-mission-run-action="pause" data-run-id="${esc(current.id)}">Pausar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='paused'?`<button class="secondary" data-mission-run-action="resume" data-run-id="${esc(current.id)}">Reanudar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='waiting_for_user'?`<button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:'';
+    const runPanel=current?`<div class="continuity-cause mission-run-card"><span>DURABLE MISSION · ${esc(missionRunStatusLabel(current.status).toUpperCase())}</span><b>Checkpoint ${Number(current.iteration||0)} / ${Number(current.max_iterations||0)}</b>${current.result_summary?`<p>${esc(current.result_summary)}</p>`:''}${current.blocker_question?`<p><strong>Necesita tu decisión:</strong> ${esc(current.blocker_question)}</p>`:''}${current.last_error&&current.status==='failed'?`<p>${esc(current.last_error)}</p>`:''}<small>Actualizado ${new Date(current.updated_at).toLocaleString('es-ES')}</small>${runControls?`<div class="confirm-actions">${runControls}</div>`:''}</div>`:'';
+    modal('Mission Workspace',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>CIERRE</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${w.summary?`<div class="continuity-cause"><span>ESTADO OPERATIVO</span><p>${esc(w.summary)}</p></div>`:''}${runPanel}<div class="small">Este workspace es un scratchpad operativo. Sus hallazgos y decisiones propuestas no son memoria personal ni verdad confirmada de proyecto. Un Durable Mission puede continuar server-side, pero no puede ejecutar acciones externas ni confirmar decisiones por sí misma.</div></div><div class="small section-label">Trabajo acumulado</div>${itemRows||'<div class="empty-panel">El workspace está abierto, pero todavía no contiene avances registrados.</div>'}`);
+    document.querySelectorAll('[data-mission-run-action]').forEach(b=>b.onclick=()=>void missionRunControlUI(b.dataset.runId,b.dataset.missionRunAction,id));
   }catch{modal('Mission Workspace','<div class="small">No pude leer este workspace ahora mismo.</div>')}
 }
 async function artifactsPanel(){
@@ -2060,7 +2077,8 @@ function doctorCards(q,now=Date.now()){
   const stale=r=>r?.status==='running'&&now-new Date(r.started_at).getTime()>10*60000;
   const routines=rows('routinesQ'),bad=routines.filter(r=>r.last_error),late=routines.filter(r=>r.next_run_at&&new Date(r.next_run_at).getTime()<now-10*60000);
   const shadow=rows('shadowQ'),shadowExact=shadow.filter(x=>x.status==='accepted').length,shadowEdited=shadow.filter(x=>x.status==='edited').length,shadowRejected=shadow.filter(x=>x.status==='rejected').length;
-  const missions=rows('missionsQ'),missionItems=rows('missionItemsQ');
+  const missions=rows('missionsQ'),missionItems=rows('missionItemsQ'),durableRuns=rows('missionRunsQ');
+  const durableActive=durableRuns.filter(x=>['queued','running'].includes(x.status)).length,durableWaiting=durableRuns.filter(x=>x.status==='waiting_for_user').length,durableFailed=durableRuns.filter(x=>x.status==='failed').length;
   const specialistRuns=rows('runsQ').filter(r=>String(r.feature||'').startsWith('specialist_'));
   const orchestrationRuns=rows('runsQ').filter(r=>r.feature==='isabella_specialist_orchestration');
   const specialistErrors=[...specialistRuns,...orchestrationRuns].filter(r=>r.status==='error'||stale(r));
@@ -2078,6 +2096,7 @@ function doctorCards(q,now=Date.now()){
     card('Skills personales',['skillsQ'],'ok',rows('skillsQ').length+' activas'),
     card('Especialistas internos',['runsQ'],specialistErrors.length?'error':specialistRuns.length||orchestrationRuns.length?'ok':'idle',specialistRuns.length||orchestrationRuns.length?(specialistRuns.length+' delegaciones · '+orchestrationRuns.length+' orquestaciones'+(specialistDetail?' · '+specialistDetail:'')):'Aún sin delegaciones; normal si no hicieron falta'),
     card('Mission Workspaces',['missionsQ','missionItemsQ'],missions.length?'ok':'idle',missions.length?missions.length+' activos/pausados · '+missionItems.length+' entradas':'Aún sin workspaces; se abren al avanzar Commitments aprobados'),
+    card('Durable Missions',['missionRunsQ'],durableFailed?'error':durableWaiting?'warn':durableActive?'ok':'idle',durableRuns.length?(durableActive+' trabajando/en cola · '+durableWaiting+' esperando · '+durableFailed+' con error'):'Aún sin ejecuciones durables'),
     card('Shadow Agency',['shadowQ'],shadow.length?'ok':'idle',shadow.length?shadow.length+' observaciones · '+shadowExact+' tal cual · '+shadowEdited+' corregidas · '+shadowRejected+' rechazadas':'Aún sin observaciones')
   ];
 }
@@ -2087,7 +2106,7 @@ async function doctorPanel(){
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
     const since=new Date(Date.now()-24*3600000).toISOString();
-    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ]=await Promise.all([
+    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ]=await Promise.all([
       sb.from('minds_agent_runs').select('feature,status,error,started_at,completed_at,latency_ms,route,metadata').gte('started_at',since).order('started_at',{ascending:false}).limit(120),
       sb.from('isabella_routines').select('title,enabled,last_run_at,next_run_at,last_error').eq('enabled',true),
       sb.from('minds_heartbeat_events').select('event_type,severity,title,status,last_seen_at').order('last_seen_at',{ascending:false}).limit(20),
@@ -2099,10 +2118,11 @@ async function doctorPanel(){
       sb.from('minds_ai_usage').select('feature,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(300),
       sb.from('minds_shadow_decisions').select('action,status,created_at').gte('created_at',new Date(Date.now()-30*86400000).toISOString()).order('created_at',{ascending:false}).limit(500),
       sb.from('minds_commitment_workspaces').select('id,status,updated_at').in('status',['active','paused']).limit(100),
-      sb.from('minds_commitment_workspace_items').select('id,workspace_id,kind,status,created_at').limit(1000)
+      sb.from('minds_commitment_workspace_items').select('id,workspace_id,kind,status,created_at').limit(1000),
+      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,last_error,updated_at').order('updated_at',{ascending:false}).limit(100)
     ]);
     const runs=runsQ.data||[],routines=routinesQ.data||[],heart=heartQ.data||[],usage=usageQ.data||[];
-    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ});
+    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ});
     const errors=runs.filter(x=>x.status==='error').slice(0,8);
     const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
     modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);

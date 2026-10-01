@@ -74,6 +74,21 @@ begin
   insert into public.minds_commitment_workspace_items(workspace_id,kind,content) values((s->'workspace'->>'id')::uuid,'note','Direct write');
   raise exception 'TEST expected direct workspace write rejection';
  exception when others then if SQLERRM='TEST expected direct workspace write rejection' then raise;end if;end;
+ req:=gen_random_uuid();
+ c:=public.minds_start_mission_run((s->'workspace'->>'id')::uuid,'Advance continuity safely',req,2);
+ if c->>'status'<>'ok' then raise exception 'TEST durable mission start';end if;
+ perform set_config('minds.test_mission',c->'run'->>'id',true);
+ c:=public.minds_start_mission_run((s->'workspace'->>'id')::uuid,'Retry must be idempotent',req,2);
+ if c->'run'->>'id'<>current_setting('minds.test_mission') then raise exception 'TEST durable mission idempotency';end if;
+ c:=public.minds_pause_mission_run(current_setting('minds.test_mission')::uuid);
+ if c->'run'->>'status'<>'paused' then raise exception 'TEST durable mission pause';end if;
+ c:=public.minds_resume_mission_run(current_setting('minds.test_mission')::uuid,'Use the reviewed direction');
+ if c->'run'->>'status'<>'queued' then raise exception 'TEST durable mission resume';end if;
+ if not exists(select 1 from public.minds_commitment_workspace_items where workspace_id=(s->'workspace'->>'id')::uuid and source_kind='user' and content='Use the reviewed direction') then raise exception 'TEST durable resume input provenance';end if;
+ begin
+  insert into public.minds_mission_runs(workspace_id,request_id,instruction) values((s->'workspace'->>'id')::uuid,gen_random_uuid(),'Direct write');
+  raise exception 'TEST expected direct mission insert rejection';
+ exception when others then if SQLERRM='TEST expected direct mission insert rejection' then raise;end if;end;
  s:=public.minds_create_commitment(jsonb_build_object('title','Waiting continuity','objective','Keep Bernried coordination alive','scope','project','project_id',project,'status','waiting'),gen_random_uuid(),true);
  perform set_config('minds.test_waiting_commitment',s->>'id',true);
  s:=public.minds_create_commitment(jsonb_build_object('title','Paused continuity','objective','Keep Bernried coordination paused','scope','project','project_id',project,'status','paused'),gen_random_uuid(),true);
@@ -93,11 +108,18 @@ begin
  if exists(select 1 from public.minds_work_claims where id=current_setting('minds.test_claim')::uuid) then raise exception 'TEST cross-user read';end if;
  if exists(select 1 from public.minds_commitments where id=current_setting('minds.test_commitment')::uuid) then raise exception 'TEST cross-user commitment read';end if;
  if exists(select 1 from public.minds_commitment_workspaces where id=current_setting('minds.test_workspace')::uuid) then raise exception 'TEST cross-user workspace read';end if;
+ if exists(select 1 from public.minds_mission_runs where id=current_setting('minds.test_mission')::uuid) then raise exception 'TEST cross-user mission read';end if;
  if (public.minds_ensure_commitment_workspace(current_setting('minds.test_commitment')::uuid)->>'status')<>'missing' then raise exception 'TEST cross-user workspace open';end if;
+ if (public.minds_start_mission_run(current_setting('minds.test_workspace')::uuid,'Other user',gen_random_uuid(),2)->>'status')<>'workspace_unavailable' then raise exception 'TEST cross-user mission start';end if;
  if has_function_privilege('anon','public.minds_ensure_commitment_workspace(uuid)','EXECUTE') then raise exception 'TEST anonymous workspace open';end if;
  if not has_function_privilege('authenticated','public.minds_ensure_commitment_workspace(uuid)','EXECUTE') then raise exception 'TEST authenticated workspace open missing';end if;
  if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='open_commitment_workspace' and mode='allow' and enabled) then raise exception 'TEST workspace open policy';end if;
  if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='write_commitment_workspace' and mode='allow' and enabled) then raise exception 'TEST workspace write policy';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='start_mission_run' and mode='allow' and enabled) then raise exception 'TEST durable mission start policy';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='control_mission_run' and mode='allow' and enabled) then raise exception 'TEST durable mission control policy';end if;
+ if has_function_privilege('authenticated','public.minds_claim_mission_runs(integer)','EXECUTE') then raise exception 'TEST mission claim exposed';end if;
+ if has_function_privilege('authenticated','public.minds_apply_mission_step(uuid,uuid,jsonb)','EXECUTE') then raise exception 'TEST mission apply exposed';end if;
+ if has_function_privilege('anon','public.minds_start_mission_run(uuid,text,uuid,integer)','EXECUTE') then raise exception 'TEST anonymous mission start';end if;
  begin
   perform public.minds_create_commitment(jsonb_build_object('title','Other user','objective','No','scope','project','project_id',current_setting('minds.test_project')),gen_random_uuid(),true);raise exception 'TEST cross-user commitment project write';
  exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
@@ -135,6 +157,29 @@ begin
  x:=public.minds_resolve_shadow_decision(shadow_req,'accepted',jsonb_build_object('kind','task'));
  if x->>'status'<>'missing' or (select status from public.minds_shadow_decisions where user_id=u and request_id=shadow_req)<>'pending' then raise exception 'TEST cross-user shadow resolve';end if;
  perform set_config('request.jwt.claim.sub',u::text,true);
+ update public.minds_mission_runs set next_attempt_at='1900-01-01T00:00:00Z' where id=current_setting('minds.test_mission')::uuid;
+ select to_jsonb(m) into x from public.minds_claim_mission_runs(1) m where m.id=current_setting('minds.test_mission')::uuid;
+ if x is null or x->>'status'<>'running' or (x->>'iteration')::int<>1 then raise exception 'TEST durable mission claim';end if;
+ x:=public.minds_apply_mission_step(
+   current_setting('minds.test_mission')::uuid,(x->>'lease_token')::uuid,
+   jsonb_build_object('status','continue','summary','Checkpoint one','items',jsonb_build_array(
+     jsonb_build_object('kind','decision','content','Proposed durable decision','source_kind','system','provenance_class','agent'),
+     jsonb_build_object('kind','finding','content','External durable finding','source_kind','web','provenance_class','agent','source_ref','https://example.invalid/source')
+   ),'sources','[{"title":"External","url":"https://example.invalid/source"}]'::jsonb)
+ );
+ if x->'run'->>'status'<>'queued' then raise exception 'TEST durable mission checkpoint';end if;
+ if not exists(select 1 from public.minds_commitment_workspace_items where metadata->>'mission_run_id'=current_setting('minds.test_mission') and kind='decision' and status='proposed') then raise exception 'TEST durable decision auto-confirmed';end if;
+ if not exists(select 1 from public.minds_commitment_workspace_items where metadata->>'mission_run_id'=current_setting('minds.test_mission') and source_kind='web' and provenance_class='external') then raise exception 'TEST durable web provenance';end if;
+ update public.minds_mission_runs set next_attempt_at='1900-01-01T00:00:00Z' where id=current_setting('minds.test_mission')::uuid;
+ select to_jsonb(m) into x from public.minds_claim_mission_runs(1) m where m.id=current_setting('minds.test_mission')::uuid;
+ if x is null or (x->>'iteration')::int<>2 then raise exception 'TEST durable second claim';end if;
+ x:=public.minds_apply_mission_step(
+   current_setting('minds.test_mission')::uuid,(x->>'lease_token')::uuid,
+   jsonb_build_object('status','completed','summary','Mission complete','items','[]'::jsonb,'sources','[]'::jsonb)
+ );
+ if x->'run'->>'status'<>'completed' or x->'run'->>'result_summary'<>'Mission complete' then raise exception 'TEST durable completion';end if;
+ x:=public.minds_apply_mission_step(current_setting('minds.test_mission')::uuid,gen_random_uuid(),'{"status":"completed"}');
+ if x->>'status'<>'stale' then raise exception 'TEST durable stale lease';end if;
  x:=public.minds_resolve_shadow_decision(shadow_req,'accepted',jsonb_build_object('kind','task','_review',jsonb_build_object('changed_fields',jsonb_build_array('date'))));
  if x->>'status'<>'edited' then raise exception 'TEST shadow edited outcome';end if;
  x:=public.minds_resolve_shadow_decision(shadow_reject,'rejected',jsonb_build_object('kind','event'));
@@ -161,5 +206,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, mission workspaces, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, mission workspaces, durable mission runtime, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
 rollback;
