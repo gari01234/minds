@@ -1281,8 +1281,8 @@ test('Build 68 mission runner advances one checkpoint at a time and cannot mutat
   assert.ok(!r.includes("from('isabella_tasks').insert"));
   assert.ok(!r.includes('from("isabella_events").insert'));
   assert.ok(!r.includes("from('isabella_events').insert"));
-  assert.ok(r.includes('clientKey=\`mission:\${run.id}:\${event}\`'));
-  assert.ok(r.includes('ignoreDuplicates:true'));
+  assert.ok(r.includes('event_key:\`mission:\${run.id}:\${event}\`'));
+  assert.ok(r.includes('minds_publish_attention'));
 });
 
 test('Build 68 lets Isabella start and control durable Missions only around approved workspaces',()=>{
@@ -1303,7 +1303,7 @@ test('Build 68 returns durable outcomes to Isabella through realtime without mak
   const app=read('apps/isabella/app.js');
   const realtime=read('supabase/migrations/20261001065451_mission_realtime_delivery_v01.sql');
   assert.ok(sync.includes("sb.channel('isabella-mission-'"));
-  assert.ok(sync.includes("row?.metadata?.source!=='mission_runtime'"));
+  assert.ok(sync.includes("['mission_runtime','attention_runtime'].includes"));
   assert.ok(sync.includes('syncNow({pullOnly:true})'));
   assert.ok(realtime.includes('alter publication supabase_realtime add table public.conversation_messages'));
   assert.ok(app.includes('DURABLE MISSION'));
