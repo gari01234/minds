@@ -201,7 +201,7 @@ async function runJob(opts:any){
         user_id:userId,surface:"feed",agent:"isabella",title:x.title,body:x.body,action_prompt:null,icon:null,
         user_feedback:action==="liked"?"liked":null,
         metadata:{
-          section:x.section||"now",kind:x.kind||"signal",surface_version:11,preference_signature:signature,generation_id:generationId,
+          source:"situational_feed",section:x.section||"now",kind:x.kind||"signal",surface_version:11,preference_signature:signature,generation_id:generationId,
           details:x.details||[],entities:x.entities||[],detail:"",image_url:null,image_alt:null,
           source_title:x.source_title||null,source_url:x.source_url||null,why:x.why||null,weather_location:x.weather_location||null
         },
@@ -214,11 +214,13 @@ async function runJob(opts:any){
     if(firstGenerated){
       await sb.from("minds_surface_items").update({status:"dismissed"})
         .eq("surface","feed").eq("agent","isabella").eq("status","active")
+        .contains("metadata",{source:"situational_feed"})
         .eq("lifecycle_state","new").is("user_feedback",null).lt("generated_at",firstGenerated);
     }
     const cutoff=new Date(Date.now()-24*60*60*1000).toISOString();
     await sb.from("minds_surface_items").update({status:"dismissed"})
-      .eq("surface","feed").eq("agent","isabella").eq("status","active").lt("generated_at",cutoff);
+      .eq("surface","feed").eq("agent","isabella").eq("status","active")
+      .contains("metadata",{source:"situational_feed"}).lt("generated_at",cutoff);
     await sb.from("minds_feed_jobs").update({status:"succeeded",completed_at:new Date().toISOString(),error:null}).eq("id",jobId);
     console.log(JSON.stringify({event:"situational_feed_done",generation_id:generationId,count:rows.length,signals:signals.length,weather:!!weather,ms:Date.now()-started}));
   }catch(e){

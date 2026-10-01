@@ -70,6 +70,8 @@ Deno.serve(async(req:Request)=>{
   for(const routine of routines||[]){
     const agentRun=await startRun(sb,routine.user_id,routine);
     const deliveryId=routine.metadata?.delivery_id;
+    const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
+    let attentionEventIds:string[]=[];
     let phase="claimed";
     try{
       if(!deliveryId)throw new Error("missing_delivery_id");
@@ -85,10 +87,13 @@ Deno.serve(async(req:Request)=>{
         sb.from("isabella_memories").select("kind,content,updated_at").eq("user_id",routine.user_id).eq("status","active").order("updated_at",{ascending:false}).limit(16),
         sb.from("conversations").select("id").eq("user_id",routine.user_id).eq("app_scope","isabella").order("updated_at",{ascending:false}).limit(1),
         sb.from("isabella_preferences").select("value").eq("user_id",routine.user_id).eq("preference_key","feed").maybeSingle(),
-        sb.from("isabella_model_claims").select("claim_type,claim,status,confidence").eq("user_id",routine.user_id).in("status",["confirmed","hypothesis"]).order("confidence",{ascending:false}).limit(12)
+        sb.from("isabella_model_claims").select("claim_type,claim,status,confidence").eq("user_id",routine.user_id).in("status",["confirmed","hypothesis"]).order("confidence",{ascending:false}).limit(12),
+        attentionDigest?sb.from("minds_attention_events").select("id,title,body,urgency,reason,reason_code,source_type,event_type,created_at").eq("user_id",routine.user_id).eq("route","briefing").eq("status","pending").order("created_at",{ascending:true}).limit(12):Promise.resolve({data:[],error:null})
       ]);
 
-      const [events,tasks,memories,convs,feedPref,modelClaims]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      const [events,tasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>({urgent:0,attention:1,info:2}[a.urgency]??3)-({urgent:0,attention:1,info:2}[b.urgency]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
+      attentionEventIds=attentionItems.map((x:any)=>String(x.id));
       let recent:any[]=[];
       const conversationId=convs?.[0]?.id||null;
       if(conversationId){
@@ -118,6 +123,10 @@ ${JSON.stringify(feedPref?.value||{})}
 CONVERSACIÓN RECIENTE:
 ${JSON.stringify(recent)}
 
+SEÑALES DIFERIDAS POR ATTENTION ECONOMY:
+${JSON.stringify(attentionItems)}
+Si esta lista contiene elementos, intégralos en el briefing solo una vez y en lenguaje natural. Estas señales ya fueron clasificadas como suficientemente importantes para el briefing pero no para interrumpir antes. Prioriza las que requieren una decisión, un fallo operativo o un resultado de Mission. Si una señal ya queda completamente cubierta por la agenda anterior, no la repitas de forma redundante.
+
 Si la rutina pide clima, usa weatherLocation solo si está configurado en las preferencias anteriores. Si está vacío, no inventes una ubicación: omite el clima o menciona muy brevemente que falta configurar el lugar. Si la rutina pide noticias, usa web_search y selecciona pocas noticias de alto valor en vez de una lista genérica.
 
 Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de esta rutina.`;
@@ -144,11 +153,18 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       const sources=extractSources(payload);
 
       phase="generated";
-      checked(await sb.from("minds_routine_deliveries").update({output:message,sources,model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna",status:"generated",generated_at:new Date().toISOString()}).eq("id",deliveryId),"routine_save_output");
+      checked(await sb.from("minds_routine_deliveries").update({output:message,sources,model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna",status:"generated",generated_at:new Date().toISOString(),attention_event_ids:attentionEventIds}).eq("id",deliveryId),"routine_save_output");
+      }else if(attentionDigest&&deliveryId){
+        const saved=checked(await sb.from("minds_routine_deliveries").select("attention_event_ids").eq("id",deliveryId).maybeSingle(),"routine_attention_restore");
+        attentionEventIds=Array.isArray(saved?.attention_event_ids)?saved.attention_event_ids.map((x:any)=>String(x)):[];
       }
       phase="delivery";
       const delivered=checked(await sb.rpc("minds_deliver_routine",{p_delivery_id:deliveryId}),"routine_delivery");
-      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,...delivered});
+      let attentionConsumed=0;
+      if(attentionEventIds.length){
+        attentionConsumed=Number(checked(await sb.rpc("minds_consume_attention_briefing",{p_user:routine.user_id,p_event_ids:attentionEventIds,p_delivery_id:deliveryId}),"routine_attention_consume")||0);
+      }
+      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,...delivered});
       results.push({id:routine.id,status:"sent",delivery_id:deliveryId});
     }catch(e){
       const detail=e instanceof Error?e.message:(()=>{try{return JSON.stringify(e)}catch{return String(e)}})();

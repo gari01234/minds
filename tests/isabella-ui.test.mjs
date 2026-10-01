@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.01.68'));
+  assert.ok(shell.includes('Build 2026.10.01.69'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=68'));
-  assert.ok(index.includes('app.js?v=74'));
-  assert.ok(index.includes('sync.js?v=pwa26'));
+  assert.ok(index.includes('shell.js?v=69'));
+  assert.ok(index.includes('app.js?v=75'));
+  assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=44'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v75'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v76'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1321,4 +1321,88 @@ test('Build 68 mission runner is server-authenticated and scheduled independentl
   assert.ok(m.includes("values ('mission_runner',encode(gen_random_bytes(32),'hex'))"));
   assert.ok(m.includes("(select value from public.isabella_runtime_secrets where key='mission_runner')"));
   assert.ok(m.includes('revoke all on function public.minds_claim_mission_runs(integer) from public,anon,authenticated'));
+});
+
+
+test('Build 69 routes proactive events through an explainable four-channel attention ledger',()=>{
+  const m=read('supabase/migrations/20261001072200_attention_economy_v01.sql');
+  const m11=read('supabase/migrations/20261001072725_attention_economy_v011.sql');
+  const m12=read('supabase/migrations/20261001073011_attention_economy_v012_preserve_continuity.sql');
+  assert.ok(m.includes('create table if not exists public.minds_attention_events'));
+  assert.ok(m.includes("route in ('interrupt','briefing','ambient','silent')"));
+  assert.ok(m.includes('function public.minds_route_attention'));
+  assert.ok(m.includes('function public.minds_publish_attention'));
+  assert.ok(m.includes("'missionCompleted','briefing'"));
+  assert.ok(m.includes("'overdueTasks','ambient'"));
+  assert.ok(m.includes("v_reason:='explicit_user_request'"));
+  assert.ok(m.includes("v_reason:='needs_user_input'"));
+  assert.ok(m.includes("v_reason:='interruption_budget'"));
+  assert.ok(m.includes("v_reason:='quiet_hours'"));
+  assert.ok(m.includes("'attention_routing','allow'"));
+  assert.ok(m11.includes('function public.minds_consume_attention_briefing'));
+  assert.ok(m11.includes("metadata=jsonb_set(metadata,'{source}','\"situational_feed\"'::jsonb,true)"));
+  assert.ok(m12.includes('public.minds_publish_continuity_signal'));
+  assert.ok(m12.includes("'attention_route',a->>'route'"));
+});
+
+test('Build 69 gives explicit notification requests priority without making every Mission an interruption',()=>{
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const runner=read('supabase/functions/isabella-mission-runner/index.ts');
+  assert.ok(chat.includes('minds_start_mission_run_with_attention'));
+  assert.ok(chat.includes('ATTENTION ECONOMY:'));
+  assert.ok(chat.includes('notify_mode'));
+  assert.ok(chat.includes('interrupt_on_complete'));
+  assert.ok(chat.includes('silent_on_complete'));
+  assert.ok(chat.includes('SOLO si el usuario pide explícitamente'));
+  assert.ok(runner.includes('async function publishMissionAttention'));
+  assert.ok(runner.includes('minds_publish_attention'));
+  assert.ok(runner.includes('notify_mode'));
+  assert.ok(runner.includes('requires_user:requiresUser'));
+  assert.ok(!runner.includes('clientKey=\`mission:\${run.id}:\${event}\`'));
+});
+
+test('Build 69 consumes deferred attention only after the daily briefing is delivered',()=>{
+  const r=read('supabase/functions/isabella-routine-runner/index.ts');
+  assert.ok(r.includes('attentionDigest'));
+  assert.ok(r.includes('minds_attention_events'));
+  assert.ok(r.includes('SEÑALES DIFERIDAS POR ATTENTION ECONOMY'));
+  assert.ok(r.includes('attention_event_ids:attentionEventIds'));
+  const delivered=r.indexOf('minds_deliver_routine');
+  const consumed=r.indexOf('minds_consume_attention_briefing');
+  assert.ok(delivered>0&&consumed>delivered);
+  assert.ok(r.includes('attention_consumed:attentionConsumed'));
+});
+
+test('Build 69 preserves Continuity while heartbeat delegates surfacing to Attention Economy',()=>{
+  const h=read('supabase/functions/isabella-heartbeat/index.ts');
+  const m=read('supabase/migrations/20261001073011_attention_economy_v012_preserve_continuity.sql');
+  assert.ok(h.includes('timezone:routineTz'));
+  assert.ok(h.includes('heartbeat_attention_resolve'));
+  assert.ok(m.includes('minds_publish_attention'));
+  assert.ok(m.includes('minds_publish_continuity_signal'));
+  assert.ok(m.includes("'fingerprint','heartbeat:'||e.fingerprint"));
+  assert.ok(m.includes("'continuity',continuity"));
+});
+
+test('Build 69 keeps ambient Attention cards separate from generated Feed cleanup',()=>{
+  const feed=read('supabase/functions/isabella-feed/index.ts');
+  assert.ok(feed.includes('source:"situational_feed"'));
+  assert.equal((feed.match(/contains\("metadata",\{source:"situational_feed"\}\)/g)||[]).length,2);
+  const m=read('supabase/migrations/20261001072200_attention_economy_v01.sql');
+  assert.ok(m.includes("'source','attention_runtime'"));
+  assert.ok(m.includes("'attention_route','ambient'"));
+});
+
+test('Build 69 exposes attention policy, rationale and health without adding another top-level surface',()=>{
+  const app=read('apps/isabella/app.js');
+  const sync=read('apps/isabella/sync.js');
+  const shell=read('apps/isabella/shell.js');
+  assert.ok(app.includes('function canonicalAttentionPreferences'));
+  assert.ok(app.includes('Economía de atención'));
+  assert.ok(app.includes('async function attentionHistoryPanel'));
+  assert.ok(app.includes("card('Attention Economy'"));
+  assert.ok(app.includes('No hay un score oculto'));
+  assert.ok(sync.includes("'attention_runtime'"));
+  assert.ok(shell.includes('data-action="assistantprefs"'));
+  assert.ok(!shell.includes('data-nav="attention"'));
 });

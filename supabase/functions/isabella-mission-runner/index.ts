@@ -117,43 +117,43 @@ async function loadMissionContext(sb:any,run:any){
   }
   return {workspace,commitment:commitQ.data,items:itemsQ.data||[],project};
 }
-async function deliverMissionOutcome(sb:any,run:any,workspace:any,event:string){
+async function publishMissionAttention(sb:any,run:any,workspace:any,event:string){
   if(!["completed","waiting_for_user","failed"].includes(event))return {status:"skipped"};
-  let content="";
+  const notifyMode=String(run?.metadata?.notify_mode||"policy");
+  let title="",body="",urgency="attention",requiresUser=false,userRequested=false,silentRequested=false,eventType="";
   if(event==="completed"){
-    content=`He terminado el trabajo de “${workspace.title}”.${run.result_summary?"\n\n"+run.result_summary:""}`;
+    eventType="mission_completed";
+    title=`Mission terminada: ${workspace.title}`;
+    body=`He terminado el trabajo de “${workspace.title}”.${run.result_summary?"\n\n"+run.result_summary:""}`;
+    userRequested=notifyMode==="interrupt_on_complete";
+    silentRequested=notifyMode==="silent_on_complete";
   }else if(event==="waiting_for_user"){
-    content=`He avanzado “${workspace.title}”, pero necesito una decisión tuya para seguir:${run.blocker_question?"\n\n"+run.blocker_question:""}`;
+    eventType="mission_waiting_for_user";
+    title=`Necesito tu decisión: ${workspace.title}`;
+    body=`He avanzado “${workspace.title}”, pero necesito una decisión tuya para seguir:${run.blocker_question?"\n\n"+run.blocker_question:""}`;
+    urgency="urgent";requiresUser=true;
   }else{
-    content=`El trabajo de “${workspace.title}” se detuvo después de varios intentos. El progreso anterior sigue guardado en su Mission Workspace; no he ejecutado ninguna acción externa.`;
+    eventType="mission_failed";
+    title=`Mission detenida: ${workspace.title}`;
+    body=`El trabajo de “${workspace.title}” se detuvo después de varios intentos. El progreso anterior sigue guardado en su Mission Workspace; no he ejecutado ninguna acción externa.`;
   }
-
-  let {data:convs,error:cErr}=await sb.from("conversations").select("id").eq("user_id",run.user_id).eq("app_scope","isabella").order("updated_at",{ascending:false}).limit(1);
-  if(cErr)throw new Error("conversation_lookup_failed");
-  let conversationId=convs?.[0]?.id||null;
-  if(!conversationId){
-    const {data:created,error:createErr}=await sb.from("conversations").insert({
-      user_id:run.user_id,app_scope:"isabella",origin_kind:"global",
-      origin_anchor:{type:"assistant",id:"isabella",label:"Isabella"},title:"Isabella",mode:"memory",
-      metadata:{app:"isabella"}
-    }).select("id").single();
-    if(createErr||!created?.id)throw new Error("conversation_create_failed");
-    conversationId=created.id;
-  }
-
-  const clientKey=`mission:${run.id}:${event}`;
-  const row={
-    user_id:run.user_id,conversation_id:conversationId,client_key:clientKey,role:"assistant",content,provisional:false,citations:[],
+  const {data,error}=await sb.rpc("minds_publish_attention",{p_user:run.user_id,p_candidate:{
+    event_key:`mission:${run.id}:${event}`,
+    source_type:"mission",
+    source_id:String(run.id),
+    event_type:eventType,
+    title,body,urgency,
+    requires_user:requiresUser,
+    user_requested:userRequested,
+    silent_requested:silentRequested,
     metadata:{
-      app:"isabella",source:"mission_runtime",mission_run_id:run.id,workspace_id:run.workspace_id,
-      mission_event:event,sources:Array.isArray(run.sources)?run.sources:[]
+      mission_run_id:run.id,workspace_id:run.workspace_id,mission_event:event,notify_mode:notifyMode,
+      sources:Array.isArray(run.sources)?run.sources:[]
     }
-  };
-  const {error:msgErr}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key",ignoreDuplicates:true});
-  if(msgErr)throw new Error("mission_delivery_failed:"+msgErr.message);
-  await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId).eq("user_id",run.user_id);
-  await sb.rpc("minds_mark_mission_notified",{p_run_id:run.id,p_event:event});
-  return {status:"delivered",conversation_id:conversationId,client_key:clientKey};
+  }});
+  if(error)throw new Error("mission_attention_failed:"+error.message);
+  if(["delivered","consumed"].includes(String(data?.status||"")))await sb.rpc("minds_mark_mission_notified",{p_run_id:run.id,p_event:event});
+  return data||{status:"unknown"};
 }
 
 Deno.serve(async(req:Request)=>{
@@ -239,7 +239,7 @@ Deno.serve(async(req:Request)=>{
 
       let delivery:any=null;
       if(["completed","waiting_for_user"].includes(next.status)){
-        delivery=await deliverMissionOutcome(sb,next,ctx.workspace,next.status);
+        delivery=await publishMissionAttention(sb,next,ctx.workspace,next.status);
       }
       await finishAgentRun(sb,agentRun,"success",{
         mission_run_id:run.id,workspace_id:run.workspace_id,iteration:run.iteration,outcome:next.status,
@@ -254,7 +254,7 @@ Deno.serve(async(req:Request)=>{
       if(next?.status==="failed"){
         try{
           const ctx=await loadMissionContext(sb,next);
-          delivery=await deliverMissionOutcome(sb,next,ctx.workspace,"failed");
+          delivery=await publishMissionAttention(sb,next,ctx.workspace,"failed");
         }catch{}
       }
       await finishAgentRun(sb,agentRun,"error",{mission_run_id:run.id,outcome:next?.status||"error",retry_count:next?.retry_count||null,delivery},detail);

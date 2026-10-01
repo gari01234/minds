@@ -75,8 +75,9 @@ begin
   raise exception 'TEST expected direct workspace write rejection';
  exception when others then if SQLERRM='TEST expected direct workspace write rejection' then raise;end if;end;
  req:=gen_random_uuid();
- c:=public.minds_start_mission_run((s->'workspace'->>'id')::uuid,'Advance continuity safely',req,2);
+ c:=public.minds_start_mission_run_with_attention((s->'workspace'->>'id')::uuid,'Advance continuity safely',req,2,'interrupt_on_complete');
  if c->>'status'<>'ok' then raise exception 'TEST durable mission start';end if;
+ if c->'run'->'metadata'->>'notify_mode'<>'interrupt_on_complete' then raise exception 'TEST durable mission notify mode';end if;
  perform set_config('minds.test_mission',c->'run'->>'id',true);
  c:=public.minds_start_mission_run((s->'workspace'->>'id')::uuid,'Retry must be idempotent',req,2);
  if c->'run'->>'id'<>current_setting('minds.test_mission') then raise exception 'TEST durable mission idempotency';end if;
@@ -120,6 +121,11 @@ begin
  if has_function_privilege('authenticated','public.minds_claim_mission_runs(integer)','EXECUTE') then raise exception 'TEST mission claim exposed';end if;
  if has_function_privilege('authenticated','public.minds_apply_mission_step(uuid,uuid,jsonb)','EXECUTE') then raise exception 'TEST mission apply exposed';end if;
  if has_function_privilege('anon','public.minds_start_mission_run(uuid,text,uuid,integer)','EXECUTE') then raise exception 'TEST anonymous mission start';end if;
+ if has_function_privilege('anon','public.minds_start_mission_run_with_attention(uuid,text,uuid,integer,text)','EXECUTE') then raise exception 'TEST anonymous mission attention start';end if;
+ if has_function_privilege('authenticated','public.minds_publish_attention(uuid,jsonb)','EXECUTE') then raise exception 'TEST attention publisher exposed';end if;
+ if has_function_privilege('authenticated','public.minds_route_attention(uuid,jsonb)','EXECUTE') then raise exception 'TEST attention router exposed';end if;
+ if has_function_privilege('authenticated','public.minds_consume_attention_briefing(uuid,uuid[],uuid)','EXECUTE') then raise exception 'TEST attention briefing consumer exposed';end if;
+ if not exists(select 1 from public.minds_action_policies where user_id is null and app_scope='isabella' and action='attention_routing' and mode='allow' and enabled) then raise exception 'TEST attention routing policy';end if;
  begin
   perform public.minds_create_commitment(jsonb_build_object('title','Other user','objective','No','scope','project','project_id',current_setting('minds.test_project')),gen_random_uuid(),true);raise exception 'TEST cross-user commitment project write';
  exception when others then if SQLERRM='TEST cross-user commitment project write' then raise;end if;end;
@@ -180,19 +186,52 @@ begin
  if x->'run'->>'status'<>'completed' or x->'run'->>'result_summary'<>'Mission complete' then raise exception 'TEST durable completion';end if;
  x:=public.minds_apply_mission_step(current_setting('minds.test_mission')::uuid,gen_random_uuid(),'{"status":"completed"}');
  if x->>'status'<>'stale' then raise exception 'TEST durable stale lease';end if;
+
+ x:=public.minds_publish_attention(u,jsonb_build_object(
+   'event_key','test:mission:briefing','source_type','mission','source_id',current_setting('minds.test_mission'),
+   'event_type','mission_completed','title','Mission complete','body','Completed safely',
+   'metadata',jsonb_build_object('mission_event','completed')
+ ));
+ if x->>'route'<>'briefing' or x->>'status'<>'pending' then raise exception 'TEST attention mission briefing route';end if;
+ perform set_config('minds.test_attention_brief',x->>'id',true);
+
+ x:=public.minds_publish_attention(u,'{"event_key":"test:explicit","source_type":"system","event_type":"mission_completed","title":"Explicit","body":"Tell me now","user_requested":true}');
+ if x->>'route'<>'interrupt' or x->>'status'<>'delivered' then raise exception 'TEST attention explicit interrupt';end if;
+ perform public.minds_publish_attention(u,'{"event_key":"test:explicit","source_type":"system","event_type":"mission_completed","title":"Explicit","body":"Tell me now","user_requested":true}');
+ if (select count(*) from public.conversation_messages where metadata->>'attention_event_id'=x->>'id')<>1 then raise exception 'TEST attention interrupt idempotency';end if;
+
+ x:=public.minds_publish_attention(u,'{"event_key":"test:ambient","source_type":"system","event_type":"overdue_digest","title":"Overdue","body":"One overdue task"}');
+ if x->>'route'<>'ambient' or x->>'status'<>'delivered' or x->>'surface_item_id' is null then raise exception 'TEST attention ambient route';end if;
+
+ x:=public.minds_publish_attention(u,'{"event_key":"test:silent","source_type":"system","event_type":"unknown","title":"Low value","body":"No interruption"}');
+ if x->>'route'<>'silent' or x->>'status'<>'suppressed' then raise exception 'TEST attention silent route';end if;
+
+ c:=public.minds_consume_attention_briefing(u,array[current_setting('minds.test_attention_brief')::uuid],gen_random_uuid());
+ if c<>1 then raise exception 'TEST attention briefing consumption';end if;
+ if (select status from public.minds_attention_events where id=current_setting('minds.test_attention_brief')::uuid)<>'consumed' then raise exception 'TEST attention briefing status';end if;
+ if (select notified_at from public.minds_mission_runs where id=current_setting('minds.test_mission')::uuid) is null then raise exception 'TEST attention briefing mission receipt';end if;
+
  x:=public.minds_resolve_shadow_decision(shadow_req,'accepted',jsonb_build_object('kind','task','_review',jsonb_build_object('changed_fields',jsonb_build_array('date'))));
  if x->>'status'<>'edited' then raise exception 'TEST shadow edited outcome';end if;
  x:=public.minds_resolve_shadow_decision(shadow_reject,'rejected',jsonb_build_object('kind','event'));
  if x->>'status'<>'rejected' then raise exception 'TEST shadow rejected outcome';end if;
  x:=public.minds_publish_heartbeat(u,'{"fingerprint":"test-failure","event_type":"routine_failure","title":"TEST","surface":false}');e:=(x->>'id')::uuid;
- if (x->>'surfaced')::boolean then raise exception 'TEST first failure surfaced';end if;
+ if (x->>'surfaced')::boolean or x->>'attention_status'<>'suppressed' then raise exception 'TEST first failure attention suppression';end if;
  x:=public.minds_publish_heartbeat(u,'{"fingerprint":"test-failure","event_type":"routine_failure","title":"TEST","surface":true}');
- if not (x->>'surfaced')::boolean then raise exception 'TEST failure escalation lost';end if;
+ if x->>'attention_route'<>'briefing' or x->>'attention_status'<>'pending' then raise exception 'TEST failure briefing escalation';end if;
  perform public.minds_publish_heartbeat(u,'{"fingerprint":"test-failure","event_type":"routine_failure","title":"TEST","surface":true}');
+ select count(*) into c from public.minds_attention_events where user_id=u and event_key='heartbeat:test-failure';
+ if c<>1 then raise exception 'TEST duplicate heartbeat attention';end if;
+
+ x:=public.minds_publish_heartbeat(u,'{"fingerprint":"test-overdue","event_type":"overdue_digest","title":"Overdue","body":"One overdue task","surface":true}');
+ e:=(x->>'id')::uuid;
+ if x->>'attention_route'<>'ambient' or x->>'attention_status'<>'delivered' then raise exception 'TEST heartbeat ambient route';end if;
+ perform public.minds_publish_heartbeat(u,'{"fingerprint":"test-overdue","event_type":"overdue_digest","title":"Overdue","body":"One overdue task","surface":true}');
  select count(*) into c from public.minds_surface_items where metadata->>'heartbeat_event_id'=e::text;
- if c<>1 then raise exception 'TEST duplicate heartbeat';end if;
+ if c<>1 then raise exception 'TEST duplicate heartbeat ambient';end if;
  update public.minds_surface_items set lifecycle_state='dismissed',status='dismissed' where metadata->>'heartbeat_event_id'=e::text;
- if (select status from public.minds_heartbeat_events where id=e)<>'dismissed' then raise exception 'TEST feedback lifecycle';end if;
+ if (select status from public.minds_heartbeat_events where id=e)<>'dismissed' then raise exception 'TEST heartbeat feedback lifecycle';end if;
+ if (select status from public.minds_attention_events where source_type='heartbeat' and source_id=e::text)<>'dismissed' then raise exception 'TEST attention feedback lifecycle';end if;
  x:=public.minds_publish_heartbeat(u,jsonb_build_object('fingerprint','test-continuity-project','event_type','upcoming_event','title','Bernried coordination changed','body','New coordination input','project_id',current_setting('minds.test_project'),'surface',false));
  if (select status from public.minds_commitments where id=current_setting('minds.test_waiting_commitment')::uuid)<>'active' then raise exception 'TEST continuity waiting reactivation';end if;
  if (select status from public.minds_commitments where id=current_setting('minds.test_paused_commitment')::uuid)<>'paused' then raise exception 'TEST continuity paused was reactivated';end if;
@@ -206,5 +245,5 @@ begin
  if (select count(*) from public.conversation_messages where metadata->>'delivery_id'=d::text)<>1 then raise exception 'TEST duplicate routine';end if;
  if (select enabled from public.isabella_routines where id=r) then raise exception 'TEST once routine remains enabled';end if;
 end $$;
-select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, mission workspaces, durable mission runtime, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat escalation, routine delivery' as result;
+select 'PASS: RLS, review, evidence rollback, versions, cursor continuity, commitments, mission workspaces, durable mission runtime, attention economy, continuity engine, shadow agency, specialist orchestration, idempotency, leases, heartbeat routing, routine delivery' as result;
 rollback;

@@ -83,6 +83,21 @@ function canonicalFeedPreferences(value={}){
     topics:[],customTopics:[],following:[],followGraph:[]
   };
 }
+function canonicalAttentionPreferences(value={}){
+  const p=value&&typeof value==='object'?value:{};
+  const route=(v,f)=>['interrupt','briefing','ambient','silent'].includes(String(v||''))?String(v):f;
+  return {
+    missionCompleted:route(p.missionCompleted,'briefing'),
+    missionFailed:route(p.missionFailed,'briefing'),
+    imminentEvent:route(p.imminentEvent,'interrupt'),
+    overdueTasks:route(p.overdueTasks,'ambient'),
+    routineFailure:route(p.routineFailure,'briefing'),
+    maxInterruptionsPerHour:Math.max(0,Math.min(12,Number(p.maxInterruptionsPerHour??3))),
+    quietHoursEnabled:p.quietHoursEnabled===true,
+    quietStart:/^([01]\d|2[0-3]):[0-5]\d$/.test(String(p.quietStart||''))?String(p.quietStart):'22:00',
+    quietEnd:/^([01]\d|2[0-3]):[0-5]\d$/.test(String(p.quietEnd||''))?String(p.quietEnd):'07:00'
+  };
+}
 const base={screen:'assistant',view:'month',date:today(),messages:[],categories:[
   {id:'casa',name:'Casa',color:'#5A9EC1'},
   {id:'trabajo',name:'Trabajo',color:'#6D7278'},
@@ -95,7 +110,8 @@ const base={screen:'assistant',view:'month',date:today(),messages:[],categories:
 ],tasks:[],events:[],memory:[],pendingIntent:null,deletedTaskIds:[],deletedEventIds:[],feedThreads:{},feedSignals:[],assistantPreferences:{
   curiosityEnabled:true,
   curiosityCadenceHours:30,
-  behaviorRules:[]
+  behaviorRules:[],
+  attention:canonicalAttentionPreferences()
 },feedPreferences:{
   mode:'situational_personal',
   instructions:'',
@@ -127,6 +143,7 @@ let state=load();
 function load(){try{
   const raw=JSON.parse(localStorage.getItem(KEY)||'{}');
   const x={...base,...raw,assistantPreferences:{...base.assistantPreferences,...(raw.assistantPreferences||{})},feedPreferences:canonicalFeedPreferences(raw.feedPreferences||{})};
+  x.assistantPreferences.attention=canonicalAttentionPreferences(raw?.assistantPreferences?.attention||x.assistantPreferences.attention);
   x.assistantPreferences.behaviorRules=Array.isArray(x.assistantPreferences.behaviorRules)?x.assistantPreferences.behaviorRules:[];
   x.assistantPreferences.curiosityEnabled=x.assistantPreferences.curiosityEnabled!==false;
   x.assistantPreferences.curiosityCadenceHours=Math.max(12,Math.min(168,Number(x.assistantPreferences.curiosityCadenceHours||30)));
@@ -2026,17 +2043,65 @@ function newPanel(){
     save();closeModal();renderCalendar();
   };
 }
+function attentionRouteOptions(selected){
+  return [
+    ['interrupt','Avisarme en el chat'],
+    ['briefing','Esperar al briefing'],
+    ['ambient','Mostrarlo discretamente en Feed'],
+    ['silent','No mostrármelo automáticamente']
+  ].map(([v,l])=>`<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
+}
+async function attentionHistoryPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Economía de atención','<div class="small">Conecta la memoria para ver cómo Isabella ha distribuido tu atención.</div>');return}
+  modal('Economía de atención','<div class="surface-loading">Leyendo decisiones recientes…</div>');
+  try{
+    const {data,error}=await sb.from('minds_attention_events')
+      .select('id,title,event_type,route,reason,status,source_type,created_at,delivered_at')
+      .order('created_at',{ascending:false}).limit(100);
+    if(error)throw error;
+    const labels={interrupt:'INTERRUPCIÓN',briefing:'BRIEFING',ambient:'FEED',silent:'SILENCIO'};
+    const rows=(data||[]).map(x=>`<div class="doctor-log"><b>${esc(labels[x.route]||x.route.toUpperCase())} · ${esc(x.title)}</b><span>${esc(x.reason)}</span><time>${esc(x.source_type)} · ${esc(x.status)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
+    modal('Economía de atención',`<div class="continuity-intro">Aquí ves por qué MINDS decidió interrumpirte, esperar, aparecer discretamente o guardar silencio. No hay un score oculto: cada decisión conserva su canal y su razón.</div>${rows||'<div class="empty-panel">Todavía no hay decisiones de atención registradas.</div>'}`);
+  }catch{modal('Economía de atención','<div class="small">No pude leer las decisiones de atención ahora mismo.</div>')}
+}
 function assistantPreferencesPanel(){
   const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
+  const attention=canonicalAttentionPreferences(prefs.attention);
   const rules=[...(prefs.behaviorRules||[])];
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
     <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
     <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
+    <div class="small section-label">Economía de atención</div>
+    <div class="small">Isabella puede ser proactiva sin convertir cada resultado en una interrupción. Las peticiones explícitas como “avísame cuando termines” tienen prioridad sobre estas reglas.</div>
+    <label>Cuando una Mission termina<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
+    <label>Cuando una Mission falla<select id="attentionMissionFailed">${attentionRouteOptions(attention.missionFailed)}</select></label>
+    <label>Evento próximo<select id="attentionImminentEvent">${attentionRouteOptions(attention.imminentEvent)}</select></label>
+    <label>Tareas vencidas<select id="attentionOverdueTasks">${attentionRouteOptions(attention.overdueTasks)}</select></label>
+    <label>Fallo de una rutina<select id="attentionRoutineFailure">${attentionRouteOptions(attention.routineFailure)}</select></label>
+    <label>Máximo de interrupciones no bloqueantes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
+    <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos no bloqueantes</span></label>
+    <div class="two-col"><label>Desde<input id="attentionQuietStart" type="time" value="${esc(attention.quietStart)}"></label><label>Hasta<input id="attentionQuietEnd" type="time" value="${esc(attention.quietEnd)}"></label></div>
+    <button id="attentionHistory" class="secondary" type="button">Ver decisiones recientes de atención</button>
     <div><div class="small section-label">Mejoras de comportamiento adoptadas</div><div id="assistantRuleRows">${rules.length?rules.map((r,i)=>`<div class="assistant-rule-row"><span>${esc(r)}</span><button data-rule-remove="${i}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small empty-panel">Todavía no has adoptado reglas adicionales.</div>'}</div></div>
     <button id="saveAssistantPreferences" class="primary">Guardar</button>
   </div>`);
-  document.querySelectorAll('[data-rule-remove]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.ruleRemove);state.assistantPreferences={...prefs,behaviorRules:rules.filter((_,idx)=>idx!==i)};save();assistantPreferencesPanel()});
-  $('#saveAssistantPreferences').onclick=()=>{state.assistantPreferences={...prefs,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number($('#curiosityCadence').value||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};save();closeModal()};
+  document.querySelectorAll('[data-rule-remove]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.ruleRemove);state.assistantPreferences={...prefs,attention,behaviorRules:rules.filter((_,idx)=>idx!==i)};save();assistantPreferencesPanel()});
+  $('#attentionHistory').onclick=()=>void attentionHistoryPanel();
+  $('#saveAssistantPreferences').onclick=()=>{
+    const nextAttention=canonicalAttentionPreferences({
+      missionCompleted:$('#attentionMissionCompleted').value,
+      missionFailed:$('#attentionMissionFailed').value,
+      imminentEvent:$('#attentionImminentEvent').value,
+      overdueTasks:$('#attentionOverdueTasks').value,
+      routineFailure:$('#attentionRoutineFailure').value,
+      maxInterruptionsPerHour:Number($('#attentionMaxInterruptions').value||3),
+      quietHoursEnabled:$('#attentionQuietEnabled').checked,
+      quietStart:$('#attentionQuietStart').value,
+      quietEnd:$('#attentionQuietEnd').value
+    });
+    state.assistantPreferences={...prefs,attention:nextAttention,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number($('#curiosityCadence').value||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};
+    save();closeModal();
+  };
 }
 async function routinesPanel(){
   modal('Rutinas','<div class="small">Cargando rutinas…</div>');
@@ -2077,8 +2142,9 @@ function doctorCards(q,now=Date.now()){
   const stale=r=>r?.status==='running'&&now-new Date(r.started_at).getTime()>10*60000;
   const routines=rows('routinesQ'),bad=routines.filter(r=>r.last_error),late=routines.filter(r=>r.next_run_at&&new Date(r.next_run_at).getTime()<now-10*60000);
   const shadow=rows('shadowQ'),shadowExact=shadow.filter(x=>x.status==='accepted').length,shadowEdited=shadow.filter(x=>x.status==='edited').length,shadowRejected=shadow.filter(x=>x.status==='rejected').length;
-  const missions=rows('missionsQ'),missionItems=rows('missionItemsQ'),durableRuns=rows('missionRunsQ');
+  const missions=rows('missionsQ'),missionItems=rows('missionItemsQ'),durableRuns=rows('missionRunsQ'),attentionRows=rows('attentionQ');
   const durableActive=durableRuns.filter(x=>['queued','running'].includes(x.status)).length,durableWaiting=durableRuns.filter(x=>x.status==='waiting_for_user').length,durableFailed=durableRuns.filter(x=>x.status==='failed').length;
+  const attentionInterrupts=attentionRows.filter(x=>x.route==='interrupt'&&x.status==='delivered').length,attentionBriefing=attentionRows.filter(x=>x.route==='briefing'&&x.status==='pending').length,attentionAmbient=attentionRows.filter(x=>x.route==='ambient'&&x.status==='delivered').length;
   const specialistRuns=rows('runsQ').filter(r=>String(r.feature||'').startsWith('specialist_'));
   const orchestrationRuns=rows('runsQ').filter(r=>r.feature==='isabella_specialist_orchestration');
   const specialistErrors=[...specialistRuns,...orchestrationRuns].filter(r=>r.status==='error'||stale(r));
@@ -2097,6 +2163,7 @@ function doctorCards(q,now=Date.now()){
     card('Especialistas internos',['runsQ'],specialistErrors.length?'error':specialistRuns.length||orchestrationRuns.length?'ok':'idle',specialistRuns.length||orchestrationRuns.length?(specialistRuns.length+' delegaciones · '+orchestrationRuns.length+' orquestaciones'+(specialistDetail?' · '+specialistDetail:'')):'Aún sin delegaciones; normal si no hicieron falta'),
     card('Mission Workspaces',['missionsQ','missionItemsQ'],missions.length?'ok':'idle',missions.length?missions.length+' activos/pausados · '+missionItems.length+' entradas':'Aún sin workspaces; se abren al avanzar Commitments aprobados'),
     card('Durable Missions',['missionRunsQ'],durableFailed?'error':durableWaiting?'warn':durableActive?'ok':'idle',durableRuns.length?(durableActive+' trabajando/en cola · '+durableWaiting+' esperando · '+durableFailed+' con error'):'Aún sin ejecuciones durables'),
+    card('Attention Economy',['attentionQ'],attentionBriefing?'warn':attentionRows.length?'ok':'idle',attentionRows.length?(attentionInterrupts+' interrupciones · '+attentionBriefing+' esperando briefing · '+attentionAmbient+' en Feed'):'Aún sin decisiones de atención'),
     card('Shadow Agency',['shadowQ'],shadow.length?'ok':'idle',shadow.length?shadow.length+' observaciones · '+shadowExact+' tal cual · '+shadowEdited+' corregidas · '+shadowRejected+' rechazadas':'Aún sin observaciones')
   ];
 }
@@ -2106,7 +2173,7 @@ async function doctorPanel(){
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
     const since=new Date(Date.now()-24*3600000).toISOString();
-    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ]=await Promise.all([
+    const [runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ,attentionQ]=await Promise.all([
       sb.from('minds_agent_runs').select('feature,status,error,started_at,completed_at,latency_ms,route,metadata').gte('started_at',since).order('started_at',{ascending:false}).limit(120),
       sb.from('isabella_routines').select('title,enabled,last_run_at,next_run_at,last_error').eq('enabled',true),
       sb.from('minds_heartbeat_events').select('event_type,severity,title,status,last_seen_at').order('last_seen_at',{ascending:false}).limit(20),
@@ -2119,10 +2186,11 @@ async function doctorPanel(){
       sb.from('minds_shadow_decisions').select('action,status,created_at').gte('created_at',new Date(Date.now()-30*86400000).toISOString()).order('created_at',{ascending:false}).limit(500),
       sb.from('minds_commitment_workspaces').select('id,status,updated_at').in('status',['active','paused']).limit(100),
       sb.from('minds_commitment_workspace_items').select('id,workspace_id,kind,status,created_at').limit(1000),
-      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,last_error,updated_at').order('updated_at',{ascending:false}).limit(100)
+      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,last_error,updated_at').order('updated_at',{ascending:false}).limit(100),
+      sb.from('minds_attention_events').select('id,route,status,reason_code,created_at').gte('created_at',since).order('created_at',{ascending:false}).limit(200)
     ]);
     const runs=runsQ.data||[],routines=routinesQ.data||[],heart=heartQ.data||[],usage=usageQ.data||[];
-    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ});
+    const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ,attentionQ});
     const errors=runs.filter(x=>x.status==='error').slice(0,8);
     const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
     modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);
@@ -2255,6 +2323,7 @@ window.ISABELLA_APP={
   replaceState:(next)=>{
     const visibleScreen=state.screen||'assistant';
     state={...base,...next,screen:visibleScreen,assistantPreferences:{...base.assistantPreferences,...(next?.assistantPreferences||{})},feedPreferences:canonicalFeedPreferences(next?.feedPreferences||{})};
+    state.assistantPreferences.attention=canonicalAttentionPreferences(next?.assistantPreferences?.attention||state.assistantPreferences.attention);
     state.messages=normalizeMessages(state.messages);
     save();renderMessages(false);renderToday();renderCalendar();
   },

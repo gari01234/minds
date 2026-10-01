@@ -1221,11 +1221,14 @@ async function startMissionRun(req:Request,args:any){
       if(workspace?.status!=="ok"||!workspace?.workspace?.id)return workspace||{status:"workspace_unavailable"};
       workspaceId=String(workspace.workspace.id);
     }
-    const result=await sb.rpc("minds_start_mission_run",{
+    const notifyMode=["policy","interrupt_on_complete","silent_on_complete"].includes(String(args?.notify_mode||""))
+      ?String(args.notify_mode):"policy";
+    const result=await sb.rpc("minds_start_mission_run_with_attention",{
       p_workspace_id:workspaceId,
       p_instruction:String(args?.instruction||"").trim(),
       p_request_id:crypto.randomUUID(),
-      p_max_iterations:Math.max(1,Math.min(Number(args?.max_iterations||4),8))
+      p_max_iterations:Math.max(1,Math.min(Number(args?.max_iterations||4),8)),
+      p_notify_mode:notifyMode
     });
     return checked(result,"start_mission_run");
   }catch(e){return {status:"error",detail:String(e)}}
@@ -1833,6 +1836,10 @@ Un Mission Run solo puede investigar, leer contexto disponible, planificar, sint
 Si active_mission_runs muestra status=waiting_for_user y el usuario responde a la pregunta bloqueante, usa control_mission_run action=resume con esa nueva instrucción. Si pide detener temporalmente usa pause; si quiere terminarlo definitivamente usa cancel. Usa read_mission_run cuando pregunte por progreso detallado.
 No prometas trabajo indefinido: cada run tiene max_iterations y reintentos acotados. Si llega al límite sin completar, vuelve a waiting_for_user. Cuando termina, necesita una decisión o falla definitivamente, el runtime entrega un mensaje proactivo idempotente en el chat de Isabella.
 
+ATTENTION ECONOMY:
+Los resultados proactivos no equivalen automáticamente a una interrupción. MINDS decide entre interrupt, briefing, ambient y silent con una política explicable. Un bloqueo que necesita respuesta del usuario se considera interrupción dura. Un trabajo terminado normalmente puede esperar al briefing; una señal personal/productiva no urgente puede quedar en Feed; una señal insuficiente puede permanecer silenciosa.
+Al iniciar una Durable Mission, usa notify_mode=interrupt_on_complete SOLO si el usuario pide explícitamente que le avises/notifiques cuando termine o vuelva a él al terminar. Usa silent_on_complete solo si pide explícitamente que no le avises. En cualquier otro caso usa policy. No conviertas tu propia valoración de importancia en una petición explícita del usuario.
+
 SKILLS:
 Dispones de habilidades reutilizables, incluidas Skills personales aprobadas por el usuario. Antes de resolver un objetivo no trivial que encaje claramente con una de ellas, llama load_skill con su slug y sigue las instrucciones devueltas. En turnos ligeros el catálogo puede omitirse deliberadamente para reducir latencia. No cargues una skill para saludos, conversación general ni operaciones directas y completas de calendario/tareas como crear una tarea con título y fecha ya dados, moverla, completarla o borrarla; usa directamente las herramientas de agenda. Puedes cargar más de una solo si realmente son complementarias.
 Si el usuario te corrige repetidamente sobre el mismo procedimiento, o pide explícitamente convertir una forma de trabajar en habilidad reutilizable, usa propose_skill. Una Skill propuesta no queda activa hasta que el usuario la revise y confirme.
@@ -2131,7 +2138,8 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         commitment_id:{type:"string"},
         workspace_id:{type:"string"},
         instruction:{type:"string",description:"Concrete work to continue autonomously."},
-        max_iterations:{type:"number",description:"Bounded checkpoints, normally 3-5."}
+        max_iterations:{type:"number",description:"Bounded checkpoints, normally 3-5."},
+        notify_mode:{type:"string",enum:["policy","interrupt_on_complete","silent_on_complete"],description:"Use interrupt_on_complete only when the user explicitly asked to be notified when it finishes; silent_on_complete only when they explicitly asked not to be notified; otherwise policy."}
       },required:["instruction"]}
     },
     {

@@ -28,7 +28,7 @@ function startRealtime(){
   realtimeChannel=sb.channel('isabella-mission-'+user.id)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversation_messages',filter:'user_id=eq.'+user.id},payload=>{
       const row=payload?.new||{};
-      if(row.role!=='assistant'||row?.metadata?.source!=='mission_runtime')return;
+      if(row.role!=='assistant'||!['mission_runtime','attention_runtime'].includes(String(row?.metadata?.source||'')))return;
       clearTimeout(realtimeTimer);
       realtimeTimer=setTimeout(()=>syncNow({pullOnly:true}),120);
     })

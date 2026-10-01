@@ -27,6 +27,7 @@ async function resolveAbsent(sb:any,userId:string,candidates:any[]){
   for(const e of active)if(!keys.has(e.fingerprint)){
     checked(await sb.from("minds_heartbeat_events").update({status:"resolved"}).eq("id",e.id),"heartbeat_resolve");
     checked(await sb.from("minds_surface_items").update({status:"dismissed",lifecycle_state:"resolved"}).eq("user_id",userId).contains("metadata",{heartbeat_event_id:e.id}),"heartbeat_surface_resolve");
+    checked(await sb.from("minds_attention_events").update({status:"resolved",updated_at:new Date().toISOString()}).eq("user_id",userId).eq("source_type","heartbeat").eq("source_id",String(e.id)).in("status",["pending","delivered","suppressed"]),"heartbeat_attention_resolve");
   }
 }
 
@@ -91,7 +92,7 @@ Deno.serve(async(req:Request)=>{
         });
       }
       let created=0;
-      for(const c of candidates){const x=await publishCandidate(sb,userId,c);if(x.created)created++}
+      for(const c of candidates){const x=await publishCandidate(sb,userId,{...c,timezone:routineTz});if(x.created)created++}
       await resolveAbsent(sb,userId,candidates);
       const contextMaintenance=await maintainConversationContext(sb,userId);
       await finishRun(sb,run,contextMaintenance.status==="error"?"error":"success",{timezone:routineTz,candidates:candidates.length,new_events:created,context_maintenance:contextMaintenance},contextMaintenance.status==="error"?contextMaintenance.detail:undefined);
