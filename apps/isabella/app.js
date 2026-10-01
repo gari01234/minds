@@ -1465,6 +1465,7 @@ async function handle(text,attachments=[],replyTo=null){
       if(result?.reply&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
+      if(result?.autonomy_execution)await window.ISABELLA_SYNC_PULL_NOW?.();
       if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
       else if(result?.proposal){state.pendingIntent=null;save();confirmProposal(result.proposal)}
       else save();
@@ -1901,7 +1902,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 function commitmentStatusLabel(status){return status==='active'?'Activo':status==='waiting'?'En espera':status==='paused'?'Pausado':status==='completed'?'Completado':status==='cancelled'?'Cancelado':String(status||'')}
 async function continuityPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
@@ -2042,6 +2043,49 @@ function newPanel(){
     }
     save();closeModal();renderCalendar();
   };
+}
+function autonomyContextLabel(key){
+  return ({fast_task_dated_v1:'Tarea sencilla con fecha · petición directa',fast_task_undated_v1:'Tarea sencilla sin fecha · petición directa',fast_unverified:'Ruta rápida · contexto sin verificar',interactive_review:'Conversación con revisión',source_derived:'Con fuentes de proyecto o externas',background:'Trabajo en segundo plano',unknown_context:'Contexto no verificado'})[key]||key;
+}
+function autonomyEvidenceHTML(e){
+  const states={eligible:'Puede proponerse un permiso',insufficient_evidence:'Evidencia insuficiente',needs_review:'Hay correcciones o rechazos',stale_evidence:'Evidencia antigua',excluded:'Revisión obligatoria en esta versión'};
+  const fields=Object.entries(e.changed_fields||{}).map(([k,n])=>`${({date:'fecha',title:'título',category:'categoría',project:'proyecto',notes:'notas'})[k]||k}: ${n}`).join(' · ');
+  return `<div class="doctor-log"><b>${esc(e.action==='create_task'?'Crear tarea':e.action)} · ${esc(e.scope_label)}</b><span>${esc(autonomyContextLabel(e.context_key))}</span><span>${Number(e.accepted_unchanged)||0} sin cambios · ${Number(e.edited)||0} editadas · ${Number(e.rejected)||0} rechazadas · ${Number(e.review_days)||0} días con revisión</span>${fields?`<span>Campos corregidos: ${esc(fields)}</span>`:''}<span>${esc(states[e.eligibility]||e.eligibility)}</span>${e.last_review_at?`<time>Última revisión: ${new Date(e.last_review_at).toLocaleString('es-ES')}</time>`:''}</div>`;
+}
+function reviewContextualPermission(unit,permission,mode){
+  const grant=mode==='allow',scope=unit||permission;
+  modal(grant?'Autorizar este permiso':'Volver a confirmar',`<div class="continuity-intro"><p>${grant?'Isabella podrá guardar tareas sencillas en esta categoría, sin proyecto, cuando tu petición directa incluya la categoría y el texto de la tarea.':'Isabella volverá a pedirte confirmación para esta clase de tarea.'}</p><p><b>${esc(scope.scope_label)}</b><br>${esc(autonomyContextLabel(scope.context_key))}</p><p>${grant?'El permiso dura 30 días. Puedes revocarlo aquí en cualquier momento. Eventos, tareas de proyecto, recurrencias y recordatorios quedan fuera. Ante dudas o nuevas correcciones, Isabella vuelve a pedir confirmación.':'Las tareas ya guardadas se conservan. Este cambio afecta a las peticiones siguientes.'}</p></div>${grant?autonomyEvidenceHTML(unit):''}<div class="proposal-actions"><button id="permissionCancel" class="secondary">Cancelar</button><button id="permissionConfirm" class="primary">${grant?'Autorizar durante 30 días':'Revocar permiso'}</button></div><div id="permissionError" class="small" role="status"></div>`);
+  const requestId=crypto.randomUUID();
+  $('#permissionCancel').onclick=()=>void contextualAutonomyPanel();
+  $('#permissionConfirm').onclick=async()=>{
+    const button=$('#permissionConfirm');if(button.disabled)return;button.disabled=true;
+    try{
+      const {error}=await window.MINDS_SUPABASE.rpc('minds_review_contextual_permission',{
+        p_action:scope.action,p_context_key:scope.context_key,p_scope_key:scope.scope_key,p_mode:mode,
+        p_evidence_version:unit?.evidence_version||null,p_expected_revision:permission?.revision||0,p_request_id:requestId,p_confirmed:true
+      });
+      if(error)throw error;
+      await contextualAutonomyPanel();
+    }catch(e){const box=$('#permissionError');if(box)box.textContent='No se confirmó el cambio. Vuelve a abrir Permisos de Isabella para revisar el estado actual.';}
+    finally{if(button.isConnected)button.disabled=false;}
+  };
+}
+async function contextualAutonomyPanel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Permisos de Isabella','<div class="small">Conecta la memoria para consultar tus permisos.</div>');return}
+  modal('Permisos de Isabella','<div class="surface-loading">Leyendo evidencia y permisos…</div>');
+  try{
+    const {data,error}=await sb.rpc('minds_get_contextual_autonomy');if(error)throw error;
+    const units=data?.units||[],permissions=data?.permissions||[];
+    const findPermission=e=>permissions.find(p=>p.action===e.action&&p.context_key===e.context_key&&p.scope_key===e.scope_key);
+    const grants=permissions.filter(p=>p.mode==='allow');
+    const active=grants.map((p,i)=>`<div class="doctor-log"><b>${esc(p.scope_label)}</b><span>${esc(autonomyContextLabel(p.context_key))}</span><span>${new Date(p.expires_at)>new Date()?'Autorizado hasta':'Caducó el'} ${new Date(p.expires_at).toLocaleDateString('es-ES')}</span><button data-permission-revoke="${i}" class="secondary">Volver a confirmar siempre</button></div>`).join('');
+    const evidence=units.map((e,i)=>{const p=findPermission(e);const enabled=p?.mode==='allow'&&new Date(p.expires_at)>new Date();return autonomyEvidenceHTML(e)+(e.eligibility==='eligible'&&!enabled?`<button data-permission-review="${i}" class="secondary">Revisar propuesta de permiso</button>`:'')}).join('');
+    const history=(data?.reviews||[]).map(r=>{const p=permissions.find(p=>p.id===r.permission_id);return `<div class="doctor-log"><b>${r.decision==='allow'?'Autorizado por ti':'Revocado por ti'} · ${esc(p?.scope_label||'Permiso')}</b><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`}).join('');
+    const executions=(data?.executions||[]).map(r=>`<div class="doctor-log"><b>${esc(r.candidate?.title||'Tarea')}</b><span>Guardada bajo un permiso tuyo · no cuenta como aprobación nueva</span><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`).join('');
+    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Shadow Agency registra tus revisiones por acción, contexto y alcance. Solo una autorización expresa tuya cambia un permiso.</p><p>Para proponerlo: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Son condiciones de propuesta, no una medida de inteligencia.</p></div><div class="small section-label">Permisos autorizados</div>${active||'<div class="empty-panel">No hay permisos contextuales autorizados.</div>'}<div class="small section-label">Evidencia por contexto</div>${evidence||'<div class="empty-panel">Todavía no hay observaciones. Las acciones siguen pidiendo confirmación.</div>'}${history?'<div class="small section-label">Tus decisiones</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    $$('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
+    $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
+  }catch{modal('Permisos de Isabella','<div class="small">No pude leer los permisos. No se ha autorizado ningún cambio desde esta pantalla.</div>')}
 }
 function attentionRouteOptions(selected){
   return [

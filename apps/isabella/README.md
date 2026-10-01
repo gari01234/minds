@@ -124,3 +124,7 @@ Las tareas completadas con fecha permanecen visibles en el calendario y se muest
 «Leer más» usa la función aislada `isabella-feed-story`, especializada en ampliar una tarjeta con contexto y fuentes. El hilo dentro de la tarjeta sigue separado del chat personal de Isabella.
 
 Las Ideas aceptadas pueden convertirse en `minds_idea_workspaces`: espacios persistentes con hilo propio (`minds_idea_messages`) y un entregable Markdown vivo. El worker `minds-idea-worker` trabaja dentro de ese alcance y no contamina el chat general.
+
+### Build 70 — permisos contextuales con revisión explícita
+
+`Más → Permisos de Isabella` permite consultar evidencia por acción, contexto y alcance, revisar una propuesta elegible y revocar un permiso autorizado. No hay score global ni ampliación automática de permisos. La primera clase admitida es crear tareas sencillas sin proyecto en una categoría concreta por una petición directa comprobada. Los datos históricos y las ejecuciones automáticas no se convierten retroactivamente en nuevas aprobaciones. Véase `BUILD-70.md` para el contrato, pruebas y límites.

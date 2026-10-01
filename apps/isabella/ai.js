@@ -70,10 +70,10 @@ async function askFastStream(message,state,options={}){
   const response=await fetch(cfg.url+'/functions/v1/isabella-fast-stream',{
     method:'POST',
     headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
-    body:JSON.stringify({message:String(message),context:compact(state)})
+    body:JSON.stringify({message:String(message),context:compact(state),permission_protocol:'contextual_v1'})
   });
   if(response.status===409)return null;
-  if(!response.ok||!response.body)return null;
+  if(!response.ok||!response.body)throw new Error('No pude verificar la petición. Revisa tus tareas antes de repetirla.');
   const reader=response.body.getReader(),decoder=new TextDecoder();
   let buffer='',result=null,fallback=false,streamError=null,streamedText='';
   while(true){
@@ -87,9 +87,10 @@ async function askFastStream(message,state,options={}){
       else if(event?.type==='error')streamError=event.message||'fast_stream_error';
     });
   }
+  if(result)return result;
   if(streamError){options.onTextReset?.();throw new Error(streamError)}
   if(fallback){options.onTextReset?.();return null}
-  return result;
+  throw new Error('La conexión terminó sin confirmar el resultado. Revisa tus tareas antes de repetir la petición.');
 }
 async function askDirectStream(message,state,options={},replyContext=''){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
@@ -131,7 +132,11 @@ async function ask(message,state,options={}){
       const fast=await askFastStream(message,state,options);
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
-    }catch{/* The full Isabella path remains the safety fallback. */}
+    }catch(e){
+      // The full Isabella path remains the safety fallback only after an explicit gate refusal.
+      // A lost response may follow a committed authorized task. Never retry as a new proposal.
+      options.onTextReset?.();await window.ISABELLA_SYNC_PULL_NOW?.();throw e;
+    }
   }
   if(!options.background&&!attachments.length){
     const streamed=await askDirectStream(message,state,options,replyContext);

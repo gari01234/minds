@@ -56,6 +56,20 @@ function proposalFromCall(name:string,a:any){
   };
   return null;
 }
+function contextualFastContext(message:string,p:any,ctx:any){
+  const words=(s:any)=>' '+normalize(s).replace(/[^\p{L}\p{N}]+/gu,' ').trim()+' ';
+  // Literal user input must contain both the category and task, not only recent context.
+  const direct=fastCreateCandidate(message)&&p?.kind==='task'&&!p.project&&!ctx?.work_context?.active
+    &&!!p.category&&!!p.title&&words(message).includes(words(p.category))&&words(message).includes(words(p.title));
+  return {autonomy_contract:'fast_task_v1',direct_request:direct,fast_path:true,one_round:true,source_tainted:false,background:false};
+}
+async function tryContextualTask(uc:any,proposal:any,context:any){
+  if(!context.direct_request)return {status:'confirm',reason:'unverified_direct_request'};
+  const {data,error}=await uc.rpc('minds_try_contextual_task',{p_request_id:proposal.request_id});
+  if(error)throw new Error('No pude verificar el resultado del permiso. Revisa tus tareas antes de repetir la petición.');
+  if(!['confirm','executed'].includes(data?.status))throw new Error('No pude verificar el resultado del permiso.');
+  return data;
+}
 function previewText(p:any){
   const title=p?.title?`“${p.title}”`:(p?.kind==="event"?"el evento":"la tarea");
   if(p?.kind==="event"){
@@ -186,10 +200,23 @@ REGLAS DE SEGURIDAD:
           await finishRun(service,runId,"skipped",started,{transport:"sse",fast_path:true,one_round:true,outcome:"invalid_proposal"});
           send("fallback",{reason:"invalid_proposal"});controller.close();return;
         }
-        await service.rpc("minds_record_shadow_decision",{
+        const permissionContext={...contextualFastContext(message,proposal,ctx),run_id:runId};
+        if(body?.permission_protocol!=='contextual_v1')permissionContext.direct_request=false;
+        const recorded=await service.rpc("minds_record_shadow_decision",{
           p_user:user.id,p_request_id:proposal.request_id,p_action:call.name,p_candidate:proposal,
-          p_context:{run_id:runId,fast_path:true,one_round:true,source_tainted:false}
+          p_context:permissionContext
         });
+        if(recorded.error)throw new Error('No pude registrar la propuesta para revisión.');
+        const permission=await tryContextualTask(uc,proposal,permissionContext);
+        if(permission.status==='executed'){
+          const text=`Guardé “${proposal.title}”${proposal.date?` para ${proposal.date}`:' sin fecha'} en ${proposal.category}, con el permiso que autorizaste.`;
+          const reply=(ackSent?'Entendido. ':'')+text;
+          send('text_delta',{delta:text});
+          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,autonomy_execution:permission.receipt});
+          await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:'authorized_execution',permission_id:permission.receipt.permission_id});
+          await finishRun(service,runId,'success',started,{transport:'sse',fast_path:true,one_round:true,tool:call.name,outcome:'authorized_execution',receipt_id:permission.receipt.id});
+          controller.close();return;
+        }
         await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:"proposal",tool:call.name});
         const reply=(ackSent?"Entendido. ":"")+previewText(proposal);
         send("text_delta",{delta:previewText(proposal)});

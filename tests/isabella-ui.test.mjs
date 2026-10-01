@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.01.69'));
+  assert.ok(shell.includes('Build 2026.10.01.70'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=69'));
-  assert.ok(index.includes('app.js?v=75'));
+  assert.ok(index.includes('shell.js?v=70'));
+  assert.ok(index.includes('app.js?v=76'));
   assert.ok(index.includes('sync.js?v=pwa27'));
-  assert.ok(index.includes('ai.js?v=44'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v76'"));
+  assert.ok(index.includes('ai.js?v=45'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v77'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1128,7 +1128,7 @@ test('Build 65 uses a strict one-round create gate before full Isabella',()=>{
   assert.ok(ai.includes("The full Isabella path remains the safety fallback"));
 });
 
-test('Build 65 fast action transport is true SSE and never executes persistent mutations',()=>{
+test('Build 70 fast transport uses SSE and delegates authorized writes to the guarded database RPC',()=>{
   const fast=read('supabase/functions/isabella-fast-stream/index.ts');
   assert.ok(fast.includes('"Content-Type":"text/event-stream; charset=utf-8"'));
   assert.ok(fast.includes('stream:true'));

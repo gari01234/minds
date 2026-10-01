@@ -57,6 +57,7 @@ function directTextStreamEligible(message:string,route:any,attachments:any[],bac
   if(String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
   const normalized=normalizeText(message);
+  if(/autonom|permis|shadow agency/i.test(normalized))return false;
   if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con|trabaja en segundo plano|avísame cuando|avisame cuando)\b/i.test(normalized))return false;
   if(normalized.length<90&&/^(sí|si|dale|hazlo|continúa|continua|sigue|reanuda|resume|usa|elige|opción|opcion)\b/i.test(normalized))return false;
   return true;
@@ -1414,6 +1415,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
+  read_contextual_autonomy:"allow",
   search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
@@ -1856,6 +1858,8 @@ Tienes offer_quick_replies para mostrar 2–4 respuestas rápidas cuando una pre
 Tienes search_memory para recuerdos antiguos o relaciones personales que no estén ya claras en la conversación.
 Tienes search_commitments para consultar objetivos abiertos ya aprobados y propose_commitment para preparar uno nuevo cuando algo deba permanecer vivo entre conversaciones. Un Commitment no ejecuta acciones y siempre requiere revisión antes de crearse.
 Tienes search_calendar para consultar agenda/tareas más allá del resumen inmediato.
+AUTONOMÍA CONTEXTUAL: Shadow Agency aporta evidencia, nunca autorización. Usa read_contextual_autonomy para responder sobre evidencia o permisos reales. No inventes un score global ni deduzcas autorización de una tasa de aceptación. Solo el usuario puede aprobar o revocar un permiso en Más → Permisos de Isabella. No hay herramienta de modelo para cambiar permisos. La ruta rápida puede guardar una tarea sencilla únicamente bajo un permiso contextual vigente aprobado allí; estas herramientas de conversación siguen generando propuestas.
+
 Tienes create_event, update_event, delete_event, create_task, update_task, complete_task, archive_task y delete_task para preparar cambios. Tienes create_routine para preparar una automatización recurrente propia de Isabella y create_chat_reminder para un único mensaje futuro dentro del chat. Tienes update_feed_preferences únicamente para ajustar la localidad habitual del clima o una regla explícita sobre qué situaciones personales merecen emerger en el Feed. El Feed NO es un news feed ni una lista de intereses. Tienes update_assistant_behavior para adoptar una mejora de comportamiento o workflow solo después de que el usuario la acepte explícitamente. Estas herramientas NO ejecutan directamente: la interfaz pedirá confirmación. Nunca digas que algo ya quedó hecho si solo preparaste una propuesta.
 Si el usuario pide una tarea pequeña o inmediata —por ejemplo redactar un email, producir una imagen concreta o preparar un archivo Word/PDF— resuélvela aquí. Usa create_artifact solo cuando haya pedido una imagen real o un archivo; no conviertas automáticamente estas peticiones en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
@@ -2051,6 +2055,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     ...calendarTools.filter((t:any)=>["search_memory","search_calendar"].includes(String(t?.name||"")))
   ]:fastAgenda?fastAgendaTools:[
     {type:"web_search",search_context_size:"low"},
+    {type:"function",name:"read_contextual_autonomy",description:"Read the user's actual action/context/scope evidence, eligibility and reviewed permissions. No global autonomy score. Cannot grant or revoke permission. When eligible, offer review in Más → Permisos de Isabella. Insufficient evidence must be stated honestly.",strict:false,parameters:{type:"object",properties:{}}},
     {
       type:"function",
       name:"load_skill",
@@ -2260,6 +2265,10 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           source_tainted:sourceTainted,round,background:!!background
         });
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"pending_user_confirmation"})});
+      }else if(call.name==="read_contextual_autonomy"){
+        const sb=supabaseClient(req);
+        const result=sb?await sb.rpc('minds_get_contextual_autonomy'):{error:{message:'unavailable'}};
+        outputs.push({type:'function_call_output',call_id:call.call_id,output:JSON.stringify(result.error?{status:'unavailable'}:{status:'ok',...result.data})});
       }else if(call.name==="orchestrate_specialists"){
         const planFingerprint=JSON.stringify((Array.isArray(args?.steps)?args.steps:[]).slice(0,3).map((x:any)=>[
           String(x?.id||""),String(x?.specialist||""),normalizeText(x?.objective||""),(Array.isArray(x?.depends_on)?x.depends_on:[]).map((v:any)=>String(v))
