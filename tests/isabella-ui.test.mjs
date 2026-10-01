@@ -1292,7 +1292,7 @@ test('Build 68 lets Isabella start and control durable Missions only around appr
   assert.ok(chat.includes('name:"read_mission_run"'));
   assert.ok(chat.includes('name:"control_mission_run"'));
   assert.ok(chat.includes('active_mission_runs:activeMissionRuns'));
-  assert.ok(chat.includes('Use start_mission_run únicamente cuando ya exista un Commitment aprobado'));
+  assert.ok(chat.includes('Usa start_mission_run únicamente cuando ya exista un Commitment aprobado'));
   assert.ok(chat.includes('No prometas trabajo indefinido'));
   assert.ok(chat.includes('durable_mission_used:'));
   assert.ok(chat.includes('avísame cuando|avisame cuando'));
