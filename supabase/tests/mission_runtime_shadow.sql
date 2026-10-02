@@ -70,7 +70,7 @@ select set_config('request.jwt.claim.sub','f3000000-0000-4000-8000-000000000071'
 set local role authenticated;
 do $$
 declare run_id uuid:=current_setting('minds.shadow_run')::uuid;
-        workspace_id uuid:=current_setting('minds.shadow_workspace')::uuid;
+        v_workspace_id uuid:=current_setting('minds.shadow_workspace')::uuid;
 begin
   if (select count(*) from public.minds_mission_runtime_executions where mission_run_id=run_id)<>2 then
     raise exception 'TEST own paired shadow read';
@@ -81,10 +81,10 @@ begin
   if (select status from public.minds_mission_runs where id=run_id)<>'queued' then
     raise exception 'TEST shadow changed Mission Run status';
   end if;
-  if (select summary from public.minds_commitment_workspaces where id=workspace_id)<>'Baseline summary' then
+  if (select w.summary from public.minds_commitment_workspaces w where w.id=v_workspace_id)<>'Baseline summary' then
     raise exception 'TEST shadow changed workspace summary';
   end if;
-  if (select count(*) from public.minds_commitment_workspace_items where workspace_id=workspace_id)<>1 then
+  if (select count(*) from public.minds_commitment_workspace_items i where i.workspace_id=v_workspace_id)<>1 then
     raise exception 'TEST shadow wrote workspace items';
   end if;
   if has_table_privilege('authenticated','public.minds_mission_runtime_executions','UPDATE') then
