@@ -141,7 +141,7 @@ export function createOpenAIAgentsShadowAdapter(deps:{
               multi_agent:{enabled:false},
               text:{
                 verbosity:"low",
-                format:{type:"json_schema",strict:true,schema:MISSION_SHADOW_SCHEMA}
+                format:{type:"json_schema",name:"mission_shadow_result",strict:true,schema:MISSION_SHADOW_SCHEMA}
               }
             },
             environment:{type:"none"},
