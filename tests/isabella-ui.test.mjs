@@ -1365,7 +1365,7 @@ test('Build 69 consumes deferred attention only after the daily briefing is deli
   const r=read('supabase/functions/isabella-routine-runner/index.ts');
   assert.ok(r.includes('attentionDigest'));
   assert.ok(r.includes('minds_attention_events'));
-  assert.ok(r.includes('SEÑALES DIFERIDAS POR ATTENTION ECONOMY'));
+  assert.ok(r.includes('COSAS QUE DECIDISTE NO INTERRUMPIR ANTES:'));
   assert.ok(r.includes('attention_event_ids:attentionEventIds'));
   const delivered=r.indexOf('minds_deliver_routine');
   const consumed=r.indexOf('minds_consume_attention_briefing');
@@ -1398,7 +1398,7 @@ test('Build 69 exposes attention policy, rationale and health without adding ano
   const sync=read('apps/isabella/sync.js');
   const shell=read('apps/isabella/shell.js');
   assert.ok(app.includes('function canonicalAttentionPreferences'));
-  assert.ok(app.includes('Economía de atención'));
+  assert.ok(app.includes('Cómo decide Isabella avisarte'));
   assert.ok(app.includes('async function attentionHistoryPanel'));
   assert.ok(app.includes("card('Attention Economy'"));
   assert.ok(app.includes('No hay un score oculto'));
