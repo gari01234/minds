@@ -44,7 +44,7 @@ function normalizeText(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function simpleAgendaMutation(message:string){
+function simpleAgendaMutation(message=""){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
   const action=/\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|mueve|mover|cambia|cambiar|reprograma|reprogramar|borra|borrar|elimina|eliminar|completa|completar|archiva|archivar|add|create|move|change|delete|remove|complete|archive|erstelle|hinzufügen|verschiebe|ändern|lösche|erledige)\b/i.test(t);
