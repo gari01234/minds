@@ -6,7 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 
 test('Build 71 keeps attention policy separate from device delivery',()=>{
-  const migration=read('supabase/migrations/20261002144500_native_presence_delivery_v01.sql');
+  const migration=read('supabase/migrations/20261002125419_native_presence_delivery_v01.sql');
   assert.ok(migration.includes('create table if not exists public.minds_delivery_intents'));
   assert.ok(migration.includes('create trigger minds_attention_enqueue_push'));
   assert.ok(migration.includes("new.route='interrupt' and new.status='delivered'"));
@@ -15,7 +15,7 @@ test('Build 71 keeps attention policy separate from device delivery',()=>{
 });
 
 test('Build 71 stores push subscriptions behind authenticated RPC and RLS',()=>{
-  const migration=read('supabase/migrations/20261002144500_native_presence_delivery_v01.sql');
+  const migration=read('supabase/migrations/20261002125419_native_presence_delivery_v01.sql');
   assert.ok(migration.includes('alter table public.minds_push_subscriptions enable row level security'));
   assert.ok(migration.includes('minds_register_push_subscription'));
   assert.ok(migration.includes('minds_remove_push_subscription'));
@@ -24,7 +24,7 @@ test('Build 71 stores push subscriptions behind authenticated RPC and RLS',()=>{
 });
 
 test('Build 71 durable delivery has leases retries receipts and stale endpoint cleanup',()=>{
-  const migration=read('supabase/migrations/20261002144500_native_presence_delivery_v01.sql');
+  const migration=read('supabase/migrations/20261002125419_native_presence_delivery_v01.sql');
   assert.ok(migration.includes('create table if not exists public.minds_delivery_attempts'));
   assert.ok(migration.includes('for update skip locked'));
   assert.ok(migration.includes("status='processing'"));
