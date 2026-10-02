@@ -262,3 +262,16 @@ Continuity, durable work, permissions, notification settings and system health a
 The conversational runtime receives the same boundary. Isabella may use technical ontology privately, but should not expose it spontaneously. She must distinguish completed work from work being checked and from uncertain inference, and she must make the current locus of responsibility legible. Humanization explicitly excludes simulated emotions, consciousness or human needs.
 
 Build 72 introduces no database migration, new navigation surface, permission class, autonomy threshold or attention rule. It changes representation while preserving authority and provenance.
+
+
+## Build 72.5A — Mission Runtime Adapter contract
+
+MINDS now distinguishes the authoritative Mission Run from the runtime execution used to advance it. `minds_mission_runs` remains the control-plane object. Runtime-provider identity lives separately in `minds_mission_runtime_executions`, allowing a future primary and shadow execution to be compared without changing the Mission's objective, authority or workspace state.
+
+The provider-neutral contract exposes `start / inspect / steer / pause_or_stop / collect` and explicit capability flags. `native_minds` remains mandatory as fallback; `openai_agents` is only a recognized provider name in 72.5A and is not selected by production.
+
+Runtime snapshots are bounded, strip no truth silently, contain no user identity, and reject credential-shaped object keys before they cross the execution boundary. Runtime results are normalized back into the existing Mission Workspace vocabulary; provenance remains subject to the database enforcement already present in `minds_apply_mission_step`.
+
+The runtime ledger is service-write/authenticated-read-only with RLS. Ownership is derived in the database from the Mission Run rather than trusted from a worker payload. Provider/mode/run identity is immutable. No new autonomy or action authority is introduced.
+
+This creates the control-plane/execution-plane seam required for 72.5B shadow execution while leaving the existing native Mission worker unchanged.
