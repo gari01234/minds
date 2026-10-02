@@ -297,8 +297,11 @@ Deno.serve(async(req:Request)=>{
       const row=await getExecution(sb,runId,"openai_agents");
       if(!row)return json({error:"agents_shadow_missing"},404);
       if(!row.provider_session_id)return json({error:"agents_session_missing",lifecycle:row.lifecycle},409);
+      const {snapshot}=await loadSnapshot(sb,runId);
       const adapter=createOpenAIAgentsShadowAdapter({apiKey,model:String(row.metadata?.model||agentsModel)});
-      const inspected=await adapter.inspect(rowToExecution(row));
+      const execution=rowToExecution(row);
+      execution.metadata={...(execution.metadata||{}),snapshot_for_normalizer:snapshot};
+      const inspected=await adapter.inspect(execution);
       if(!inspected.ok){
         const updated=await updateExecution(sb,row.id,{
           last_error:inspected.error.slice(0,8000),
