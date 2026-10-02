@@ -170,7 +170,6 @@ declare
   v_public text;
   v_private text;
 begin
-  if current_user not in ('service_role','postgres') then raise exception 'service only'; end if;
   if length(trim(coalesce(p_public,'')))<20 or length(trim(coalesce(p_private,'')))<20 then
     raise exception 'invalid vapid pair';
   end if;
@@ -246,7 +245,10 @@ security definer
 set search_path=public,pg_temp
 as $$
 begin
-  if current_user not in ('service_role','postgres') then raise exception 'service only'; end if;
+  update public.minds_delivery_intents
+  set status='skipped',last_error='expired',lease_token=null,lease_until=null,updated_at=now()
+  where status in ('pending','retry','processing') and expires_at<=now();
+
   return query
   with picked as (
     select id
@@ -292,7 +294,6 @@ declare
   v_error text:=null;
   v_delay integer:=5;
 begin
-  if current_user not in ('service_role','postgres') then raise exception 'service only'; end if;
   if jsonb_typeof(coalesce(p_results,'[]'::jsonb))<>'array' then raise exception 'results must be array'; end if;
 
   select * into v_intent
