@@ -551,14 +551,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.02.71'));
+  assert.ok(shell.includes('Build 2026.10.02.72'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=52'));
-  assert.ok(index.includes('shell.js?v=71'));
-  assert.ok(index.includes('app.js?v=77'));
+  assert.ok(index.includes('app.css?v=53'));
+  assert.ok(index.includes('shell.js?v=72'));
+  assert.ok(index.includes('app.js?v=78'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=45'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v78'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v79'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1247,7 +1247,7 @@ test('Build 67 keeps mission work out of direct text streaming and visible insid
   assert.ok(app.includes('data-mission-workspace'));
   assert.ok(app.includes('async function missionWorkspacePanel'));
   assert.ok(app.includes("card('Mission Workspaces'"));
-  assert.ok(app.includes('Este workspace es un scratchpad operativo'));
+  assert.ok(app.includes('Aquí conservo el trabajo intermedio para poder continuar entre conversaciones'));
 });
 
 
@@ -1306,10 +1306,10 @@ test('Build 68 returns durable outcomes to Isabella through realtime without mak
   assert.ok(sync.includes("['mission_runtime','attention_runtime'].includes"));
   assert.ok(sync.includes('syncNow({pullOnly:true})'));
   assert.ok(realtime.includes('alter publication supabase_realtime add table public.conversation_messages'));
-  assert.ok(app.includes('DURABLE MISSION'));
+  assert.ok(app.includes('Mission Run'));
   assert.ok(app.includes('missionRunControlUI'));
   assert.ok(app.includes("card('Durable Missions'"));
-  assert.ok(app.includes('no puede ejecutar acciones externas ni confirmar decisiones por sí misma'));
+  assert.ok(app.includes('tampoco puedo ejecutar acciones externas o confirmar una decisión por mi cuenta'));
 });
 
 test('Build 68 mission runner is server-authenticated and scheduled independently',()=>{
@@ -1401,7 +1401,7 @@ test('Build 69 exposes attention policy, rationale and health without adding ano
   assert.ok(app.includes('Cómo decide Isabella avisarte'));
   assert.ok(app.includes('async function attentionHistoryPanel'));
   assert.ok(app.includes("card('Attention Economy'"));
-  assert.ok(app.includes('No hay un score oculto'));
+  assert.ok(app.includes('score oculto'));
   assert.ok(sync.includes("'attention_runtime'"));
   assert.ok(shell.includes('data-action="assistantprefs"'));
   assert.ok(!shell.includes('data-nav="attention"'));
