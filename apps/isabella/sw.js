@@ -88,7 +88,7 @@ self.addEventListener('push', event => {
   };
   event.waitUntil(
     self.registration.showNotification(title, options)
-      .then(() => self.registration.setAppBadge?.(1))
+      .then(() => self.navigator?.setAppBadge?.(1))
       .catch(() => undefined)
   );
 });
@@ -97,7 +97,7 @@ self.addEventListener('notificationclick', event => {
   event.notification.close();
   const target = new URL(event.notification.data?.url || './', self.location.origin).href;
   event.waitUntil((async () => {
-    try { await self.registration.clearAppBadge?.(); } catch {}
+    try { await self.navigator?.clearAppBadge?.(); } catch {}
     const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     const base = new URL('./', self.location.href).href;
     const existing = windows.find(client => client.url.startsWith(base));
