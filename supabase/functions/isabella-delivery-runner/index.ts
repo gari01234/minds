@@ -44,7 +44,6 @@ Deno.serve(async(req:Request)=>{
           const accepted=await sendPushNotification(
             {
               endpoint:String(sub.endpoint),
-              expirationTime:sub.expiration_time??null,
               keys:{p256dh:String(sub.p256dh),auth:String(sub.auth_key)}
             },
             {
