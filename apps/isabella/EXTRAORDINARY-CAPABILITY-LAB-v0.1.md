@@ -237,3 +237,162 @@ observación
 ```
 
 Esto permite que Isabella participe en su evolución sin convertirse en autoridad sobre su propia arquitectura.
+
+
+## 72.6A — Resultado experimental
+
+El primer laboratorio de `Persistent Environment & Artifacts` se ejecutó el 2 de octubre de 2026 con datos completamente sintéticos, `environment.type=openai_hosted`, container `small` y network access desactivado.
+
+Se hicieron dos pruebas distintas sobre Agent Sessions reales y multi-turn.
+
+### A1 — Estado material persistente
+
+Episode 1 recibió:
+
+- `/workspace/input/options.csv`;
+- `/workspace/input/seed.txt` con un nonce de benchmark.
+
+El agente debía:
+
+1. leer ambos archivos;
+2. calcular una recomendación inicial;
+3. escribir `/workspace/outputs/state.json`;
+4. copiar el nonce al estado sin revelarlo en conversación;
+5. publicar `episode1.json`;
+6. borrar `seed.txt`.
+
+Resultado observado:
+
+- `state.json` publicado correctamente;
+- selección inicial: **A**;
+- `seed.txt` ausente del filesystem al finalizar;
+- nonce dentro de `state.json` verificado por el harness;
+- hash de artifact episodio 1: `b6d9da03c52b39a5a0bd79c1d7085e8d685def4c44c777361267edc701700a84`.
+
+Episode 2 se envió a la misma Session sin volver a subir `state.json` ni el nonce original.
+
+La nueva restricción exigía `maintenance_years >= 40`, manteniendo `lead_days <= 20`.
+
+El agente debía leer el `state.json` existente, conservar el nonce, actualizar el mismo archivo y publicar `episode2.json`.
+
+Resultado observado:
+
+- nonce preservado correctamente aunque su archivo fuente ya no existía;
+- `previous_selected = A`;
+- nueva selección: **B**;
+- `state_file_reused = true`;
+- hash del nuevo `state.json`: `2c05afafef3d22981a6c1633ce8d5b7147491b6c4c95d5c6a106426930de33f0`.
+
+Esto demuestra persistencia real de estado material entre turns, no simple recuperación desde conversación.
+
+### A2 — Herramienta persistente
+
+Episode 1 recibió únicamente `baseline.csv`.
+
+El agente creó:
+
+- `/workspace/tools/analyze.py`;
+- `/workspace/outputs/baseline.json`.
+
+Resultado baseline verificado:
+
+- count = 3;
+- sum = 60;
+- mean = 20;
+- script presente en el filesystem tras terminar el turn.
+
+Antes del Episode 2 MINDS añadió únicamente un nuevo `update.csv` al mismo environment.
+
+No se volvió a subir ni recrear `analyze.py`.
+
+El segundo turn recibió la instrucción de reutilizar el script existente con ambos CSV.
+
+Resultado observado:
+
+- `analyze.py` seguía presente;
+- `updated.json` se produjo correctamente;
+- count = 5;
+- sum = 150;
+- mean = 30;
+- sources = `baseline.csv, update.csv`.
+
+Esto demuestra que el environment puede conservar no solo memoria declarativa, sino **herramientas de trabajo creadas durante una Mission**.
+
+### Interpretación
+
+72.6A demuestra una capability diferencial real respecto al runtime nativo actual:
+
+```
+estado cognitivo durable
+        ≠
+estado material durable
+```
+
+Mission Workspace ya resuelve bien el primero.
+
+El OpenAI-hosted environment añade el segundo:
+
+```
+archivos
+scripts
+transformaciones
+artefactos intermedios
+        ↓
+sobreviven entre turns
+```
+
+Esta diferencia puede ser valiosa para Missions donde reconstruir o retransferir continuamente un entorno de trabajo sería artificial o costoso.
+
+### Decisión
+
+**Persistent Environment & Artifacts pasa a capability candidate.**
+
+No pasa todavía a producción automática.
+
+No cambia el runtime primario: `native_minds` continúa siendo default.
+
+No se habilitan archivos reales del usuario.
+
+No existe todavía import automático de provider artifacts a MINDS.
+
+Antes de convertirlo en producto se requiere una frontera explícita:
+
+```
+OpenAI artifact
+    ↓
+MINDS artifact intake
+    ↓
+validate:
+  path
+  media type
+  size
+  hash
+  provenance
+  Mission ownership
+    ↓
+proposed artifact
+    ↓
+accepted MINDS artifact
+```
+
+El valor demostrado es suficientemente concreto para mantener esta capability en el diseño, pero no suficiente para ampliar autoridad.
+
+### Coste observado
+
+A1 Episode 1 consumió 37.048 tokens totales; Episode 2, 21.194. Gran parte del segundo input fue cacheado.
+
+A2 Episode 1 consumió 52.325 tokens. El API no devolvió usage completo en la inspección del segundo turn utilizada por el harness.
+
+Estas cifras refuerzan que un environment alojado debe reservarse para trabajo donde el estado material aporte valor real. No debe convertirse en una ruta general.
+
+### Hygiene
+
+Tras recoger la evidencia:
+
+- ambas Agent Sessions fueron eliminadas;
+- no se usaron datos de usuario;
+- no se crearon Commitments ni Missions reales;
+- el endpoint temporal `isabella-capability-lab` fue retirado como `410 Gone`;
+- `verify_jwt=true` quedó restaurado.
+
+72.6B puede continuar sin conceder write-through ni cambiar el runtime primario.
