@@ -343,3 +343,90 @@ Por tanto, el estado correcto de 72.5B es:
 - PR #4 permanece draft y no debe fusionarse como build cerrada hasta observar un `run_pair` real y recoger su resultado.
 
 No se debe inferir éxito del provider a partir del despliegue o de mocks. El criterio de 72.5B exige una sesión Agents real.
+
+
+## 72.5B — Resultado del primer benchmark real
+
+El 2 de octubre de 2026 se ejecutó el primer par shadow real sobre una Mission sintética aislada y pausada. Ambos providers recibieron el mismo problema: Option A requería 2 días y costaba 3 unidades; Option B requería 5 días y costaba 1 unidad; el deadline fijo era de 3 días. La pregunta era identificar qué opción era compatible con el deadline y si hacía falta una decisión del usuario.
+
+### Native Minds shadow
+
+`native_minds + shadow` terminó en `succeeded / completed`.
+
+Resultado esencial:
+
+- Option A cabe dentro del deadline de 3 días.
+- Option B no cabe.
+- No hace falta una decisión del usuario para determinar viabilidad.
+
+Uso observado: **896 tokens totales** (570 input, 326 output; 135 reasoning).
+
+### OpenAI Agents shadow
+
+La primera integración reveló una diferencia real de contrato: Managed Agents no acepta el mismo objeto `text.format` que Responses. Los intentos de pasar el schema directamente al agent devolvieron errores de parámetro. Esa evidencia condujo a una arquitectura más limpia:
+
+```
+Agent Session
+  environment:none
+  no tools
+  no MCP
+  no multi-agent
+        ↓
+final analysis del Agent
+        ↓
+MINDS / Responses normalizer
+  strict JSON Schema
+        ↓
+MissionRuntimeResult
+```
+
+Con esa arquitectura, `openai_agents + shadow` terminó en `succeeded / completed`.
+
+Resultado esencial:
+
+- Option A cabe dentro del deadline de 3 días.
+- Option B no cabe.
+- No hace falta una decisión del usuario para determinar viabilidad.
+- El coste no altera esa conclusión porque no se proporcionó ningún límite presupuestario.
+
+Uso observado:
+
+- Agent Session: **7.877 tokens**.
+- Strict normalizer: **1.028 tokens**.
+- Total del pipeline Agents: **8.905 tokens**.
+
+No se deriva un ganador de una métrica compuesta. La observación factual de este primer caso es que ambos runtimes produjeron la misma conclusión sustantiva; el pipeline Agents consumió aproximadamente 9,9 veces los tokens del shadow nativo en este problema pequeño. Ese coste puede justificarse únicamente cuando las propiedades durables/agentic aporten valor material en tareas que realmente las necesiten.
+
+### Zero write-through verificado después de la ejecución real
+
+Tras ambos shadows se comprobó en producción:
+
+- Mission Run: `paused`;
+- iteration: `0`;
+- Workspace summary: sin cambios;
+- Workspace items: exactamente los 4 originales.
+
+Por tanto, ni el native shadow ni Managed Agents modificaron el Mission Run autoritativo o el Mission Workspace.
+
+### Limpieza del benchmark
+
+Una vez recogida la evidencia:
+
+- los endpoints temporales `isabella-agent-benchmark-once` e `isabella-agent-benchmark-v2` fueron sobrescritos con `410 Gone` y `verify_jwt=true`;
+- el usuario técnico, Commitment, Workspace, Mission Run, runtime executions y runtime events sintéticos fueron eliminados mediante cascade;
+- producción quedó sin fixture de benchmark;
+- `isabella-agent-shadow` sigue siendo el único runner previsto para futuras ejecuciones shadow reales.
+
+### Decisión arquitectónica de 72.5B
+
+Managed Agents queda aceptado como **execution-plane candidate en modo shadow**, no como sustituto del runtime nativo.
+
+La forma estable del adapter es:
+
+1. Agents API mantiene la sesión durable y produce un análisis final provider-native.
+2. MINDS recupera ese análisis únicamente cuando el turn está `completed`.
+3. Responses normaliza el análisis mediante JSON Schema estricto al contrato `MissionRuntimeResult`.
+4. El resultado permanece en el runtime ledger.
+5. No existe write-through al Workspace en 72.5B.
+
+Esto preserva una frontera importante: **la sesión del proveedor puede razonar en su propio formato; MINDS decide qué estructura acepta como resultado**.
