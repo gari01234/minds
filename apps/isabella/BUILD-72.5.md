@@ -430,3 +430,26 @@ La forma estable del adapter es:
 5. No existe write-through al Workspace en 72.5B.
 
 Esto preserva una frontera importante: **la sesión del proveedor puede razonar en su propio formato; MINDS decide qué estructura acepta como resultado**.
+
+
+## Cierre técnico de 72.5B
+
+El gate final del PR completó:
+
+- **180 tests Node, 180 pass, 0 fail**;
+- build web correcto;
+- Deno typecheck correcto para el adapter y los runtimes relevantes;
+- **8 tests Deno, 8 pass, 0 fail**.
+
+Producción:
+
+- `isabella-agent-shadow` → **ACTIVE v3**, `verify_jwt=false`, protegido por el secreto server-side `agent_shadow_runner`;
+- `isabella-agent-benchmark-once` → retirado como tombstone `410 Gone`, `verify_jwt=true`;
+- `isabella-agent-benchmark-v2` → retirado como tombstone `410 Gone`, `verify_jwt=true`;
+- usuario técnico y fixture sintético → eliminados completamente;
+- runtime ledger de benchmark → eliminado por cascade junto con el fixture;
+- advisors de seguridad y performance → sin findings nuevos vinculados a `minds_mission_runtime_executions`, `minds_mission_runtime_events` o `isabella-agent-shadow`.
+
+72.5B demuestra que MINDS puede crear una Agent Session durable real, observar su lifecycle, recuperar su final answer y convertirlo en un `MissionRuntimeResult` estricto sin concederle herramientas, acciones externas o write-through.
+
+La conclusión arquitectónica queda limitada a eso. Esta build **no** demuestra todavía que Agents API deba sustituir el runtime nativo como opción primaria. Solo demuestra que puede coexistir de forma segura como execution plane shadow bajo autoridad de MINDS.
