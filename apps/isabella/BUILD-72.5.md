@@ -199,3 +199,45 @@ Builds 73–76 permanecen pausadas, no canceladas:
 - Build 76 — Expectation Engine v0.1
 
 Build 72.5 se inserta antes de ellas porque determina hasta qué punto MINDS debe seguir construyendo infraestructura agentic propia.
+
+
+## Estado de 72.5A — Runtime Adapter Contract
+
+72.5A queda implementada como una capa aditiva. No cambia todavía el runtime primario de ninguna Mission.
+
+El contrato compartido vive en `supabase/functions/_shared/mission-runtime.ts` y define:
+
+- providers: `native_minds` y `openai_agents`;
+- modos: `primary` y `shadow`;
+- lifecycle de ejecución separado del outcome de la Mission;
+- capacidades explícitas por provider;
+- las cinco operaciones comunes `start / inspect / steer / pause_or_stop / collect`;
+- snapshot v1 acotado y sin identidad de usuario ni credenciales;
+- normalización de items, sources y provenance antes de cruzar el boundary;
+- un adapter `native_minds` de compatibilidad;
+- registry que exige conservar `native_minds` como fallback y rechaza providers duplicados.
+
+El snapshot rechaza claves con forma de credencial —authorization, cookies, passwords, secrets, API/service-role keys y access/refresh tokens— y limita tamaño, profundidad y complejidad. Esto es una defensa adicional: el futuro execution plane recibe únicamente contexto explícitamente preparado por MINDS.
+
+### Ledger persistente
+
+La migración de producción `20261002155459_mission_runtime_adapter_v01` añade dos objetos separados de `minds_mission_runs`:
+
+- `minds_mission_runtime_executions`: mapping entre un Mission Run y una ejecución de provider;
+- `minds_mission_runtime_events`: historial de lifecycle/provider turns y eventos observables.
+
+El mapping conserva provider, mode, lifecycle, provider session id, provider turn id, snapshot hash, result status, usage, error y metadata. La identidad `mission_run_id + provider + mode` es inmutable y única en v0.1.
+
+El `user_id` nunca se acepta como autoridad del runtime: triggers de base de datos lo derivan del Mission Run y de la ejecución padre. Authenticated puede leer únicamente sus filas mediante RLS; no puede insertar, actualizar ni borrar. Las mutaciones quedan reservadas al service role. No se añadieron RPCs `SECURITY DEFINER`.
+
+### Validación
+
+Antes de aplicar la migración, el DDL completo y su contrato de seguridad se ejecutaron dentro de una transacción con rollback. Después de aplicarla, `supabase/tests/mission_runtime_adapter.sql` volvió a pasar contra producción con rollback:
+
+`PASS: runtime ownership, immutable mapping, RLS and service-only writes`.
+
+Los Security Advisors no reportan findings nuevos sobre las tablas 72.5A. El único finding de performance nuevo es que `minds_mission_runtime_run_idx` todavía no ha sido usado, lo esperado inmediatamente después de crear una tabla cuyo runtime todavía no está conectado.
+
+El runtime de producción permanece intacto: `isabella-mission-runner` sigue reclamando `minds_mission_runs`, usando Responses API y aplicando cada checkpoint mediante `minds_apply_mission_step`. No importa el nuevo adapter y no contiene selección de `openai_agents`.
+
+72.5B será el primer punto en el que una ejecución `openai_agents + shadow` pueda existir. Hasta entonces, el ledger está preparado pero no dirige ninguna Mission.
