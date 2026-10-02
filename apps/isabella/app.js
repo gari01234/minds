@@ -8,6 +8,18 @@ const fromIso=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const today=()=>iso(new Date());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const humanSurface=()=>window.MINDS_HUMAN_SURFACE;
+function humanStateHTML(value,technical=''){
+  if(!value)return '';
+  const labels=humanSurface()?.metaLabels?.(value)||{};
+  const meta=[labels.owner,labels.certainty,labels.action].filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('');
+  return '<div class="human-state tone-'+esc(value.tone||'neutral')+'"><b>'+esc(value.headline||'')+'</b>'+
+    (value.detail?'<p>'+esc(value.detail)+'</p>':'')+
+    (meta?'<div class="human-state-meta">'+meta+'</div>':'')+
+    (technical?'<details class="human-tech"><summary>Ver detalle técnico</summary>'+technical+'</details>':'')+
+    '</div>';
+}
+
 const clone=x=>x==null?null:JSON.parse(JSON.stringify(x));
 const signedAssetCache=new Map();
 let lastMessagesRenderKey='';
@@ -1903,7 +1915,7 @@ function initEventDrag(){
 }
 function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
-function commitmentStatusLabel(status){return status==='active'?'Activo':status==='waiting'?'En espera':status==='paused'?'Pausado':status==='completed'?'Completado':status==='cancelled'?'Cancelado':String(status||'')}
+function commitmentStatusLabel(status){return humanSurface()?.commitment?.(status)?.headline||String(status||'')}
 async function continuityPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
   modal('Continuidad','<div class="surface-loading">Leyendo lo que sigue vivo…</div>');
@@ -1931,9 +1943,7 @@ async function continuityPanel(){
     document.querySelectorAll('[data-mission-workspace]').forEach(b=>b.onclick=()=>void missionWorkspacePanel(b.dataset.missionWorkspace));
   }catch(e){modal('Continuidad','<div class="small">No pude cargar la continuidad ahora mismo.</div>')}
 }
-function missionRunStatusLabel(status){
-  return status==='queued'?'En cola':status==='running'?'Trabajando':status==='waiting_for_user'?'Necesita tu decisión':status==='paused'?'Pausada':status==='completed'?'Completada':status==='failed'?'Con error':status==='cancelled'?'Cancelada':String(status||'');
-}
+function missionRunStatusLabel(status){return humanSurface()?.mission?.({status})?.headline||String(status||'')}
 async function missionRunControlUI(runId,action,workspaceId){
   const sb=window.MINDS_SUPABASE;if(!sb||!runId)return;
   try{
