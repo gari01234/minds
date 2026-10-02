@@ -128,3 +128,8 @@ Las Ideas aceptadas pueden convertirse en `minds_idea_workspaces`: espacios pers
 ### Build 70 — permisos contextuales con revisión explícita
 
 `Más → Permisos de Isabella` permite consultar evidencia por acción, contexto y alcance, revisar una propuesta elegible y revocar un permiso autorizado. No hay score global ni ampliación automática de permisos. La primera clase admitida es crear tareas sencillas sin proyecto en una categoría concreta por una petición directa comprobada. Los datos históricos y las ejecuciones automáticas no se convierten retroactivamente en nuevas aprobaciones. Véase `BUILD-70.md` para el contrato, pruebas y límites.
+
+
+### Build 71 — presencia y entrega en el dispositivo
+
+`Más → Avisos de Isabella` añade Web Push a la PWA sin convertir Isabella en una app nativa ni mover su cognición al teléfono. Attention Economy sigue decidiendo cuándo una señal merece `interrupt`; Delivery Layer únicamente transporta esa decisión hacia un dispositivo registrado y conserva intents, attempts y receipts separados. La interfaz solicita permiso únicamente por una acción explícita del usuario y, en iOS/iPadOS, exige abrir Isabella como web app instalada. Véase `BUILD-71.md` para contrato, seguridad, pruebas y estado de despliegue.
