@@ -254,3 +254,70 @@ El PR gate final completó:
 - test SQL transaccional de producción correcto.
 
 No se desplegó ninguna nueva Edge Function porque 72.5A no modifica ejecución productiva. El único cambio de producción es la migración aditiva del ledger. El runtime nativo continúa como única ruta activa.
+
+
+## Estado de 72.5B — OpenAI Agents Shadow Execution
+
+72.5B introduce el primer provider real `openai_agents`, pero exclusivamente en modo `shadow`.
+
+### Boundary del pilot
+
+La primera Agent Session usa:
+
+- `environment.type = none`;
+- ningún tool;
+- `multi_agent.enabled = false`;
+- ningún MCP;
+- ningún Computer Use;
+- ninguna función con side effects;
+- Structured Outputs mediante JSON Schema;
+- un snapshot `mission_snapshot_v1` previamente normalizado por MINDS.
+
+La sesión recibe objetivo, criterio de cierre, instrucción, summary, último input relevante, items operativos recientes y un contexto de proyecto reducido. No recibe `user_id`, IDs de claims/tasks/files, metadata arbitraria ni credenciales.
+
+El provider usa el contrato público actual de Agents API: `POST /v1/agents/sessions` con `OpenAI-Beta: agents=v1`, consulta de turns y recuperación de session items. El runtime considera un turn completado, no un session `idle`, como condición necesaria para recoger resultado.
+
+### Comparación pareada
+
+El worker interno `isabella-agent-shadow` ejecuta dos evaluaciones sobre exactamente el mismo snapshot y `snapshot_hash`:
+
+- `native_minds + shadow`: una llamada Responses sin write-through;
+- `openai_agents + shadow`: una Agent Session durable sin write-through.
+
+Los dos resultados usan el mismo schema de salida:
+
+- `status`;
+- `summary`;
+- `blocker_question`;
+- `items`;
+- `sources`.
+
+No se aplica ningún score agregado. La evidencia queda separada por provider para poder comparar posteriormente calidad, continuidad, procedencia, decisiones, preguntas, uso y comportamiento operacional.
+
+### Persistencia shadow
+
+La migración de producción `20261002173851_mission_runtime_shadow_v01` añade `result_payload` al ledger de 72.5A e instala el secreto server-side `agent_shadow_runner`.
+
+El resultado shadow se guarda únicamente en:
+
+- `minds_mission_runtime_executions.result_payload`;
+- `minds_mission_runtime_executions.result_status`;
+- `minds_mission_runtime_events`.
+
+El worker no contiene llamadas a `minds_apply_mission_step`, `minds_append_commitment_workspace_item` ni `minds_update_commitment_workspace_summary`.
+
+El test SQL de producción con rollback confirma:
+
+`PASS: paired shadow isolation, shared snapshot, RLS and zero write-through`.
+
+### Lifecycle
+
+`run_pair` crea o reutiliza idempotentemente los dos shadows. La rama nativa puede terminar en la misma invocación. Agents API puede permanecer `running`; `inspect_agents` recupera posteriormente la sesión, el último turn y los items guardados.
+
+`idle` por sí solo no se interpreta como éxito. Solo un turn `completed` habilita `collect`.
+
+Aunque Agents API soporta steering, cancelación y multi-agent, 72.5B los mantiene explícitamente desactivados en el adapter. Se abrirán únicamente en fases posteriores si el shadow justifica hacerlo.
+
+### Producción
+
+La migración de datos ya está aplicada, pero `isabella-agent-shadow` no se considera productivo hasta completar Deno/Node gates, desplegar la Edge Function y ejecutar el primer par controlado. No existe cron para este worker: 72.5B solo puede iniciarse mediante una llamada interna autenticada por el secreto `agent_shadow_runner`.
