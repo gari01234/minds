@@ -44,7 +44,7 @@ function normalizeText(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
-function simpleAgendaMutation(message){
+function simpleAgendaMutation(message:string){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
   const action=/\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|mueve|mover|cambia|cambiar|reprograma|reprogramar|borra|borrar|elimina|eliminar|completa|completar|archiva|archivar|add|create|move|change|delete|remove|complete|archive|erstelle|hinzufügen|verschiebe|ändern|lösche|erledige)\b/i.test(t);
@@ -1163,7 +1163,7 @@ async function readCommitmentWorkspace(req:Request,args:any){
     q=workspaceId?q.eq("id",workspaceId):commitmentId?q.eq("commitment_id",commitmentId):q.eq("id","00000000-0000-0000-0000-000000000000");
     const {data:workspace,error}=await q.maybeSingle();
     if(error||!workspace)return {status:"missing"};
-    const {data:items,itemError}=await sb.from("minds_commitment_workspace_items")
+    const {data:items,error:itemError}=await sb.from("minds_commitment_workspace_items")
       .select("id,workspace_id,kind,status,content,provenance_class,source_kind,source_ref,created_at")
       .eq("workspace_id",workspace.id).order("created_at",{ascending:true}).limit(120);
     if(itemError)return {status:"error",detail:itemError.message};
@@ -2261,7 +2261,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
         continue;
       }
-      const proposal=proposalFromTool(call.name,args);
+      const proposal:any=proposalFromTool(call.name,args);
       if(mode==="confirm"&&!proposal){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"confirmation_required_but_no_proposal"})});
         continue;
