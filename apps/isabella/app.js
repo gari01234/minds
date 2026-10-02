@@ -1902,7 +1902,7 @@ function initEventDrag(){
   });
 }
 function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 function commitmentStatusLabel(status){return status==='active'?'Activo':status==='waiting'?'En espera':status==='paused'?'Pausado':status==='completed'?'Completado':status==='cancelled'?'Cancelado':String(status||'')}
 async function continuityPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
@@ -2087,6 +2087,130 @@ async function contextualAutonomyPanel(){
     $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
   }catch{modal('Permisos de Isabella','<div class="small">No pude leer los permisos. No se ha autorizado ningún cambio desde esta pantalla.</div>')}
 }
+
+function pushEnvironment(){
+  const supported='serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window;
+  const standalone=window.matchMedia?.('(display-mode: standalone)')?.matches||navigator.standalone===true;
+  const ios=/iPad|iPhone|iPod/i.test(navigator.userAgent)||(/Macintosh/i.test(navigator.userAgent)&&navigator.maxTouchPoints>1);
+  return {supported,standalone,ios};
+}
+function pushKeyBytes(value){
+  const normalized=String(value||'').replace(/-/g,'+').replace(/_/g,'/');
+  const padded=normalized+'='.repeat((4-normalized.length%4)%4);
+  const raw=atob(padded),bytes=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)bytes[i]=raw.charCodeAt(i);
+  return bytes;
+}
+function pushDeviceMeta(env){
+  return {
+    user_agent:navigator.userAgent||'',
+    platform:navigator.userAgentData?.platform||navigator.platform||'',
+    display_mode:env.standalone?'standalone':'browser'
+  };
+}
+async function enablePushNotifications(){
+  const env=pushEnvironment(),sb=window.MINDS_SUPABASE;
+  if(!env.supported){throw new Error('Este navegador no permite avisos push.')}
+  if(env.ios&&!env.standalone){throw new Error('En iPhone o iPad, añade Isabella a la pantalla de inicio y ábrela desde allí antes de activar los avisos.')}
+  if(!sb)throw new Error('Conecta la memoria antes de activar los avisos.');
+
+  const permission=await Notification.requestPermission();
+  if(permission!=='granted')throw new Error(permission==='denied'?'Los avisos están bloqueados en los ajustes del dispositivo.':'No se concedió permiso para avisos.');
+
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw new Error('Conecta la memoria antes de activar los avisos.');
+
+  const {data:config,error:configError}=await sb.functions.invoke('isabella-push',{body:{action:'config'}});
+  if(configError||!config?.public_key)throw new Error('No pude preparar los avisos de Isabella.');
+
+  const registration=await navigator.serviceWorker.ready;
+  let subscription=await registration.pushManager.getSubscription();
+  if(!subscription){
+    subscription=await registration.pushManager.subscribe({
+      userVisibleOnly:true,
+      applicationServerKey:pushKeyBytes(config.public_key)
+    });
+  }
+  const serialized=subscription.toJSON();
+  const {error}=await sb.rpc('minds_register_push_subscription',{
+    p_subscription:serialized,
+    p_device:pushDeviceMeta(env)
+  });
+  if(error){
+    try{await subscription.unsubscribe()}catch{}
+    throw new Error('No pude guardar este dispositivo para los avisos.');
+  }
+  try{await navigator.clearAppBadge?.()}catch{}
+  return subscription;
+}
+async function disablePushNotifications(){
+  const sb=window.MINDS_SUPABASE;
+  if(!('serviceWorker' in navigator))return;
+  const registration=await navigator.serviceWorker.ready;
+  const subscription=await registration.pushManager?.getSubscription?.();
+  if(!subscription)return;
+  if(sb){
+    const {error}=await sb.rpc('minds_remove_push_subscription',{p_endpoint:subscription.endpoint});
+    if(error)throw new Error('No pude desactivar este dispositivo en MINDS.');
+  }
+  await subscription.unsubscribe();
+  try{await navigator.clearAppBadge?.()}catch{}
+}
+function pushStatusCopy(env,permission,subscribed){
+  if(!env.supported)return 'Este navegador no admite avisos push.';
+  if(env.ios&&!env.standalone)return 'En iPhone o iPad, primero añade Isabella a la pantalla de inicio y ábrela desde allí.';
+  if(permission==='denied')return 'Los avisos están bloqueados por el dispositivo. Puedes volver a permitirlos desde los ajustes del sistema.';
+  if(subscribed)return 'Isabella puede avisarte en este dispositivo aunque MINDS no esté abierto.';
+  return 'Isabella todavía no puede avisarte fuera de MINDS en este dispositivo.';
+}
+async function pushNotificationsPanel(){
+  const env=pushEnvironment(),sb=window.MINDS_SUPABASE;
+  modal('Avisos de Isabella','<div class="surface-loading">Comprobando este dispositivo…</div>');
+  let subscription=null,permission=typeof Notification!=='undefined'?Notification.permission:'unsupported',history=[];
+  try{
+    if(env.supported){
+      const registration=await navigator.serviceWorker.ready;
+      subscription=await registration.pushManager.getSubscription();
+    }
+    if(sb){
+      const {data:{session}}=await sb.auth.getSession();
+      if(session){
+        const {data}=await sb.from('minds_delivery_intents')
+          .select('status,sent_at,created_at,last_error')
+          .order('created_at',{ascending:false}).limit(5);
+        history=data||[];
+      }
+    }
+  }catch{}
+  const active=!!subscription&&permission==='granted';
+  const recent=history.map(row=>{
+    const label=row.status==='sent'?'Aviso enviado':row.status==='retry'?'Volveré a intentarlo':row.status==='failed'?'No se pudo entregar':row.status==='skipped'?'Ya no era necesario':'Preparando aviso';
+    return '<div class="doctor-log"><b>'+esc(label)+'</b><time>'+new Date(row.sent_at||row.created_at).toLocaleString('es-ES')+'</time></div>';
+  }).join('');
+  const iosHelp=env.ios&&!env.standalone?'<div class="continuity-intro"><p>En iPhone, abre esta página en Safari, usa <b>Compartir → Añadir a pantalla de inicio</b> y después abre Isabella desde su icono. Apple solo permite solicitar avisos desde una web app instalada.</p></div>':'';
+  const actionButton=env.supported&&!(env.ios&&!env.standalone)
+    ?'<div class="proposal-actions"><button id="pushToggle" class="'+(active?'secondary':'primary')+'">'+(active?'Desactivar avisos en este dispositivo':'Permitir avisos en este dispositivo')+'</button></div>'
+    :'';
+  modal('Avisos de Isabella',
+    '<div class="continuity-intro"><p><b>'+esc(active?'Avisos activados':'Avisos no activados')+'</b></p><p>'+esc(pushStatusCopy(env,permission,active))+'</p><p>Activarlos no cambia cuándo Isabella decide interrumpirte. Attention Economy sigue tomando esa decisión; esta capa solo permite que el aviso llegue al dispositivo.</p></div>'+
+    iosHelp+actionButton+
+    (recent?'<div class="small section-label">Entregas recientes</div>'+recent:'')+
+    '<div id="pushError" class="small" role="status"></div>'
+  );
+  const button=$('#pushToggle');
+  if(button)button.onclick=async()=>{
+    if(button.disabled)return;button.disabled=true;
+    const box=$('#pushError');if(box)box.textContent='';
+    try{
+      if(active)await disablePushNotifications();else await enablePushNotifications();
+      await pushNotificationsPanel();
+    }catch(e){
+      if(box)box.textContent=e instanceof Error?e.message:'No pude cambiar los avisos.';
+      if(button.isConnected)button.disabled=false;
+    }
+  };
+}
+
 function attentionRouteOptions(selected){
   return [
     ['interrupt','Avisarme en el chat'],
