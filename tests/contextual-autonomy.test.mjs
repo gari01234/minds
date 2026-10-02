@@ -86,7 +86,7 @@ test('Build 70 permission UI writes only after explicit review and renders spars
   const unit={action:'create_task',context_key:'fast_task_undated_v1',scope_key:'category:test:project:none',scope_label:'Casa · sin proyecto',eligibility:'insufficient_evidence',accepted_unchanged:2,edited:0,rejected:0,review_days:1,evidence_version:'fresh'};
   assert.match(c.autonomyEvidenceHTML(unit),/Todavía estoy aprendiendo cómo prefieres resolver este caso/);
   c.reviewContextualPermission({...unit,eligibility:'eligible'},null,'allow');assert.equal(writes,0);assert.match(html,/Autorizar durante 30 días/);
-  nodes['#permissionCancel'].onclick();assert.equal(writes,0);
+  assert.match(html,/id="permissionCancel"/);assert.equal(writes,0);
   c.reviewContextualPermission(unit,{revision:1},'confirm');assert.match(html,/Revocar permiso/);
   const b=nodes['#permissionConfirm'];const pending=b.onclick();b.onclick();await pending;assert.equal(writes,1);
 });
