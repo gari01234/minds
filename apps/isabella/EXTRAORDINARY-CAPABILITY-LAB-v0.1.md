@@ -591,3 +591,174 @@ Computer Use                        → DEFERRED pending approval model
 La regla permanece:
 
 **solo se conserva aquello que demuestra una mejora concreta para Isabella.**
+
+
+## 72.6D — Computer Use: autoridad antes que capacidad
+
+72.6D no ejecuta acciones reales de navegador. La investigación del contrato actual identifica primero una incompatibilidad de autoridad que debe resolverse antes de cualquier adopción.
+
+Managed Agents Computer Use permite un browser en un environment OpenAI-hosted. El browser requiere aprobación para acceder a cada nuevo origin y las acciones aparecen como `computer_use_call` observables.
+
+Sin embargo, el approval de origin **no equivale a confirmación por acción**. Una vez aprobado un sitio, ese mecanismo no garantiza una nueva confirmación antes de una compra, envío, cambio destructivo u otra acción consecuente.
+
+Para MINDS esto es una diferencia estructural.
+
+Contextual Autonomy necesita que la autoridad dependa de:
+
+```
+acción
++ objeto
++ contexto
++ permiso vigente
+```
+
+y no únicamente de:
+
+```
+origin aprobado
+```
+
+### Approval model requerido por MINDS
+
+Una futura browser capability debe distinguir al menos:
+
+**Nivel R0 — observation**
+
+- abrir una página pública;
+- desplazarse;
+- leer contenido;
+- cambiar tabs/filtros puramente locales.
+
+Puede ser autónomo cuando el origin está expresamente permitido y no existe login ni transmisión de datos.
+
+**Nivel R1 — local retrieval**
+
+- descargar un archivo;
+- capturar un artifact;
+- exportar datos sin modificar el sistema externo.
+
+Puede ejecutarse bajo permiso contextual, pero cualquier archivo debe pasar por Artifact Intake antes de entrar en MINDS.
+
+**Nivel R2 — transmission**
+
+- escribir datos personales en un formulario;
+- subir un archivo;
+- introducir información privada;
+- autenticarse.
+
+Es transmisión de datos y requiere una frontera explícita. Credenciales nunca se entregan como prompt ni memoria del Agent.
+
+**Nivel R3 — consequential reversible action**
+
+- guardar preferencias;
+- crear un draft;
+- modificar un registro reversible;
+- enviar una operación que todavía puede deshacacerse con garantías claras.
+
+Requiere permission scope específico y receipt verificable.
+
+**Nivel R4 — consequential / destructive**
+
+- enviar mensajes externos;
+- publicar;
+- comprar;
+- aceptar contratos;
+- borrar;
+- transferir dinero;
+- cambiar seguridad;
+- cualquier acción materialmente difícil de revertir.
+
+Requiere confirmación humana por acción salvo que en el futuro exista una política explícita, estrecha y previamente concedida que pueda garantizarse técnicamente en el execution runtime.
+
+### Decisión sobre OpenAI-hosted Computer Use
+
+**NO ADOPTED para acciones reales en esta fase.**
+
+La capacidad técnica de mover un browser no compensa una frontera de autoridad menos precisa que la que MINDS ya exige.
+
+No se hará una demo de UI únicamente para demostrar que el Agent puede hacer click.
+
+### Dos rutas que permanecen abiertas
+
+**Read-only hosted browser**
+
+Podría evaluarse posteriormente para navegación pública sin login, sin formularios, sin uploads y sin acciones consecuentes. Su valor tendría que superar web/MCP estructurado; si no, tampoco se adopta.
+
+**MINDS-controlled browser runtime**
+
+Es la opción preferida para trabajo con autoridad real. Un runtime controlado por MINDS podría interponer cada operación relevante:
+
+```
+Agent proposes browser action
+        ↓
+MINDS classifies R0–R4
+        ↓
+permission / confirmation gate
+        ↓
+execution
+        ↓
+receipt + verification
+```
+
+Solo esta arquitectura permite hacer cumplir de forma técnica la autonomía contextual en vez de confiar en que el modelo recuerde pedir permiso.
+
+### Resultado 72.6D
+
+Computer Use queda **deferred / not adopted for consequential actions**.
+
+El laboratorio no considera una feature mejor para Isabella si aumenta la capacidad de actuar pero reduce la precisión con la que Isabella respeta autoridad.
+
+
+## Conclusión de Build 72.6
+
+Después de probar o analizar las cuatro capabilities extraordinarias:
+
+```
+A · Persistent Environment / Artifacts
+    → KEEP AS CANDIDATE
+
+B · Read-only MINDS MCP
+    → KEEP AS BOUNDARY CANDIDATE
+
+C · Multi-Agent Parallelism
+    → DO NOT ADOPT
+
+D · OpenAI-hosted Computer Use
+    → DO NOT ADOPT FOR REAL ACTIONS
+      DEFER READ-ONLY / MINDS-CONTROLLED BROWSER
+```
+
+Por tanto, el laboratorio **no cambia el runtime primario de Isabella**.
+
+`native_minds` sigue siendo el default.
+
+Lo que sí cambia es nuestro mapa de capabilities:
+
+- sabemos que un hosted environment puede aportar estado material durable;
+- sabemos que MCP estrecho puede reducir exposición de contexto y mantener capabilities de escritura fuera del Agent;
+- sabemos que multi-agent no mejoró el workload probado;
+- sabemos que la frontera de approval de hosted Computer Use es demasiado gruesa para las acciones consecuentes de Isabella.
+
+### Qué merece construir ahora
+
+La siguiente pieza con valor demostrado no es otro Agent.
+
+Es una frontera propia de MINDS:
+
+**Artifact Intake v0.1**
+
+Su función será permitir que un runtime externo produzca archivos sin convertirlos automáticamente en verdad, memoria o artifact aceptado.
+
+Después de Artifact Intake, Persistent Environment podrá probarse con una Mission real pero no sensible.
+
+Read-only MCP puede desarrollarse en paralelo como interfaz interna de contexto.
+
+No se amplía write-through.
+
+No se amplía Computer Use.
+
+No se activa multi-agent.
+
+El criterio rector permanece:
+
+> una capability solo entra en Isabella cuando aumenta capacidad útil sin debilitar autoridad, provenance, continuidad o comprensibilidad.
