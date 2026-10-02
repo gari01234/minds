@@ -1,10 +1,10 @@
-const CACHE_NAME = 'isabella-shell-v77';
+const CACHE_NAME = 'isabella-shell-v78';
 const SHELL = [
   './',
   './index.html',
   './app.css?v=52',
-  './shell.js?v=70',
-  './app.js?v=76',
+  './shell.js?v=71',
+  './app.js?v=77',
   './work.js?v=4',
   './sync.js?v=pwa27',
   './ai.js?v=45',
@@ -67,4 +67,45 @@ self.addEventListener('fetch', event => {
       });
     })
   );
+});
+
+
+self.addEventListener('push', event => {
+  let payload = {};
+  try {
+    payload = event.data?.json?.() || {};
+  } catch {
+    payload = { body: event.data?.text?.() || '' };
+  }
+  const title = String(payload.title || 'Isabella');
+  const options = {
+    body: String(payload.body || 'Hay algo que merece tu atención.'),
+    icon: './icon.svg',
+    badge: './icon.svg',
+    tag: payload.tag ? String(payload.tag) : undefined,
+    renotify: true,
+    data: { url: String(payload.url || './') }
+  };
+  event.waitUntil(
+    self.registration.showNotification(title, options)
+      .then(() => self.registration.setAppBadge?.(1))
+      .catch(() => undefined)
+  );
+});
+
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const target = new URL(event.notification.data?.url || './', self.location.origin).href;
+  event.waitUntil((async () => {
+    try { await self.registration.clearAppBadge?.(); } catch {}
+    const windows = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const base = new URL('./', self.location.href).href;
+    const existing = windows.find(client => client.url.startsWith(base));
+    if (existing) {
+      try { await existing.navigate(target); } catch {}
+      await existing.focus();
+      return;
+    }
+    await self.clients.openWindow(target);
+  })());
 });
