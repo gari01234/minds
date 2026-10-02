@@ -7,7 +7,7 @@ export async function ensureVapidKeys(sb:any){
     .select("key,value")
     .in("key",["push_vapid_public","push_vapid_private"]);
   if(error)throw new Error("vapid_read_failed:"+error.message);
-  const map=new Map((data||[]).map((row:any)=>[String(row.key),String(row.value||"")]));
+  const map=new Map<string,string>((data||[]).map((row:any)=>[String(row.key),String(row.value||"")] as [string,string]));
   const existingPublic=map.get("push_vapid_public")||"";
   const existingPrivate=map.get("push_vapid_private")||"";
   if(existingPublic&&existingPrivate)return {publicKey:existingPublic,privateKey:existingPrivate};
