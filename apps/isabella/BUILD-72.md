@@ -95,4 +95,20 @@ No se modifica el runtime durable ni la política de Attention Economy.
 
 La build añade `tests/human-surface.test.mjs` para validar estados humanos, autoridad, incertidumbre, progressive disclosure, lenguaje de Isabella, mensajes proactivos y ausencia de una nueva superficie de navegación. El workflow de PR amplía `deno check` a todas las Edge Functions modificadas por esta build.
 
-El cierre exige: tests Node verdes, build web verde, Deno typecheck verde, despliegue de las Edge Functions modificadas, smoke checks de funciones y workflow oficial de Pages verde después de merge.
+El gate ampliado reveló deuda tipada previa que los workflows anteriores no compilaban: un parámetro implícito, un typo real `itemError` que podía ocultar un error de lectura de Mission Workspace, una unión de propuestas sin `request_id` tipado y el ranking dinámico de urgencia del briefing. Se corrigieron de forma acotada sin cambiar políticas ni autoridad.
+
+El run de verificación previo al despliegue completó **167 tests Node, 167 pass, 0 fail**, `node scripts/build.mjs` correcto y `deno check` correcto para `isabella-chat`, `isabella-mission-runner`, `isabella-routine-runner`, `isabella-push` e `isabella-delivery-runner`.
+
+## Producción
+
+No hay migración SQL en Build 72. Se desplegaron las superficies server-side modificadas manteniendo su modelo de autenticación existente:
+
+- `isabella-chat` → v54, JWT.
+- `isabella-mission-runner` → v3, secreto runtime existente.
+- `isabella-routine-runner` → v10, secreto runtime existente.
+- `isabella-push` → v2, JWT.
+- `isabella-delivery-runner` → v2, secreto `delivery_runner`.
+
+Los crons existentes no fueron modificados. En el ciclo real de las 14:23 UTC del 2 de octubre de 2026, `isabella-mission-runner v3`, `isabella-routine-runner v10` e `isabella-delivery-runner v2` respondieron HTTP 200. Esto verifica que la nueva representación no rompe los runtimes durables, rutinas ni delivery.
+
+El cierre exige además fusionar el PR y verificar el workflow oficial de Pages sobre el commit de `main`. No declarar Build 72 cerrada hasta que ese gate también sea verde.
