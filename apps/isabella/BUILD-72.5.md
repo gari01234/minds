@@ -321,3 +321,25 @@ Aunque Agents API soporta steering, cancelación y multi-agent, 72.5B los mantie
 ### Producción
 
 La migración de datos ya está aplicada, pero `isabella-agent-shadow` no se considera productivo hasta completar Deno/Node gates, desplegar la Edge Function y ejecutar el primer par controlado. No existe cron para este worker: 72.5B solo puede iniciarse mediante una llamada interna autenticada por el secreto `agent_shadow_runner`.
+
+
+### Gate de ejecución del benchmark
+
+El usuario autorizó explícitamente la invocación de `isabella-agent-shadow` mediante el secreto interno `agent_shadow_runner`. Aun con esa autorización, el entorno de herramientas bloqueó:
+
+1. el `net.http_post` directo que lee `agent_shadow_runner` y lo envía a la Edge Function;
+2. la persistencia de un invoker SQL service-role que mantendría el secreto íntegramente dentro de Supabase.
+
+El segundo diseño fue probado únicamente dentro de una transacción con rollback y pasó su contrato de privilegios, pero **no fue aplicado como migración** porque el gate de seguridad volvió a bloquear la operación.
+
+Por tanto, el estado correcto de 72.5B es:
+
+- adapter Agents implementado y testeado;
+- `isabella-agent-shadow` ACTIVE v1;
+- migración `20261002173851_mission_runtime_shadow_v01` aplicada;
+- benchmark sintético creado y pausado;
+- cero write-through verificado;
+- **ninguna Agent Session real creada todavía**;
+- PR #4 permanece draft y no debe fusionarse como build cerrada hasta observar un `run_pair` real y recoger su resultado.
+
+No se debe inferir éxito del provider a partir del despliegue o de mocks. El criterio de 72.5B exige una sesión Agents real.
