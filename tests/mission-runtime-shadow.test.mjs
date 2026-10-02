@@ -30,6 +30,7 @@ test('Build 72.5B compares native and Agents shadows from the same normalized sn
   assert.ok(runner.includes('mode:"shadow"'));
   assert.ok(runner.includes('action==="run_pair"'));
   assert.ok(runner.includes('action==="inspect_agents"'));
+  assert.ok(runner.includes('snapshot_for_normalizer:snapshot'));
 });
 
 test('Build 72.5B stores normalized results in the runtime ledger, not Mission state',()=>{
@@ -45,12 +46,18 @@ test('Build 72.5B stores normalized results in the runtime ledger, not Mission s
   assert.ok(!migration.includes('alter table public.minds_mission_runs'));
 });
 
-test('Build 72.5B uses current Agents API beta contract with structured output',()=>{
+test('Build 72.5B keeps Managed Agents provider-native and normalizes through strict Responses',()=>{
   const adapter=read('supabase/functions/_shared/openai-agents-runtime.ts');
   assert.ok(adapter.includes('https://api.openai.com/v1/agents'));
+  assert.ok(adapter.includes('https://api.openai.com/v1/responses'));
   assert.ok(adapter.includes('"OpenAI-Beta":BETA_HEADER'));
   assert.ok(adapter.includes('BETA_HEADER="agents=v1"'));
-  assert.ok(adapter.includes('format:{type:"json_schema",strict:true,schema:MISSION_SHADOW_SCHEMA}'));
+  assert.ok(adapter.includes('environment:{type:"none"}'));
+  assert.ok(adapter.includes('multi_agent:{enabled:false}'));
+  assert.ok(!adapter.includes('agent:{\n              model,\n              text:'));
+  assert.ok(adapter.includes('name:"mission_shadow_result"'));
+  assert.ok(adapter.includes('strict:true'));
+  assert.ok(adapter.includes('normalization:"responses_strict_json_schema"'));
   assert.ok(adapter.includes('/turns?order=desc&limit=1'));
   assert.ok(adapter.includes('/items?order=asc&limit=100'));
   assert.ok(adapter.includes('phase==="final_answer"'));
