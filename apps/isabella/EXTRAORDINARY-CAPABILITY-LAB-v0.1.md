@@ -762,3 +762,14 @@ No se activa multi-agent.
 El criterio rector permanece:
 
 > una capability solo entra en Isabella cuando aumenta capacidad útil sin debilitar autoridad, provenance, continuidad o comprensibilidad.
+
+
+## 72.6E — Artifact Intake v0.1 implemented
+
+The first capability demonstrated by the lab has produced a concrete MINDS improvement.
+
+Artifact Intake v0.1 is now the mandatory boundary for future provider-generated files. It introduces a service-only quarantine bucket, immutable material identity (path, size, MIME and SHA-256), runtime-derived ownership, explicit authenticated accept/reject review, and a state machine that forbids promotion before acceptance.
+
+Importantly, this does **not** activate Persistent Environment as a default runtime. It makes future use of that capability compatible with MINDS authority.
+
+See `ARTIFACT-INTAKE-v0.1.md`.
