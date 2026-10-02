@@ -248,4 +248,4 @@ The browser receives only the VAPID public key. Subscription registration/remova
 
 The human surface is deliberately smaller than the internal ontology: the user sees `Avisos de Isabella`, not delivery intents or push receipts. This is the first narrow application of the next design direction: internal complexity should reduce rather than increase external complexity.
 
-The repository implementation is documented in `BUILD-71.md`. It must not be described as production-deployed until the migration and functions have been verified against the exact MINDS Supabase project and the official Pages gate has completed after merge.
+The repository implementation is documented in `BUILD-71.md`. The delivery schema and both Edge Functions are deployed and verified against the exact MINDS Supabase project; the user-facing publication is complete only once PR #1 is merged and the official Pages gate succeeds.
