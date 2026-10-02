@@ -140,3 +140,10 @@ Las Ideas aceptadas pueden convertirse en `minds_idea_workspaces`: espacios pers
 Isabella now translates internal MINDS states into a small human-facing vocabulary before showing them in everyday UI. Continuity, durable work, contextual permissions, notification policy and system health tell the user what is happening, who needs to act, how certain the state is and whether anything is required. Technical ontology remains inspectable behind explicit detail disclosure instead of becoming the default interface.
 
 Human Surface is read-only projection, not state. It cannot grant authority, change Attention Economy, modify Missions or replace Supabase as source of truth. Conversation and proactive runtimes receive the same language rule, and Isabella is explicitly forbidden from simulating emotions or personhood as part of this abstraction. See `BUILD-72.md`.
+
+
+### Build 72.5A — Runtime Adapter
+
+Mission Run now has a provider-neutral execution contract without changing production execution. `native_minds` remains the mandatory fallback and current primary runtime; `openai_agents` is only prepared as a future shadow provider.
+
+A separate runtime ledger records provider/session/turn identity and lifecycle without modifying the authoritative Mission Run. Runtime ownership is derived from the Mission itself, direct authenticated writes are blocked, and snapshots reject credential-shaped data before crossing the execution boundary. See `BUILD-72.5.md`.
