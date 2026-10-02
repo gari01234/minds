@@ -162,7 +162,7 @@ async function nativeShadow(apiKey:string,model:string,snapshot:any){
       ].join(" "),
       reasoning:{effort:"medium"},
       max_output_tokens:3200,
-      text:{format:{type:"json_schema",strict:true,schema:MISSION_SHADOW_SCHEMA}},
+      text:{format:{type:"json_schema",name:"mission_shadow_result",strict:true,schema:MISSION_SHADOW_SCHEMA}},
       input:[{role:"user",content:[{type:"input_text",text:JSON.stringify(snapshot)}]}]
     })
   });
