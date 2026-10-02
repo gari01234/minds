@@ -241,3 +241,16 @@ Los Security Advisors no reportan findings nuevos sobre las tablas 72.5A. El ún
 El runtime de producción permanece intacto: `isabella-mission-runner` sigue reclamando `minds_mission_runs`, usando Responses API y aplicando cada checkpoint mediante `minds_apply_mission_step`. No importa el nuevo adapter y no contiene selección de `openai_agents`.
 
 72.5B será el primer punto en el que una ejecución `openai_agents + shadow` pueda existir. Hasta entonces, el ledger está preparado pero no dirige ninguna Mission.
+
+
+## Gate final de 72.5A
+
+El PR gate final completó:
+
+- 173 tests Node, 173 pass, 0 fail;
+- build web correcto;
+- Deno typecheck correcto incluyendo `_shared/mission-runtime.ts`;
+- 4 tests Deno del adapter correctos;
+- test SQL transaccional de producción correcto.
+
+No se desplegó ninguna nueva Edge Function porque 72.5A no modifica ejecución productiva. El único cambio de producción es la migración aditiva del ledger. El runtime nativo continúa como única ruta activa.
