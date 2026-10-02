@@ -157,3 +157,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Extraordinary Capability Lab
 
 `EXTRAORDINARY-CAPABILITY-LAB-v0.1.md` defines the post-72.5 experimental sequence for capabilities that may be worth renting from OpenAI without moving Isabella's memory, authority or source of truth out of MINDS: persistent environments/artifacts, read-only MCP, justified multi-agent delegation and, only later, Computer Use with a separate approval model.
+
+
+### Artifact Intake
+
+`ARTIFACT-INTAKE-v0.1.md` defines the quarantine and review boundary for artifacts produced by external runtimes. A provider output remains a candidate until explicitly accepted and promoted; it is not memory, Workspace truth or a permanent MINDS artifact merely because an Agent produced it.
