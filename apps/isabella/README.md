@@ -152,3 +152,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Runtime selection evidence
 
 `RUNTIME-SELECTION-v0.1.md` records the post-72.5B evaluation of `native_minds` versus `openai_agents`. Native remains the production default; Managed Agents remains shadow-only until a benchmark demonstrates a concrete capability advantage rather than generic task difficulty or multi-turn duration.
+
+
+### Extraordinary Capability Lab
+
+`EXTRAORDINARY-CAPABILITY-LAB-v0.1.md` defines the post-72.5 experimental sequence for capabilities that may be worth renting from OpenAI without moving Isabella's memory, authority or source of truth out of MINDS: persistent environments/artifacts, read-only MCP, justified multi-agent delegation and, only later, Computer Use with a separate approval model.
