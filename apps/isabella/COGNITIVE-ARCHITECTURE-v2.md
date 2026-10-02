@@ -275,3 +275,14 @@ Runtime snapshots are bounded, strip no truth silently, contain no user identity
 The runtime ledger is service-write/authenticated-read-only with RLS. Ownership is derived in the database from the Mission Run rather than trusted from a worker payload. Provider/mode/run identity is immutable. No new autonomy or action authority is introduced.
 
 This creates the control-plane/execution-plane seam required for 72.5B shadow execution while leaving the existing native Mission worker unchanged.
+
+
+## Runtime selection after 72.5B-EVAL
+
+The runtime abstraction now has an evidence-based routing rule. `native_minds` remains the production default; `openai_agents` remains shadow-only.
+
+Five synthetic evaluations showed equivalent substantive resolution across conflict handling, user-decision gating, provenance discipline and two multi-episode continuity tasks. Provider-managed session durability did not outperform reconstruction from Mission Workspace under the tested no-tool environment, while observed token volume and latency were materially higher.
+
+Therefore runtime selection must not be based on generic task difficulty, number of documents or multi-turn duration alone. A future Agents route requires a **capability differential** that native MINDS has not demonstrated efficiently: persistent execution environment/artifacts, durable tool/MCP work, justified multi-agent delegation, or sufficiently large/long state that reconstruction becomes materially inferior.
+
+The full evidence and policy live in `RUNTIME-SELECTION-v0.1.md`. No opaque global runtime score is permitted.

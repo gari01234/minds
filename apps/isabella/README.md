@@ -147,3 +147,8 @@ Human Surface is read-only projection, not state. It cannot grant authority, cha
 Mission Run now has a provider-neutral execution contract without changing production execution. `native_minds` remains the mandatory fallback and current primary runtime; `openai_agents` is only prepared as a future shadow provider.
 
 A separate runtime ledger records provider/session/turn identity and lifecycle without modifying the authoritative Mission Run. Runtime ownership is derived from the Mission itself, direct authenticated writes are blocked, and snapshots reject credential-shaped data before crossing the execution boundary. See `BUILD-72.5.md`.
+
+
+### Runtime selection evidence
+
+`RUNTIME-SELECTION-v0.1.md` records the post-72.5B evaluation of `native_minds` versus `openai_agents`. Native remains the production default; Managed Agents remains shadow-only until a benchmark demonstrates a concrete capability advantage rather than generic task difficulty or multi-turn duration.
