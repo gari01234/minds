@@ -71,7 +71,9 @@ test('Build 71 service worker shows visible pushes and opens their Isabella deep
   assert.ok(sw.includes('self.registration.showNotification'));
   assert.ok(sw.includes("self.addEventListener('notificationclick'"));
   assert.ok(sw.includes('self.clients.openWindow(target)'));
-  assert.ok(sw.includes('attention-'));
+  assert.ok(sw.includes('tag: payload.tag ? String(payload.tag) : undefined'));
+  const runner=read('supabase/functions/isabella-delivery-runner/index.ts');
+  assert.ok(runner.includes('tag:"attention-"+String(intent.attention_event_id)'));
 });
 
 test('Build 71 declares authenticated config and secret delivery runner functions',()=>{
