@@ -236,3 +236,16 @@ Shadow Agency now reports evidence by action, request context and exact category
 The database stamps request scope and enforces fresh evidence, current permission, exact scope, expiry, base denials, transaction locking and idempotent execution receipts. The model can read `read_contextual_autonomy` but cannot grant permission. Historical unverified contexts do not retroactively authorize the new execution class. Network uncertainty cannot silently retry a possibly committed task through the full runtime. Existing clients remain proposal-only through explicit protocol negotiation.
 
 Migration `20261001185142_contextual_autonomy_v01` and the behavioral SQL suite implement these boundaries. `BUILD-70.md` documents infrastructure, validation, limits and real evidence at deployment. No contextual permissions were granted as part of this build.
+
+
+## Build 71 — Native Presence & Delivery Layer v0.1
+
+Build 71 closes the transport gap identified in Build 69 without changing the attention policy. An `interrupt` may now be projected into a durable `minds_delivery_intents` record when the user has an active Web Push subscription. `briefing`, `ambient` and `silent` never become device push merely because transport exists.
+
+Device subscriptions, transport intents and delivery attempts are independent persisted objects. The delivery worker claims intents with bounded leases, sends Web Push using a stable VAPID identity, deactivates stale 404/410 endpoints and records what the push service actually accepted. A push-service acceptance is not treated as proof that the user saw or opened the notification.
+
+The browser receives only the VAPID public key. Subscription registration/removal is authenticated; direct table writes remain unavailable to authenticated clients; claim/finish and VAPID persistence are service-only. The Service Worker always produces a visible notification for a received push and opens the associated Isabella deep link when tapped.
+
+The human surface is deliberately smaller than the internal ontology: the user sees `Avisos de Isabella`, not delivery intents or push receipts. This is the first narrow application of the next design direction: internal complexity should reduce rather than increase external complexity.
+
+The repository implementation is documented in `BUILD-71.md`. It must not be described as production-deployed until the migration and functions have been verified against the exact MINDS Supabase project and the official Pages gate has completed after merge.
