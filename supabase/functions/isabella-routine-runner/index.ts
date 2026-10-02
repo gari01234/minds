@@ -92,7 +92,8 @@ Deno.serve(async(req:Request)=>{
       ]);
 
       const [events,tasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
-      const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>({urgent:0,attention:1,info:2}[a.urgency]??3)-({urgent:0,attention:1,info:2}[b.urgency]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
+      const urgencyRank:Record<string,number>={urgent:0,attention:1,info:2};
+      const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>(urgencyRank[String(a.urgency)]??3)-(urgencyRank[String(b.urgency)]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
       attentionEventIds=attentionItems.map((x:any)=>String(x.id));
       let recent:any[]=[];
       const conversationId=convs?.[0]?.id||null;
