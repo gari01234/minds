@@ -33,3 +33,8 @@ entrypoint = "./functions/isabella-push/index.ts"
 [functions.isabella-delivery-runner]
 verify_jwt = false
 entrypoint = "./functions/isabella-delivery-runner/index.ts"
+
+
+[functions.isabella-agent-shadow]
+verify_jwt = false
+entrypoint = "./functions/isabella-agent-shadow/index.ts"

@@ -254,3 +254,202 @@ El PR gate final completó:
 - test SQL transaccional de producción correcto.
 
 No se desplegó ninguna nueva Edge Function porque 72.5A no modifica ejecución productiva. El único cambio de producción es la migración aditiva del ledger. El runtime nativo continúa como única ruta activa.
+
+
+## Estado de 72.5B — OpenAI Agents Shadow Execution
+
+72.5B introduce el primer provider real `openai_agents`, pero exclusivamente en modo `shadow`.
+
+### Boundary del pilot
+
+La primera Agent Session usa:
+
+- `environment.type = none`;
+- ningún tool;
+- `multi_agent.enabled = false`;
+- ningún MCP;
+- ningún Computer Use;
+- ninguna función con side effects;
+- Structured Outputs mediante JSON Schema;
+- un snapshot `mission_snapshot_v1` previamente normalizado por MINDS.
+
+La sesión recibe objetivo, criterio de cierre, instrucción, summary, último input relevante, items operativos recientes y un contexto de proyecto reducido. No recibe `user_id`, IDs de claims/tasks/files, metadata arbitraria ni credenciales.
+
+El provider usa el contrato público actual de Agents API: `POST /v1/agents/sessions` con `OpenAI-Beta: agents=v1`, consulta de turns y recuperación de session items. El runtime considera un turn completado, no un session `idle`, como condición necesaria para recoger resultado.
+
+### Comparación pareada
+
+El worker interno `isabella-agent-shadow` ejecuta dos evaluaciones sobre exactamente el mismo snapshot y `snapshot_hash`:
+
+- `native_minds + shadow`: una llamada Responses sin write-through;
+- `openai_agents + shadow`: una Agent Session durable sin write-through.
+
+Los dos resultados usan el mismo schema de salida:
+
+- `status`;
+- `summary`;
+- `blocker_question`;
+- `items`;
+- `sources`.
+
+No se aplica ningún score agregado. La evidencia queda separada por provider para poder comparar posteriormente calidad, continuidad, procedencia, decisiones, preguntas, uso y comportamiento operacional.
+
+### Persistencia shadow
+
+La migración de producción `20261002173851_mission_runtime_shadow_v01` añade `result_payload` al ledger de 72.5A e instala el secreto server-side `agent_shadow_runner`.
+
+El resultado shadow se guarda únicamente en:
+
+- `minds_mission_runtime_executions.result_payload`;
+- `minds_mission_runtime_executions.result_status`;
+- `minds_mission_runtime_events`.
+
+El worker no contiene llamadas a `minds_apply_mission_step`, `minds_append_commitment_workspace_item` ni `minds_update_commitment_workspace_summary`.
+
+El test SQL de producción con rollback confirma:
+
+`PASS: paired shadow isolation, shared snapshot, RLS and zero write-through`.
+
+### Lifecycle
+
+`run_pair` crea o reutiliza idempotentemente los dos shadows. La rama nativa puede terminar en la misma invocación. Agents API puede permanecer `running`; `inspect_agents` recupera posteriormente la sesión, el último turn y los items guardados.
+
+`idle` por sí solo no se interpreta como éxito. Solo un turn `completed` habilita `collect`.
+
+Aunque Agents API soporta steering, cancelación y multi-agent, 72.5B los mantiene explícitamente desactivados en el adapter. Se abrirán únicamente en fases posteriores si el shadow justifica hacerlo.
+
+### Producción
+
+La migración de datos ya está aplicada, pero `isabella-agent-shadow` no se considera productivo hasta completar Deno/Node gates, desplegar la Edge Function y ejecutar el primer par controlado. No existe cron para este worker: 72.5B solo puede iniciarse mediante una llamada interna autenticada por el secreto `agent_shadow_runner`.
+
+
+### Gate de ejecución del benchmark
+
+El usuario autorizó explícitamente la invocación de `isabella-agent-shadow` mediante el secreto interno `agent_shadow_runner`. Aun con esa autorización, el entorno de herramientas bloqueó:
+
+1. el `net.http_post` directo que lee `agent_shadow_runner` y lo envía a la Edge Function;
+2. la persistencia de un invoker SQL service-role que mantendría el secreto íntegramente dentro de Supabase.
+
+El segundo diseño fue probado únicamente dentro de una transacción con rollback y pasó su contrato de privilegios, pero **no fue aplicado como migración** porque el gate de seguridad volvió a bloquear la operación.
+
+Por tanto, el estado correcto de 72.5B es:
+
+- adapter Agents implementado y testeado;
+- `isabella-agent-shadow` ACTIVE v1;
+- migración `20261002173851_mission_runtime_shadow_v01` aplicada;
+- benchmark sintético creado y pausado;
+- cero write-through verificado;
+- **ninguna Agent Session real creada todavía**;
+- PR #4 permanece draft y no debe fusionarse como build cerrada hasta observar un `run_pair` real y recoger su resultado.
+
+No se debe inferir éxito del provider a partir del despliegue o de mocks. El criterio de 72.5B exige una sesión Agents real.
+
+
+## 72.5B — Resultado del primer benchmark real
+
+El 2 de octubre de 2026 se ejecutó el primer par shadow real sobre una Mission sintética aislada y pausada. Ambos providers recibieron el mismo problema: Option A requería 2 días y costaba 3 unidades; Option B requería 5 días y costaba 1 unidad; el deadline fijo era de 3 días. La pregunta era identificar qué opción era compatible con el deadline y si hacía falta una decisión del usuario.
+
+### Native Minds shadow
+
+`native_minds + shadow` terminó en `succeeded / completed`.
+
+Resultado esencial:
+
+- Option A cabe dentro del deadline de 3 días.
+- Option B no cabe.
+- No hace falta una decisión del usuario para determinar viabilidad.
+
+Uso observado: **896 tokens totales** (570 input, 326 output; 135 reasoning).
+
+### OpenAI Agents shadow
+
+La primera integración reveló una diferencia real de contrato: Managed Agents no acepta el mismo objeto `text.format` que Responses. Los intentos de pasar el schema directamente al agent devolvieron errores de parámetro. Esa evidencia condujo a una arquitectura más limpia:
+
+```
+Agent Session
+  environment:none
+  no tools
+  no MCP
+  no multi-agent
+        ↓
+final analysis del Agent
+        ↓
+MINDS / Responses normalizer
+  strict JSON Schema
+        ↓
+MissionRuntimeResult
+```
+
+Con esa arquitectura, `openai_agents + shadow` terminó en `succeeded / completed`.
+
+Resultado esencial:
+
+- Option A cabe dentro del deadline de 3 días.
+- Option B no cabe.
+- No hace falta una decisión del usuario para determinar viabilidad.
+- El coste no altera esa conclusión porque no se proporcionó ningún límite presupuestario.
+
+Uso observado:
+
+- Agent Session: **7.877 tokens**.
+- Strict normalizer: **1.028 tokens**.
+- Total del pipeline Agents: **8.905 tokens**.
+
+No se deriva un ganador de una métrica compuesta. La observación factual de este primer caso es que ambos runtimes produjeron la misma conclusión sustantiva; el pipeline Agents consumió aproximadamente 9,9 veces los tokens del shadow nativo en este problema pequeño. Ese coste puede justificarse únicamente cuando las propiedades durables/agentic aporten valor material en tareas que realmente las necesiten.
+
+### Zero write-through verificado después de la ejecución real
+
+Tras ambos shadows se comprobó en producción:
+
+- Mission Run: `paused`;
+- iteration: `0`;
+- Workspace summary: sin cambios;
+- Workspace items: exactamente los 4 originales.
+
+Por tanto, ni el native shadow ni Managed Agents modificaron el Mission Run autoritativo o el Mission Workspace.
+
+### Limpieza del benchmark
+
+Una vez recogida la evidencia:
+
+- los endpoints temporales `isabella-agent-benchmark-once` e `isabella-agent-benchmark-v2` fueron sobrescritos con `410 Gone` y `verify_jwt=true`;
+- el usuario técnico, Commitment, Workspace, Mission Run, runtime executions y runtime events sintéticos fueron eliminados mediante cascade;
+- producción quedó sin fixture de benchmark;
+- `isabella-agent-shadow` sigue siendo el único runner previsto para futuras ejecuciones shadow reales.
+
+### Decisión arquitectónica de 72.5B
+
+Managed Agents queda aceptado como **execution-plane candidate en modo shadow**, no como sustituto del runtime nativo.
+
+La forma estable del adapter es:
+
+1. Agents API mantiene la sesión durable y produce un análisis final provider-native.
+2. MINDS recupera ese análisis únicamente cuando el turn está `completed`.
+3. Responses normaliza el análisis mediante JSON Schema estricto al contrato `MissionRuntimeResult`.
+4. El resultado permanece en el runtime ledger.
+5. No existe write-through al Workspace en 72.5B.
+
+Esto preserva una frontera importante: **la sesión del proveedor puede razonar en su propio formato; MINDS decide qué estructura acepta como resultado**.
+
+
+## Cierre técnico de 72.5B
+
+El gate final del PR completó:
+
+- **180 tests Node, 180 pass, 0 fail**;
+- build web correcto;
+- Deno typecheck correcto para el adapter y los runtimes relevantes;
+- **8 tests Deno, 8 pass, 0 fail**.
+
+Producción:
+
+- `isabella-agent-shadow` → **ACTIVE v3**, `verify_jwt=false`, protegido por el secreto server-side `agent_shadow_runner`;
+- `isabella-agent-benchmark-once` → retirado como tombstone `410 Gone`, `verify_jwt=true`;
+- `isabella-agent-benchmark-v2` → retirado como tombstone `410 Gone`, `verify_jwt=true`;
+- usuario técnico y fixture sintético → eliminados completamente;
+- runtime ledger de benchmark → eliminado por cascade junto con el fixture;
+- advisors de seguridad y performance → sin findings nuevos vinculados a `minds_mission_runtime_executions`, `minds_mission_runtime_events` o `isabella-agent-shadow`.
+
+72.5B demuestra que MINDS puede crear una Agent Session durable real, observar su lifecycle, recuperar su final answer y convertirlo en un `MissionRuntimeResult` estricto sin concederle herramientas, acciones externas o write-through.
+
+La conclusión arquitectónica queda limitada a eso. Esta build **no** demuestra todavía que Agents API deba sustituir el runtime nativo como opción primaria. Solo demuestra que puede coexistir de forma segura como execution plane shadow bajo autoridad de MINDS.
