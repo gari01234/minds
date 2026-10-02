@@ -2230,24 +2230,24 @@ async function pushNotificationsPanel(){
 
 function attentionRouteOptions(selected){
   return [
-    ['interrupt','Avisarme en el chat'],
-    ['briefing','Esperar al briefing'],
-    ['ambient','Mostrarlo discretamente en Feed'],
-    ['silent','No mostrármelo automáticamente']
+    ['interrupt','Avisarme en cuanto ocurra'],
+    ['briefing','Guardarlo para el próximo resumen'],
+    ['ambient','Dejarlo discretamente en Feed'],
+    ['silent','No avisarme automáticamente']
   ].map(([v,l])=>`<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
 }
 async function attentionHistoryPanel(){
-  const sb=window.MINDS_SUPABASE;if(!sb){modal('Economía de atención','<div class="small">Conecta la memoria para ver cómo Isabella ha distribuido tu atención.</div>');return}
-  modal('Economía de atención','<div class="surface-loading">Leyendo decisiones recientes…</div>');
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Cómo decide Isabella avisarte','<div class="small">Conecta la memoria para ver cómo Isabella ha distribuido tu atención.</div>');return}
+  modal('Cómo decide Isabella avisarte','<div class="surface-loading">Leyendo decisiones recientes…</div>');
   try{
     const {data,error}=await sb.from('minds_attention_events')
       .select('id,title,event_type,route,reason,status,source_type,created_at,delivered_at')
       .order('created_at',{ascending:false}).limit(100);
     if(error)throw error;
-    const labels={interrupt:'INTERRUPCIÓN',briefing:'BRIEFING',ambient:'FEED',silent:'SILENCIO'};
-    const rows=(data||[]).map(x=>`<div class="doctor-log"><b>${esc(labels[x.route]||x.route.toUpperCase())} · ${esc(x.title)}</b><span>${esc(x.reason)}</span><time>${esc(x.source_type)} · ${esc(x.status)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
-    modal('Economía de atención',`<div class="continuity-intro">Aquí ves por qué MINDS decidió interrumpirte, esperar, aparecer discretamente o guardar silencio. No hay un score oculto: cada decisión conserva su canal y su razón.</div>${rows||'<div class="empty-panel">Todavía no hay decisiones de atención registradas.</div>'}`);
-  }catch{modal('Economía de atención','<div class="small">No pude leer las decisiones de atención ahora mismo.</div>')}
+    const labels={interrupt:'Te avisé en el momento',briefing:'Lo guardé para el resumen',ambient:'Lo dejé en Feed',silent:'No te interrumpí'};
+    const rows=(data||[]).map(x=>`<div class="human-permission-case"><div class="human-case-title">${esc(labels[x.route]||x.route)} · ${esc(x.title)}</div><p class="small">${esc(x.reason)}</p><details class="human-tech"><summary>Ver detalle técnico</summary><div class="human-tech-grid"><span>Ruta</span><b>${esc(x.route)}</b><span>Fuente</span><b>${esc(x.source_type)}</b><span>Estado</span><b>${esc(x.status)}</b><span>Fecha</span><b>${new Date(x.created_at).toLocaleString('es-ES')}</b></div></details></div>`).join('');
+    modal('Cómo decide Isabella avisarte',`<div class="continuity-intro">Aquí puedes ver por qué te avisé en el momento, guardé algo para más tarde, lo dejé en Feed o decidí no interrumpirte. Cada decisión conserva una razón concreta; no uso un score oculto de importancia.</div>${rows||'<div class="empty-panel">Todavía no he tenido que decidir cómo ocupar tu atención.</div>'}`);
+  }catch{modal('Cómo decide Isabella avisarte','<div class="small">No pude leer las decisiones de atención ahora mismo.</div>')}
 }
 function assistantPreferencesPanel(){
   const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
@@ -2256,17 +2256,17 @@ function assistantPreferencesPanel(){
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
     <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
     <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
-    <div class="small section-label">Economía de atención</div>
-    <div class="small">Isabella puede ser proactiva sin convertir cada resultado en una interrupción. Las peticiones explícitas como “avísame cuando termines” tienen prioridad sobre estas reglas.</div>
-    <label>Cuando una Mission termina<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
-    <label>Cuando una Mission falla<select id="attentionMissionFailed">${attentionRouteOptions(attention.missionFailed)}</select></label>
+    <div class="small section-label">Cuándo quieres que te avise</div>
+    <div class="small">Puedo mantener cosas vivas y trabajar en segundo plano sin interrumpirte cada vez. Si me dices explícitamente “avísame cuando termines”, esa petición tiene prioridad sobre estas reglas.</div>
+    <label>Cuando termino un trabajo en segundo plano<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
+    <label>Cuando no puedo terminar un trabajo en segundo plano<select id="attentionMissionFailed">${attentionRouteOptions(attention.missionFailed)}</select></label>
     <label>Evento próximo<select id="attentionImminentEvent">${attentionRouteOptions(attention.imminentEvent)}</select></label>
     <label>Tareas vencidas<select id="attentionOverdueTasks">${attentionRouteOptions(attention.overdueTasks)}</select></label>
     <label>Fallo de una rutina<select id="attentionRoutineFailure">${attentionRouteOptions(attention.routineFailure)}</select></label>
-    <label>Máximo de interrupciones no bloqueantes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
-    <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos no bloqueantes</span></label>
+    <label>Máximo de avisos no urgentes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
+    <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos que pueden esperar</span></label>
     <div class="two-col"><label>Desde<input id="attentionQuietStart" type="time" value="${esc(attention.quietStart)}"></label><label>Hasta<input id="attentionQuietEnd" type="time" value="${esc(attention.quietEnd)}"></label></div>
-    <button id="attentionHistory" class="secondary" type="button">Ver decisiones recientes de atención</button>
+    <button id="attentionHistory" class="secondary" type="button">Ver por qué te avisé o no te avisé</button>
     <div><div class="small section-label">Mejoras de comportamiento adoptadas</div><div id="assistantRuleRows">${rules.length?rules.map((r,i)=>`<div class="assistant-rule-row"><span>${esc(r)}</span><button data-rule-remove="${i}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small empty-panel">Todavía no has adoptado reglas adicionales.</div>'}</div></div>
     <button id="saveAssistantPreferences" class="primary">Guardar</button>
   </div>`);
