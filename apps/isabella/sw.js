@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v79';
+const CACHE_NAME = 'isabella-shell-v80';
 const SHELL = [
   './',
   './index.html',
@@ -8,9 +8,13 @@ const SHELL = [
   './work.js?v=4',
   './sync.js?v=pwa27',
   './ai.js?v=45',
-  './manifest.webmanifest',
-  './icon.svg',
-  '../shared/supabase-client.js',\n  '../shared/human-surface.js?v=1'
+  './manifest.webmanifest?v=2',
+  './icon.svg?v=2',
+  './apple-touch-icon.png?v=2',
+  './icon-192.png?v=2',
+  './icon-512.png?v=2',
+  '../shared/supabase-client.js',
+  '../shared/human-surface.js?v=1'
 ];
 
 self.addEventListener('install', event => {
@@ -80,8 +84,8 @@ self.addEventListener('push', event => {
   const title = String(payload.title || 'Isabella');
   const options = {
     body: String(payload.body || 'Hay algo que merece tu atención.'),
-    icon: './icon.svg',
-    badge: './icon.svg',
+    icon: './icon-192.png?v=2',
+    badge: './icon-192.png?v=2',
     tag: payload.tag ? String(payload.tag) : undefined,
     renotify: true,
     data: { url: String(payload.url || './') }
