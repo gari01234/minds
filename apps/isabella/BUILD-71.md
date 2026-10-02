@@ -49,7 +49,7 @@ No se añade una acción autónoma nueva, no se amplía Contextual Autonomy y no
 
 ## Verificación de repositorio
 
-La implementación está en PR #1, rama `build-71-native-presence`. El primer run de `Verify MINDS` detectó una aserción situada en la capa incorrecta; la prueba se corrigió para comprobar el tag de deduplicación donde realmente se produce, en el delivery runner, sin modificar el comportamiento. El segundo run, #2 (`37008655386`), terminó en `success`: **159 tests Node, 159 pass, 0 fail**, seguido de `node scripts/build.mjs` correcto.
+La implementación está en PR #1, rama `build-71-native-presence`. El primer run de `Verify MINDS` detectó una aserción situada en la capa incorrecta; la prueba se corrigió para comprobar el tag de deduplicación donde realmente se produce, en el delivery runner, sin modificar el comportamiento. El gate se endureció además con `deno check` para las dos Edge Functions nuevas. Ese typecheck detectó dos incompatibilidades reales antes del despliegue —una propiedad no admitida por el contrato de Web Push y una inferencia demasiado laxa del par VAPID— y ambas se corrigieron sin debilitar comportamiento ni pruebas. El run final verificado, #7 (`37009073674`), terminó en `success`: **159 tests Node, 159 pass, 0 fail**, `node scripts/build.mjs` correcto y `deno check` correcto para `isabella-push` e `isabella-delivery-runner`.
 
 Se añadió además `supabase/tests/native_presence.sql`, transaccional y con rollback, para comprobar registro/retirada, RLS, separación de Attention, enqueue idempotente, claim/lease y receipt. Esa suite todavía no se ha ejecutado contra el Supabase real de MINDS desde este chat.
 
