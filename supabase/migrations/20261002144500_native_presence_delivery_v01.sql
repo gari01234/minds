@@ -200,7 +200,9 @@ set search_path=public,pg_temp
 as $$
 begin
   if new.route<>'interrupt' or new.status<>'delivered' then return new; end if;
-  if tg_op='UPDATE' and old.status='delivered' then return new; end if;
+  if tg_op='UPDATE' then
+    if old.status='delivered' then return new; end if;
+  end if;
   if not exists(
     select 1 from public.minds_push_subscriptions
     where user_id=new.user_id and active
