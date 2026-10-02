@@ -15,3 +15,7 @@ jobs:
           node-version: '24'
       - run: node --test tests/*.test.mjs
       - run: node scripts/build.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - run: deno check supabase/functions/isabella-push/index.ts supabase/functions/isabella-delivery-runner/index.ts
