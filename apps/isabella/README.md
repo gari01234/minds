@@ -133,3 +133,10 @@ Las Ideas aceptadas pueden convertirse en `minds_idea_workspaces`: espacios pers
 ### Build 71 — presencia y entrega en el dispositivo
 
 `Más → Avisos de Isabella` añade Web Push a la PWA sin convertir Isabella en una app nativa ni mover su cognición al teléfono. Attention Economy sigue decidiendo cuándo una señal merece `interrupt`; Delivery Layer únicamente transporta esa decisión hacia un dispositivo registrado y conserva intents, attempts y receipts separados. La interfaz solicita permiso únicamente por una acción explícita del usuario y, en iOS/iPadOS, exige abrir Isabella como web app instalada. Véase `BUILD-71.md` para contrato, seguridad, pruebas y estado de despliegue.
+
+
+### Build 72 — Human Surface
+
+Isabella now translates internal MINDS states into a small human-facing vocabulary before showing them in everyday UI. Continuity, durable work, contextual permissions, notification policy and system health tell the user what is happening, who needs to act, how certain the state is and whether anything is required. Technical ontology remains inspectable behind explicit detail disclosure instead of becoming the default interface.
+
+Human Surface is read-only projection, not state. It cannot grant authority, change Attention Economy, modify Missions or replace Supabase as source of truth. Conversation and proactive runtimes receive the same language rule, and Isabella is explicitly forbidden from simulating emotions or personhood as part of this abstraction. See `BUILD-72.md`.

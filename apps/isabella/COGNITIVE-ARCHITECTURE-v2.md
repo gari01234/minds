@@ -249,3 +249,16 @@ The browser receives only the VAPID public key. Subscription registration/remova
 The human surface is deliberately smaller than the internal ontology: the user sees `Avisos de Isabella`, not delivery intents or push receipts. This is the first narrow application of the next design direction: internal complexity should reduce rather than increase external complexity.
 
 The repository implementation is documented in `BUILD-71.md`. The delivery schema and both Edge Functions are deployed and verified against the exact MINDS Supabase project; the user-facing publication is complete only once PR #1 is merged and the official Pages gate succeeds.
+
+
+## Build 72 — Human Surface / Conversational Abstraction v0.1
+
+Build 72 adds an explicit abstraction boundary between MINDS' technical ontology and Isabella's everyday surface. The internal system may continue to reason in terms of Commitments, Mission Workspaces, Mission Runs, attention routes, contextual permissions, Shadow Agency, Continuity signals, checkpoints and receipts. The user-facing default instead answers four questions: what is happening, who must act, what is known versus uncertain, and whether the user needs to do anything.
+
+The browser contract in `shared/human-surface.js` is deliberately pure and non-authoritative. It maps existing states to human descriptions but persists nothing and changes no policy. Supabase remains the source of truth. A human phrase that conflicts with technical state is a projection bug, never grounds for overriding backend state.
+
+Continuity, durable work, permissions, notification settings and system health adopt progressive disclosure: human state first, technical state on demand. Mission Workspace becomes “Trabajo de Isabella” at the default surface; checkpoints and provenance remain available beneath technical detail. Contextual Autonomy keeps its evidence thresholds and explicit user authority while explaining eligibility as “I am still learning / I will keep asking / I can propose that you let me stop asking in this exact case.” Attention routes keep exactly the same semantics while their controls are expressed as when Isabella should notify, defer, surface quietly or remain silent.
+
+The conversational runtime receives the same boundary. Isabella may use technical ontology privately, but should not expose it spontaneously. She must distinguish completed work from work being checked and from uncertain inference, and she must make the current locus of responsibility legible. Humanization explicitly excludes simulated emotions, consciousness or human needs.
+
+Build 72 introduces no database migration, new navigation surface, permission class, autonomy threshold or attention rule. It changes representation while preserving authority and provenance.

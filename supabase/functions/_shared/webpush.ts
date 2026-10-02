@@ -31,8 +31,8 @@ export function humanPushBody(payload:any){
   const type=String(payload?.event_type||"");
   const title=String(payload?.title||"").trim();
   if(type==="mission_waiting_for_user")return "Necesito que decidas algo para poder seguir con "+quotedSubject(title,"Necesito tu decisión:")+".";
-  if(type==="mission_completed")return "Terminé "+quotedSubject(title,"Mission terminada:")+".";
-  if(type==="mission_failed")return "No pude terminar "+quotedSubject(title,"Mission detenida:")+". El progreso sigue guardado.";
+  if(type==="mission_completed")return "Terminé "+quotedSubject(title,"Trabajo terminado:")+".";
+  if(type==="mission_failed")return "No pude terminar "+quotedSubject(title,"No pude terminar:")+". El progreso sigue guardado.";
   if(type==="upcoming_event")return title||"Tienes un evento próximo.";
   return title||"Hay algo que merece tu atención.";
 }

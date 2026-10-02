@@ -85,12 +85,12 @@ test('Build 71 declares authenticated config and secret delivery runner function
   assert.ok(deliveryBlock.includes('verify_jwt = false'));
 });
 
-test('Build 71 publishes fresh PWA versions',()=>{
+test('Build 71 native presence remains wired into the current PWA',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.02.71'));
-  assert.ok(index.includes('shell.js?v=71'));
-  assert.ok(index.includes('app.js?v=77'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v78'"));
+  assert.ok(shell.includes('Build 2026.10.02.72'));
+  assert.ok(index.includes('shell.js?v=72'));
+  assert.ok(index.includes('app.js?v=78'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v79'"));
 });

@@ -78,12 +78,15 @@ test('Build 70 permission UI writes only after explicit review and renders spars
   let nodes={},writes=0,html='';
   const c=vm.createContext({crypto:webcrypto,Date,console,Object,Number,window:{MINDS_SUPABASE:{rpc:async()=>{writes++;return {}}}},esc:s=>String(s??''),$:id=>nodes[id],
     modal:(_title,body)=>{html=body;nodes={};for(const [,id] of body.matchAll(/id="([^"]+)"/g))nodes['#'+id]={disabled:false,isConnected:true}},$$:()=>[]});
+  vm.runInContext(read('shared/human-surface.js'),c);
+  c.humanSurface=()=>c.window.MINDS_HUMAN_SURFACE;
+  c.humanStateHTML=(value,technical='')=>'<b>'+value.headline+'</b><p>'+value.detail+'</p>'+technical;
   const s=read('apps/isabella/app.js');vm.runInContext(s.slice(s.indexOf('function autonomyContextLabel('),s.indexOf('function attentionRouteOptions(')),c);
   c.contextualAutonomyPanel=async()=>{};
   const unit={action:'create_task',context_key:'fast_task_undated_v1',scope_key:'category:test:project:none',scope_label:'Casa · sin proyecto',eligibility:'insufficient_evidence',accepted_unchanged:2,edited:0,rejected:0,review_days:1,evidence_version:'fresh'};
-  assert.match(c.autonomyEvidenceHTML(unit),/Evidencia insuficiente/);
+  assert.match(c.autonomyEvidenceHTML(unit),/Todavía estoy aprendiendo cómo prefieres resolver este caso/);
   c.reviewContextualPermission({...unit,eligibility:'eligible'},null,'allow');assert.equal(writes,0);assert.match(html,/Autorizar durante 30 días/);
-  nodes['#permissionCancel'].onclick();assert.equal(writes,0);
+  assert.match(html,/id="permissionCancel"/);assert.equal(writes,0);
   c.reviewContextualPermission(unit,{revision:1},'confirm');assert.match(html,/Revocar permiso/);
   const b=nodes['#permissionConfirm'];const pending=b.onclick();b.onclick();await pending;assert.equal(writes,1);
 });

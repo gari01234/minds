@@ -8,6 +8,18 @@ const fromIso=s=>{const [y,m,d]=s.split('-').map(Number);return new Date(y,m-1,d
 const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const today=()=>iso(new Date());
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const humanSurface=()=>window.MINDS_HUMAN_SURFACE;
+function humanStateHTML(value,technical=''){
+  if(!value)return '';
+  const labels=humanSurface()?.metaLabels?.(value)||{};
+  const meta=[labels.owner,labels.certainty,labels.action].filter(Boolean).map(x=>'<span>'+esc(x)+'</span>').join('');
+  return '<div class="human-state tone-'+esc(value.tone||'neutral')+'"><b>'+esc(value.headline||'')+'</b>'+
+    (value.detail?'<p>'+esc(value.detail)+'</p>':'')+
+    (meta?'<div class="human-state-meta">'+meta+'</div>':'')+
+    (technical?'<details class="human-tech"><summary>Ver detalle técnico</summary>'+technical+'</details>':'')+
+    '</div>';
+}
+
 const clone=x=>x==null?null:JSON.parse(JSON.stringify(x));
 const signedAssetCache=new Map();
 let lastMessagesRenderKey='';
@@ -1903,7 +1915,7 @@ function initEventDrag(){
 }
 function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
-function commitmentStatusLabel(status){return status==='active'?'Activo':status==='waiting'?'En espera':status==='paused'?'Pausado':status==='completed'?'Completado':status==='cancelled'?'Cancelado':String(status||'')}
+function commitmentStatusLabel(status){return humanSurface()?.commitment?.(status)?.headline||String(status||'')}
 async function continuityPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
   modal('Continuidad','<div class="surface-loading">Leyendo lo que sigue vivo…</div>');
@@ -1923,17 +1935,17 @@ async function continuityPanel(){
     const cards=rows.map(x=>{
       const e=latest.get(x.id),last=x?.metadata?.last_continuity||null,projectName=x.isabella_projects?.name||null,workspace=workspaceByCommitment.get(x.id);
       const missionCount=workspace?workspaceItems.filter(i=>i.workspace_id===workspace.id).length:0;
-      const mission=workspace?`<button class="continuity-cause" data-mission-workspace="${esc(workspace.id)}"><span>MISSION WORKSPACE · ${esc(workspace.status.toUpperCase())}</span><b>${missionCount} entradas de trabajo</b>${workspace.summary?`<p>${esc(workspace.summary)}</p>`:''}<small>Actualizado ${new Date(workspace.updated_at).toLocaleString('es-ES')}</small></button>`:'';
+      const workspaceState=workspace?humanSurface()?.workspace?.(workspace.status):null;
+      const workspaceTechnical=workspace?`<div class="human-tech-grid"><span>Mission Workspace</span><b>${esc(workspace.status)}</b><span>Entradas</span><b>${missionCount}</b><span>Actualizado</span><b>${new Date(workspace.updated_at).toLocaleString('es-ES')}</b></div>`:'';
+      const mission=workspace?`<div class="continuity-cause human-work-card">${humanStateHTML(workspaceState,workspaceTechnical)}${workspace.summary?`<p class="human-work-summary">${esc(workspace.summary)}</p>`:''}<button class="secondary" data-mission-workspace="${esc(workspace.id)}">Ver trabajo</button></div>`:'';
       const why=last?.signal_title?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO RELEVANTE</span><b>${esc(last.signal_title)}</b>${last.signal_body?`<p>${esc(last.signal_body)}</p>`:''}<small>${esc(last.reason||'')} · ${new Date(last.linked_at||last.occurred_at||x.updated_at).toLocaleString('es-ES')}</small></div>`:(e&&['reactivated','signal_linked'].includes(e.event_type)?`<div class="continuity-cause"><span>ÚLTIMO CAMBIO</span><b>${esc(e.body||e.event_type)}</b><small>${new Date(e.created_at).toLocaleString('es-ES')}</small></div>`:'');
       return `<article class="commitment-card ${esc(x.status)}"><div class="commitment-card-head"><span class="commitment-status">${esc(commitmentStatusLabel(x.status))}</span><span class="commitment-project">${esc(projectName||x.scope||'global')}</span></div><h3>${esc(x.title)}</h3><p>${esc(x.objective)}</p>${x.completion_criteria?`<div class="commitment-criteria"><span>CIERRE</span>${esc(x.completion_criteria)}</div>`:''}${x.source_open_loop?'<div class="small">Nació de un open loop que tú decidiste elevar.</div>':''}${mission}${why}</article>`;
     }).join('');
-    modal('Continuidad',`<div class="continuity-intro">Aquí puedes inspeccionar lo que MINDS mantiene vivo. Nada entra en esta lista sin tu revisión; los cambios del sistema pueden reactivar un Commitment en espera, pero no uno que hayas pausado.</div><div class="commitment-list">${cards||'<div class="empty-panel">Todavía no has decidido mantener ningún asunto vivo. Puedes decirle a Isabella “esto no quiero perderlo” cuando algo merezca continuidad.</div>'}</div>`);
+    modal('Continuidad',`<div class="continuity-intro">Aquí puedes ver lo que Isabella mantiene vivo para que no tengas que recordar cada asunto abierto por tu cuenta. Nada entra en esta lista sin tu revisión y algo que hayas pausado no se reactiva por sí solo.</div><div class="commitment-list">${cards||'<div class="empty-panel">Todavía no has decidido mantener ningún asunto vivo. Puedes decirle a Isabella “esto no quiero perderlo” cuando algo merezca continuidad.</div>'}</div>`);
     document.querySelectorAll('[data-mission-workspace]').forEach(b=>b.onclick=()=>void missionWorkspacePanel(b.dataset.missionWorkspace));
   }catch(e){modal('Continuidad','<div class="small">No pude cargar la continuidad ahora mismo.</div>')}
 }
-function missionRunStatusLabel(status){
-  return status==='queued'?'En cola':status==='running'?'Trabajando':status==='waiting_for_user'?'Necesita tu decisión':status==='paused'?'Pausada':status==='completed'?'Completada':status==='failed'?'Con error':status==='cancelled'?'Cancelada':String(status||'');
-}
+function missionRunStatusLabel(status){return humanSurface()?.mission?.({status})?.headline||String(status||'')}
 async function missionRunControlUI(runId,action,workspaceId){
   const sb=window.MINDS_SUPABASE;if(!sb||!runId)return;
   try{
@@ -1942,11 +1954,11 @@ async function missionRunControlUI(runId,action,workspaceId){
     const {data,error}=await sb.rpc(rpc,params);if(error)throw error;
     if(data?.status!=='ok')throw new Error(data?.status||'No disponible');
     await missionWorkspacePanel(workspaceId);
-  }catch(e){say('assistant','No pude cambiar esa Mission ahora mismo: '+(e?.message||String(e)))}
+  }catch(e){say('assistant','No pude cambiar ese trabajo ahora mismo: '+(e?.message||String(e)))}
 }
 async function missionWorkspacePanel(id){
   const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
-  modal('Mission Workspace','<div class="surface-loading">Leyendo trabajo activo…</div>');
+  modal('Trabajo de Isabella','<div class="surface-loading">Leyendo lo que sigue en marcha…</div>');
   try{
     const [wQ,iQ,rQ]=await Promise.all([
       sb.from('minds_commitment_workspaces').select('id,commitment_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at').eq('id',id).single(),
@@ -1955,13 +1967,17 @@ async function missionWorkspacePanel(id){
     ]);
     if(wQ.error)throw wQ.error;if(iQ.error)throw iQ.error;if(rQ.error)throw rQ.error;
     const w=wQ.data,items=iQ.data||[],runs=rQ.data||[],current=runs.find(x=>['queued','running','waiting_for_user','paused'].includes(x.status))||runs[0]||null;
-    const labels={plan:'PLAN',finding:'HALLAZGO',source:'FUENTE',question:'PREGUNTA',decision:'DECISIÓN PROPUESTA',note:'NOTA'};
-    const itemRows=items.map(x=>`<div class="doctor-log"><b>${esc(labels[x.kind]||x.kind.toUpperCase())} · ${esc(x.status)}</b><span>${esc(x.content)}</span><time>${esc(x.provenance_class)} · ${esc(x.source_kind)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
+    const labels={plan:'Plan',finding:'Hallazgo',source:'Fuente',question:'Pregunta',decision:'Decisión propuesta',note:'Nota'};
+    const itemRows=items.map(x=>`<div class="doctor-log"><b>${esc(labels[x.kind]||x.kind)}</b><span>${esc(x.content)}</span><time>${new Date(x.created_at).toLocaleString('es-ES')}</time><details class="human-tech"><summary>Procedencia</summary><div class="small">${esc(x.status)} · ${esc(x.provenance_class)} · ${esc(x.source_kind)}</div></details></div>`).join('');
     const runControls=current&&['queued','running'].includes(current.status)?`<button class="secondary" data-mission-run-action="pause" data-run-id="${esc(current.id)}">Pausar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='paused'?`<button class="secondary" data-mission-run-action="resume" data-run-id="${esc(current.id)}">Reanudar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='waiting_for_user'?`<button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:'';
-    const runPanel=current?`<div class="continuity-cause mission-run-card"><span>DURABLE MISSION · ${esc(missionRunStatusLabel(current.status).toUpperCase())}</span><b>Checkpoint ${Number(current.iteration||0)} / ${Number(current.max_iterations||0)}</b>${current.result_summary?`<p>${esc(current.result_summary)}</p>`:''}${current.blocker_question?`<p><strong>Necesita tu decisión:</strong> ${esc(current.blocker_question)}</p>`:''}${current.last_error&&current.status==='failed'?`<p>${esc(current.last_error)}</p>`:''}<small>Actualizado ${new Date(current.updated_at).toLocaleString('es-ES')}</small>${runControls?`<div class="confirm-actions">${runControls}</div>`:''}</div>`:'';
-    modal('Mission Workspace',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>CIERRE</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${w.summary?`<div class="continuity-cause"><span>ESTADO OPERATIVO</span><p>${esc(w.summary)}</p></div>`:''}${runPanel}<div class="small">Este workspace es un scratchpad operativo. Sus hallazgos y decisiones propuestas no son memoria personal ni verdad confirmada de proyecto. Un Durable Mission puede continuar server-side, pero no puede ejecutar acciones externas ni confirmar decisiones por sí misma.</div></div><div class="small section-label">Trabajo acumulado</div>${itemRows||'<div class="empty-panel">El workspace está abierto, pero todavía no contiene avances registrados.</div>'}`);
+    const workspaceState=humanSurface()?.workspace?.(w.status);
+    const workspaceTechnical=`<div class="human-tech-grid"><span>Mission Workspace</span><b>${esc(w.status)}</b><span>Actualizado</span><b>${new Date(w.updated_at).toLocaleString('es-ES')}</b></div>`;
+    const runState=current?humanSurface()?.mission?.(current,w.title):null;
+    const runTechnical=current?`<div class="human-tech-grid"><span>Mission Run</span><b>${esc(current.status)}</b><span>Fase</span><b>${esc(current.phase||'—')}</b><span>Checkpoint</span><b>${Number(current.iteration||0)} / ${Number(current.max_iterations||0)}</b><span>Reintentos</span><b>${Number(current.retry_count||0)}</b><span>Actualizado</span><b>${new Date(current.updated_at).toLocaleString('es-ES')}</b></div>`:'';
+    const runPanel=current?`<div class="mission-run-card">${humanStateHTML(runState,runTechnical)}${current.last_error&&current.status==='failed'?`<div class="human-inline-error">${esc(current.last_error)}</div>`:''}${runControls?`<div class="confirm-actions">${runControls}</div>`:''}</div>`:'';
+    modal('Trabajo de Isabella',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>Cuándo estará resuelto</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${humanStateHTML(workspaceState,workspaceTechnical)}${w.summary?`<div class="continuity-cause"><span>Lo que sé hasta ahora</span><p>${esc(w.summary)}</p></div>`:''}${runPanel}<div class="small">Aquí conservo el trabajo intermedio para poder continuar entre conversaciones. Los hallazgos siguen siendo evidencia de trabajo, no memoria personal ni hechos confirmados; tampoco puedo ejecutar acciones externas o confirmar una decisión por mi cuenta.</div></div><div class="small section-label">Lo que he ido reuniendo</div>${itemRows||'<div class="empty-panel">Todavía no he registrado avances en este trabajo.</div>'}`);
     document.querySelectorAll('[data-mission-run-action]').forEach(b=>b.onclick=()=>void missionRunControlUI(b.dataset.runId,b.dataset.missionRunAction,id));
-  }catch{modal('Mission Workspace','<div class="small">No pude leer este workspace ahora mismo.</div>')}
+  }catch{modal('Trabajo de Isabella','<div class="small">No pude leer este trabajo ahora mismo.</div>')}
 }
 async function artifactsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
@@ -2048,9 +2064,10 @@ function autonomyContextLabel(key){
   return ({fast_task_dated_v1:'Tarea sencilla con fecha · petición directa',fast_task_undated_v1:'Tarea sencilla sin fecha · petición directa',fast_unverified:'Ruta rápida · contexto sin verificar',interactive_review:'Conversación con revisión',source_derived:'Con fuentes de proyecto o externas',background:'Trabajo en segundo plano',unknown_context:'Contexto no verificado'})[key]||key;
 }
 function autonomyEvidenceHTML(e){
-  const states={eligible:'Puede proponerse un permiso',insufficient_evidence:'Evidencia insuficiente',needs_review:'Hay correcciones o rechazos',stale_evidence:'Evidencia antigua',excluded:'Revisión obligatoria en esta versión'};
   const fields=Object.entries(e.changed_fields||{}).map(([k,n])=>`${({date:'fecha',title:'título',category:'categoría',project:'proyecto',notes:'notas'})[k]||k}: ${n}`).join(' · ');
-  return `<div class="doctor-log"><b>${esc(e.action==='create_task'?'Crear tarea':e.action)} · ${esc(e.scope_label)}</b><span>${esc(autonomyContextLabel(e.context_key))}</span><span>${Number(e.accepted_unchanged)||0} sin cambios · ${Number(e.edited)||0} editadas · ${Number(e.rejected)||0} rechazadas · ${Number(e.review_days)||0} días con revisión</span>${fields?`<span>Campos corregidos: ${esc(fields)}</span>`:''}<span>${esc(states[e.eligibility]||e.eligibility)}</span>${e.last_review_at?`<time>Última revisión: ${new Date(e.last_review_at).toLocaleString('es-ES')}</time>`:''}</div>`;
+  const human=humanSurface()?.autonomy?.(e);
+  const technical=`<div class="human-tech-grid"><span>Contexto</span><b>${esc(autonomyContextLabel(e.context_key))}</b><span>Sin cambios</span><b>${Number(e.accepted_unchanged)||0}</b><span>Editadas</span><b>${Number(e.edited)||0}</b><span>Rechazadas</span><b>${Number(e.rejected)||0}</b><span>Días revisados</span><b>${Number(e.review_days)||0}</b>${fields?`<span>Campos corregidos</span><b>${esc(fields)}</b>`:''}${e.last_review_at?`<span>Última revisión</span><b>${new Date(e.last_review_at).toLocaleString('es-ES')}</b>`:''}</div>`;
+  return `<div class="human-permission-case"><div class="human-case-title">${esc(e.action==='create_task'?'Crear tarea':e.action)} · ${esc(e.scope_label)}</div>${humanStateHTML(human,technical)}</div>`;
 }
 function reviewContextualPermission(unit,permission,mode){
   const grant=mode==='allow',scope=unit||permission;
@@ -2078,11 +2095,11 @@ async function contextualAutonomyPanel(){
     const units=data?.units||[],permissions=data?.permissions||[];
     const findPermission=e=>permissions.find(p=>p.action===e.action&&p.context_key===e.context_key&&p.scope_key===e.scope_key);
     const grants=permissions.filter(p=>p.mode==='allow');
-    const active=grants.map((p,i)=>`<div class="doctor-log"><b>${esc(p.scope_label)}</b><span>${esc(autonomyContextLabel(p.context_key))}</span><span>${new Date(p.expires_at)>new Date()?'Autorizado hasta':'Caducó el'} ${new Date(p.expires_at).toLocaleDateString('es-ES')}</span><button data-permission-revoke="${i}" class="secondary">Volver a confirmar siempre</button></div>`).join('');
+    const active=grants.map((p,i)=>`<div class="human-permission-case"><div class="human-case-title">${esc(p.scope_label)}</div><div class="human-state tone-complete"><b>Puedo hacerlo sin volver a preguntarte.</b><p>Este permiso dura hasta el ${new Date(p.expires_at).toLocaleDateString('es-ES')} y solo vale para este caso concreto.</p><div class="human-state-meta"><span>Tú lo autorizaste</span><span>${esc(autonomyContextLabel(p.context_key))}</span></div></div><button data-permission-revoke="${i}" class="secondary">Volver a preguntarme siempre</button></div>`).join('');
     const evidence=units.map((e,i)=>{const p=findPermission(e);const enabled=p?.mode==='allow'&&new Date(p.expires_at)>new Date();return autonomyEvidenceHTML(e)+(e.eligibility==='eligible'&&!enabled?`<button data-permission-review="${i}" class="secondary">Revisar propuesta de permiso</button>`:'')}).join('');
     const history=(data?.reviews||[]).map(r=>{const p=permissions.find(p=>p.id===r.permission_id);return `<div class="doctor-log"><b>${r.decision==='allow'?'Autorizado por ti':'Revocado por ti'} · ${esc(p?.scope_label||'Permiso')}</b><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`}).join('');
     const executions=(data?.executions||[]).map(r=>`<div class="doctor-log"><b>${esc(r.candidate?.title||'Tarea')}</b><span>Guardada bajo un permiso tuyo · no cuenta como aprobación nueva</span><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`).join('');
-    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Shadow Agency registra tus revisiones por acción, contexto y alcance. Solo una autorización expresa tuya cambia un permiso.</p><p>Para proponerlo: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Son condiciones de propuesta, no una medida de inteligencia.</p></div><div class="small section-label">Permisos autorizados</div>${active||'<div class="empty-panel">No hay permisos contextuales autorizados.</div>'}<div class="small section-label">Evidencia por contexto</div>${evidence||'<div class="empty-panel">Todavía no hay observaciones. Las acciones siguen pidiendo confirmación.</div>'}${history?'<div class="small section-label">Tus decisiones</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas, pero nunca convierte ese aprendizaje en permiso por su cuenta. Aquí puedes ver cuándo ya hay suficiente evidencia para decidir si quieres que deje de preguntarte en un caso concreto.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Internamente se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Estas reglas permiten proponer un permiso; solo tú puedes autorizarlo.</p></details></div><div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${history?'<div class="small section-label">Tus decisiones</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
     $$('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
     $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
   }catch{modal('Permisos de Isabella','<div class="small">No pude leer los permisos. No se ha autorizado ningún cambio desde esta pantalla.</div>')}
@@ -2192,7 +2209,7 @@ async function pushNotificationsPanel(){
     ?'<div class="proposal-actions"><button id="pushToggle" class="'+(active?'secondary':'primary')+'">'+(active?'Desactivar avisos en este dispositivo':'Permitir avisos en este dispositivo')+'</button></div>'
     :'';
   modal('Avisos de Isabella',
-    '<div class="continuity-intro"><p><b>'+esc(active?'Avisos activados':'Avisos no activados')+'</b></p><p>'+esc(pushStatusCopy(env,permission,active))+'</p><p>Activarlos no cambia cuándo Isabella decide interrumpirte. Attention Economy sigue tomando esa decisión; esta capa solo permite que el aviso llegue al dispositivo.</p></div>'+
+    '<div class="continuity-intro"><p><b>'+esc(active?'Avisos activados':'Avisos no activados')+'</b></p><p>'+esc(pushStatusCopy(env,permission,active))+'</p><p>Activarlos no cambia cuándo decido avisarte; solo permite que el aviso pueda llegar hasta este dispositivo cuando realmente haga falta.</p><details class="human-tech"><summary>Ver detalle técnico</summary><p>Internamente, Attention Economy sigue decidiendo si una señal debe interrumpir, esperar al briefing, aparecer en Feed o permanecer silenciosa. Delivery Layer solo transporta los interrupts ya decididos.</p></details></div>'+
     iosHelp+actionButton+
     (recent?'<div class="small section-label">Entregas recientes</div>'+recent:'')+
     '<div id="pushError" class="small" role="status"></div>'
@@ -2213,24 +2230,24 @@ async function pushNotificationsPanel(){
 
 function attentionRouteOptions(selected){
   return [
-    ['interrupt','Avisarme en el chat'],
-    ['briefing','Esperar al briefing'],
-    ['ambient','Mostrarlo discretamente en Feed'],
-    ['silent','No mostrármelo automáticamente']
+    ['interrupt','Avisarme en cuanto ocurra'],
+    ['briefing','Guardarlo para el próximo resumen'],
+    ['ambient','Dejarlo discretamente en Feed'],
+    ['silent','No avisarme automáticamente']
   ].map(([v,l])=>`<option value="${v}" ${selected===v?'selected':''}>${l}</option>`).join('');
 }
 async function attentionHistoryPanel(){
-  const sb=window.MINDS_SUPABASE;if(!sb){modal('Economía de atención','<div class="small">Conecta la memoria para ver cómo Isabella ha distribuido tu atención.</div>');return}
-  modal('Economía de atención','<div class="surface-loading">Leyendo decisiones recientes…</div>');
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Cómo decide Isabella avisarte','<div class="small">Conecta la memoria para ver cómo Isabella ha distribuido tu atención.</div>');return}
+  modal('Cómo decide Isabella avisarte','<div class="surface-loading">Leyendo decisiones recientes…</div>');
   try{
     const {data,error}=await sb.from('minds_attention_events')
       .select('id,title,event_type,route,reason,status,source_type,created_at,delivered_at')
       .order('created_at',{ascending:false}).limit(100);
     if(error)throw error;
-    const labels={interrupt:'INTERRUPCIÓN',briefing:'BRIEFING',ambient:'FEED',silent:'SILENCIO'};
-    const rows=(data||[]).map(x=>`<div class="doctor-log"><b>${esc(labels[x.route]||x.route.toUpperCase())} · ${esc(x.title)}</b><span>${esc(x.reason)}</span><time>${esc(x.source_type)} · ${esc(x.status)} · ${new Date(x.created_at).toLocaleString('es-ES')}</time></div>`).join('');
-    modal('Economía de atención',`<div class="continuity-intro">Aquí ves por qué MINDS decidió interrumpirte, esperar, aparecer discretamente o guardar silencio. No hay un score oculto: cada decisión conserva su canal y su razón.</div>${rows||'<div class="empty-panel">Todavía no hay decisiones de atención registradas.</div>'}`);
-  }catch{modal('Economía de atención','<div class="small">No pude leer las decisiones de atención ahora mismo.</div>')}
+    const labels={interrupt:'Te avisé en el momento',briefing:'Lo guardé para el resumen',ambient:'Lo dejé en Feed',silent:'No te interrumpí'};
+    const rows=(data||[]).map(x=>`<div class="human-permission-case"><div class="human-case-title">${esc(labels[x.route]||x.route)} · ${esc(x.title)}</div><p class="small">${esc(x.reason)}</p><details class="human-tech"><summary>Ver detalle técnico</summary><div class="human-tech-grid"><span>Ruta</span><b>${esc(x.route)}</b><span>Fuente</span><b>${esc(x.source_type)}</b><span>Estado</span><b>${esc(x.status)}</b><span>Fecha</span><b>${new Date(x.created_at).toLocaleString('es-ES')}</b></div></details></div>`).join('');
+    modal('Cómo decide Isabella avisarte',`<div class="continuity-intro">Aquí puedes ver por qué te avisé en el momento, guardé algo para más tarde, lo dejé en Feed o decidí no interrumpirte. Cada decisión conserva una razón concreta; no uso un score oculto de importancia.</div>${rows||'<div class="empty-panel">Todavía no he tenido que decidir cómo ocupar tu atención.</div>'}`);
+  }catch{modal('Cómo decide Isabella avisarte','<div class="small">No pude leer las decisiones de atención ahora mismo.</div>')}
 }
 function assistantPreferencesPanel(){
   const prefs={...base.assistantPreferences,...(state.assistantPreferences||{})};
@@ -2239,17 +2256,17 @@ function assistantPreferencesPanel(){
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
     <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
     <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
-    <div class="small section-label">Economía de atención</div>
-    <div class="small">Isabella puede ser proactiva sin convertir cada resultado en una interrupción. Las peticiones explícitas como “avísame cuando termines” tienen prioridad sobre estas reglas.</div>
-    <label>Cuando una Mission termina<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
-    <label>Cuando una Mission falla<select id="attentionMissionFailed">${attentionRouteOptions(attention.missionFailed)}</select></label>
+    <div class="small section-label">Cuándo quieres que te avise</div>
+    <div class="small">Puedo mantener cosas vivas y trabajar en segundo plano sin interrumpirte cada vez. Si me dices explícitamente “avísame cuando termines”, esa petición tiene prioridad sobre estas reglas.</div>
+    <label>Cuando termino un trabajo en segundo plano<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
+    <label>Cuando no puedo terminar un trabajo en segundo plano<select id="attentionMissionFailed">${attentionRouteOptions(attention.missionFailed)}</select></label>
     <label>Evento próximo<select id="attentionImminentEvent">${attentionRouteOptions(attention.imminentEvent)}</select></label>
     <label>Tareas vencidas<select id="attentionOverdueTasks">${attentionRouteOptions(attention.overdueTasks)}</select></label>
     <label>Fallo de una rutina<select id="attentionRoutineFailure">${attentionRouteOptions(attention.routineFailure)}</select></label>
-    <label>Máximo de interrupciones no bloqueantes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
-    <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos no bloqueantes</span></label>
+    <label>Máximo de avisos no urgentes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
+    <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos que pueden esperar</span></label>
     <div class="two-col"><label>Desde<input id="attentionQuietStart" type="time" value="${esc(attention.quietStart)}"></label><label>Hasta<input id="attentionQuietEnd" type="time" value="${esc(attention.quietEnd)}"></label></div>
-    <button id="attentionHistory" class="secondary" type="button">Ver decisiones recientes de atención</button>
+    <button id="attentionHistory" class="secondary" type="button">Ver por qué te avisé o no te avisé</button>
     <div><div class="small section-label">Mejoras de comportamiento adoptadas</div><div id="assistantRuleRows">${rules.length?rules.map((r,i)=>`<div class="assistant-rule-row"><span>${esc(r)}</span><button data-rule-remove="${i}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small empty-panel">Todavía no has adoptado reglas adicionales.</div>'}</div></div>
     <button id="saveAssistantPreferences" class="primary">Guardar</button>
   </div>`);
@@ -2361,7 +2378,15 @@ async function doctorPanel(){
     const cards=doctorCards({runsQ,routinesQ,heartQ,flushQ,skillsQ,claimsQ,filesQ,embedQ,usageQ,shadowQ,missionsQ,missionItemsQ,missionRunsQ,attentionQ});
     const errors=runs.filter(x=>x.status==='error').slice(0,8);
     const hbEvents=heart.filter(x=>x.status==='new').slice(0,6);
-    modal('Estado de MINDS',`<div class="doctor-panel"><div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}</div>`);
+    const durableRuns=missionRunsQ.data||[];
+    const summary=humanSurface()?.systemSummary?.({
+      errors:cards.filter(([,status])=>status==='error').length,
+      waiting:durableRuns.filter(x=>x.status==='waiting_for_user').length,
+      working:durableRuns.filter(x=>['queued','running'].includes(x.status)).length,
+      briefing:(attentionQ.data||[]).filter(x=>x.route==='briefing'&&x.status==='pending').length
+    });
+    const technical=`<div class="doctor-grid">${cards.map(([name,status,detail])=>`<div class="doctor-card">${healthDot(status)}<div><b>${esc(name)}</b><div class="small">${esc(detail)}</div></div></div>`).join('')}</div>${errors.length?`<div class="small section-label">Errores recientes</div>${errors.map(x=>`<div class="doctor-log"><b>${esc(x.feature)}</b><span>${esc(x.error||'Error')}</span><time>${new Date(x.started_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}${hbEvents.length?`<div class="small section-label">Señales del heartbeat</div>${hbEvents.map(x=>`<div class="doctor-log"><b>${esc(x.title)}</b><span>${esc(x.event_type)}</span><time>${new Date(x.last_seen_at).toLocaleString('es-ES')}</time></div>`).join('')}`:''}`;
+    modal('Estado de MINDS',`<div class="doctor-panel">${humanStateHTML(summary)}<details class="human-tech doctor-tech"><summary>Ver estado técnico de MINDS</summary>${technical}</details></div>`);
   }catch(e){modal('Estado de MINDS','<div class="small">No pude completar el diagnóstico ahora mismo.</div>')}
 }
 async function skillsPanel(){

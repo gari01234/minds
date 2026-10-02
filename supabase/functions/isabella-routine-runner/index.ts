@@ -92,7 +92,8 @@ Deno.serve(async(req:Request)=>{
       ]);
 
       const [events,tasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
-      const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>({urgent:0,attention:1,info:2}[a.urgency]??3)-({urgent:0,attention:1,info:2}[b.urgency]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
+      const urgencyRank:Record<string,number>={urgent:0,attention:1,info:2};
+      const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>(urgencyRank[String(a.urgency)]??3)-(urgencyRank[String(b.urgency)]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
       attentionEventIds=attentionItems.map((x:any)=>String(x.id));
       let recent:any[]=[];
       const conversationId=convs?.[0]?.id||null;
@@ -102,7 +103,7 @@ Deno.serve(async(req:Request)=>{
       }
 
       const localNow=new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
-      const system=`Eres Isabella, la asistente personal de Gari, ejecutando una rutina que él configuró explícitamente. El resultado se insertará como un mensaje proactivo en su chat personal. Mantén la misma voz cercana, natural y precisa de Isabella. No menciones cron, scheduler, backend ni que estás ejecutando una función. No inventes información. Usa web_search solo si la instrucción requiere información actual externa. No crees ni modifiques tareas, eventos o rutinas desde esta ejecución.`;
+      const system=`Eres Isabella, la asistente personal de Gari, ejecutando una rutina que él configuró explícitamente. El resultado se insertará como un mensaje proactivo en su chat personal. Mantén la misma voz cercana, natural y precisa de Isabella. No menciones cron, scheduler, backend ni que estás ejecutando una función. Tampoco expongas términos internos de MINDS como Mission, Attention Economy, briefing route, workspace, checkpoint o event_type: tradúcelos a qué ocurrió, si hace falta una decisión y qué debe hacer Gari. Distingue claramente hechos confirmados, cosas que estás comprobando e inferencias todavía inciertas. No inventes información. Usa web_search solo si la instrucción requiere información actual externa. No crees ni modifiques tareas, eventos o rutinas desde esta ejecución.`;
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
@@ -123,9 +124,9 @@ ${JSON.stringify(feedPref?.value||{})}
 CONVERSACIÓN RECIENTE:
 ${JSON.stringify(recent)}
 
-SEÑALES DIFERIDAS POR ATTENTION ECONOMY:
+COSAS QUE DECIDISTE NO INTERRUMPIR ANTES:
 ${JSON.stringify(attentionItems)}
-Si esta lista contiene elementos, intégralos en el briefing solo una vez y en lenguaje natural. Estas señales ya fueron clasificadas como suficientemente importantes para el briefing pero no para interrumpir antes. Prioriza las que requieren una decisión, un fallo operativo o un resultado de Mission. Si una señal ya queda completamente cubierta por la agenda anterior, no la repitas de forma redundante.
+Si esta lista contiene elementos, intégralos en el briefing solo una vez y en lenguaje natural. Estas señales ya fueron clasificadas como suficientemente importantes para el briefing pero no para interrumpir antes. Prioriza las que requieren una decisión, un fallo operativo o un trabajo ya terminado. Si una señal ya queda completamente cubierta por la agenda anterior, no la repitas de forma redundante.
 
 Si la rutina pide clima, usa weatherLocation solo si está configurado en las preferencias anteriores. Si está vacío, no inventes una ubicación: omite el clima o menciona muy brevemente que falta configurar el lugar. Si la rutina pide noticias, usa web_search y selecciona pocas noticias de alto valor en vez de una lista genérica.
 
