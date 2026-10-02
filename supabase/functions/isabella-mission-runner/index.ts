@@ -123,19 +123,19 @@ async function publishMissionAttention(sb:any,run:any,workspace:any,event:string
   let title="",body="",urgency="attention",requiresUser=false,userRequested=false,silentRequested=false,eventType="";
   if(event==="completed"){
     eventType="mission_completed";
-    title=`Mission terminada: ${workspace.title}`;
-    body=`He terminado el trabajo de “${workspace.title}”.${run.result_summary?"\n\n"+run.result_summary:""}`;
+    title=`Trabajo terminado: ${workspace.title}`;
+    body=`He terminado “${workspace.title}”.${run.result_summary?"\n\n"+run.result_summary:""}`;
     userRequested=notifyMode==="interrupt_on_complete";
     silentRequested=notifyMode==="silent_on_complete";
   }else if(event==="waiting_for_user"){
     eventType="mission_waiting_for_user";
     title=`Necesito tu decisión: ${workspace.title}`;
-    body=`He avanzado “${workspace.title}”, pero necesito una decisión tuya para seguir:${run.blocker_question?"\n\n"+run.blocker_question:""}`;
+    body=`Necesito que decidas algo antes de poder seguir con “${workspace.title}”.${run.blocker_question?"\n\n"+run.blocker_question:""}`;
     urgency="urgent";requiresUser=true;
   }else{
     eventType="mission_failed";
-    title=`Mission detenida: ${workspace.title}`;
-    body=`El trabajo de “${workspace.title}” se detuvo después de varios intentos. El progreso anterior sigue guardado en su Mission Workspace; no he ejecutado ninguna acción externa.`;
+    title=`No pude terminar: ${workspace.title}`;
+    body=`No pude terminar “${workspace.title}” después de varios intentos. El progreso sigue guardado y no he hecho ningún cambio externo.`;
   }
   const {data,error}=await sb.rpc("minds_publish_attention",{p_user:run.user_id,p_candidate:{
     event_key:`mission:${run.id}:${event}`,
