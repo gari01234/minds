@@ -453,3 +453,18 @@ Producción:
 72.5B demuestra que MINDS puede crear una Agent Session durable real, observar su lifecycle, recuperar su final answer y convertirlo en un `MissionRuntimeResult` estricto sin concederle herramientas, acciones externas o write-through.
 
 La conclusión arquitectónica queda limitada a eso. Esta build **no** demuestra todavía que Agents API deba sustituir el runtime nativo como opción primaria. Solo demuestra que puede coexistir de forma segura como execution plane shadow bajo autoridad de MINDS.
+
+
+## 72.5B-EVAL — Runtime Selection Study
+
+Tras cerrar 72.5B se ejecutó una evaluación adicional antes de 72.5C para responder una pregunta distinta: **cuándo merece la pena usar Managed Agents en lugar de native_minds**.
+
+La evaluación final utilizó cinco Missions sintéticas y aisladas: conflicto multifuente, continuidad en dos episodios, síntesis diferida en dos episodios, decision gate y disciplina de procedencia. Los fixtures se validaron antes de la repetición final; dos defectos iniciales del propio benchmark —orden incorrecto de parámetros de provenance/source y una premisa de mantenimiento no explicitada— fueron corregidos y las mediciones contaminadas fueron descartadas.
+
+Resultado final: ambos runtimes resolvieron correctamente los cinco casos y ambos conservaron continuidad en los dos casos multi-episodio. Native acumuló 8.869 tokens y 38,5 s; Agents + normalizador estricto acumuló 65.387 tokens y 389,3 s. El volumen de tokens no equivale directamente a coste monetario porque los segundos turns de Agents incluyeron input cacheado.
+
+La evidencia no justifica routing automático hacia Agents bajo el envelope probado (`environment:none`, sin tools, MCP, Computer Use o multi-agent). `native_minds` permanece como runtime primario por defecto y `openai_agents` como shadow candidate.
+
+La política completa, criterios, tablas y próxima frontera experimental están en `RUNTIME-SELECTION-v0.1.md`.
+
+No avanzar a 72.5C Controlled write-through hasta probar una capacidad diferencial de Agents —environment persistente, tools/MCP, multi-agent o un contexto multi-turn donde la reconstrucción native sea materialmente inferior.
