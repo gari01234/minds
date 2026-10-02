@@ -51,12 +51,12 @@ No se añade una acción autónoma nueva, no se amplía Contextual Autonomy y no
 
 La implementación está en PR #1, rama `build-71-native-presence`. El primer run de `Verify MINDS` detectó una aserción situada en la capa incorrecta; la prueba se corrigió para comprobar el tag de deduplicación donde realmente se produce, en el delivery runner, sin modificar el comportamiento. El gate se endureció además con `deno check` para las dos Edge Functions nuevas. Ese typecheck detectó dos incompatibilidades reales antes del despliegue —una propiedad no admitida por el contrato de Web Push y una inferencia demasiado laxa del par VAPID— y ambas se corrigieron sin debilitar comportamiento ni pruebas. El run final verificado, #7 (`37009073674`), terminó en `success`: **159 tests Node, 159 pass, 0 fail**, `node scripts/build.mjs` correcto y `deno check` correcto para `isabella-push` e `isabella-delivery-runner`.
 
-Se añadió además `supabase/tests/native_presence.sql`, transaccional y con rollback, para comprobar registro/retirada, RLS, separación de Attention, enqueue idempotente, claim/lease y receipt. Esa suite todavía no se ha ejecutado contra el Supabase real de MINDS desde este chat.
+Se añadió además `supabase/tests/native_presence.sql`, transaccional y con rollback, para comprobar registro/retirada, RLS, separación de Attention, enqueue idempotente, claim/lease y receipt. En producción pasaron con rollback las suites `native_presence.sql`, `contextual_autonomy.sql` y `cognitive_integrity.sql`.
 
 ## Estado de despliegue
 
-El conector Supabase disponible durante esta build no expone el proyecto MINDS `lodexwyyynlarkqgkyhy`; solo expone otros proyectos. Por seguridad no se ha aplicado la migración ni desplegado `isabella-push`/`isabella-delivery-runner` en un proyecto distinto.
+El proyecto MINDS `lodexwyyynlarkqgkyhy` fue verificado como `ACTIVE_HEALTHY`. La migración principal quedó registrada por Supabase como `20261002125419_native_presence_delivery_v01`. Durante el gate del runner se aplicó `20261002125845_native_presence_delivery_v011_pause_runner` para evitar llamadas fallidas, y después del despliegue autorizado se reactivó mediante `20261002134606_native_presence_delivery_v012_activate_runner`.
 
-Por la misma razón, **PR #1 permanece draft y `main` sigue en Build 70**. Esto evita publicar una interfaz Build 71 que dependa de backend todavía no desplegado. El cierre de Build 71 requiere conectar el Supabase exacto, ejecutar primero las suites SQL con rollback, aplicar la migración, desplegar las dos funciones, verificar cron/versiones, fusionar PR #1 y comprobar el workflow oficial de Pages.
+`isabella-push` está desplegada como v1 con JWT. `isabella-delivery-runner` está desplegada como v1 con `verify_jwt=false` y autenticación propia mediante el secreto server-side `delivery_runner`, igual que los runners cron existentes. El cron `minds-delivery-runner` está activo con frecuencia de un minuto.
 
-No declarar Build 71 publicada hasta completar esos pasos.
+La publicación web se completa al fusionar PR #1 y verificar el workflow oficial de Pages. No considerar Build 71 cerrada hasta que ambos pasos queden verdes.
