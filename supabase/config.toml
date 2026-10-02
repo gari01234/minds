@@ -25,3 +25,11 @@ entrypoint = "./functions/isabella-routine-runner/index.ts"
 [functions.isabella-mission-runner]
 verify_jwt = false
 entrypoint = "./functions/isabella-mission-runner/index.ts"
+
+[functions.isabella-push]
+verify_jwt = true
+entrypoint = "./functions/isabella-push/index.ts"
+
+[functions.isabella-delivery-runner]
+verify_jwt = false
+entrypoint = "./functions/isabella-delivery-runner/index.ts"
