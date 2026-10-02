@@ -1312,3 +1312,48 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 
 /* Knowledge review: readable on phone and desktop. */
 .work-knowledge{max-width:1000px;margin:auto}.knowledge-filters{display:flex;gap:10px;margin:16px 0}.knowledge-filters input{flex:1;min-width:100px}.knowledge-filters input,.knowledge-filters select{padding:10px;border:1px solid #ddd;border-radius:10px;background:white}.knowledge-card{border:1px solid #e7e5e1;border-radius:14px;padding:18px;margin:12px 0;background:#fff}.knowledge-card p{line-height:1.55;white-space:pre-wrap}.knowledge-meta{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:#68635d}.knowledge-attention{color:#9a5028}.knowledge-card details{margin-top:14px;font-size:13px}.knowledge-card blockquote{margin:12px 0;padding:10px 14px;border-left:2px solid #ddd}.knowledge-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}.knowledge-actions button,.work-knowledge button,.skill-controls button{border:1px solid #ddd;border-radius:9px;background:white;padding:8px 12px}.skill-controls{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.skill-history pre{white-space:pre-wrap;line-height:1.5;font-family:inherit}.health-dot.idle{background:#aaa}.knowledge-filters select{max-width:45%}@media(max-width:600px){.knowledge-card{padding:14px}.work-knowledge .work-desktop-toolbar{align-items:flex-start}.work-tabs{flex-wrap:wrap}}
+
+
+/* Build 72 — Human Surface / Conversational Abstraction v0.1 */
+.human-state{
+  display:grid;gap:7px;padding:14px 15px;border:1px solid rgba(0,0,0,.07);
+  border-radius:16px;background:#fafafa;margin:10px 0
+}
+.human-state>b{font-size:15px;line-height:1.28;font-weight:650}
+.human-state>p{margin:0;line-height:1.46;color:#4f4f54}
+.human-state.tone-active{background:#fbfbfb}
+.human-state.tone-attention{background:#fffdf6}
+.human-state.tone-complete{background:#fbfcfb}
+.human-state.tone-error{background:#fffafa}
+.human-state.tone-muted{opacity:.78}
+.human-state-meta{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.human-state-meta span{
+  font-size:11px;line-height:1.2;padding:5px 8px;border-radius:999px;
+  background:#f0f0f2;color:#66666b
+}
+.human-tech{margin-top:8px;border-top:1px solid rgba(0,0,0,.06);padding-top:8px}
+.human-tech>summary{cursor:pointer;color:#77777d;font-size:12px;list-style:none}
+.human-tech>summary::-webkit-details-marker{display:none}
+.human-tech>summary::after{content:'  +';color:#aaa}
+.human-tech[open]>summary::after{content:'  −'}
+.human-tech-grid{display:grid;grid-template-columns:minmax(110px,.7fr) 1fr;gap:6px 12px;margin-top:10px;font-size:12px}
+.human-tech-grid span{color:#8a8a8f}
+.human-tech-grid b{font-weight:550;overflow-wrap:anywhere}
+.human-work-card{display:grid;gap:9px}
+.human-work-card .human-state{margin:0}
+.human-work-summary{margin:0!important}
+.human-permission-case{display:grid;gap:8px;padding:12px 0;border-bottom:1px solid rgba(0,0,0,.06)}
+.human-case-title{font-size:13px;font-weight:650}
+.human-permission-case>.human-state{margin:0}
+.human-inline-error{font-size:12px;line-height:1.4;color:#8f3535;padding:8px 2px}
+.doctor-tech{border-top:0;padding-top:0}
+.doctor-tech>summary{
+  padding:10px 0;border-top:1px solid rgba(0,0,0,.07);
+  border-bottom:1px solid rgba(0,0,0,.07);margin:2px 0 12px
+}
+.mission-run-card{display:grid;gap:9px;margin:10px 0}
+.mission-run-card>.human-state{margin:0}
+@media(max-width:620px){
+  .human-tech-grid{grid-template-columns:1fr;gap:3px}
+  .human-tech-grid b{margin-bottom:7px}
+}
