@@ -77,7 +77,7 @@ test('Build 70 incomplete SSE fails closed, a verified gate refusal can fall bac
 test('Build 70 permission UI writes only after explicit review and renders sparse evidence honestly',async()=>{
   let nodes={},writes=0,html='';
   const c=vm.createContext({crypto:webcrypto,Date,console,Object,Number,window:{MINDS_SUPABASE:{rpc:async()=>{writes++;return {}}}},esc:s=>String(s??''),$:id=>nodes[id],
-    modal:(_title,body)=>{html=body;nodes={};for(const [,id] of body.matchAll(/id="([^"]+)"/g))nodes['#'+id]={disabled:false,isConnected:true}},$:()=>[]});
+    modal:(_title,body)=>{html=body;nodes={};for(const [,id] of body.matchAll(/id="([^"]+)"/g))nodes['#'+id]={disabled:false,isConnected:true}},$$:()=>[]});
   vm.runInContext(read('shared/human-surface.js'),c);
   c.humanSurface=()=>c.window.MINDS_HUMAN_SURFACE;
   c.humanStateHTML=(value,technical='')=>'<b>'+value.headline+'</b><p>'+value.detail+'</p>'+technical;
