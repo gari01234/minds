@@ -383,3 +383,22 @@ what MINDS hypothesizes
 ≠
 what Isabella is allowed to act as true
 ```
+
+
+## Counterfactual authority after Build 75
+
+Before expanding contextual autonomy, MINDS can now replay the user-confirmation layer over real Shadow Agency history.
+
+The counterfactual is intentionally narrower than a prediction:
+
+```
+recorded request class
++ recorded candidate
++ recorded human outcome
++ hypothetical exact allow permission
+→ observable historical consequence
+```
+
+It does not alter the request, infer a future preference or combine evidence into a score.
+
+Counterfactual evidence is advisory context for the human decision. It is not authority and never changes permissions by itself.
