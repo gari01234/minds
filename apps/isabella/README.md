@@ -172,3 +172,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Read-only MINDS MCP
 
 `BUILD-72.8.md` records the production-grade read boundary for external execution. OpenAI Agents can receive an execution-scoped, expiring capability token and call only explicitly granted MINDS read tools. Tokens are stored only as hashes, every read is audited, and grants are revoked when the execution ends.
+
+
+### Runtime Decision Gate
+
+`BUILD-72.9.md` and `RUNTIME-SELECTION-v0.2.md` close the external-execution research line. `native_minds` remains primary for every Mission. OpenAI Agents is allowed only as a bounded material execution lane when a Mission needs durable material state reused across checkpoints and all authority boundaries pass a deterministic fail-closed gate.
