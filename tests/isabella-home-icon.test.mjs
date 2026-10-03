@@ -28,7 +28,7 @@ test('Isabella Home Screen icon is pure black and iOS-specific',()=>{
 
 test('service worker caches and displays the black icon assets',()=>{
   const sw=text('apps/isabella/sw.js');
-  assert.ok(sw.includes("isabella-shell-v80"));
+  assert.ok(sw.includes("isabella-shell-v81"));
   assert.ok(sw.includes("'./apple-touch-icon.png?v=2'"));
   assert.ok(sw.includes("'./icon-192.png?v=2'"));
   assert.ok(sw.includes("'./icon-512.png?v=2'"));
