@@ -42,6 +42,7 @@ function compact(state){
       feed_instructions:String(state.feedPreferences?.instructions||'').trim(),
       weather_location:String(state.feedPreferences?.weatherLocation||'').trim(),
       assistant_behavior_rules:Array.isArray(state.assistantPreferences?.behaviorRules)?state.assistantPreferences.behaviorRules:[],
+      operating_rules:Array.isArray(window.ISABELLA_OPERATING_RULES)?window.ISABELLA_OPERATING_RULES.slice(0,12):[],
       curiosity_enabled:state.assistantPreferences?.curiosityEnabled!==false
     }
   };
