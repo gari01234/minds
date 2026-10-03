@@ -342,3 +342,14 @@ External execution is capability-shaped rather than Mission-shaped.
 Read-only MCP is an enabling boundary, not a routing reason. Artifact Intake is mandatory for provider outputs that must persist. No score, free-text heuristic or provider-side decision can grant this lane.
 
 The current automated gate fails closed for sensitive data, provider network access, Computer Use, multi-agent, external side effects, write-through, provider secrets and MCP reads not yet validated for routing.
+
+
+## Outcome Learning after Build 73
+
+MINDS now separates post-action correlation from causality.
+
+An autonomous execution receipt can be linked deterministically to a later manual mutation of the exact task. A bounded first relevant mutation may create a `post_action_feedback_candidate`, but that candidate has no learning effect by itself.
+
+Only explicit authenticated review can classify it as a real correction. A confirmed correction produces an immutable `minds_outcome_feedback` receipt and may reduce the exact contextual permission from `allow` to `confirm`. A later change classified as non-causal produces no learning evidence.
+
+This layer does not create memory, personality claims or positive authority. It is evidence about outcomes of previously authorized actions and is deliberately asymmetric: confirmed corrections can make Isabella more conservative; they cannot silently make her more autonomous.
