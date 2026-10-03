@@ -162,3 +162,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Artifact Intake
 
 `ARTIFACT-INTAKE-v0.1.md` defines the quarantine and review boundary for artifacts produced by external runtimes. A provider output remains a candidate until explicitly accepted and promoted; it is not memory, Workspace truth or a permanent MINDS artifact merely because an Agent produced it.
+
+
+### Capability Integration Pilot
+
+`BUILD-72.7.md` records the first real non-sensitive Mission that used an OpenAI-hosted persistent environment and returned a provider artifact through Artifact Intake. The provider never wrote to Mission Workspace; the resulting Markdown remains a human-reviewed candidate until explicitly kept or rejected.
