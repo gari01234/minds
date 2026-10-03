@@ -5,6 +5,7 @@ import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 const migration=read('supabase/migrations/20261003071804_outcome_learning_post_action_feedback_v01.sql');
+const hardening=read('supabase/migrations/20261003072511_outcome_learning_post_action_feedback_v011_first_relevant_mutation.sql');
 const app=read('apps/isabella/app.js');
 const sql=read('supabase/tests/outcome_learning.sql');
 
@@ -15,6 +16,8 @@ test('Build 73 treats post-action mutation as a candidate, never automatic causa
   assert.ok(migration.includes("new.action not in ('update','delete')"));
   assert.ok(migration.includes("created_at>=new.created_at-interval '48 hours'"));
   assert.ok(migration.includes('on conflict(autonomy_execution_id) do nothing'));
+  assert.ok(hardening.includes('from public.minds_post_action_feedback_candidates c'));
+  assert.ok(!hardening.includes('from public.isabella_activity_log a'));
   assert.ok(migration.includes("status text not null default 'pending'"));
   assert.ok(!migration.includes("new.action in ('complete'"));
 });
@@ -43,6 +46,7 @@ test('Build 73 can only reduce contextual autonomy after a confirmed correction'
 test('Build 73 keeps ordinary completion and late edits out of causal learning',()=>{
   assert.ok(sql.includes("'complete','manual'"));
   assert.ok(sql.includes('completion classified as correction'));
+  assert.ok(sql.includes('completion consumed later relevant correction'));
   assert.ok(sql.includes("now()-interval '49 hours'"));
   assert.ok(sql.includes('stale edit classified as correction'));
   assert.ok(sql.includes("'later_change'"));
