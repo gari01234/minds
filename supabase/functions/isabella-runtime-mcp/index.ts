@@ -29,25 +29,25 @@ Deno.serve(async(req:Request)=>{
   if(grantErr)return json({error:"capability_lookup_failed"},500);
   if(!grant)return json({error:"capability_token_invalid"},401);
   if(grant.status!=="active")return json({error:"capability_not_active"},403);
-  if(Date.parse(grant.expires_at)<=Date.now()){
+  const activeGrant=grant;
+  if(Date.parse(activeGrant.expires_at)<=Date.now()){
     await sb.from("minds_runtime_capability_grants").update({status:"expired"}).eq("id",activeGrant.id).eq("status","active");
     return json({error:"capability_expired"},403);
   }
 
   const {data:execution,error:execErr}=await sb.from("minds_mission_runtime_executions")
     .select("id,mission_run_id,user_id,provider,mode,lifecycle")
-    .eq("id",grant.execution_id).eq("user_id",activeGrant.user_id).maybeSingle();
+    .eq("id",activeGrant.execution_id).eq("user_id",activeGrant.user_id).maybeSingle();
   if(execErr||!execution)return json({error:"capability_execution_missing"},403);
   if(execution.provider!=="openai_agents"||execution.mode!=="shadow")
     return json({error:"capability_execution_not_allowed"},403);
+  const activeExecution=execution;
 
   const {data:run,error:runErr}=await sb.from("minds_mission_runs")
     .select("id,workspace_id,user_id,instruction,status,iteration,max_iterations")
-    .eq("id",execution.mission_run_id).eq("user_id",activeGrant.user_id).maybeSingle();
+    .eq("id",activeExecution.mission_run_id).eq("user_id",activeGrant.user_id).maybeSingle();
   if(runErr||!run)return json({error:"capability_mission_missing"},403);
 
-  const activeGrant=grant;
-  const activeExecution=execution;
   const activeRun=run;
   const allowed=new Set((activeGrant.capabilities||[]).map(String));
 
