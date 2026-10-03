@@ -402,3 +402,25 @@ recorded request class
 It does not alter the request, infer a future preference or combine evidence into a score.
 
 Counterfactual evidence is advisory context for the human decision. It is not authority and never changes permissions by itself.
+
+
+## Expectation Engine after Build 76
+
+MINDS now separates four kinds of future state:
+
+```
+Task            = action the user must perform
+Standing Intent = context-triggered future reminder
+Commitment      = durable objective kept alive
+Expectation     = future world event expected by a date
+```
+
+Expectation Engine adds an epistemic state that did not previously exist:
+
+```
+due_unconfirmed
+```
+
+It means the temporal condition has been met but the outcome is unknown. Time alone may move an Expectation from `active` to `due_unconfirmed`; time alone can never move it to `missed`.
+
+v0.1 has manual observability. Fulfillment, failure, cancellation and rescheduling remain explicit reviewed transitions with durable receipts. Heartbeat detects due Expectations and routes them through Attention Economy as ambient signals. This preserves the rule that uncertainty is represented as uncertainty rather than silently converted into fact.
