@@ -187,3 +187,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Personal Operating Model
 
 `BUILD-74.md` introduces a reviewable model of how Isabella should work with the user. Observations and behavioral evidence can produce hypotheses, but only rules explicitly accepted or corrected by the user enter Isabella's operating context.
+
+
+### Counterfactual Isabella
+
+`BUILD-75.md` adds a read-only retrospective preview before contextual permissions: for an exact action/context/scope, MINDS shows which historical confirmations would have produced the same result, preceded a correction, preceded a rejection, or remain unknown. No score, execution or permission change is produced by the simulation.

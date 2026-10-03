@@ -2124,6 +2124,72 @@ function autonomyEvidenceHTML(e){
   const technical=`<div class="human-tech-grid"><span>Contexto</span><b>${esc(autonomyContextLabel(e.context_key))}</b><span>Sin cambios</span><b>${Number(e.accepted_unchanged)||0}</b><span>Editadas</span><b>${Number(e.edited)||0}</b><span>Rechazadas</span><b>${Number(e.rejected)||0}</b><span>Días revisados</span><b>${Number(e.review_days)||0}</b>${outcomeCorrections?`<span>Correcciones posteriores confirmadas</span><b>${outcomeCorrections}</b>`:''}${fields?`<span>Campos corregidos</span><b>${esc(fields)}</b>`:''}${e.last_review_at?`<span>Última revisión</span><b>${new Date(e.last_review_at).toLocaleString('es-ES')}</b>`:''}</div>`;
   return `<div class="human-permission-case"><div class="human-case-title">${esc(e.action==='create_task'?'Crear tarea':e.action)} · ${esc(e.scope_label)}</div>${humanStateHTML(human,technical)}</div>`;
 }
+function counterfactualSupported(unit){
+  return unit?.action==='create_task'
+    && unit?.eligible_class===true
+    && ['fast_task_undated_v1','fast_task_dated_v1'].includes(unit?.context_key);
+}
+function counterfactualEffectCopy(row){
+  const effect=row?.counterfactual_effect;
+  if(effect==='same_result_without_confirmation')return 'Habría hecho exactamente lo que terminaste aprobando, sin volver a preguntarte.';
+  if(effect==='would_act_before_correction')return 'Habría actuado antes de que hicieras tu corrección.';
+  if(effect==='would_act_despite_rejection')return 'Habría actuado aunque después rechazaste esta propuesta.';
+  if(effect==='already_autonomous')return 'Este caso ya se ejecutó bajo un permiso real; no es contrafactual.';
+  return 'No sé qué habrías decidido en este caso y no lo cuento a favor ni en contra.';
+}
+function counterfactualCaseHTML(row){
+  const candidate=row?.candidate||{},reviewed=row?.reviewed||{};
+  const fields=(row?.changed_fields||[]).map(postActionFieldLabel).join(', ');
+  const when=row?.created_at?new Date(row.created_at).toLocaleString('es-ES'):'';
+  const finalChanged=row?.actual_outcome==='edited'&&reviewed
+    ? '<p class="small">Resultado revisado: '+esc(reviewed.title||candidate.title||'Tarea')+(reviewed.date?' · '+esc(reviewed.date):'')+'</p>'
+    :'';
+  return '<div class="human-permission-case counterfactual-case"><div class="human-case-title">'
+    +esc(candidate.title||'Tarea')
+    +(candidate.date?' · '+esc(candidate.date):'')
+    +'</div><div class="human-state"><b>'+esc(counterfactualEffectCopy(row))+'</b>'
+    +(fields?'<p>Cambiaste: '+esc(fields)+'.</p>':'')
+    +finalChanged
+    +'<div class="human-state-meta"><span>'+esc(candidate.category||'')+'</span><span>'+esc(when)+'</span></div></div></div>';
+}
+async function contextualCounterfactualPanel(unit){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!counterfactualSupported(unit)){
+    modal('Qué habría pasado','<div class="small">Esta clase no admite simulación contrafactual.</div>');
+    return;
+  }
+  modal('Qué habría pasado','<div class="surface-loading">Reconstruyendo tus casos reales…</div>');
+  try{
+    const {data,error}=await sb.rpc('minds_preview_contextual_counterfactual',{
+      p_action:unit.action,
+      p_context_key:unit.context_key,
+      p_scope_key:unit.scope_key
+    });
+    if(error)throw error;
+    const s=data?.summary||{},cases=data?.cases||[];
+    const reviewed=Number(s.historical_reviews||0);
+    const same=Number(s.would_have_matched_final||0);
+    const corrected=Number(s.would_have_preceded_correction||0);
+    const rejected=Number(s.would_have_preceded_rejection||0);
+    const unknown=Number(s.unknown_outcome||0);
+    const parts=[];
+    if(reviewed>0)parts.push('Hay '+reviewed+' revisiones humanas comparables.');
+    if(same>0)parts.push('En '+same+' habría hecho exactamente lo que terminaste aprobando.');
+    if(corrected>0)parts.push('En '+corrected+' habría actuado antes de una corrección tuya.');
+    if(rejected>0)parts.push('En '+rejected+' habría actuado en algo que terminaste rechazando.');
+    if(unknown>0)parts.push('En '+unknown+' no hay una decisión humana final y no infiero qué habría pasado.');
+    if(!parts.length)parts.push('Todavía no hay historia comparable suficiente para esta clase.');
+    const consequential=cases.filter(x=>['would_act_before_correction','would_act_despite_rejection'].includes(x.counterfactual_effect));
+    const unknownCases=cases.filter(x=>x.counterfactual_effect==='unknown');
+    const sameCases=cases.filter(x=>x.counterfactual_effect==='same_result_without_confirmation');
+    const detail=[...consequential,...unknownCases,...sameCases].slice(0,12).map(counterfactualCaseHTML).join('');
+    modal('Qué habría pasado',`<div class="continuity-intro"><p><b>Simulación, no permiso.</b></p><p>${esc(parts.join(' '))}</p><p>La simulación supone únicamente que este permiso exacto hubiera estado activo en cada petición compatible de los últimos 30 días. No ejecuta nada ni cambia tus permisos.</p><details class="human-tech"><summary>Cómo se calcula</summary><p>Comparo el candidato original de cada request con lo que terminaste aceptando, corrigiendo o rechazando. No uso un score ni un modelo para adivinar tu intención. Los casos pendientes o caducados quedan como desconocidos. Tampoco reconstruyo versiones históricas de políticas globales que no estén registradas.</p></details></div>${detail||'<div class="empty-panel">No hay casos cerrados que mostrar.</div>'}<div class="proposal-actions"><button id="counterfactualBack" class="secondary">Volver a Permisos</button></div>`);
+    $('#counterfactualBack').onclick=()=>void contextualAutonomyPanel();
+  }catch{
+    modal('Qué habría pasado','<div class="small">No pude reconstruir esta simulación. No se ha cambiado ningún permiso ni se ha ejecutado ninguna acción.</div><div class="proposal-actions"><button id="counterfactualBack" class="secondary">Volver a Permisos</button></div>');
+    $('#counterfactualBack').onclick=()=>void contextualAutonomyPanel();
+  }
+}
 function reviewContextualPermission(unit,permission,mode){
   const grant=mode==='allow',scope=unit||permission;
   modal(grant?'Autorizar este permiso':'Volver a confirmar',`<div class="continuity-intro"><p>${grant?'Isabella podrá guardar tareas sencillas en esta categoría, sin proyecto, cuando tu petición directa incluya la categoría y el texto de la tarea.':'Isabella volverá a pedirte confirmación para esta clase de tarea.'}</p><p><b>${esc(scope.scope_label)}</b><br>${esc(autonomyContextLabel(scope.context_key))}</p><p>${grant?'El permiso dura 30 días. Puedes revocarlo aquí en cualquier momento. Eventos, tareas de proyecto, recurrencias y recordatorios quedan fuera. Ante dudas o nuevas correcciones, Isabella vuelve a pedir confirmación.':'Las tareas ya guardadas se conservan. Este cambio afecta a las peticiones siguientes.'}</p></div>${grant?autonomyEvidenceHTML(unit):''}<div class="proposal-actions"><button id="permissionCancel" class="secondary">Cancelar</button><button id="permissionConfirm" class="primary">${grant?'Autorizar durante 30 días':'Revocar permiso'}</button></div><div id="permissionError" class="small" role="status"></div>`);
@@ -2182,7 +2248,7 @@ async function contextualAutonomyPanel(){
     const findPermission=e=>permissions.find(p=>p.action===e.action&&p.context_key===e.context_key&&p.scope_key===e.scope_key);
     const grants=permissions.filter(p=>p.mode==='allow');
     const active=grants.map((p,i)=>`<div class="human-permission-case"><div class="human-case-title">${esc(p.scope_label)}</div><div class="human-state tone-complete"><b>Puedo hacerlo sin volver a preguntarte.</b><p>Este permiso dura hasta el ${new Date(p.expires_at).toLocaleDateString('es-ES')} y solo vale para este caso concreto.</p><div class="human-state-meta"><span>Tú lo autorizaste</span><span>${esc(autonomyContextLabel(p.context_key))}</span></div></div><button data-permission-revoke="${i}" class="secondary">Volver a preguntarme siempre</button></div>`).join('');
-    const evidence=units.map((e,i)=>{const p=findPermission(e);const enabled=p?.mode==='allow'&&p.expires_at&&new Date(p.expires_at)>new Date();return autonomyEvidenceHTML(e)+(e.eligibility==='eligible'&&!enabled?`<button data-permission-review="${i}" class="secondary">Revisar propuesta de permiso</button>`:'')}).join('');
+    const evidence=units.map((e,i)=>{const p=findPermission(e);const enabled=p?.mode==='allow'&&p.expires_at&&new Date(p.expires_at)>new Date();const preview=counterfactualSupported(e)?`<button data-permission-counterfactual="${i}" class="secondary">Ver qué habría pasado</button>`:'';const review=e.eligibility==='eligible'&&!enabled?`<button data-permission-review="${i}" class="secondary">Revisar propuesta de permiso</button>`:'';return autonomyEvidenceHTML(e)+preview+review}).join('');
     const history=(data?.reviews||[]).map(r=>{const p=permissions.find(p=>p.id===r.permission_id);return `<div class="doctor-log"><b>${r.decision==='allow'?'Autorizado por ti':'Revocado por ti'} · ${esc(p?.scope_label||'Permiso')}</b><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`}).join('');
     const executions=(data?.executions||[]).map(r=>`<div class="doctor-log"><b>${esc(r.candidate?.title||'Tarea')}</b><span>Guardada bajo un permiso tuyo · no cuenta como aprobación nueva</span><time>${new Date(r.created_at).toLocaleString('es-ES')}</time></div>`).join('');
     const correctionHistory=reviewedCorrections.slice(0,12).map(r=>{
@@ -2191,8 +2257,9 @@ async function contextualAutonomyPanel(){
       return `<div class="doctor-log"><b>${causal?'Corrección confirmada':'Cambio posterior'} · ${esc(postActionCandidateTitle(r))}</b><span>${causal?'Volví a pedir confirmación para ese permiso.':'No lo utilicé como aprendizaje causal.'}${feedback?.changed_fields?.length?' · '+esc(feedback.changed_fields.map(postActionFieldLabel).join(', ')):''}</span><time>${new Date(r.reviewed_at||r.created_at).toLocaleString('es-ES')}</time></div>`;
     }).join('');
     const pendingHtml=pendingCorrections.map(postActionCandidateHTML).join('');
-    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
-    $$('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
+    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal. Antes de autorizar una clase, puedes simular con tu historial qué habría ocurrido si ese permiso hubiera estado activo.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    document.querySelectorAll('[data-permission-counterfactual]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionCounterfactual)];void contextualCounterfactualPanel(e)});
+    document.querySelectorAll('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
     $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
     $$('[data-post-action-correction]').forEach(b=>b.onclick=()=>void reviewPostActionFeedback(b.dataset.postActionCorrection,'correction'));
     $$('[data-post-action-later]').forEach(b=>b.onclick=()=>void reviewPostActionFeedback(b.dataset.postActionLater,'later_change'));
