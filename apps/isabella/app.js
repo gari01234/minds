@@ -2545,7 +2545,7 @@ function expectationDueLabel(row){
     :d.toLocaleDateString('es-ES',{timeZone:p.timezone,dateStyle:'medium'});
 }
 function expectationStateLabel(status){
-  return status==='active'?'En espera':status==='due_unconfirmed'?'Pendiente de comprobar':status==='fulfilled'?'Ocurrió':status==='missed'?'No ocurrió':'Cancelada';
+  return status==='active'?'En espera':status==='due_unconfirmed'?'Pendiente de comprobar':status==='fulfilled'?'Ocurrió':status==='not_occurred'?'No ocurrió':'Cancelada';
 }
 async function reviewExpectation(id,decision){
   const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
@@ -2603,7 +2603,7 @@ async function standingIntentsPanel(){
   try{
     const [expectQ,intentQ]=await Promise.all([
       sb.from('minds_expectations')
-        .select('id,title,expected_event,expectation_type,due_at,due_precision,timezone,status,fulfilled_at,missed_at,cancelled_at,project_id,created_at,isabella_projects(name)')
+        .select('id,title,expected_event,expectation_type,due_at,due_precision,timezone,status,fulfilled_at,not_occurred_at,cancelled_at,project_id,created_at,isabella_projects(name)')
         .order('due_at',{ascending:true})
         .limit(100),
       sb.from('minds_standing_intents')
@@ -2618,7 +2618,7 @@ async function standingIntentsPanel(){
     const expectationCard=x=>{
       const due=expectationDueLabel(x),project=x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':'';
       const actions=x.status==='due_unconfirmed'
-        ?`<div class="confirm-actions"><button class="primary" data-expectation-review="${x.id}" data-expectation-decision="fulfilled">Sí, ocurrió</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="missed">No ocurrió</button><button class="secondary" data-expectation-reschedule="${x.id}">Nueva fecha</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="cancel">Cancelar</button></div>`
+        ?`<div class="confirm-actions"><button class="primary" data-expectation-review="${x.id}" data-expectation-decision="fulfilled">Sí, ocurrió</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="not_occurred">No ocurrió</button><button class="secondary" data-expectation-reschedule="${x.id}">Nueva fecha</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="cancel">Cancelar</button></div>`
         :`<div class="confirm-actions"><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="fulfilled">Ya ocurrió</button><button class="secondary" data-expectation-reschedule="${x.id}">Cambiar fecha</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="cancel">Cancelar</button></div>`;
       return `<div class="intent-row expectation-row ${esc(x.status)}"><div class="row-main"><b>${esc(x.title)}</b><div>${esc(x.expected_event)}</div><div class="small">${project}${esc(expectationStateLabel(x.status))} · ${esc(due)}</div>${x.status==='due_unconfirmed'?'<div class="small">La fecha ya llegó, pero MINDS no sabe todavía si ocurrió.</div>':''}${actions}</div></div>`;
     };

@@ -421,6 +421,6 @@ Expectation Engine adds an epistemic state that did not previously exist:
 due_unconfirmed
 ```
 
-It means the temporal condition has been met but the outcome is unknown. Time alone may move an Expectation from `active` to `due_unconfirmed`; time alone can never move it to `missed`.
+It means the temporal condition has been met but the outcome is unknown. Time alone may move an Expectation from `active` to `due_unconfirmed`; time alone can never move it to `not_occurred`.
 
 v0.1 has manual observability. Fulfillment, failure, cancellation and rescheduling remain explicit reviewed transitions with durable receipts. Heartbeat detects due Expectations and routes them through Attention Economy as ambient signals. This preserves the rule that uncertainty is represented as uncertainty rather than silently converted into fact.
