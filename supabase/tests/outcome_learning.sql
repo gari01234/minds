@@ -96,6 +96,17 @@ begin
   raise exception 'TEST73 completion classified as correction';
  end if;
 
+ -- Completing the task does not consume later correction attribution.
+ insert into public.isabella_activity_log(user_id,entity_type,entity_key,action,source,before_state,after_state)
+ values(
+  u,'task','autonomy:'||req::text,'update','manual',
+  '{"title":"Completion test","date":null,"categoryId":"outcome73","notes":"","done":true}',
+  '{"title":"Completion test","date":"2030-02-15","categoryId":"outcome73","notes":"","done":true}'
+ );
+ if not exists(select 1 from public.minds_post_action_feedback_candidates where autonomy_execution_id=exec.id) then
+  raise exception 'TEST73 completion consumed later relevant correction';
+ end if;
+
  -- An edit after the bounded 48h attribution window is ignored.
  req:=gen_random_uuid();
  insert into public.isabella_tasks(user_id,title,due_date,category_id,client_key,sort_order,metadata)
