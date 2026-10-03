@@ -22,7 +22,7 @@ async function publishCandidate(sb:any,userId:string,c:any){
   return checked(await sb.rpc("minds_publish_heartbeat",{p_user:userId,p_candidate:c}),"heartbeat_publish");
 }
 async function resolveAbsent(sb:any,userId:string,candidates:any[]){
-  const active=checked(await sb.from("minds_heartbeat_events").select("id,fingerprint").eq("user_id",userId).in("status",["new","surfaced"]).in("event_type",["overdue_digest","upcoming_event","routine_failure"]),"heartbeat_active")||[];
+  const active=checked(await sb.from("minds_heartbeat_events").select("id,fingerprint").eq("user_id",userId).in("status",["new","surfaced"]).in("event_type",["overdue_digest","upcoming_event","routine_failure","expectation_due"]),"heartbeat_active")||[];
   const keys=new Set(candidates.map(x=>x.fingerprint));
   for(const e of active)if(!keys.has(e.fingerprint)){
     checked(await sb.from("minds_heartbeat_events").update({status:"resolved"}).eq("id",e.id),"heartbeat_resolve");
@@ -62,12 +62,13 @@ Deno.serve(async(req:Request)=>{
     try{
       const routineTz=userRows.find((x:any)=>x.user_id===userId)?.timezone||"Europe/Berlin";
       const today=localDateISO(routineTz),now=new Date(),soon=new Date(now.getTime()+45*60000);
-      const [tasks,routines,events]=await Promise.all([
+      const [tasks,routines,events,expectations]=await Promise.all([
         sb.from("isabella_tasks").select("id,title,due_date,project_id,priority,updated_at").eq("user_id",userId).is("archived_at",null).is("completed_at",null).lt("due_date",today).order("due_date",{ascending:true}).limit(20),
         sb.from("isabella_routines").select("id,title,last_error,last_run_at,updated_at,metadata").eq("user_id",userId).eq("enabled",true).not("last_error","is",null).limit(20),
-        sb.from("isabella_events").select("id,title,starts_at,project_id").eq("user_id",userId).gte("starts_at",now.toISOString()).lte("starts_at",soon.toISOString()).order("starts_at",{ascending:true}).limit(10)
+        sb.from("isabella_events").select("id,title,starts_at,project_id").eq("user_id",userId).gte("starts_at",now.toISOString()).lte("starts_at",soon.toISOString()).order("starts_at",{ascending:true}).limit(10),
+        sb.from("minds_expectations").select("id,title,expected_event,due_at,due_precision,timezone,project_id,status,due_detected_at").eq("user_id",userId).in("status",["active","due_unconfirmed"]).lte("due_at",now.toISOString()).order("due_at",{ascending:true}).limit(20)
       ]);
-      for(const [label,q] of [["tasks",tasks],["routines",routines],["events",events]] as any[])checked(q,"heartbeat_"+label);
+      for(const [label,q] of [["tasks",tasks],["routines",routines],["events",events],["expectations",expectations]] as any[])checked(q,"heartbeat_"+label);
       const candidates:any[]=[];
       const overdue=(tasks.data||[]).slice(0,20);
       if(overdue.length){
@@ -89,6 +90,26 @@ Deno.serve(async(req:Request)=>{
           body:failures>=2?`Ha fallado ${failures} veces. MINDS la mantiene registrada para diagnóstico.`:String(r.last_error||"La última ejecución falló."),
           source:{routine_id:r.id,last_run_at:r.last_run_at,failure_retries:failures},
           surface:failures>=2,ttl_hours:24
+        });
+      }
+      for(const e of expectations.data||[]){
+        if(e.status==="active"){
+          checked(await sb.from("minds_expectations").update({status:"due_unconfirmed",due_detected_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",e.id).eq("user_id",userId).eq("status","active"),"heartbeat_expectation_due_state");
+        }
+        const tz=String(e.timezone||routineTz);
+        const due=e.due_precision==="datetime"
+          ?new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"medium",timeStyle:"short"}).format(new Date(e.due_at))
+          :new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"medium"}).format(new Date(e.due_at));
+        candidates.push({
+          event_type:"expectation_due",
+          fingerprint:`expectation_due:${e.id}:${e.due_at}`,
+          severity:"attention",
+          title:`Esperabas: ${e.title}`,
+          body:`Se esperaba para ${due}. Todavía no tengo confirmación de que haya ocurrido.`,
+          project_id:e.project_id||null,
+          source:{expectation_id:e.id,due_at:e.due_at,due_precision:e.due_precision,status:"due_unconfirmed"},
+          metadata:{expectation_id:e.id},
+          ttl_hours:72
         });
       }
       let created=0;
