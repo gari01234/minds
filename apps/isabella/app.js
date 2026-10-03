@@ -2567,7 +2567,7 @@ async function skillsPanel(){
     });
   }catch(e){modal('Habilidades','<p>No pude cargar las habilidades: '+esc(e.message)+'</p>')}
 }
-const operatingDimensionLabels={time_planning:'Planificación del tiempo',task_management:'Tareas',focus:'Concentración',interruption:'Interrupciones',decision_making:'Decisiones',autonomy:'Autonomía',interaction:'Cómo colaboramos'};
+const operatingDimensionLabels={time_planning:'Planificación del tiempo',scheduling:'Planificación del tiempo',task_management:'Tareas',focus:'Concentración',work_rhythm:'Ritmo de trabajo',interruption:'Interrupciones',interruptions:'Interrupciones',decision_making:'Decisiones',decision_style:'Decisiones',autonomy:'Autonomía',planning:'Planificación',interaction:'Cómo colaboramos',communication:'Cómo colaboramos',tooling:'Herramientas',review:'Revisión'};
 function emptyOperatingModel(){return {accepted:[],proposed:[],recent_reviews:[],observation_count:0}}
 async function loadOperatingModel(){
   const sb=window.MINDS_SUPABASE;if(!sb){window.ISABELLA_OPERATING_RULES=[];return emptyOperatingModel()}
