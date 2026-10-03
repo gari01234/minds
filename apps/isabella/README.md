@@ -182,3 +182,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Outcome Learning / Post-Action Feedback
 
 `BUILD-73.md` closes the first post-action learning loop. A later manual edit to an autonomously-created task is only a feedback candidate; it becomes causal learning evidence only after explicit user review. Confirmed corrections can reduce the exact contextual permission from `allow` to `confirm`, never expand autonomy.
+
+
+### Personal Operating Model
+
+`BUILD-74.md` introduces a reviewable model of how Isabella should work with the user. Observations and behavioral evidence can produce hypotheses, but only rules explicitly accepted or corrected by the user enter Isabella's operating context.
