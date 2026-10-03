@@ -25,7 +25,7 @@ test('Build 72.8 MCP authenticates by hashed ephemeral capability token',()=>{
   assert.ok(mcp.includes('tokenHash=await sha256(token)'));
   assert.ok(mcp.includes('.eq("token_hash",tokenHash)'));
   assert.ok(mcp.includes('grant.status!=="active"'));
-  assert.ok(mcp.includes('Date.parse(grant.expires_at)<=Date.now()'));
+  assert.ok(mcp.includes('Date.parse(activeGrant.expires_at)<=Date.now()'));
   assert.ok(mcp.includes('execution.provider!=="openai_agents"||execution.mode!=="shadow"'));
   assert.ok(!mcp.includes('SUPABASE_ANON_KEY'));
   assert.ok(!mcp.includes('OPENAI_API_KEY'));
@@ -38,7 +38,7 @@ test('Build 72.8 exposes only bounded read capabilities and audits each use',()=
   assert.ok(!mcp.includes('registerTool("write_'));
   assert.ok(!mcp.includes('registerTool("mutate_'));
   assert.ok(mcp.includes('event_type:"mcp.read"'));
-  assert.ok(mcp.includes('use_count:Number(grant.use_count||0)+1'));
+  assert.ok(mcp.includes('use_count:Number(activeGrant.use_count||0)+1'));
   assert.ok(mcp.includes('item_count:bounded.length'));
   assert.ok(mcp.includes('artifact_count:artifacts.length'));
 });
