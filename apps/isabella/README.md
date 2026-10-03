@@ -167,3 +167,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Capability Integration Pilot
 
 `BUILD-72.7.md` records the first real non-sensitive Mission that used an OpenAI-hosted persistent environment and returned a provider artifact through Artifact Intake. The provider never wrote to Mission Workspace; the resulting Markdown remains a human-reviewed candidate until explicitly kept or rejected.
+
+
+### Read-only MINDS MCP
+
+`BUILD-72.8.md` records the production-grade read boundary for external execution. OpenAI Agents can receive an execution-scoped, expiring capability token and call only explicitly granted MINDS read tools. Tokens are stored only as hashes, every read is audited, and grants are revoked when the execution ends.
