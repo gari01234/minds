@@ -5,7 +5,9 @@ function json(data:unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
 }
 async function sha256(bytes:Uint8Array){
-  const digest=await crypto.subtle.digest("SHA-256",bytes);
+  const stable=new Uint8Array(bytes.byteLength);
+  stable.set(bytes);
+  const digest=await crypto.subtle.digest("SHA-256",stable.buffer);
   return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 function safeName(path:string,kind:string){
