@@ -146,7 +146,7 @@ Deno.serve(async(req:Request)=>{
 
   const now=new Date(),today=now.toISOString().slice(0,10),future=new Date(Date.now()+14*86400e3).toISOString().slice(0,10);
   const [{data:claims},{data:memories},{data:tasks},{data:events},{data:feedback},{data:feedPref},{data:olderResearch}]=await Promise.all([
-    sb.from("isabella_model_claims").select("claim_type,claim,status,confidence,last_seen_at").eq("user_id",user.id).in("status",["confirmed","hypothesis"]).order("confidence",{ascending:false}).limit(30),
+    sb.from("isabella_model_claims").select("claim_type,claim,status,source_type,last_seen_at").eq("user_id",user.id).eq("status","confirmed").order("last_seen_at",{ascending:false}).limit(30),
     sb.from("isabella_memories").select("kind,content,confidence,updated_at").eq("user_id",user.id).eq("status","active").order("updated_at",{ascending:false}).limit(25),
     sb.from("isabella_tasks").select("title,due_date,completed_at,archived_at,notes").eq("user_id",user.id).gte("due_date",today).lte("due_date",future).is("archived_at",null).order("due_date",{ascending:true}).limit(30),
     sb.from("isabella_events").select("title,starts_at,ends_at,notes").eq("user_id",user.id).gte("starts_at",now.toISOString()).lte("starts_at",new Date(Date.now()+14*86400e3).toISOString()).order("starts_at",{ascending:true}).limit(25),
