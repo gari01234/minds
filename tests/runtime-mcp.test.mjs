@@ -6,6 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 const migration=read('supabase/migrations/20261003064428_runtime_capability_grants_v01.sql');
 const mcp=read('supabase/functions/isabella-runtime-mcp/index.ts');
+const hardening=read('supabase/migrations/20261003065415_runtime_capability_grants_v011_hardening.sql');
 const config=read('supabase/config.toml');
 
 test('Build 72.8 capability grants are execution-scoped, read-only and invisible to clients',()=>{
@@ -56,4 +57,13 @@ test('Build 72.8 runtime MCP uses custom auth instead of Supabase client JWT',()
   const block=config.slice(config.indexOf('[functions.isabella-runtime-mcp]'));
   assert.ok(block.includes('verify_jwt = false'));
   assert.ok(block.includes('entrypoint = "./functions/isabella-runtime-mcp/index.ts"'));
+});
+
+
+test('Build 72.8 hardening keeps grants client-invisible even under accidental privileges',()=>{
+  assert.ok(hardening.includes('minds_runtime_capability_grants_user_idx'));
+  assert.ok(hardening.includes('runtime capability grants deny authenticated'));
+  assert.ok(hardening.includes('runtime capability grants deny anon'));
+  assert.ok(hardening.includes('using (false)'));
+  assert.ok(hardening.includes('with check (false)'));
 });
