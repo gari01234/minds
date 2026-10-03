@@ -19,7 +19,7 @@ La regla epistemológica central es:
 
 > ausencia de confirmación no equivale a confirmación de ausencia.
 
-Por eso una Expectation vencida no pasa automáticamente a `missed`.
+Por eso una Expectation vencida no pasa automáticamente a `not_occurred`.
 
 ## Estado
 
@@ -32,7 +32,7 @@ active
         ↓
    due_unconfirmed
         ├─ fulfilled
-        ├─ missed
+        ├─ not_occurred
         ├─ cancelled
         └─ reschedule
 ```
@@ -41,7 +41,7 @@ active
 
 **la fecha esperada ya llegó y MINDS todavía no sabe qué ocurrió.**
 
-`missed` exige una revisión explícita posterior.
+`not_occurred` exige una revisión explícita posterior.
 
 ## Datos
 
@@ -124,7 +124,7 @@ El mensaje usa lenguaje deliberadamente no concluyente:
 
 > Todavía no tengo confirmación de que haya ocurrido.
 
-El heartbeat **no contiene ningún camino hacia `missed`**.
+El heartbeat **no contiene ningún camino hacia `not_occurred`**.
 
 Si una Expectation se resuelve o se reprograma, el evento anterior deja de estar presente y se resuelve mediante el mecanismo existente del heartbeat.
 
@@ -185,12 +185,27 @@ Se verificó:
 - sin INSERT/UPDATE directo desde authenticated;
 - creación explícita;
 - idempotencia;
-- una Expectation futura no puede marcarse `missed`;
-- reprogramar al pasado produce `due_unconfirmed`;
+- una Expectation futura no puede marcarse `not_occurred`;
+- reprogramar exige una nueva fecha futura;
 - receipts conservan fecha anterior y nueva;
 - cumplimiento explícito;
 - `expectation_due` se enruta a `ambient`;
 - la cuenta real quedó con 0 Expectations y 0 reviews después de los tests.
+
+## Reconciliación del corte de implementación
+
+Build 76 quedó interrumpido durante su primera aplicación. Supabase llegó a registrar una primera migración mientras la rama de GitHub no se fusionó.
+
+La historia se conserva explícitamente:
+
+- `20261003112450_expectation_engine_v01` — contrato inicial;
+- `20261003113300_expectation_engine_v01` — reconciliación epistemológica: `missed → not_occurred`, `resolution_source`, fecha futura obligatoria e integración del source type;
+- `20261003113506_expectation_engine_v011_ambient_due` — validación temporal de routing ambiental;
+- `20261003113943_expectation_engine_v012_heartbeat_single_detector` — retira el sweep/cron duplicado y deja Heartbeat como único detector temporal.
+
+No se reescribió ni ocultó la migración inicial. El estado final se obtiene aplicando la secuencia completa.
+
+Heartbeat es el único detector de vencimiento de v0.1. No existe un cron paralelo de Expectations.
 
 ## Decisión
 
