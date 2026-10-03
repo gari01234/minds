@@ -45,3 +45,46 @@ test('Build 72.6E does not turn intake candidates into memory or workspace truth
   assert.ok(!all.includes('minds_messages'));
   assert.ok(all.includes('accepted_artifact_id uuid null references public.minds_artifacts'));
 });
+
+
+test('Build 72.7 authenticates artifact preview and promotion through MINDS',()=>{
+  const edge=read('supabase/functions/isabella-artifact-intake/index.ts');
+  const app=read('apps/isabella/app.js');
+  const config=read('supabase/config.toml');
+
+  assert.ok(edge.includes('auth.getUser(token)'));
+  assert.ok(edge.includes('.eq("id",intakeId).eq("user_id",user.id)'));
+  assert.ok(edge.includes('intake.status!=="accepted"'));
+  assert.ok(edge.includes('bytes.byteLength!==Number(intake.size_bytes)'));
+  assert.ok(edge.includes('digest!==String(intake.sha256)'));
+  assert.ok(edge.includes('storage.from("minds-artifact-intake")'));
+  assert.ok(edge.includes('storage.from("minds-artifacts").upload'));
+  assert.ok(edge.includes('source_kind:"mission_runtime"'));
+  assert.ok(edge.includes('status:"promoted"'));
+  assert.ok(edge.includes('event_type:"artifact.promoted"'));
+  assert.ok(!edge.includes('minds_commitment_workspace_items'));
+  assert.ok(!edge.includes('minds_append_commitment_workspace_item'));
+
+  assert.ok(app.includes('async function previewArtifactIntake'));
+  assert.ok(app.includes('async function reviewArtifactIntake'));
+  assert.ok(app.includes("rpc('minds_review_artifact_intake'"));
+  assert.ok(app.includes("functions.invoke('isabella-artifact-intake'"));
+  assert.ok(app.includes('data-intake-preview'));
+  assert.ok(app.includes('data-intake-accept'));
+  assert.ok(app.includes('data-intake-reject'));
+  assert.ok(app.includes("source_kind==='mission_runtime'"));
+  assert.ok(!app.includes("storage.from('minds-artifact-intake')"));
+
+  const block=config.slice(config.indexOf('[functions.isabella-artifact-intake]'));
+  assert.ok(block.includes('verify_jwt = true'));
+});
+
+test('Build 72.7 keeps human acceptance between provider output and permanent artifact',()=>{
+  const app=read('apps/isabella/app.js');
+  const edge=read('supabase/functions/isabella-artifact-intake/index.ts');
+  assert.ok(app.includes("p_decision:decision"));
+  assert.ok(app.includes("decision==='accepted'"));
+  assert.ok(edge.includes('if(intake.status!=="accepted")'));
+  assert.ok(edge.includes('accepted_artifact_id:artifact.id'));
+  assert.ok(edge.includes('storage.from("minds-artifact-intake").remove'));
+});
