@@ -331,3 +331,14 @@ source-of-truth context
 The provider cannot select arbitrary users, workspaces or projects; those scopes are derived from the execution chain inside MINDS. Each read emits an audit event without duplicating the retrieved content.
 
 This is a data-minimization boundary, not a new authority channel. Write capabilities remain absent.
+
+
+## Runtime Decision Gate after Build 72.9
+
+External execution is capability-shaped rather than Mission-shaped.
+
+`native_minds` remains the primary Mission runtime. A Mission may additionally receive a bounded `openai_agents` material execution only when `mission_execution_requirements_v1` proves that durable material state must survive and be reused across checkpoints and no unvalidated capability is required.
+
+Read-only MCP is an enabling boundary, not a routing reason. Artifact Intake is mandatory for provider outputs that must persist. No score, free-text heuristic or provider-side decision can grant this lane.
+
+The current automated gate fails closed for sensitive data, provider network access, Computer Use, multi-agent, external side effects, write-through, provider secrets and MCP reads not yet validated for routing.
