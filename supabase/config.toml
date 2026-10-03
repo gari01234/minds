@@ -47,6 +47,3 @@ entrypoint = "./functions/isabella-artifact-intake/index.ts"
 verify_jwt = false
 entrypoint = "./functions/isabella-runtime-mcp/index.ts"
 
-[functions.isabella-operating-model]
-verify_jwt = true
-entrypoint = "./functions/isabella-operating-model/index.ts"
