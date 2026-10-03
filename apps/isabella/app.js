@@ -296,6 +296,7 @@ async function afterSync(){
     void maybePrewarmFeed();
     void maybePrewarmResearch();
     void maybeReactivateIdeas();
+    void refreshOperatingModel(false);
     const nudged=await maybeProactiveNudge();
     if(!nudged)await maybeCuriosityQuestion();
   }finally{proactiveCycleBusy=false}
