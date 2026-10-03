@@ -306,3 +306,28 @@ Mission Runtime
 Provider filesystem state and provider artifacts are execution state, not autobiographical memory or project truth. Mission Workspace remains unchanged until a later, separately authorized architecture explicitly permits proposals to cross that boundary.
 
 Persistent Environment is therefore a capability-level route for material-state work, not a second default runtime.
+
+
+## Execution-scoped context after Build 72.8
+
+External runtimes no longer need broad context injection as their only way to understand a Mission.
+
+MINDS may grant narrowly scoped, temporary read capabilities:
+
+```
+MissionRuntimeExecution
+      ↓
+Capability Grant
+  execution-bound
+  expiring
+  revocable
+  hashed credential
+      ↓
+Read-only MINDS MCP
+      ↓
+source-of-truth context
+```
+
+The provider cannot select arbitrary users, workspaces or projects; those scopes are derived from the execution chain inside MINDS. Each read emits an audit event without duplicating the retrieved content.
+
+This is a data-minimization boundary, not a new authority channel. Write capabilities remain absent.
