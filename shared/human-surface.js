@@ -49,7 +49,10 @@ function mission(run={},subject=''){
 function autonomy(unit={}){
   const e=known(unit.eligibility);
   if(e==='eligible')return state('permission_ready','Puedo dejar de preguntarte en este caso, si tú quieres.','He visto suficiente consistencia para proponerte un permiso; solo tú puedes activarlo.',{owner:'you',action:'review',tone:'attention',technical:{kind:'contextual_permission_evidence',status:e}});
-  if(e==='needs_review')return state('keep_asking','Aquí todavía conviene que te pregunte.','Has corregido o rechazado propuestas de este tipo, así que no reduciré la confirmación.',{owner:'isabella',tone:'neutral',technical:{kind:'contextual_permission_evidence',status:e}});
+  if(e==='needs_review'){
+    const post=Number(unit.outcome_corrections||0)>0;
+    return state('keep_asking','Aquí todavía conviene que te pregunte.',post?'Después de actuar tuviste que corregirme en un caso de este tipo, así que volveré a pedir confirmación.':'Has corregido o rechazado propuestas de este tipo, así que no reduciré la confirmación.',{owner:'isabella',tone:'neutral',technical:{kind:'contextual_permission_evidence',status:e}});
+  }
   if(e==='stale_evidence')return state('keep_asking','Seguiré preguntándote por ahora.','Lo que aprendí sobre este caso ya es antiguo y necesita evidencia reciente.',{owner:'isabella',tone:'neutral',technical:{kind:'contextual_permission_evidence',status:e}});
   if(e==='excluded')return state('always_confirm','En este tipo de acción seguiré preguntándote.','Esta versión no permite convertirla en una acción autónoma.',{owner:'isabella',tone:'muted',technical:{kind:'contextual_permission_evidence',status:e}});
   return state('learning','Todavía estoy aprendiendo cómo prefieres resolver este caso.','Hasta tener suficiente evidencia, seguiré pidiendo confirmación.',{owner:'isabella',tone:'neutral',technical:{kind:'contextual_permission_evidence',status:e||'insufficient_evidence'}});
