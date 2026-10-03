@@ -7,6 +7,7 @@ const read=p=>readFileSync(new URL(p,root),'utf8');
 const migration=read('supabase/migrations/20261003071804_outcome_learning_post_action_feedback_v01.sql');
 const hardening=read('supabase/migrations/20261003072511_outcome_learning_post_action_feedback_v011_first_relevant_mutation.sql');
 const app=read('apps/isabella/app.js');
+const human=read('shared/human-surface.js');
 const sql=read('supabase/tests/outcome_learning.sql');
 
 test('Build 73 treats post-action mutation as a candidate, never automatic causal feedback',()=>{
@@ -62,6 +63,7 @@ test('Build 73 exposes a human review inside Permissions without a new product s
   assert.ok(app.includes('Fue un cambio posterior'));
   assert.ok(app.includes('Una edición posterior nunca se interpreta sola como feedback'));
   assert.ok(app.includes('Confirmar causalidad reduce el permiso a “volver a preguntar”'));
+  assert.ok(human.includes('Después de actuar tuviste que corregirme en un caso de este tipo'));
   assert.ok(!app.includes('data-action="outcomelearning"'));
 });
 
