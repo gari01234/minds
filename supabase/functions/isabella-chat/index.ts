@@ -59,6 +59,7 @@ function directTextStreamEligible(message:string,route:any,attachments:any[],bac
   const normalized=normalizeText(message);
   if(/autonom|permis|shadow agency/i.test(normalized))return false;
   if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con|trabaja en segundo plano|avísame cuando|avisame cuando)\b/i.test(normalized))return false;
+  if(/\b(recu[eé]rdame si|av[ií]same si|mant[eé]n.*pendiente|quiero que sigas|deber[ií]a (llegar|responder|enviar|entregar)|esperamos (una )?(respuesta|entrega|decisi[oó]n|documento))\b/i.test(normalized))return false;
   if(normalized.length<90&&/^(sí|si|dale|hazlo|continúa|continua|sigue|reanuda|resume|usa|elige|opción|opcion)\b/i.test(normalized))return false;
   return true;
 }
@@ -211,6 +212,20 @@ function proposalFromTool(name: string, a: any) {
     cooldown_hours:Math.max(0,Number(a.cooldown_hours||24)),
     max_triggers:Math.max(1,Math.min(12,Number(a.max_triggers||3))),
     expires_days:Math.max(1,Math.min(365,Number(a.expires_days||90)))
+  };
+  if (name === "propose_expectation") return {
+    action:"create",
+    kind:"expectation",
+    title:String(a.title||"").trim(),
+    expected_event:String(a.expected_event||"").trim(),
+    expectation_type:["reply","delivery","decision","document","external_event","other"].includes(String(a.expectation_type||""))
+      ?String(a.expectation_type):"other",
+    due_date:String(a.due_date||"").trim(),
+    due_time:String(a.due_time||"").trim()||null,
+    due_precision:String(a.due_time||"").trim()?"datetime":"date",
+    timezone:String(a.timezone||"Europe/Berlin").trim()||"Europe/Berlin",
+    project:String(a.project||"").trim()||null,
+    source_kind:"conversation"
   };
   if (name === "propose_commitment") return {
     action:"create",
@@ -462,6 +477,21 @@ const calendarTools = [
       max_triggers:{type:"integer"},
       expires_days:{type:"integer"}
     },required:["trigger_text","reminder_text"]}
+  },
+  {
+    type:"function",
+    name:"propose_expectation",
+    description:"Propose tracking a future event in the world that the user expects by a date: for example another person replying, sending a document, making a decision or delivering something. This is NOT a task for the user, NOT a situation-triggered standing reminder, and NOT a Commitment. Use it only when the user wants Isabella/MINDS to keep track of whether the expected event happened. If the due date arrives without evidence, MINDS may only say the outcome is unconfirmed; it must not infer failure. Requires user confirmation.",
+    strict:false,
+    parameters:{type:"object",properties:{
+      title:{type:"string",description:"Short human-readable label for what is expected."},
+      expected_event:{type:"string",description:"Concrete event expected to happen."},
+      expectation_type:{type:"string",enum:["reply","delivery","decision","document","external_event","other"]},
+      due_date:{type:"string",description:"Expected local date YYYY-MM-DD."},
+      due_time:{type:"string",description:"Optional exact local time HH:MM. Omit when only the date matters."},
+      timezone:{type:"string",description:"IANA timezone, normally the user's current timezone."},
+      project:{type:"string",description:"Optional MINDS Work project name when the expectation belongs to one."}
+    },required:["title","expected_event","expectation_type","due_date","timezone"]}
   },
   {
     type:"function",
@@ -1086,6 +1116,30 @@ async function commitmentRows(req:Request,statuses:string[]=["active","waiting",
     .in("status",statuses).order("updated_at",{ascending:false}).limit(80);
   return checked(result,"commitments_query")||[];
 }
+async function expectationContext(req:Request){
+  try{
+    const sb=supabaseClient(req);if(!sb)return [];
+    const {data,error}=await sb.from("minds_expectations")
+      .select("id,title,expected_event,expectation_type,due_at,due_precision,timezone,status,project_id,created_at,isabella_projects(name,client_key)")
+      .in("status",["active","due_unconfirmed"])
+      .order("due_at",{ascending:true})
+      .limit(24);
+    if(error)return [];
+    return (data||[]).map((x:any)=>({
+      id:x.id,
+      title:x.title,
+      expected_event:x.expected_event,
+      expectation_type:x.expectation_type,
+      due_at:x.due_at,
+      due_precision:x.due_precision,
+      timezone:x.timezone,
+      status:x.status,
+      project:(x.isabella_projects as any)?.name||null,
+      epistemic_status:x.status==="due_unconfirmed"?"due_but_outcome_unconfirmed":"future_expectation"
+    }));
+  }catch{return []}
+}
+
 async function commitmentMatches(req:Request,message:string,projectName:string|null){
   try{
     const rows=await commitmentRows(req);
@@ -1421,7 +1475,7 @@ const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",create_chat_reminder:"confirm",
-  update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",propose_commitment:"confirm",
+  update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",propose_expectation:"confirm",propose_commitment:"confirm",
   propose_project_claim:"confirm",propose_skill:"confirm"
 };
 function policyMode(name:string){return ACTION_POLICY[name]||"deny"}
@@ -1772,7 +1826,7 @@ Deno.serve(async (req: Request) => {
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const initialSemantic=!background&&!!route.deep_memory;
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
-  const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
+  const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req, effectiveMessage),
     fastAgenda?Promise.resolve([]):longTermRecall(req, effectiveMessage,budget.lexical),
     fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
@@ -1783,6 +1837,7 @@ Deno.serve(async (req: Request) => {
     fastAgenda?Promise.resolve([]):personalModel(req,budget.claims),
     fastAgenda?Promise.resolve(null):personalModelPolicy(req),
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
+    background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
     !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage}):Promise.resolve(null),
     !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
@@ -1873,6 +1928,10 @@ Tienes create_event, update_event, delete_event, create_task, update_task, compl
 Si el usuario pide una tarea pequeña o inmediata —por ejemplo redactar un email, producir una imagen concreta o preparar un archivo Word/PDF— resuélvela aquí. Usa create_artifact solo cuando haya pedido una imagen real o un archivo; no conviertas automáticamente estas peticiones en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
 Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Ese tipo de memoria se activa por contexto, con cooldown y límite de activaciones.
+
+EXPECTATIONS:
+Usa propose_expectation únicamente cuando el usuario quiera que MINDS mantenga pendiente un hecho futuro del mundo con una fecha esperada: otra persona responde, envía un documento, toma una decisión o entrega algo. No es una Task: una Task representa algo que Gari debe hacer. No es un Standing Intent: ese se activa cuando reaparece una situación. No es un Commitment: ese mantiene vivo un objetivo. Si el usuario solo menciona una posibilidad sin pedir seguimiento, no persistas nada.
+Una Expectation vencida sin evidencia queda "pendiente de comprobar". Ausencia de confirmación no significa que el hecho no ocurrió. Nunca digas que una Expectation falló salvo que el usuario lo confirme explícitamente o exista en el futuro una fuente verificable autorizada que lo demuestre.
 No propongas seguir personas, temas o publicaciones dentro del Feed. Si el usuario quiere recordar un interés duradero, usa memoria cuando corresponda; si quiere vigilar una condición futura concreta, usa la herramienta o rutina adecuada. El Feed debe emerger de su situación activa, no de una constelación editorial.
 update_feed_preferences también puede proponer weather_location, pero solo después de una confirmación explícita del usuario. Si el usuario acaba de decir dónde vive y weather_location está vacío, detecta esa conexión y pregúntale si quiere usar esa localidad para el clima; no la cambies silenciosamente.
 Si el usuario acepta una idea de auto-mejora de Isabella que pueda expresarse como una regla de interacción o workflow, usa update_assistant_behavior. No pretendas modificar tu propio código ni desplegar software desde el chat; las mejoras de producto o código deben quedar como propuestas para revisión externa.
@@ -1957,6 +2016,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     specialist_plan_hint:specialistPlanHint(effectiveMessage,route),
     reply_context:context.reply_context||null,
     standing_intent_matches:standingIntents||[],
+    active_expectations:expectations||[],
     active_commitments:commitments||[],
     commitment_workspaces:missionWorkspaces||[],
     active_mission_runs:activeMissionRuns||[],

@@ -192,3 +192,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Counterfactual Isabella
 
 `BUILD-75.md` adds a read-only retrospective preview before contextual permissions: for an exact action/context/scope, MINDS shows which historical confirmations would have produced the same result, preceded a correction, preceded a rejection, or remain unknown. No score, execution or permission change is produced by the simulation.
+
+
+### Expectation Engine
+
+`BUILD-76.md` adds a distinct future-state primitive for events expected to happen in the world. Expectations are neither tasks nor commitments nor standing intents. A due expectation becomes `due_unconfirmed`, never automatically `missed`; explicit review resolves the outcome.
