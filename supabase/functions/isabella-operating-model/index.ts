@@ -253,7 +253,7 @@ Deno.serve(async(req:Request)=>{
       for(const candidate of completion.value?.candidates||[]){
         const dimension=String(candidate.dimension||"");
         if(!DIMS.includes(dimension)||blocked.includes(dimension))continue;
-        const ids=[...new Set((candidate.evidence_ids||[]).map(String))].slice(0,12);
+        const ids:string[]=[...new Set<string>((candidate.evidence_ids||[]).map((x:any)=>String(x)))].slice(0,12);
         const rows=ids.map(id=>lookup.get(id)).filter(Boolean).filter((x:any)=>x.dimension===dimension);
         if(rows.length!==ids.length||!rows.length)continue;
         const explicit=rows.some((x:any)=>x.provenance_class==="explicit");
