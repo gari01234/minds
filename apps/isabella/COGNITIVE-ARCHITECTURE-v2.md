@@ -286,3 +286,23 @@ Five synthetic evaluations showed equivalent substantive resolution across confl
 Therefore runtime selection must not be based on generic task difficulty, number of documents or multi-turn duration alone. A future Agents route requires a **capability differential** that native MINDS has not demonstrated efficiently: persistent execution environment/artifacts, durable tool/MCP work, justified multi-agent delegation, or sufficiently large/long state that reconstruction becomes materially inferior.
 
 The full evidence and policy live in `RUNTIME-SELECTION-v0.1.md`. No opaque global runtime score is permitted.
+
+
+## Capability Integration after Build 72.7
+
+External execution can now produce material work without becoming authoritative state.
+
+The stable boundary is:
+
+```
+Mission Runtime
+  → external material execution
+  → verified provider artifact
+  → Artifact Intake / pending
+  → human review
+  → optional MINDS artifact
+```
+
+Provider filesystem state and provider artifacts are execution state, not autobiographical memory or project truth. Mission Workspace remains unchanged until a later, separately authorized architecture explicitly permits proposals to cross that boundary.
+
+Persistent Environment is therefore a capability-level route for material-state work, not a second default runtime.
