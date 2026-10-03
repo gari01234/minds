@@ -1050,6 +1050,7 @@ function proposalLabel(p){
     return ['Mejorar Isabella',add?('adoptar '+add+(add===1?' regla':' reglas')):'',remove?('retirar '+remove):''].filter(Boolean).join(' · ');
   }
   if(p.kind==='standing_intent')return ['Recordar cuando',p.trigger_text,p.project||''].filter(Boolean).join(' · ');
+  if(p.kind==='expectation')return ['Esperar',p.title,p.due_date,p.due_time||''].filter(Boolean).join(' · ');
   if(p.kind==='commitment')return ['Mantener vivo',p.title,p.project||p.scope||''].filter(Boolean).join(' · ');
   if(p.kind==='work_claim')return ['Guardar conocimiento',p.project,p.claim_type,p.statement].filter(Boolean).join(' · ');
   if(p.kind==='skill_proposal')return ['Crear Skill',p.agent==='sofia'?'Sofía':'Isabella',p.name].filter(Boolean).join(' · ');
@@ -1079,7 +1080,34 @@ function proposalEditor(p,onDone){
     $('#proposalEditSave').onclick=()=>onDone?.({...p,trigger_text:$('#standingTrigger').value.trim(),reminder_text:$('#standingReminder').value.trim(),project:$('#standingProject').value.trim()||null,trigger_terms:$('#standingTerms').value.split(/[,\n]+/).map(x=>x.trim()).filter(Boolean),cooldown_hours:Number($('#standingCooldown').value === '' ? 24 : $('#standingCooldown').value),max_triggers:Number($('#standingMax').value||3),expires_days:Number($('#standingExpiry').value||90)});
     return;
   }
-  if(p.kind==='commitment'){
+
+  if(p.kind==='expectation'){
+    const types=[['reply','Respuesta'],['delivery','Entrega'],['decision','Decisión'],['document','Documento'],['external_event','Evento externo'],['other','Otro']];
+    modal('Revisar expectativa',`<div class="form proposal-editor">
+      <div class="small">Esto no es una tarea. Es algo que esperas que ocurra. Si llega la fecha sin confirmación, Isabella lo marcará como pendiente de comprobar; no asumirá que no ocurrió.</div>
+      <label>Nombre<input id="expectationTitle" value="${esc(p.title||'')}" placeholder="Respuesta del consultor"></label>
+      <label>Qué esperas que ocurra<textarea id="expectationEvent" rows="4">${esc(p.expected_event||'')}</textarea></label>
+      <div class="form-grid-2"><label>Tipo<select id="expectationType">${types.map(([v,l])=>`<option value="${v}" ${v===(p.expectation_type||'other')?'selected':''}>${l}</option>`).join('')}</select></label><label>Proyecto (opcional)<input id="expectationProject" value="${esc(p.project||'')}" placeholder="Bernried, Schwarz…"></label></div>
+      <div class="form-grid-2"><label>Fecha esperada<input id="expectationDate" type="date" value="${esc(p.due_date||'')}"></label><label>Hora exacta (opcional)<input id="expectationTime" type="time" value="${esc(p.due_time||'')}"></label></div>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Usar estos datos</button></div>
+    </div>`);
+    $('#proposalEditCancel').onclick=()=>onDone?.(null);
+    $('#proposalEditSave').onclick=()=>{
+      const time=$('#expectationTime').value||null;
+      onDone?.({...p,
+        title:$('#expectationTitle').value.trim(),
+        expected_event:$('#expectationEvent').value.trim(),
+        expectation_type:$('#expectationType').value,
+        project:$('#expectationProject').value.trim()||null,
+        due_date:$('#expectationDate').value,
+        due_time:time,
+        due_precision:time?'datetime':'date'
+      });
+    };
+    return;
+  }
+
+    if(p.kind==='commitment'){
     const sourceNote=p.source_open_loop?'<div class="small">Origen: asunto abierto detectado en un checkpoint. Al confirmar se conservará esa procedencia sin convertirla en hecho.</div><blockquote>'+esc(p.source_open_loop)+'</blockquote>':'';
     modal('Revisar continuidad',`<div class="form proposal-editor">
       <div class="small">Un Commitment mantiene un objetivo vivo entre conversaciones. No crea tareas, rutinas ni acciones por sí mismo.</div>
@@ -1235,6 +1263,7 @@ function reviewedProposal(original,corrected){
   return {...corrected,...(keys.length?{_review:{changed_fields:keys,original:Object.fromEntries(keys.map(k=>[k,original[k]??null]))}}:{})};
 }
 function proposalDetails(p){
+  if(p.kind==='expectation')return `<p>${esc(p.expected_event||'')}</p><div class="small">${esc(p.due_date||'')}${p.due_time?' · '+esc(p.due_time):' · sin hora exacta'} · Si vence sin evidencia, quedará pendiente de comprobar.</div>`;
   if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
   if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
   if(p.kind==='work_claim')return `<p class="small">Estado: ${esc(p.status||'proposed')} · Procedencia: ${esc(p.provenance_class||'inferred')}</p>${p.evidence_excerpt?`<blockquote>${esc(p.evidence_excerpt)}</blockquote>`:''}${p.supersedes_id?'<p class="small">Sustituirá una formulación anterior y conservará su historia.</p>':''}`;
@@ -1244,7 +1273,7 @@ function proposalDetails(p){
 window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=>{if(q)confirmProposal(q);else closeModal()})};
 function confirmProposal(p){
   p={...p,request_id:p.request_id||crypto.randomUUID()};
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='expectation'?'Esto seguirá un hecho futuro del mundo; una fecha vencida sin evidencia no se tratará como fallo.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
@@ -1311,6 +1340,39 @@ async function createStandingIntentProposal(p){
   const {error}=await sb.from('minds_standing_intents').upsert({user_id:session.user.id,trigger_text:p.trigger_text,reminder_text:p.reminder_text,trigger_terms:p.trigger_terms||[],project_id:proj?.id||null,cooldown_minutes:Math.max(0,Number(p.cooldown_hours??24))*60,max_triggers:Math.max(1,Number(p.max_triggers||3)),expires_at:expires,request_id:p.request_id||crypto.randomUUID(),metadata:{source:'isabella_chat'}},{onConflict:'user_id,request_id',ignoreDuplicates:true});
   closeModal();
   say('assistant',error?'No pude guardar esa memoria futura todavía: '+error.message:'Listo. Lo guardaré como memoria futura y te lo recordaré cuando vuelva a aparecer esa situación.');
+}
+async function createExpectationProposal(p){
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para seguir esta expectativa.');return}
+  const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
+  const proj=p.project?await dbWorkProjectByName(p.project):null;
+  if(p.project&&!proj){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude identificar el proyecto. Corrige su nombre antes de guardar.');return}
+  if(!String(p.title||'').trim()||!String(p.expected_event||'').trim()||!String(p.due_date||'').trim()){
+    const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','La expectativa necesita un nombre, qué se espera y una fecha.');return
+  }
+  const time=String(p.due_time||'').trim()||null;
+  const timezone=String(p.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin');
+  const payload={
+    title:String(p.title).trim(),
+    expected_event:String(p.expected_event).trim(),
+    expectation_type:String(p.expectation_type||'other'),
+    due_date:String(p.due_date),
+    due_time:time,
+    due_precision:time?'datetime':'date',
+    timezone,
+    project_id:proj?.id||null,
+    source_kind:String(p.source_kind||'conversation'),
+    metadata:{source:'isabella_chat'}
+  };
+  const {data,error}=await sb.rpc('minds_create_expectation',{
+    p_expectation:payload,
+    p_request_id:p.request_id||crypto.randomUUID(),
+    p_confirmed:true
+  });
+  if(error){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude guardar esa expectativa todavía: '+error.message);return}
+  closeModal();
+  const row=data?.expectation||{};
+  const due=row.due_at?new Date(row.due_at).toLocaleString('es-ES',{timeZone:row.timezone||timezone,dateStyle:'medium',...(row.due_precision==='datetime'?{timeStyle:'short'}:{})}):p.due_date;
+  say('assistant',`Listo. Mantendré “${row.title||p.title}” pendiente hasta ${due}. Si llega ese momento sin confirmación, te diré que sigue sin comprobar; no asumiré que no ocurrió.`);
 }
 async function createCommitmentProposal(p){
   const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para mantener esto vivo entre conversaciones.');return}
@@ -1400,6 +1462,7 @@ function applyAssistantPreferencesProposal(p){
 function applyProposal(p){
   if(p.kind==='routine')return createRoutineProposal(p)
   if(p.kind==='standing_intent')return createStandingIntentProposal(p)
+  if(p.kind==='expectation')return createExpectationProposal(p)
   if(p.kind==='commitment')return createCommitmentProposal(p)
   if(p.kind==='work_claim')return createWorkClaimProposal(p)
   if(p.kind==='skill_proposal')return createSkillProposal(p)
