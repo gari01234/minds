@@ -196,4 +196,4 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 
 ### Expectation Engine
 
-`BUILD-76.md` adds a distinct future-state primitive for events expected to happen in the world. Expectations are neither tasks nor commitments nor standing intents. A due expectation becomes `due_unconfirmed`, never automatically `missed`; explicit review resolves the outcome.
+`BUILD-76.md` adds a distinct future-state primitive for events expected to happen in the world. Expectations are neither tasks nor commitments nor standing intents. A due expectation becomes `due_unconfirmed`, never automatically `not_occurred`; explicit review resolves the outcome.
