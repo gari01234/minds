@@ -799,13 +799,28 @@ async function personalModel(req: Request, limit=32) {
     const sb = supabaseClient(req);
     if (!sb) return [];
     const { data, error } = await sb.from("isabella_model_claims")
-      .select("id,claim_type,claim,status,confidence,source_type,evidence,first_seen_at,last_seen_at,confirmed_at,metadata")
-      .in("status", ["hypothesis","confirmed"])
-      .order("confidence", { ascending:false })
+      .select("id,claim_type,claim,status,source_type,evidence,last_seen_at,confirmed_at,metadata")
+      .eq("status","confirmed")
       .order("last_seen_at", { ascending:false })
       .limit(limit);
     if (error) return [];
     return data || [];
+  } catch {
+    return [];
+  }
+}
+
+async function operatingModelProposals(req: Request, limit=12) {
+  try {
+    const sb=supabaseClient(req);
+    if(!sb)return [];
+    const {data,error}=await sb.from("minds_operating_model_hypotheses")
+      .select("id,dimension,claim_type,statement,inference_kind,rationale,evidence_summary,proposed_at")
+      .eq("status","proposed")
+      .order("proposed_at",{ascending:false})
+      .limit(limit);
+    if(error)return [];
+    return data||[];
   } catch {
     return [];
   }
@@ -826,94 +841,92 @@ async function personalModelPolicy(req: Request) {
   }
 }
 
+const OPERATING_DIMS=new Set([
+  "scheduling","task_management","work_rhythm","interruptions",
+  "planning","decision_style","communication","tooling","review"
+]);
+function operatingDimensionForClaim(claimType:string,args:any){
+  const supplied=String(args?.dimension||"").trim();
+  if(OPERATING_DIMS.has(supplied))return supplied;
+  if(claimType==="interaction")return "communication";
+  if(claimType==="habit"||claimType==="pattern")return "task_management";
+  if(claimType==="working_style")return "planning";
+  if(claimType==="constraint")return "planning";
+  return "planning";
+}
+
 async function recordPersonalModelClaim(req: Request, args: any) {
   try {
-    const sb = supabaseClient(req);
-    if (!sb) return { status:"unavailable" };
-    const { data:{user}, error:authError } = await sb.auth.getUser();
-    if (authError || !user) return { status:"unauthorized" };
-    const claim = String(args?.claim || "").trim();
-    const claimType = String(args?.claim_type || "other").trim();
-    const status = String(args?.status || "hypothesis").trim() === "confirmed" ? "confirmed" : "hypothesis";
-    const confidence = Math.max(0, Math.min(1, Number(args?.confidence ?? (status === "confirmed" ? 1 : 0.65))));
-    if (!claim) return { status:"invalid" };
-    const prohibited = /\b(health|medical|diagnos|religio|politic|sexual|financ|password|contrase|bank|banco|criminal|race|ethnic|salud|médic|religión|polític|sexualidad)\b/i;
-    if (prohibited.test(claim)) return { status:"sensitive_not_stored" };
-    const { data:existing } = await sb.from("isabella_model_claims")
-      .select("id,status,confidence,evidence")
-      .eq("user_id",user.id)
-      .eq("claim",claim)
-      .in("status",["hypothesis","confirmed"])
-      .limit(1);
-    const evidenceItem = {
-      source:String(args?.source || "conversation"),
-      note:String(args?.evidence || "").slice(0,1000),
-      at:new Date().toISOString()
-    };
-    if (existing?.[0]?.id) {
-      const prev = existing[0];
-      const nextStatus = prev.status === "confirmed" ? "confirmed" : status;
-      const nextConfidence = Math.max(Number(prev.confidence || 0), confidence);
-      const evidence = [...(Array.isArray(prev.evidence) ? prev.evidence : []), evidenceItem].slice(-12);
-      const { error } = await sb.from("isabella_model_claims").update({
-        claim_type:claimType,
-        status:nextStatus,
-        confidence:nextConfidence,
-        evidence,
-        last_seen_at:new Date().toISOString(),
-        ...(nextStatus === "confirmed" ? { confirmed_at:new Date().toISOString() } : {})
-      }).eq("id",prev.id).eq("user_id",user.id);
-      return error ? { status:"error", detail:error.message } : { status:"updated", id:prev.id };
+    const sb=supabaseClient(req);
+    if(!sb)return {status:"unavailable"};
+    const claim=String(args?.claim||"").trim();
+    const claimType=String(args?.claim_type||"other").trim();
+    const status=String(args?.status||"hypothesis")==="confirmed"?"confirmed":"hypothesis";
+    if(!claim)return {status:"invalid"};
+
+    if(status==="confirmed"){
+      const {data,error}=await sb.rpc("minds_record_explicit_model_claim",{
+        p_claim_type:claimType,
+        p_claim:claim,
+        p_evidence:String(args?.evidence||"").slice(0,2000)||null,
+        p_source:String(args?.source||"conversation").slice(0,200)||"conversation"
+      });
+      return error?{status:"error",detail:error.message}:data;
     }
-    const { data, error } = await sb.from("isabella_model_claims").insert({
-      user_id:user.id,
-      claim_type:claimType,
-      claim,
-      status,
-      confidence,
-      source_type:status === "confirmed" ? "explicit" : "inferred",
-      evidence:[evidenceItem],
-      confirmed_at:status === "confirmed" ? new Date().toISOString() : null
-    }).select("id").single();
-    return error ? { status:"error", detail:error.message } : { status:"stored", id:data?.id };
-  } catch (e) {
-    return { status:"error", detail:String(e) };
+
+    const dimension=operatingDimensionForClaim(claimType,args);
+    const {data,error}=await sb.rpc("minds_propose_operating_model_hypothesis",{
+      p_dimension:dimension,
+      p_claim_type:claimType,
+      p_statement:claim,
+      p_rationale:String(args?.rationale||args?.evidence||"").slice(0,4000),
+      p_source_kind:"conversation",
+      p_source_ref:String(args?.source||"conversation").slice(0,500)||"conversation",
+      p_evidence_note:String(args?.evidence||"").slice(0,2000)||null
+    });
+    return error?{status:"error",detail:error.message}:data;
+  } catch(e) {
+    return {status:"error",detail:String(e)};
   }
 }
 
 async function updatePersonalModelClaim(req: Request, args: any) {
   try {
-    const sb = supabaseClient(req);
-    if (!sb) return { status:"unavailable" };
-    const { data:{user}, error:authError } = await sb.auth.getUser();
-    if (authError || !user) return { status:"unauthorized" };
-    const id = String(args?.claim_id || "").trim();
-    const status = String(args?.status || "").trim();
-    if (!id || !["confirmed","contradicted","stale"].includes(status)) return { status:"invalid" };
-    const patch:any = { status, last_seen_at:new Date().toISOString() };
-    if (status === "confirmed") {
-      patch.confidence = 1;
-      patch.confirmed_at = new Date().toISOString();
-      patch.source_type = "explicit";
-    }
-    const { error } = await sb.from("isabella_model_claims").update(patch).eq("id",id).eq("user_id",user.id);
-    if (error) return { status:"error", detail:error.message };
-    const replacement = String(args?.replacement_claim || "").trim();
-    if (replacement && status === "contradicted") {
-      const stored = await recordPersonalModelClaim(req,{
-        claim_type:args?.claim_type || "other",
-        claim:replacement,
-        status:"confirmed",
-        confidence:1,
-        source:"user_correction",
-        evidence:String(args?.evidence || "User correction")
-      });
-      return { status:"updated_with_replacement", replacement:stored };
-    }
-    return { status:"updated" };
-  } catch (e) {
-    return { status:"error", detail:String(e) };
+    const sb=supabaseClient(req);
+    if(!sb)return {status:"unavailable"};
+    const id=String(args?.claim_id||"").trim();
+    const status=String(args?.status||"").trim();
+    if(!id||!["confirmed","contradicted","stale"].includes(status))return {status:"invalid"};
+    const {data,error}=await sb.rpc("minds_review_model_claim",{
+      p_claim_id:id,
+      p_status:status,
+      p_replacement:String(args?.replacement_claim||"").trim()||null,
+      p_claim_type:String(args?.claim_type||"other").trim()||"other",
+      p_evidence:String(args?.evidence||"").slice(0,2000)||null,
+      p_request_id:crypto.randomUUID(),
+      p_confirmed:true
+    });
+    return error?{status:"error",detail:error.message}:data;
+  } catch(e) {
+    return {status:"error",detail:String(e)};
   }
+}
+
+async function reviewOperatingModelHypothesis(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const id=String(args?.hypothesis_id||"").trim();
+    const decision=String(args?.decision||"").trim();
+    if(!id||!["accept","reject","replace","retire"].includes(decision))return {status:"invalid"};
+    const {data,error}=await sb.rpc("minds_review_operating_model_hypothesis",{
+      p_hypothesis_id:id,
+      p_decision:decision,
+      p_replacement:String(args?.replacement||"").trim()||null,
+      p_request_id:crypto.randomUUID(),
+      p_confirmed:true
+    });
+    return error?{status:"error",detail:error.message}:data;
+  }catch(e){return {status:"error",detail:String(e)}}
 }
 
 async function recentActivity(req: Request, limit=24) {
