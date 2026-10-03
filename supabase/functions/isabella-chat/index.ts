@@ -384,13 +384,14 @@ const calendarTools = [
   {
     type: "function",
     name: "record_personal_model_claim",
-    description: "Store a non-sensitive personal-model hypothesis or explicitly confirmed claim. Use hypothesis for inferred patterns or preferences. Use confirmed ONLY when the user explicitly states or confirms it. Never store sensitive traits such as health, religion, politics, sexuality, finances, passwords, criminal history, race or ethnicity.",
+    description: "Record a non-sensitive statement in Isabella's personal operating model. Use confirmed ONLY for something the user explicitly states or explicitly confirms. Use hypothesis for an inference; a hypothesis is merely proposed and MUST NOT influence behavior until the user reviews it. Never infer or store sensitive traits such as health, religion, politics, sexuality, finances, passwords, criminal history, race or ethnicity.",
     strict: false,
     parameters: { type:"object", properties:{
       claim_type:{type:"string",enum:["preference","habit","pattern","goal","priority","value","working_style","interaction","constraint","other"]},
+      dimension:{type:"string",enum:["scheduling","task_management","work_rhythm","interruptions","planning","decision_style","communication","tooling","review"]},
       claim:{type:"string"},
       status:{type:"string",enum:["hypothesis","confirmed"]},
-      confidence:{type:"number"},
+      rationale:{type:"string",description:"For a hypothesis, explain briefly why the evidence may support it. Do not use a probability score."},
       evidence:{type:"string"},
       source:{type:"string"}
     }, required:["claim_type","claim","status"] }
@@ -398,7 +399,7 @@ const calendarTools = [
   {
     type: "function",
     name: "update_personal_model_claim",
-    description: "Update an existing personal-model claim when the user explicitly confirms, corrects or rejects it. Use contradicted for a correction/rejection and optionally provide replacement_claim.",
+    description: "Review an already confirmed personal-model claim only when the user explicitly confirms, corrects, rejects or retires it. Use contradicted when replacing a wrong statement and provide replacement_claim.",
     strict: false,
     parameters: { type:"object", properties:{
       claim_id:{type:"string"},
@@ -407,6 +408,17 @@ const calendarTools = [
       claim_type:{type:"string"},
       evidence:{type:"string"}
     }, required:["claim_id","status"] }
+  },
+  {
+    type:"function",
+    name:"review_operating_model_hypothesis",
+    description:"Accept, reject, correct or retire a Personal Operating Model hypothesis only after the user explicitly makes that decision. Pending hypotheses are non-authoritative. Use replace when the user supplies a corrected formulation.",
+    strict:false,
+    parameters:{type:"object",properties:{
+      hypothesis_id:{type:"string"},
+      decision:{type:"string",enum:["accept","reject","replace","retire"]},
+      replacement:{type:"string"}
+    },required:["hypothesis_id","decision"]}
   },
   {
     type: "function",
@@ -1430,7 +1442,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   read_contextual_autonomy:"allow",
   search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
-  offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
+  offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",review_operating_model_hypothesis:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",create_chat_reminder:"confirm",
@@ -2380,6 +2392,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="update_personal_model_claim"){
         const result=await updatePersonalModelClaim(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="review_operating_model_hypothesis"){
+        const result=await reviewOperatingModelHypothesis(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_memory"){
         const result=await searchMemoryTool(req,String(args.query||effectiveMessage),apiKey);
