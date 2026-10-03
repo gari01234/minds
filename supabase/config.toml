@@ -42,3 +42,7 @@ entrypoint = "./functions/isabella-agent-shadow/index.ts"
 [functions.isabella-artifact-intake]
 verify_jwt = true
 entrypoint = "./functions/isabella-artifact-intake/index.ts"
+
+[functions.isabella-runtime-mcp]
+verify_jwt = false
+entrypoint = "./functions/isabella-runtime-mcp/index.ts"
