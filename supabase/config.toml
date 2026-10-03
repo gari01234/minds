@@ -38,3 +38,7 @@ entrypoint = "./functions/isabella-delivery-runner/index.ts"
 [functions.isabella-agent-shadow]
 verify_jwt = false
 entrypoint = "./functions/isabella-agent-shadow/index.ts"
+
+[functions.isabella-artifact-intake]
+verify_jwt = true
+entrypoint = "./functions/isabella-artifact-intake/index.ts"
