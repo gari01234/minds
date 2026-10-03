@@ -2531,14 +2531,107 @@ async function routinesPanel(){
     document.querySelectorAll('[data-routine-delete]').forEach(x=>x.onclick=async()=>{await sb.from('isabella_routines').delete().eq('id',x.dataset.routineDelete);routinesPanel()});
   }catch(e){modal('Rutinas','<div class="small">No pude cargar las rutinas ahora mismo.</div>')}
 }
+function expectationLocalParts(row){
+  const tz=String(row?.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin');
+  const d=new Date(row.due_at);
+  const parts=new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d);
+  const get=t=>parts.find(x=>x.type===t)?.value||'';
+  return {date:`${get('year')}-${get('month')}-${get('day')}`,time:`${get('hour')}:${get('minute')}`,timezone:tz};
+}
+function expectationDueLabel(row){
+  const p=expectationLocalParts(row),d=new Date(row.due_at);
+  return row.due_precision==='datetime'
+    ?d.toLocaleString('es-ES',{timeZone:p.timezone,dateStyle:'medium',timeStyle:'short'})
+    :d.toLocaleDateString('es-ES',{timeZone:p.timezone,dateStyle:'medium'});
+}
+function expectationStateLabel(status){
+  return status==='active'?'En espera':status==='due_unconfirmed'?'Pendiente de comprobar':status==='fulfilled'?'Ocurrió':status==='missed'?'No ocurrió':'Cancelada';
+}
+async function reviewExpectation(id,decision){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  try{
+    const {data,error}=await sb.rpc('minds_review_expectation',{
+      p_expectation_id:id,
+      p_decision:decision,
+      p_note:null,
+      p_occurred_at:decision==='fulfilled'?new Date().toISOString():null,
+      p_next_date:null,
+      p_next_time:null,
+      p_next_precision:null,
+      p_timezone:null,
+      p_request_id:crypto.randomUUID(),
+      p_confirmed:true
+    });
+    if(error)throw error;
+    await standingIntentsPanel();
+  }catch(e){say('assistant','No pude actualizar esa expectativa: '+(e?.message||String(e)))}
+}
+function rescheduleExpectation(row){
+  const local=expectationLocalParts(row);
+  modal('Nueva fecha esperada',`<div class="form">
+    <div class="small">Cambiar la fecha no afirma nada sobre lo que ocurrió antes; solo mueve la expectativa hacia adelante.</div>
+    <label>Fecha<input id="expectationNextDate" type="date" value="${esc(local.date)}"></label>
+    <label>Hora exacta (opcional)<input id="expectationNextTime" type="time" value="${row.due_precision==='datetime'?esc(local.time):''}"></label>
+    <div class="confirm-actions"><button id="expectationRescheduleCancel" class="secondary">Volver</button><button id="expectationRescheduleSave" class="primary">Cambiar fecha</button></div>
+  </div>`);
+  $('#expectationRescheduleCancel').onclick=()=>void standingIntentsPanel();
+  $('#expectationRescheduleSave').onclick=async()=>{
+    const date=$('#expectationNextDate').value,time=$('#expectationNextTime').value||null;
+    if(!date)return;
+    const sb=window.MINDS_SUPABASE;
+    try{
+      const {error}=await sb.rpc('minds_review_expectation',{
+        p_expectation_id:row.id,
+        p_decision:'reschedule',
+        p_note:null,
+        p_occurred_at:null,
+        p_next_date:date,
+        p_next_time:time,
+        p_next_precision:time?'datetime':'date',
+        p_timezone:local.timezone,
+        p_request_id:crypto.randomUUID(),
+        p_confirmed:true
+      });
+      if(error)throw error;
+      await standingIntentsPanel();
+    }catch(e){say('assistant','No pude cambiar la fecha: '+(e?.message||String(e)))}
+  };
+}
 async function standingIntentsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Memoria futura','<div class="small">Conecta la memoria para verla.</div>');return}
   modal('Memoria futura','<div class="small">Cargando…</div>');
   try{
-    const {data,error}=await sb.from('minds_standing_intents').select('id,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,project_id,isabella_projects(name)').order('created_at',{ascending:false});if(error)throw error;
-    const rows=data||[];
-    const body=rows.length?rows.map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}${x.trigger_count||0}/${x.max_triggers||3} activaciones · cooldown ${Math.round(Number(x.cooldown_minutes||0)/60)} h${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div></div><button data-intent-toggle="${x.id}" data-intent-status="${x.status}">${x.status==='active'?'Pausar':'Activar'}</button><button data-intent-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small">Todavía no hay recordatorios contextuales.</div>';
-    modal('Memoria futura',`<div class="small" style="margin-bottom:12px">Recordatorios que se activan por una situación, no por una hora.</div>${body}`);
+    const [expectQ,intentQ]=await Promise.all([
+      sb.from('minds_expectations')
+        .select('id,title,expected_event,expectation_type,due_at,due_precision,timezone,status,fulfilled_at,missed_at,cancelled_at,project_id,created_at,isabella_projects(name)')
+        .order('due_at',{ascending:true})
+        .limit(100),
+      sb.from('minds_standing_intents')
+        .select('id,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,project_id,isabella_projects(name)')
+        .order('created_at',{ascending:false})
+    ]);
+    if(expectQ.error)throw expectQ.error;if(intentQ.error)throw intentQ.error;
+    const expectations=expectQ.data||[],intents=intentQ.data||[];
+    const open=expectations.filter(x=>['active','due_unconfirmed'].includes(x.status));
+    const closed=expectations.filter(x=>!['active','due_unconfirmed'].includes(x.status)).sort((a,b)=>new Date(b.due_at)-new Date(a.due_at));
+
+    const expectationCard=x=>{
+      const due=expectationDueLabel(x),project=x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':'';
+      const actions=x.status==='due_unconfirmed'
+        ?`<div class="confirm-actions"><button class="primary" data-expectation-review="${x.id}" data-expectation-decision="fulfilled">Sí, ocurrió</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="missed">No ocurrió</button><button class="secondary" data-expectation-reschedule="${x.id}">Nueva fecha</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="cancel">Cancelar</button></div>`
+        :`<div class="confirm-actions"><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="fulfilled">Ya ocurrió</button><button class="secondary" data-expectation-reschedule="${x.id}">Cambiar fecha</button><button class="secondary" data-expectation-review="${x.id}" data-expectation-decision="cancel">Cancelar</button></div>`;
+      return `<div class="intent-row expectation-row ${esc(x.status)}"><div class="row-main"><b>${esc(x.title)}</b><div>${esc(x.expected_event)}</div><div class="small">${project}${esc(expectationStateLabel(x.status))} · ${esc(due)}</div>${x.status==='due_unconfirmed'?'<div class="small">La fecha ya llegó, pero MINDS no sabe todavía si ocurrió.</div>':''}${actions}</div></div>`;
+    };
+
+    const openHtml=open.length?open.map(expectationCard).join(''):'<div class="small">No hay expectativas abiertas.</div>';
+    const historyHtml=closed.length?`<details class="human-tech"><summary>Historial de expectativas (${closed.length})</summary>${closed.slice(0,40).map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>${esc(x.title)}</b><div>${esc(x.expected_event)}</div><div class="small">${esc(expectationStateLabel(x.status))} · ${esc(expectationDueLabel(x))}</div></div></div>`).join('')}</details>`:'';
+
+    const intentHtml=intents.length?intents.map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}${x.trigger_count||0}/${x.max_triggers||3} activaciones · cooldown ${Math.round(Number(x.cooldown_minutes||0)/60)} h${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div></div><button data-intent-toggle="${x.id}" data-intent-status="${x.status}">${x.status==='active'?'Pausar':'Activar'}</button><button data-intent-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small">No hay recordatorios contextuales.</div>';
+
+    modal('Memoria futura',`<div class="small section-label">Expectativas con fecha</div><div class="small" style="margin-bottom:12px">Cosas del mundo que esperas que ocurran. Una fecha vencida sin evidencia queda pendiente de comprobar, no se considera un fallo.</div>${openHtml}${historyHtml}<div class="small section-label" style="margin-top:22px">Recordatorios por situación</div><div class="small" style="margin-bottom:12px">Se activan cuando reaparece una situación, no por una hora.</div>${intentHtml}`);
+
+    document.querySelectorAll('[data-expectation-review]').forEach(b=>b.onclick=()=>void reviewExpectation(b.dataset.expectationReview,b.dataset.expectationDecision));
+    document.querySelectorAll('[data-expectation-reschedule]').forEach(b=>b.onclick=()=>{const row=expectations.find(x=>x.id===b.dataset.expectationReschedule);if(row)rescheduleExpectation(row)});
     document.querySelectorAll('[data-intent-toggle]').forEach(b=>b.onclick=async()=>{const status=b.dataset.intentStatus==='active'?'snoozed':'active';await sb.from('minds_standing_intents').update({status,updated_at:new Date().toISOString()}).eq('id',b.dataset.intentToggle);standingIntentsPanel()});
     document.querySelectorAll('[data-intent-delete]').forEach(b=>b.onclick=async()=>{await sb.from('minds_standing_intents').delete().eq('id',b.dataset.intentDelete);standingIntentsPanel()});
   }catch{modal('Memoria futura','<div class="small">No pude cargarla ahora mismo.</div>')}
