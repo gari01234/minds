@@ -1979,17 +1979,70 @@ async function missionWorkspacePanel(id){
     document.querySelectorAll('[data-mission-run-action]').forEach(b=>b.onclick=()=>void missionRunControlUI(b.dataset.runId,b.dataset.missionRunAction,id));
   }catch{modal('Trabajo de Isabella','<div class="small">No pude leer este trabajo ahora mismo.</div>')}
 }
+async function previewArtifactIntake(id){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  const status=$('#artifactIntakeStatus');if(status)status.textContent='Preparando vista previa…';
+  try{
+    const {data,error}=await sb.functions.invoke('isabella-artifact-intake',{body:{action:'preview',intake_id:id}});
+    if(error||data?.error)throw new Error(data?.detail||data?.error||error?.message||'No pude abrir la vista previa.');
+    if(!data?.url)throw new Error('No recibí una vista previa válida.');
+    window.open(data.url,'_blank','noopener');
+    if(status)status.textContent='';
+  }catch(e){if(status)status.textContent=e?.message||'No pude abrir la vista previa.'}
+}
+async function reviewArtifactIntake(id,decision){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id||!['accepted','rejected'].includes(decision))return;
+  const status=$('#artifactIntakeStatus');if(status)status.textContent=decision==='accepted'?'Conservando…':'Rechazando…';
+  try{
+    const {data,error}=await sb.rpc('minds_review_artifact_intake',{p_intake_id:id,p_decision:decision,p_note:null});
+    if(error||data?.error)throw new Error(data?.error||error?.message||'No pude registrar tu decisión.');
+    if(decision==='accepted'){
+      const promoted=await sb.functions.invoke('isabella-artifact-intake',{body:{action:'promote',intake_id:id}});
+      if(promoted.error||promoted.data?.error)throw new Error(promoted.data?.detail||promoted.data?.error||promoted.error?.message||'El archivo quedó aceptado, pero todavía no pude conservarlo definitivamente.');
+    }
+    await artifactsPanel();
+  }catch(e){if(status)status.textContent=e?.message||'No pude completar esta acción.'}
+}
+async function promoteAcceptedArtifactIntake(id){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  const status=$('#artifactIntakeStatus');if(status)status.textContent='Terminando de conservar…';
+  try{
+    const {data,error}=await sb.functions.invoke('isabella-artifact-intake',{body:{action:'promote',intake_id:id}});
+    if(error||data?.error)throw new Error(data?.detail||data?.error||error?.message||'No pude terminar de conservar el archivo.');
+    await artifactsPanel();
+  }catch(e){if(status)status.textContent=e?.message||'No pude terminar de conservar el archivo.'}
+}
 async function artifactsPanel(){
-  const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class="small">Conecta la memoria para ver tus artefactos.</div>');return}
-  modal('Artefactos','<div class="surface-loading">Cargando artefactos…</div>');
+  const sb=window.MINDS_SUPABASE;if(!sb){modal('Artefactos','<div class=\"small\">Conecta la memoria para ver tus artefactos.</div>');return}
+  modal('Artefactos','<div class=\"surface-loading\">Cargando artefactos…</div>');
   try{
     const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
-    const {data,error}=await sb.from('minds_artifacts').select('id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at').order('created_at',{ascending:false}).limit(100);
-    if(error)throw error;
-    const rows=data||[];
-    $('#modalBody').innerHTML=rows.length?`<div class="artifact-library">${rows.map(a=>`<div class="artifact-library-item"><div class="artifact-library-meta"><span>${esc(a.source_kind==='idea'?'TRABAJO':'CHAT')}</span><time>${new Date(a.created_at).toLocaleDateString('es-ES')}</time></div>${artifactMarkup(a)}</div>`).join('')}</div>`:'<div class="small">Todavía no hay artefactos generados.</div>';
+    const [intakeQ,artifactQ]=await Promise.all([
+      sb.from('minds_artifact_intake')
+        .select('id,status,title,kind,mime_type,size_bytes,sha256,accepted_artifact_id,expires_at,created_at,metadata')
+        .in('status',['pending','accepted'])
+        .order('created_at',{ascending:false})
+        .limit(50),
+      sb.from('minds_artifacts')
+        .select('id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at')
+        .order('created_at',{ascending:false})
+        .limit(100)
+    ]);
+    if(intakeQ.error)throw intakeQ.error;if(artifactQ.error)throw artifactQ.error;
+    const pending=intakeQ.data||[],rows=artifactQ.data||[];
+    const pendingHtml=pending.length?`<div class=\"small section-label\">Por revisar</div><div class=\"artifact-library\">${pending.map(a=>{
+      const accepted=a.status==='accepted';
+      const meta=[String(a.kind||'').toUpperCase(),Math.max(1,Math.round(Number(a.size_bytes||0)/1024))+' KB',new Date(a.created_at).toLocaleString('es-ES')].join(' · ');
+      return `<div class=\"artifact-library-item\"><div class=\"continuity-cause\"><span>${accepted?'ACEPTADO · PENDIENTE DE PROMOCIÓN':'ISABELLA HA PRODUCIDO UN ARCHIVO'}</span><b>${esc(a.title||'Artefacto')}</b><p class=\"small\">${esc(meta)}</p><details class=\"human-tech\"><summary>Ver procedencia técnica</summary><div class=\"small\">SHA-256 · ${esc(String(a.sha256||''))}</div></details><div class=\"confirm-actions\"><button class=\"secondary\" data-intake-preview=\"${esc(a.id)}\">Vista previa</button>${accepted?`<button class=\"primary\" data-intake-promote=\"${esc(a.id)}\">Terminar de conservar</button>`:`<button class=\"primary\" data-intake-accept=\"${esc(a.id)}\">Conservar</button><button class=\"secondary\" data-intake-reject=\"${esc(a.id)}\">Rechazar</button>`}</div></div></div>`;
+    }).join('')}</div><div id=\"artifactIntakeStatus\" class=\"small\" aria-live=\"polite\"></div>`:'';
+    const permanentHtml=rows.length?`<div class=\"small section-label\">Conservados</div><div class=\"artifact-library\">${rows.map(a=>`<div class=\"artifact-library-item\"><div class=\"artifact-library-meta\"><span>${esc(a.source_kind==='idea'?'TRABAJO':a.source_kind==='mission_runtime'?'MISSION':'CHAT')}</span><time>${new Date(a.created_at).toLocaleDateString('es-ES')}</time></div>${artifactMarkup(a)}</div>`).join('')}</div>`:'<div class=\"small\">Todavía no hay artefactos conservados.</div>';
+    $('#modalBody').innerHTML=pendingHtml+permanentHtml;
+    document.querySelectorAll('[data-intake-preview]').forEach(b=>b.onclick=()=>void previewArtifactIntake(b.dataset.intakePreview));
+    document.querySelectorAll('[data-intake-accept]').forEach(b=>b.onclick=()=>void reviewArtifactIntake(b.dataset.intakeAccept,'accepted'));
+    document.querySelectorAll('[data-intake-reject]').forEach(b=>b.onclick=()=>void reviewArtifactIntake(b.dataset.intakeReject,'rejected'));
+    document.querySelectorAll('[data-intake-promote]').forEach(b=>b.onclick=()=>void promoteAcceptedArtifactIntake(b.dataset.intakePromote));
     await hydrateArtifactFiles($('#modalBody'));
-  }catch{$('#modalBody').innerHTML='<div class="small">No pude cargar los artefactos ahora mismo.</div>'}
+  }catch{$('#modalBody').innerHTML='<div class=\"small\">No pude cargar los artefactos ahora mismo.</div>'}
 }
 async function aiUsagePanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Uso IA','<div class="small">Conecta la memoria para medir el uso de MINDS.</div>');return}
