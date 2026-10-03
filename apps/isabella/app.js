@@ -296,6 +296,7 @@ async function afterSync(){
     void maybePrewarmFeed();
     void maybePrewarmResearch();
     void maybeReactivateIdeas();
+    void refreshOperatingModel(false);
     const nudged=await maybeProactiveNudge();
     if(!nudged)await maybeCuriosityQuestion();
   }finally{proactiveCycleBusy=false}
@@ -2499,26 +2500,66 @@ async function skillsPanel(){
     });
   }catch(e){modal('Habilidades','<p>No pude cargar las habilidades: '+esc(e.message)+'</p>')}
 }
+const operatingDimensionLabels={time_planning:'Planificación del tiempo',task_management:'Tareas',focus:'Concentración',interruption:'Interrupciones',decision_making:'Decisiones',autonomy:'Autonomía',interaction:'Cómo colaboramos'};
+function emptyOperatingModel(){return {accepted:[],proposed:[],recent_reviews:[],observation_count:0}}
+async function loadOperatingModel(){
+  const sb=window.MINDS_SUPABASE;if(!sb){window.ISABELLA_OPERATING_RULES=[];return emptyOperatingModel()}
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session){window.ISABELLA_OPERATING_RULES=[];return emptyOperatingModel()}
+    const {data,error}=await sb.rpc('minds_get_personal_operating_model');if(error)throw error;
+    const model=data||emptyOperatingModel(),accepted=Array.isArray(model.accepted)?model.accepted:[];
+    window.ISABELLA_OPERATING_RULES=accepted.map(x=>({dimension:String(x.dimension||''),statement:String(x.accepted_statement||x.statement||'').trim()})).filter(x=>x.statement).slice(0,12);
+    return {...emptyOperatingModel(),...model,accepted,proposed:Array.isArray(model.proposed)?model.proposed:[],recent_reviews:Array.isArray(model.recent_reviews)?model.recent_reviews:[]};
+  }catch{window.ISABELLA_OPERATING_RULES=[];return emptyOperatingModel()}
+}
+async function refreshOperatingModel(force=false){
+  const sb=window.MINDS_SUPABASE;if(!sb)return loadOperatingModel();
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return loadOperatingModel();
+    const key='isabella-operating-model-refresh:'+session.user.id,last=Number(localStorage.getItem(key)||0),now=Date.now();
+    if(force||now-last>=24*60*60*1000){
+      const {data,error}=await sb.functions.invoke('isabella-operating-model',{body:{action:'refresh'}});
+      if(!error&&!data?.error)localStorage.setItem(key,String(now));
+    }
+  }catch{}
+  return loadOperatingModel();
+}
+async function reviewOperatingHypothesis(id,decision,finalStatement=null){
+  const sb=window.MINDS_SUPABASE;if(!sb||!id)return;
+  try{
+    const {data,error}=await sb.rpc('minds_review_operating_hypothesis',{p_hypothesis_id:id,p_decision:decision,p_final_statement:finalStatement,p_request_id:crypto.randomUUID(),p_confirmed:true});
+    if(error||data?.error)throw new Error(data?.error||error?.message||'No pude registrar la revisión.');
+    await loadOperatingModel();await memoryPanel();
+  }catch(e){say('assistant','No pude actualizar esa regla ahora mismo: '+(e?.message||String(e)))}
+}
+function correctOperatingHypothesis(id,current){
+  modal('Corregir regla de trabajo',`<div class="form"><div class="small">La corrección se guardará como la regla aceptada. La formulación original y tu revisión quedan en el historial.</div><label>Formulación correcta<textarea id="operatingCorrection" rows="5">${esc(current||'')}</textarea></label><button id="saveOperatingCorrection" class="primary">Usar esta regla</button></div>`);
+  $('#saveOperatingCorrection').onclick=async()=>{const text=$('#operatingCorrection').value.trim();if(!text)return;await reviewOperatingHypothesis(id,'correct',text)};
+}
 async function memoryPanel(){
   const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
-  let claims=[];
+  let claims=[],operating=emptyOperatingModel();
   try{
     const sb=window.MINDS_SUPABASE,{data:{session}}=await sb.auth.getSession();
     if(session){
-      const {data}=await sb.from('isabella_model_claims').select('id,claim_type,claim,status,confidence,source_type,last_seen_at').in('status',['confirmed','hypothesis']).order('status',{ascending:true}).order('confidence',{ascending:false}).limit(60);
-      claims=data||[];
+      const [{data:claimRows},model]=await Promise.all([sb.from('isabella_model_claims').select('id,claim_type,claim,status,confidence,source_type,last_seen_at').in('status',['confirmed','hypothesis']).order('status',{ascending:true}).order('confidence',{ascending:false}).limit(60),loadOperatingModel()]);
+      claims=claimRows||[];operating=model||emptyOperatingModel();
     }
   }catch{}
   const modelHtml=claims.length?claims.map(c=>`<div class="model-claim-row ${esc(c.status)}"><div class="row-main"><div>${esc(c.claim)}</div><div class="small">${c.status==='confirmed'?'Confirmado':'Hipótesis'} · ${esc(c.claim_type)} · ${Math.round(Number(c.confidence||0)*100)}%</div></div><div class="model-claim-actions">${c.status==='hypothesis'?`<button data-model-confirm="${esc(c.id)}">Confirmar</button><button data-model-reject="${esc(c.id)}">No</button>`:''}<button data-model-correct="${esc(c.id)}" data-model-text="${esc(c.claim)}">Corregir</button></div></div>`).join(''):'<div class="small">Todavía no hay hipótesis estructuradas sobre ti.</div>';
-  const memoryHtml=items.length?items.map((m,i)=>{
-    const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';
-    const id=typeof m==='object'?(m.id||String(i)):String(i);
-    return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`;
-  }).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
-  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}`);
+  const accepted=operating.accepted||[],proposed=operating.proposed||[];
+  const acceptedHtml=accepted.length?accepted.map(x=>`<div class="model-claim-row confirmed"><div class="row-main"><div>${esc(x.accepted_statement||x.statement||'')}</div><div class="small">Confirmado · ${esc(operatingDimensionLabels[x.dimension]||x.dimension)}</div></div><div class="model-claim-actions"><button data-operating-retire="${esc(x.id)}">Retirar</button></div></div>`).join(''):'<div class="small">Todavía no hay reglas de trabajo confirmadas.</div>';
+  const proposedHtml=proposed.length?proposed.map(x=>{const evidence=Array.isArray(x.evidence)?x.evidence:[];return `<div class="model-claim-row hypothesis"><div class="row-main"><div>${esc(x.statement||'')}</div><div class="small">Propuesta · ${esc(operatingDimensionLabels[x.dimension]||x.dimension)}</div>${x.rationale?`<p class="small">${esc(x.rationale)}</p>`:''}${evidence.length?`<details class="human-tech"><summary>Por qué lo propongo</summary>${evidence.map(e=>`<div class="small">${esc(e.summary||'')} · ${esc(e.provenance_class||'')}</div>`).join('')}</details>`:''}</div><div class="model-claim-actions"><button data-operating-accept="${esc(x.id)}">Sí, úsalo</button><button data-operating-correct="${esc(x.id)}" data-operating-text="${esc(x.statement||'')}">Corregir</button><button data-operating-reject="${esc(x.id)}">No</button></div></div>`}).join(''):'<div class="small">No hay nuevas reglas por revisar.</div>';
+  const operatingHtml=`<div class="small">Isabella puede observar patrones operativos, pero ninguna inferencia cambia cómo trabaja contigo hasta que la confirmes.</div><div class="small section-label">Reglas confirmadas</div>${acceptedHtml}<div class="small section-label memory-section-title">Por revisar</div>${proposedHtml}<div class="small">Observaciones disponibles: ${Number(operating.observation_count||0)}</div>`;
+  const memoryHtml=items.length?items.map((m,i)=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';const id=typeof m==='object'?(m.id||String(i)):String(i);return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
+  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}`);
   document.querySelectorAll('[data-model-confirm]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelConfirm,'confirmed'));
   document.querySelectorAll('[data-model-reject]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelReject,'contradicted'));
   document.querySelectorAll('[data-model-correct]').forEach(b=>b.onclick=()=>correctModelClaim(b.dataset.modelCorrect,b.dataset.modelText||''));
+  document.querySelectorAll('[data-operating-accept]').forEach(b=>b.onclick=()=>void reviewOperatingHypothesis(b.dataset.operatingAccept,'accept',null));
+  document.querySelectorAll('[data-operating-reject]').forEach(b=>b.onclick=()=>void reviewOperatingHypothesis(b.dataset.operatingReject,'reject',null));
+  document.querySelectorAll('[data-operating-correct]').forEach(b=>b.onclick=()=>correctOperatingHypothesis(b.dataset.operatingCorrect,b.dataset.operatingText||''));
+  document.querySelectorAll('[data-operating-retire]').forEach(b=>b.onclick=()=>{if(confirm('¿Retirar esta regla de trabajo? Isabella dejará de usarla.'))void reviewOperatingHypothesis(b.dataset.operatingRetire,'retire',null)});
   $$('[data-memory-edit]').forEach(b=>b.onclick=()=>editMemory(b.dataset.memoryEdit));
   $$('[data-memory-delete]').forEach(b=>b.onclick=()=>deleteMemory(b.dataset.memoryDelete));
 }

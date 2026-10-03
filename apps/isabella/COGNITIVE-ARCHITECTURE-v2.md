@@ -353,3 +353,33 @@ An autonomous execution receipt can be linked deterministically to a later manua
 Only explicit authenticated review can classify it as a real correction. A confirmed correction produces an immutable `minds_outcome_feedback` receipt and may reduce the exact contextual permission from `allow` to `confirm`. A later change classified as non-causal produces no learning evidence.
 
 This layer does not create memory, personality claims or positive authority. It is evidence about outcomes of previously authorized actions and is deliberately asymmetric: confirmed corrections can make Isabella more conservative; they cannot silently make her more autonomous.
+
+
+## Personal Operating Model after Build 74
+
+MINDS now separates operational learning from autobiographical memory.
+
+```
+observation
+→ evidence
+→ hypothesis
+→ proposal
+→ explicit review
+→ accepted operating rule
+```
+
+Observations may be collected automatically from bounded operational sources. Hypotheses may be generated automatically when evidence is sufficient. Neither layer affects Isabella directly.
+
+Only `accepted` operating rules are projected into Isabella's dynamic context. Proposed, rejected and retired hypotheses remain outside active behavior.
+
+The model is intentionally operational rather than psychological: it can describe how to plan, interrupt, ask, decide or collaborate, but it must not infer identity, personality, motives, emotions or sensitive traits.
+
+This preserves a critical boundary:
+
+```
+what MINDS observes
+≠
+what MINDS hypothesizes
+≠
+what Isabella is allowed to act as true
+```

@@ -1,13 +1,13 @@
-const CACHE_NAME = 'isabella-shell-v82';
+const CACHE_NAME = 'isabella-shell-v83';
 const SHELL = [
   './',
   './index.html',
   './app.css?v=53',
-  './shell.js?v=74',
-  './app.js?v=80',
+  './shell.js?v=75',
+  './app.js?v=81',
   './work.js?v=4',
   './sync.js?v=pwa27',
-  './ai.js?v=45',
+  './ai.js?v=46',
   './manifest.webmanifest?v=2',
   './icon.svg?v=2',
   './apple-touch-icon.png?v=2',
