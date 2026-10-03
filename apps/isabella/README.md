@@ -177,3 +177,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Runtime Decision Gate
 
 `BUILD-72.9.md` and `RUNTIME-SELECTION-v0.2.md` close the external-execution research line. `native_minds` remains primary for every Mission. OpenAI Agents is allowed only as a bounded material execution lane when a Mission needs durable material state reused across checkpoints and all authority boundaries pass a deterministic fail-closed gate.
+
+
+### Outcome Learning / Post-Action Feedback
+
+`BUILD-73.md` closes the first post-action learning loop. A later manual edit to an autonomously-created task is only a feedback candidate; it becomes causal learning evidence only after explicit user review. Confirmed corrections can reduce the exact contextual permission from `allow` to `confirm`, never expand autonomy.
