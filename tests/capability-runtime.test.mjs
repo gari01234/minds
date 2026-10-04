@@ -81,6 +81,18 @@ test('Build 79 capability ledger is RLS protected and broadens artifact kinds',(
   assert.ok(sql.includes("'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'"));
 });
 
+test('Build 79 durable runner is declared and scheduled independently of the browser',()=>{
+  const sql=migrations();
+  const config=read('supabase/config.toml');
+  assert.ok(config.includes('[functions.isabella-capability-runtime]'));
+  assert.ok(config.includes('[functions.isabella-capability-runner]'));
+  assert.ok(config.includes('verify_jwt = false'));
+  assert.ok(sql.includes("'capability_runner'"));
+  assert.ok(sql.includes("'minds-capability-runner'"));
+  assert.ok(sql.includes("'* * * * *'"));
+  assert.ok(sql.includes('/functions/v1/isabella-capability-runner'));
+});
+
 test('Build 79 ambient presence is state projection, not another brain',()=>{
   assert.ok(ambient.includes("status==='queued'"));
   assert.ok(ambient.includes("status==='in_progress'"));
