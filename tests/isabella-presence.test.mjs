@@ -19,7 +19,7 @@ const forbiddenClientSecrets=['service_role','SUPABASE_SERVICE_ROLE_KEY','OPENAI
 
 test('Presence remains a thin native shell over canonical MINDS state',()=>{
   assert.ok(protocolV1.includes('Presence no razona, no ejecuta, no decide autoridad'));
-  assert.ok(protocolV2.includes('No crea otro chat backend'));
+  assert.ok(protocolV2.includes('NO crea otro chat backend'));
   assert.ok(protocolV2.includes('minds_attention_events'));
   assert.ok(build.includes('always available, not always visible'));
   assert.ok(build82.includes('fallo de aceptación de experiencia'));
