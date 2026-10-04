@@ -8,7 +8,7 @@ export const CAPABILITY_REGISTRY=Object.freeze({
     tools:Object.freeze(["code_interpreter"]),
     authority:"material_output_only",
     background:true,
-    network:"disabled",
+    external_network_tool:false,
     persistent_outputs:true,
     output_kinds:Object.freeze(["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"]),
     principle:"Create or transform a usable material deliverable when the user's goal should end in a file rather than a chat explanation."
