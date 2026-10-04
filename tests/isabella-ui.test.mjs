@@ -252,11 +252,13 @@ test('Build 24 news detail can render immediate context and optional verified me
   assert.ok(ai.includes('async function feedStory'));
 });
 
-test('Isabella keeps its conversational voice in server instructions',()=>{
+test('Isabella keeps its conversational voice in the shared relationship policy',()=>{
   const server=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(server.includes('PERSONALIDAD:'));
-  assert.ok(server.includes('humor ligero'));
-  assert.ok(server.includes('No seas burocrática'));
+  const policy=read('supabase/functions/_shared/relationship-policy.ts');
+  assert.ok(server.includes('relationshipPolicy("conversation")'));
+  assert.ok(policy.includes('humor propio'));
+  assert.ok(policy.includes('No burocratices la conversación'));
+  assert.ok(policy.includes('No optimices tiempo de pantalla'));
   const ai=read('apps/isabella/ai.js');
   assert.ok(ai.includes('message:String(message)'));
   assert.ok(!ai.includes('VOZ DE ISABELLA'));
@@ -551,14 +553,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.03.76'));
+  assert.ok(shell.includes('Build 2026.10.04.77'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=53'));
   assert.ok(index.includes('shell.js?v=77'));
   assert.ok(index.includes('app.js?v=84'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=46'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v86'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v87'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
