@@ -1357,3 +1357,44 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .human-tech-grid{grid-template-columns:1fr;gap:3px}
   .human-tech-grid b{margin-bottom:7px}
 }
+
+
+/* Build 78 — Project Threads & Shared Work Context v0.1 */
+.work-threads{max-width:1040px;margin:0 auto;padding-bottom:24px}
+.work-thread-list{display:grid;gap:8px;margin-top:14px}
+.work-thread-card{
+  width:100%;display:flex;align-items:center;justify-content:space-between;gap:18px;
+  border:0;border-bottom:1px solid rgba(0,0,0,.07);background:transparent;
+  padding:15px 4px;text-align:left;color:inherit
+}
+.work-thread-card-main{display:grid;gap:5px;min-width:0}
+.work-thread-card-main strong{font-size:17px;font-weight:620}
+.work-thread-card-main span{font-size:13px;color:#8a8a8f;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.work-thread-card-meta{display:flex;align-items:center;gap:10px;color:#a0a0a5;font-size:12px;flex:none}
+.work-thread-card-meta b{font-size:22px;font-weight:300}
+.work-thread-conversation{
+  height:calc(100dvh - 230px);min-height:520px;display:grid;grid-template-rows:auto 1fr auto;
+  max-width:920px;margin:0 auto;border:1px solid rgba(0,0,0,.06);border-radius:18px;overflow:hidden;background:#fff
+}
+.work-thread-head{display:flex;align-items:center;gap:14px;padding:12px 14px;border-bottom:1px solid rgba(0,0,0,.06);background:rgba(255,255,255,.98)}
+.work-thread-head>div{display:grid;gap:2px}
+.work-thread-head strong{font-size:16px;font-weight:650}
+.work-thread-head span{font-size:11px;color:#8a8a8f}
+.work-thread-log{overflow:auto;padding:18px 18px 28px;display:flex;flex-direction:column;gap:14px}
+.work-thread-empty{margin:auto;color:#9a9a9f;font-size:13px;text-align:center;max-width:320px;line-height:1.5}
+.work-thread-message{max-width:min(78%,680px);font-size:15px;line-height:1.48}
+.work-thread-message.user{align-self:flex-end;background:#f1f1f3;border-radius:18px 18px 5px 18px;padding:10px 13px}
+.work-thread-message.assistant{align-self:flex-start;padding:4px 1px}
+.work-thread-message-copy{overflow-wrap:anywhere}
+.work-thread-message details{margin-top:8px;font-size:11px;color:#8a8a8f}
+.work-thread-composer{display:flex;align-items:flex-end;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));border-top:1px solid rgba(0,0,0,.06);background:#fff}
+.work-thread-composer textarea{flex:1;resize:none;min-height:40px;max-height:140px;border:1px solid #dedee2;border-radius:18px;padding:10px 13px;font:inherit;line-height:1.35;background:#fff}
+.work-thread-composer .send{width:40px;height:40px;flex:none}
+.work-thread-composer.is-busy{opacity:.65;pointer-events:none}
+@media(max-width:620px){
+  .work-thread-conversation{height:calc(100dvh - 195px);min-height:0;border:0;border-radius:0;margin:0 -14px}
+  .work-thread-head{padding-left:12px;padding-right:12px}
+  .work-thread-log{padding:15px 14px 22px}
+  .work-thread-message{max-width:88%}
+  .work-thread-card{padding:14px 2px}
+}
