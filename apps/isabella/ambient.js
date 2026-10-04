@@ -88,7 +88,7 @@ async function render(runs){
     const s=stateOf(run),allArtifacts=run.status==='completed'?await signedArtifacts(run.artifact_ids||[]):[],artifacts=primaryArtifacts(allArtifacts);
     rows.push(`<article class="ambient-run ${esc(s.key)}">
       <div class="ambient-run-state"><span></span><div><b>${esc(run.title||'Trabajo')}</b><small>${esc(s.verb)}</small></div></div>
-      ${run.summary?`<p>${esc(String(run.summary).slice(0,260))}</p>`:''}
+      ${run.summary?`<p>${esc(cleanCapabilitySummary(run.summary).slice(0,260))}</p>`:''}
       ${run.error?`<p class="ambient-error">${esc(String(run.error).slice(0,220))}</p>`:''}
       ${artifacts.length?`<div class="ambient-artifacts">${artifacts.map(a=>a.url?`<a href="${esc(a.url)}" target="_blank" rel="noopener"><span>${esc(artifactLabel(a.kind))}</span>${esc(a.title)}</a>`:'').join('')}</div>`:''}
       ${['queued','in_progress'].includes(run.status)?`<button class="ambient-cancel" data-capability-cancel="${esc(run.id)}">Cancelar</button>`:''}
