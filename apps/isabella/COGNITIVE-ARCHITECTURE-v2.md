@@ -438,3 +438,18 @@ Build 78 añade Threads persistentes como cuarta superficie de Work junto a Desk
 Isabella puede buscar conversaciones de otros Threads de forma selectiva mediante `search_work_threads`, y `search_work` incorpora Threads relevantes al retrieval del proyecto. Esta comunicación transversal es retrieval con provenance, no agent-to-agent messaging: una conversación de otro Thread permanece `work_thread_conversation / accepted_fact=false` y solo se vuelve conocimiento estable si pasa por la capa de Conocimiento y sus mecanismos de revisión.
 
 Los Threads no crean otra identidad, memoria autobiográfica, autoridad ni permisos. Siguen usando Isabella y los especialistas invisibles existentes como capacidades internas. La historia local de un Thread se mantiene aislada de la conversación global de Isabella incluso al crear o rotar el objeto OpenAI Conversation.
+
+
+## Build 79 — Capability Runtime & Ambient Presence v0.1
+
+Build 79 separa explícitamente control plane y capability plane.
+
+MINDS continúa gobernando memoria, proyectos, provenance, permisos, Attention Economy, Personal Operating Model, Relationship Contract y autoridad. Las capabilities proporcionan ejecución. El registry v0.1 distingue `general_execution`, `image_generation`, `web_search`, `project_work` y `durable_mission`.
+
+`general_execution` es capability rental, no otro cerebro. Usa OpenAI Responses + Code Interpreter para producir deliverables materiales estructurados y admite background execution. Los runs se registran en `minds_capability_runs`; si un request termina antes que el provider, `isabella-capability-runner` puede reconciliarlo posteriormente y devolver el resultado a la conversación o Work Thread original.
+
+Los artifacts generados llevan provenance `generated_deliverable / accepted_fact=false`. Persistir el archivo que Gari pidió no lo convierte en conocimiento del proyecto ni autoriza write-through. Artifact Intake continúa siendo la frontera de promoción para artifacts de la lane externa de Missions.
+
+La conversación adopta Completion / Execution Bias: cuando una herramienta puede completar una petición accionable, Isabella debe actuar hasta obtener el resultado o dejar una ejecución real en curso. Herramientas, formatos y modelos son detalles internos; autoridad sigue siendo una frontera separada.
+
+Ambient Presence desacopla presencia de ejecución. La PWA muestra únicamente estados humanos derivados del ledger de runs. Una futura shell nativa podrá consumir el mismo contrato para una presencia always-on-top fuera del navegador.
