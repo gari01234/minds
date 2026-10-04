@@ -202,3 +202,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Build 77 — Personality & Relationship Model
 
 `BUILD-77.md` fija una policy relacional explícita y versionada para la relación Gari ↔ Isabella. No es un personality engine generalista: Isabella existe solo para Gari. Chat y rutinas proactivas comparten el mismo contrato de iniciativa, familiaridad, desacuerdo, humor, continuidad, anti-engagement y autoridad. Las hypotheses no revisadas del modelo personal quedan fuera de la generación proactiva.
+
+
+### Build 78 — Project Threads & Shared Work Context
+
+`BUILD-78.md` extiende Work con una cuarta superficie, Threads. Cada Thread pertenece a un proyecto, conserva una conversación persistente propia y comparte el Desktop, Planner y Conocimiento del proyecto sin convertir conversaciones hermanas en verdad confirmada. Isabella sigue siendo la única interlocutora y puede recuperar contexto transversal entre Threads mediante provenance explícito. Los Threads reutilizan `conversations / conversation_messages`; no introducen agentes visibles ni memoria autobiográfica paralela.
