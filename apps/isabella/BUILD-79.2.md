@@ -149,3 +149,36 @@ Producción registró:
 79.2 pasa si la misma capability `execute_artifact_task → general_execution` puede representar los cinco casos de la matriz y si edición/transformación entregan el binario fuente original al container con ownership comprobado.
 
 79.2 falla si para resolver cualquiera de esos casos aparece una nueva herramienta específica del tipo `make_excel`, `make_powerpoint`, `edit_word` o `transform_pdf`.
+
+
+## Validación final y producción
+
+El head de Build 79.2 pasó `Verify MINDS #96`:
+
+- 255 tests;
+- 255 pass;
+- 0 fail;
+- web build: success;
+- Deno type-check: success para chat, capability runtime y capability runner.
+
+Producción quedó reconciliada con la rama:
+
+- `isabella-chat` ACTIVE v63, `verify_jwt=true`;
+- `isabella-capability-runtime` ACTIVE v2, `verify_jwt=true`;
+- `isabella-capability-runner` ACTIVE v2, `verify_jwt=false` con autenticación propia por runtime secret;
+- entrypoints y shared dependencies desplegados coinciden byte por byte con esta rama.
+
+No se requieren migraciones SQL para 79.2.
+
+El primer run real de Build 79 permanece como baseline: 1 ejecución completada, 0 fallidas, con PDF + DOCX + preview. 79.2 no crea runs sintéticos de Excel/PowerPoint ni transforma documentos falsos para aparentar éxito. La suite valida que la arquitectura general puede aceptar inputs binarios reales y que todos esos casos atraviesan el mismo runtime.
+
+## Criterio de cierre
+
+Build 79.2 se considera cerrado cuando:
+
+1. la suite cubre XLSX, PPTX, edición, transformación y background;
+2. no existen herramientas específicas por formato;
+3. artifacts y Work files propios pueden entrar como `input_file`;
+4. los inputs están limitados, validados y resueltos server-side;
+5. background sigue independiente del navegador;
+6. CI y deploy de producción están reconciliados.
