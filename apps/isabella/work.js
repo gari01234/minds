@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
-let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'desktop',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
+let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'desktop',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
 const workSignedCache=new Map();
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
@@ -12,7 +12,7 @@ async function getSession(){if(!sb)return null;const {data}=await sb.auth.getSes
 async function loadProject(){const session=await getSession();if(!session)return null;const {data,error}=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('client_key',projectKey).maybeSingle();if(error)throw error;return data||null}
 function bindStatic(){
   if(bound)return;bound=true;
-  $$('[data-work-project]').forEach(b=>b.onclick=()=>{projectKey=b.dataset.workProject;localStorage.setItem('minds-work-project',projectKey);folderId=null;void render()});
+  $('[data-work-project]').forEach(b=>b.onclick=()=>{projectKey=b.dataset.workProject;localStorage.setItem('minds-work-project',projectKey);folderId=null;activeThreadId=null;void render()});
   $$('[data-work-view]').forEach(b=>b.onclick=()=>{view=b.dataset.workView;localStorage.setItem('minds-work-view',view);void render()});
   const input=$('#workFileInput');if(input)input.onchange=()=>{const fs=[...(input.files||[])];input.value='';if(fs.length)void uploadFiles(fs)};
   const body=$('#workBody');
@@ -32,7 +32,7 @@ async function render(){
     if(!session){$('#workBody').innerHTML='<div class="work-empty">Conecta la memoria de MINDS para abrir Work.</div>';return}
     project=await loadProject();paintChrome();
     if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
-    if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
+    if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
   }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
 }
 let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='';
@@ -236,5 +236,121 @@ async function saveTask(existing){
   }
   pendingTaskFiles=[];editingAttachments=[];window.ISABELLA_APP?.closeModal?.();await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
-window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work'}:null};
+
+async function loadThreads(){
+  const {data,error}=await sb.from('minds_work_threads')
+    .select('id,project_id,conversation_id,title,summary,status,capability_profile,sort_order,last_activity_at,updated_at')
+    .eq('project_id',project.id).eq('status','active')
+    .order('sort_order',{ascending:true}).order('updated_at',{ascending:false});
+  if(error)throw error;threads=data||[];
+  const ids=threads.map(x=>x.conversation_id).filter(Boolean);
+  if(ids.length){
+    const {data:msgs}=await sb.from('conversation_messages')
+      .select('conversation_id,role,content,created_at')
+      .in('conversation_id',ids).in('role',['user','assistant'])
+      .order('created_at',{ascending:false}).limit(240);
+    const latest=new Map();
+    for(const m of msgs||[])if(!latest.has(m.conversation_id))latest.set(m.conversation_id,m);
+    threads=threads.map(t=>({...t,preview:latest.get(t.conversation_id)||null}));
+  }
+}
+function threadDate(value){
+  if(!value)return '';
+  try{return new Date(value).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:new Date(value).getFullYear()!==new Date().getFullYear()?'2-digit':undefined})}catch{return''}
+}
+async function renderThreads(){
+  await loadThreads();
+  if(activeThreadId&&threads.some(x=>x.id===activeThreadId)){await renderThreadConversation(activeThreadId);return}
+  activeThreadId=null;
+  const body=$('#workBody');
+  body.innerHTML=`<div class="work-threads">
+    <div class="work-desktop-toolbar"><div><strong>Threads</strong><p class="small">Conversaciones de trabajo por tema. Comparten Desktop, Conocimiento y Planner de ${esc(project.name)} sin mezclar sus historiales.</p></div><button data-work-new-thread>＋ Thread</button></div>
+    <div class="work-thread-list">${threads.map(t=>{
+      const preview=String(t.preview?.content||t.summary||'').trim();
+      const at=t.last_activity_at||t.preview?.created_at||t.updated_at;
+      return `<button class="work-thread-card" data-work-thread="${t.id}">
+        <span class="work-thread-card-main"><strong>${esc(t.title)}</strong><span>${esc(preview?preview.slice(0,150):'Todavía sin conversación')}</span></span>
+        <span class="work-thread-card-meta">${esc(threadDate(at))}<b>›</b></span>
+      </button>`;
+    }).join('')||'<div class="work-empty work-empty-wide">Todavía no hay Threads en este proyecto.</div>'}</div>
+  </div>`;
+  $('[data-work-new-thread]')?.addEventListener('click',()=>void createThread());
+  $('[data-work-thread]').forEach(b=>b.onclick=()=>{activeThreadId=b.dataset.workThread;void renderThreads()});
+}
+async function createThread(){
+  const title=window.prompt('Nombre del Thread');if(!title?.trim())return;
+  const order=(threads.reduce((m,x)=>Math.max(m,Number(x.sort_order||0)),0)||0)+10;
+  const {data,error}=await sb.from('minds_work_threads').insert({project_id:project.id,title:title.trim(),sort_order:order,metadata:{source:'work_ui'}}).select('id').single();
+  if(error){setStatus(error.code==='23505'?'Ya existe un Thread activo con ese nombre.':'No pude crear el Thread.');return}
+  activeThreadId=data.id;setStatus('');await renderThreads();
+}
+async function ensureThreadConversation(thread){
+  if(thread.conversation_id)return thread.conversation_id;
+  const {data,error}=await sb.rpc('minds_ensure_work_thread_conversation',{p_thread_id:thread.id});
+  if(error||!data)throw error||new Error('No pude abrir la conversación.');
+  thread.conversation_id=String(data);return thread.conversation_id;
+}
+async function loadThreadMessages(thread){
+  const cid=await ensureThreadConversation(thread);
+  const {data,error}=await sb.from('conversation_messages')
+    .select('client_key,role,content,created_at,metadata')
+    .eq('conversation_id',cid).in('role',['user','assistant'])
+    .order('created_at',{ascending:true}).limit(400);
+  if(error)throw error;return data||[];
+}
+function threadMessageMarkup(m){
+  const role=m.role==='user'?'user':'assistant';
+  const sources=Array.isArray(m.metadata?.sources)?m.metadata.sources:[];
+  return `<article class="work-thread-message ${role}"><div class="work-thread-message-copy">${esc(m.content||'').replace(/\n/g,'<br>')}</div>${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+}
+async function renderThreadConversation(id){
+  const thread=threads.find(x=>x.id===id);if(!thread){activeThreadId=null;await renderThreads();return}
+  const body=$('#workBody');body.innerHTML='<div class="surface-loading">Abriendo Thread…</div>';
+  try{
+    const messages=await loadThreadMessages(thread);
+    body.innerHTML=`<section class="work-thread-conversation">
+      <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div></header>
+      <div class="work-thread-log" id="workThreadLog">${messages.map(threadMessageMarkup).join('')||'<div class="work-thread-empty">Este Thread está vacío. Empieza con la primera pregunta o tarea.</div>'}</div>
+      <form class="work-thread-composer" id="workThreadForm"><textarea id="workThreadInput" rows="1" placeholder="Preguntar en ${esc(thread.title)}…"></textarea><button class="send" aria-label="Enviar">↑</button></form>
+    </section>`;
+    $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
+    $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
+    requestAnimationFrame(()=>{const log=$('#workThreadLog');if(log)log.scrollTop=log.scrollHeight});
+  }catch(e){console.error(e);body.innerHTML='<div class="work-empty">No pude abrir este Thread.</div>'}
+}
+async function persistThreadMessage(conversationId,role,content,metadata={}){
+  const session=await getSession();if(!session)throw new Error('Sin sesión');
+  const key=(globalThis.crypto?.randomUUID?.()||String(Date.now())+'-'+Math.random().toString(36).slice(2));
+  const {error}=await sb.from('conversation_messages').insert({
+    user_id:session.user.id,conversation_id:conversationId,client_key:key,role,content:String(content||''),provisional:false,citations:[],
+    metadata:{...metadata,app:'work_thread',work_thread_id:activeThreadId,project_id:project.id}
+  });
+  if(error)throw error;
+  await sb.from('conversations').update({updated_at:new Date().toISOString()}).eq('id',conversationId);
+  return key;
+}
+async function sendThreadMessage(thread){
+  const input=$('#workThreadInput'),message=String(input?.value||'').trim();if(!message)return;
+  const form=$('#workThreadForm');if(form)form.classList.add('is-busy');if(input){input.value='';input.disabled=true}
+  try{
+    const cid=await ensureThreadConversation(thread);
+    await persistThreadMessage(cid,'user',message);
+    await renderThreadConversation(thread.id);
+    const currentInput=$('#workThreadInput');if(currentInput)currentInput.disabled=true;
+    setStatus('Isabella está revisando el contexto del proyecto…');
+    const state=window.ISABELLA_APP?.getState?.()||{};
+    const result=await window.ISABELLA_AI.ask(message,state,{workThread:{id:thread.id,project:project.name}});
+    const reply=String(result?.reply||result?.streamed_text||'').trim();
+    if(reply)await persistThreadMessage(cid,'assistant',reply,{sources:Array.isArray(result?.sources)?result.sources.slice(0,8):[],artifacts:Array.isArray(result?.artifacts)?result.artifacts.slice(0,8):[]});
+    const proposal=result?.proposal||(Array.isArray(result?.proposals)?result.proposals[0]:null);
+    await sb.from('minds_work_threads').update({last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',thread.id);
+    setStatus('');await renderThreads();
+    if(proposal)window.MINDS_PROPOSALS?.edit?.(proposal);
+  }catch(e){
+    console.error(e);setStatus('No pude completar el mensaje del Thread.');
+    await renderThreads();
+  }
+}
+
+window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
 })();
