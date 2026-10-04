@@ -1,0 +1,49 @@
+name: Validate Isabella Presence
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/isabella-presence/**"
+      - "apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.1.md"
+      - "apps/isabella/BUILD-80.md"
+      - ".github/workflows/desktop-presence.yml"
+  pull_request:
+    paths:
+      - "apps/isabella-presence/**"
+      - "apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.1.md"
+      - "apps/isabella/BUILD-80.md"
+      - ".github/workflows/desktop-presence.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Rust 1.90
+        uses: dtolnay/rust-toolchain@1.90.0
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: apps/isabella-presence/src-tauri
+
+      - name: Check native shell
+        working-directory: apps/isabella-presence/src-tauri
+        run: cargo check
+
+      - name: Build native shell
+        working-directory: apps/isabella-presence/src-tauri
+        run: cargo build --release
