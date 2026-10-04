@@ -1476,3 +1476,12 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .ambient-pill{min-height:39px}
   .ambient-orb{width:28px;height:28px}.ambient-orb i{top:12px}.ambient-orb i:first-child{left:9px}.ambient-orb i:last-child{right:9px}
 }
+
+
+/* Build 79.1 — Artifact / Execution Human Surface polish */
+.message-artifact-previews{margin-top:10px;display:grid;gap:8px}
+.generated-artifact-preview{display:block;width:100%;max-width:440px;padding:0;border:1px solid #e7e7ea;border-radius:16px;overflow:hidden;background:#f7f7f8;cursor:zoom-in}
+.generated-artifact-preview img{display:block;width:100%;height:auto;max-height:420px;object-fit:contain;background:#f6f6f7}
+.work-thread-previews{margin-top:10px}
+.work-thread-previews button{display:block;width:100%;padding:0;border:1px solid rgba(0,0,0,.07);border-radius:11px;overflow:hidden;background:#fafafa}
+.work-thread-previews img{display:block;width:100%;height:auto;max-height:360px;object-fit:contain;background:#f6f6f7}
