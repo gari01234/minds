@@ -104,6 +104,18 @@ Bernried se inicia con la estructura ya utilizada en la práctica:
 
 Los Threads están vacíos inicialmente: Build 78 no inventa ni importa conocimiento de ChatGPT.
 
+## Migraciones de producción
+
+Build 78 se aplica mediante tres migraciones canónicas:
+
+- `20261004162347_project_threads_shared_work_context_v01`
+- `20261004162420_project_threads_shared_work_context_v011_grants`
+- `20261004162800_project_threads_shared_work_context_v012_conversation_boundary`
+
+La segunda reduce los grants de `authenticated` a CRUD exacto después de detectar privilegios adicionales heredados de los default privileges de Supabase.
+
+La tercera endurece la asociación Thread ↔ conversation: un `conversation_id` solo es válido si pertenece al mismo usuario, usa `app_scope=work_thread` y declara exactamente el mismo `work_thread_id` y `project_id`.
+
 ## Fronteras
 
 Desktop sigue siendo el lugar de las fuentes.
