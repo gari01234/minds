@@ -429,3 +429,12 @@ v0.1 has manual observability. Fulfillment, failure, cancellation and rescheduli
 ## Build 77 — Personality & Relationship Model v0.1
 
 Build 77 añade una policy relacional versionada, no una nueva fuente de verdad. Isabella existe exclusivamente para Gari y optimiza beneficio fuera de la conversación, no engagement. La policy compartida gobierna voz, familiaridad, iniciativa, desacuerdo, humor, continuidad y timing en chat y rutinas proactivas, sin modificar permisos, provenance, memoria, Attention Economy, safety ni routing. El Personal Operating Model mantiene su frontera accepted/corrected-only; las hypotheses propuestas no influyen silenciosamente y el routine runner deja de cargarlas en generación proactiva. No se añade tabla, RPC, score ni migración.
+
+
+## Build 78 — Project Threads & Shared Work Context v0.1
+
+Build 78 añade Threads persistentes como cuarta superficie de Work junto a Desktop, Planner y Conocimiento. Un Thread mantiene historia local mediante el sistema existente `conversations / conversation_messages` con `app_scope=work_thread`, mientras el proyecto sigue siendo la frontera compartida de fuentes, tareas y conocimiento.
+
+Isabella puede buscar conversaciones de otros Threads de forma selectiva mediante `search_work_threads`, y `search_work` incorpora Threads relevantes al retrieval del proyecto. Esta comunicación transversal es retrieval con provenance, no agent-to-agent messaging: una conversación de otro Thread permanece `work_thread_conversation / accepted_fact=false` y solo se vuelve conocimiento estable si pasa por la capa de Conocimiento y sus mecanismos de revisión.
+
+Los Threads no crean otra identidad, memoria autobiográfica, autoridad ni permisos. Siguen usando Isabella y los especialistas invisibles existentes como capacidades internas. La historia local de un Thread se mantiene aislada de la conversación global de Isabella incluso al crear o rotar el objeto OpenAI Conversation.
