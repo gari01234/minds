@@ -1,4 +1,4 @@
-export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.1";
+export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2.1";
 export const GENERAL_EXECUTION_MODEL="gpt-6-astra";
 
 const KIND_BY_EXT:Record<string,{kind:string,mime:string}>={
@@ -77,14 +77,18 @@ async function listContainerOutputs(apiKey:string,containerId:string){
 }
 async function allOutputFiles(apiKey:string,payload:any){
   const cited=citationFiles(payload).filter(x=>KIND_BY_EXT[extOf(x.filename)]);
-  if(cited.length)return cited.slice(0,10);
-  const all:any[]=[];
+  const generated:any[]=[];
   for(const containerId of containerIds(payload).slice(0,2)){
     for(const x of await listContainerOutputs(apiKey,containerId)){
-      if(!all.some(y=>y.file_id===x.file_id))all.push(x);
+      if(!generated.some(y=>y.file_id===x.file_id))generated.push(x);
     }
   }
-  return all.slice(0,10);
+  if(generated.length){
+    const citedIds=new Set(cited.map(x=>x.file_id));
+    return generated.sort((a:any,b:any)=>Number(citedIds.has(b.file_id))-Number(citedIds.has(a.file_id))).slice(0,10);
+  }
+  // Citation fallback is retained for provider responses where the container listing is unavailable.
+  return cited.slice(0,10);
 }
 async function downloadContainerFile(apiKey:string,file:any){
   const response=await fetch(`https://api.openai.com/v1/containers/${encodeURIComponent(file.container_id)}/files/${encodeURIComponent(file.file_id)}/content`,{
@@ -126,7 +130,8 @@ async function storeOutputs(sb:any,apiKey:string,run:any,payload:any){
         metadata:{
           capability_run_id:run.id,provider:"openai_responses",provider_response_id:run.provider_response_id,
           provider_container_id:file.container_id,provider_file_id:file.file_id,
-          provenance_class:"generated_deliverable",accepted_fact:false,promotion_required_for_project_truth:true
+          provenance_class:"generated_deliverable",accepted_fact:false,promotion_required_for_project_truth:true,
+          derived_from:Array.isArray(run?.metadata?.input_files)?run.metadata.input_files:[]
         }
       }).select("id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at").single();
       if(insertError){
@@ -181,6 +186,8 @@ export function generalExecutionInstructions(){
     "For data, comparisons, calculations or tabular work, prefer XLSX or CSV as appropriate.",
     "For a presentation, create PPTX. For bundles, ZIP is allowed.",
     "Generate real structured files: tables must be real tables/cells, spreadsheets real workbooks, presentations real slides.",
+    "When input files are provided, inspect and work from those files. Edit or transform them directly when that is the user's goal; do not replace them with a generic reconstruction unless necessary.",
+    "Preserve source content, formulas, structure and formatting that the user did not ask to change whenever practical.",
     "Inspect the generated material for obvious layout/content errors before finishing.",
     "Do not access external systems, credentials, email, browser sessions, or network resources.",
     "Do not write to MINDS, project knowledge, memory or any external application.",
@@ -188,7 +195,7 @@ export function generalExecutionInstructions(){
     "Reference every final file in the final answer so the host receives container file citations."
   ].join(" ");
 }
-export async function startGeneralExecution(apiKey:string,input:{objective:string;title:string;desired_outputs:string[];context?:any;model?:string}){
+export async function startGeneralExecution(apiKey:string,input:{objective:string;title:string;desired_outputs:string[];context?:any;model?:string;input_files?:Array<{name:string;mime:string;file_data:string;source?:string;id?:string}>}){
   const model=String(input.model||GENERAL_EXECUTION_MODEL);
   const desired=(input.desired_outputs||[]).filter(x=>OUTPUT_KINDS.has(x));
   const text=[
@@ -198,6 +205,11 @@ export async function startGeneralExecution(apiKey:string,input:{objective:strin
     input.context&&Object.keys(input.context).length?`CONTEXT: ${JSON.stringify(input.context)}`:"",
     "Complete the task now. Save final deliverables in the container and reference every final file in your final answer."
   ].filter(Boolean).join("\n\n");
+  const inputFiles=(input.input_files||[]).slice(0,6).filter(x=>x?.name&&x?.mime&&x?.file_data);
+  const content:any[]=[
+    ...inputFiles.map(file=>({type:"input_file",filename:safeName(file.name),file_data:file.file_data})),
+    {type:"input_text",text}
+  ];
   const response=await fetch("https://api.openai.com/v1/responses",{
     method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},
     body:JSON.stringify({
@@ -205,7 +217,7 @@ export async function startGeneralExecution(apiKey:string,input:{objective:strin
       reasoning:{effort:"medium",summary:"auto"},max_output_tokens:3200,max_tool_calls:24,
       tools:[{type:"code_interpreter",container:{type:"auto",memory_limit:"4g"}}],
       instructions:generalExecutionInstructions(),
-      input:[{role:"user",content:[{type:"input_text",text}]}]
+      input:[{role:"user",content}]
     })
   });
   const payload=await response.json();

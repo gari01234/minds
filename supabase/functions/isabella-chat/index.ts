@@ -58,7 +58,7 @@ function likelyMaterialDeliverable(message=""){
   const t=normalizeText(message);if(!t)return false;
   const explicit=/\b(pdf|word|docx|excel|xlsx|powerpoint|pptx|presentaci[oó]n|präsentation|archivo|datei|hoja de c[aá]lculo|spreadsheet|imagen|image|gr[aá]fic[oa]|chart|zip)\b/i.test(t);
   const physical=/\b(imprim\w*|druck\w*|firm\w*|unterschrift\w*|rellen\w*|ausfüll\w*|editable|editierbar)\b/i.test(t);
-  const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|erstelle\w*|mach\w*)\b/i.test(t);
+  const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|edit\w*|modific\w*|corrig\w*|transform\w*|conviert\w*|convert\w*|actualiz\w*|erstelle\w*|bearbeit\w*|änder\w*|aender\w*|umwandel\w*|mach\w*)\b/i.test(t);
   const object=/\b(lista|listado|tabla|tabelle|teilnehmerliste|formulario|formular|documento|dokument|plantilla|vorlage|informe|bericht|minuta|acta|protokoll|presentaci[oó]n|präsentation|spreadsheet|hoja)\b/i.test(t);
   return explicit||physical||(action&&object);
 }
@@ -476,14 +476,18 @@ const calendarTools = [
   {
     type:"function",
     name:"execute_artifact_task",
-    description:"General material execution environment. Use whenever the user's real goal should end in a usable file rather than merely an explanation, even if they did not name a file extension. Examples: printable participant/signature list -> polished PDF plus editable DOCX; comparison/data table -> XLSX; presentation -> PPTX; conversions, structured forms, bundles or other file work. The environment may continue in the background if the result is not ready within this turn.",
+    description:"General material execution environment. Use whenever the user's real goal should end in a usable file rather than merely an explanation, even if they did not name a file extension. Examples: printable form -> PDF plus editable DOCX; comparison/data table -> XLSX; presentation -> PPTX; edit or transform an existing Work/artifact file -> use input_files. The same general runtime handles every format and may continue in the background if the result is not ready within this turn.",
     strict:false,
     parameters:{type:"object",properties:{
       title:{type:"string",description:"Short deliverable title."},
       objective:{type:"string",description:"Complete material objective. Describe what must be usable when finished; do not merely ask for advice."},
       desired_outputs:{type:"array",maxItems:4,items:{type:"string",enum:["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"]}},
       project:{type:"string",description:"Optional Work project name."},
-      supporting_context:{type:"string",description:"Only the minimal already-known context needed to build the deliverable. Do not dump unrelated private memory."}
+      supporting_context:{type:"string",description:"Only the minimal already-known context needed to build the deliverable. Do not dump unrelated private memory."},
+      input_files:{type:"array",maxItems:6,description:"Optional existing files to edit or transform. Resolve their IDs with search_generated_artifacts or search_work; do not invent IDs.",items:{type:"object",properties:{
+        source:{type:"string",enum:["artifact","work_file"]},
+        id:{type:"string"}
+      },required:["source","id"]}}
     },required:["title","objective"]}
   },
   {
@@ -642,6 +646,9 @@ async function executeArtifactTask(req:Request,args:any,ctx:any={}){
     let key=Deno.env.get("SUPABASE_ANON_KEY")||"";try{const keys=JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")||"{}");key=keys?.default||key}catch{}
     if(!base||!auth||!key)return {status:"unavailable"};
     const desired=[...new Set((Array.isArray(args?.desired_outputs)?args.desired_outputs:[]).map((x:any)=>String(x||"").toLowerCase()).filter((x:string)=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"].includes(x)))].slice(0,4);
+    const inputs=(Array.isArray(args?.input_files)?args.input_files:[]).slice(0,6)
+      .map((x:any)=>({source:String(x?.source||""),id:String(x?.id||"")}))
+      .filter((x:any)=>["artifact","work_file"].includes(x.source)&&/^[0-9a-f-]{36}$/i.test(x.id));
     const objective=String(args?.objective||args?.instruction||ctx?.message||"").trim();
     if(!objective)return {status:"invalid",detail:"objective_required"};
     const response=await fetch(base+"/functions/v1/isabella-capability-runtime",{
@@ -651,6 +658,7 @@ async function executeArtifactTask(req:Request,args:any,ctx:any={}){
         title:String(args?.title||"Entregable").trim().slice(0,240),
         objective,
         desired_outputs:desired,
+        input_files:inputs,
         project:String(args?.project||ctx?.project||"").trim()||null,
         project_id:ctx?.project_id||null,
         work_thread_id:ctx?.work_thread_id||null,
@@ -1466,6 +1474,31 @@ async function searchWorkThreads(req:Request,args:any){
   }catch(e){return {status:"error",detail:String(e),threads:[]}}
 }
 
+
+async function searchGeneratedArtifacts(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable",artifacts:[]};
+    const query=String(args?.query||"").trim(),terms=normalizeText(query).split(/[^a-z0-9äöüßáéíóúñ]+/).filter((x:string)=>x.length>1).slice(0,12);
+    const kinds=[...new Set((Array.isArray(args?.kinds)?args.kinds:[]).map((x:any)=>String(x||"").toLowerCase()).filter((x:string)=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json","image"].includes(x)))];
+    let q=sb.from("minds_artifacts")
+      .select("id,source_kind,kind,title,mime_type,metadata,created_at")
+      .order("created_at",{ascending:false}).limit(100);
+    if(kinds.length)q=q.in("kind",kinds);
+    const {data,error}=await q;if(error)return {status:"error",detail:error.message,artifacts:[]};
+    const rows=(data||[]).map((x:any)=>{
+      const hay=normalizeText([x.title,x.kind,x.source_kind].join(" "));
+      const score=terms.length?terms.filter((t:string)=>hay.includes(t)).length:1;
+      return {score,row:x};
+    }).filter((x:any)=>!terms.length||x.score>0)
+      .sort((a:any,b:any)=>b.score-a.score||new Date(b.row.created_at).getTime()-new Date(a.row.created_at).getTime())
+      .slice(0,16).map((x:any)=>({
+        id:x.row.id,source:"artifact",kind:x.row.kind,title:x.row.title,mime_type:x.row.mime_type,source_kind:x.row.source_kind,created_at:x.row.created_at,
+        provenance:{class:"generated_artifact",accepted_fact:false}
+      }));
+    return {status:"ok",query,artifacts:rows};
+  }catch(e){return {status:"error",detail:String(e),artifacts:[]}}
+}
+
 async function searchWork(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
@@ -1624,7 +1657,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   read_contextual_autonomy:"allow",
-  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
@@ -2095,6 +2128,7 @@ Ante una petición accionable, intenta llevarla hasta un resultado utilizable en
 Capacidad y autoridad son distintas: puedes crear material sin pedir permiso adicional, pero no envíes, publiques, promociones a verdad de proyecto ni hagas side effects externos salvo que otra herramienta/política lo autorice.
 Si execute_artifact_task devuelve queued/in_progress, di de forma breve que estás trabajando y que el resultado volverá aquí; no digas que está terminado. Si devuelve completed, entrega los archivos y no repitas su contenido entero en chat.
 Nunca escribas rutas internas sandbox:/mnt/data/... ni inventes enlaces Markdown a archivos. La UI de MINDS presenta los artifacts por separado; en el texto solo resume qué has producido y para qué sirve. Si existe una imagen auxiliar de previsualización junto a PDF/DOCX/XLSX/PPTX, trátala como preview, no como otro entregable principal.
+Para editar, corregir, convertir o transformar un archivo existente, usa search_generated_artifacts o search_work para obtener el id exacto y pásalo a execute_artifact_task.input_files. Si importa conservar fórmulas, estructura, estilos, páginas o slides, pasa el archivo binario original al runtime; no lo sustituyas por un resumen textual. Si hay varios archivos plausibles y no puedes identificar con seguridad cuál quiere Gari, pregunta cuál antes de ejecutar.
 No conviertas automáticamente estas tareas en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
 Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Ese tipo de memoria se activa por contexto, con cooldown y límite de activaciones.
@@ -2424,6 +2458,16 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     },
     {
       type:"function",
+      name:"search_generated_artifacts",
+      description:"Find files Isabella previously generated for Gari. Use when he asks to edit, transform, reuse or refer to a previously produced PDF, Word, Excel, PowerPoint or other artifact. Returns owned artifact IDs for execute_artifact_task input_files; generated artifacts are not verified project facts.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        query:{type:"string",description:"Filename/title/topic to locate. Omit for the most recent generated files."},
+        kinds:{type:"array",items:{type:"string",enum:["docx","pdf","xlsx","pptx","csv","zip","html","txt","json","image"]}}
+      }}
+    },
+    {
+      type:"function",
       name:"search_work",
       description:"Search the user's private Work-MINDS project memory, Planner tasks and stored files for Bernried or Schwarz. Use automatically when those projects or their professional context are relevant.",
       strict:false,
@@ -2501,7 +2545,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       usedTools.push(String(call.name||""));
       const mode=policyMode(String(call.name||""));
       if(sourceTainted&&["record_personal_model_claim","update_personal_model_claim","remember_relation","remember_information"].includes(call.name)){outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"review_required",reason:"Source-derived content must remain a sourced proposal; do not promote it to personal fact."})});continue;}
-      if(["search_work","search_work_threads","read_work_file","consult_sofia"].includes(call.name))sourceTainted=true;
+      if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","consult_sofia"].includes(call.name))sourceTainted=true;
       if(mode==="deny"){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
         continue;
@@ -2612,6 +2656,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_commitments"){
         const result=await searchCommitments(req,args,effectiveMessage);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="search_generated_artifacts"){
+        const result=await searchGeneratedArtifacts(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work"){
         const result=await searchWork(req,args);

@@ -1,0 +1,60 @@
+{
+  "version": "general-capability-acceptance-v0.1",
+  "invariant": "one_general_runtime_no_format_specific_handlers",
+  "cases": [
+    {
+      "id": "spreadsheet_generation",
+      "prompt": "Compara tres ofertas con partidas, precios y totales y déjame el resultado utilizable.",
+      "mode": "generate",
+      "expected_outputs": [
+        "xlsx"
+      ],
+      "input_sources": [],
+      "requires_background_survival": false
+    },
+    {
+      "id": "presentation_generation",
+      "prompt": "Prepara una presentación clara del Entwurf para una reunión con Bauherren.",
+      "mode": "generate",
+      "expected_outputs": [
+        "pptx"
+      ],
+      "input_sources": [],
+      "requires_background_survival": false
+    },
+    {
+      "id": "edit_existing_document",
+      "prompt": "Edita el documento que hiciste antes: cambia el título y conserva el resto de la estructura.",
+      "mode": "edit",
+      "expected_outputs": [
+        "docx"
+      ],
+      "input_sources": [
+        "artifact"
+      ],
+      "requires_background_survival": false
+    },
+    {
+      "id": "transform_project_file",
+      "prompt": "Toma este archivo del proyecto, reorganiza la información y devuélveme un PDF utilizable.",
+      "mode": "transform",
+      "expected_outputs": [
+        "pdf"
+      ],
+      "input_sources": [
+        "work_file"
+      ],
+      "requires_background_survival": false
+    },
+    {
+      "id": "background_survival",
+      "prompt": "Prepara el entregable completo; puedes seguir trabajando aunque cierre Isabella.",
+      "mode": "background",
+      "expected_outputs": [
+        "pdf"
+      ],
+      "input_sources": [],
+      "requires_background_survival": true
+    }
+  ]
+}
