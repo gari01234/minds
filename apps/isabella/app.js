@@ -493,7 +493,7 @@ function artifactMarkup(a,compact=false){
   const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
   if(!path)return '';
   if(kind==='image'){const cached=cachedSignedAsset('minds-artifacts',path);return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`}
-  const label=kind==='docx'?'WORD':kind==='pdf'?'PDF':kind.toUpperCase();
+  const label=({docx:'WORD',pdf:'PDF',xlsx:'EXCEL',pptx:'POWERPOINT',csv:'CSV',zip:'ZIP',html:'HTML',txt:'TXT',json:'JSON'}[kind]||kind.toUpperCase());
   return `<a class="generated-artifact generated-file ${compact?'compact':''}" data-artifact-file="${esc(path)}" href="#" target="_blank" rel="noopener"><span>${esc(label)}</span><strong>${esc(title)}</strong><em>Abrir archivo ↗</em></a>`;
 }
 async function artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}
