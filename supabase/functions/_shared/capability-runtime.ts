@@ -1,4 +1,4 @@
-export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2";
+export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2.1";
 export const GENERAL_EXECUTION_MODEL="gpt-6-astra";
 
 const KIND_BY_EXT:Record<string,{kind:string,mime:string}>={
@@ -77,14 +77,18 @@ async function listContainerOutputs(apiKey:string,containerId:string){
 }
 async function allOutputFiles(apiKey:string,payload:any){
   const cited=citationFiles(payload).filter(x=>KIND_BY_EXT[extOf(x.filename)]);
-  if(cited.length)return cited.slice(0,10);
-  const all:any[]=[];
+  const generated:any[]=[];
   for(const containerId of containerIds(payload).slice(0,2)){
     for(const x of await listContainerOutputs(apiKey,containerId)){
-      if(!all.some(y=>y.file_id===x.file_id))all.push(x);
+      if(!generated.some(y=>y.file_id===x.file_id))generated.push(x);
     }
   }
-  return all.slice(0,10);
+  if(generated.length){
+    const citedIds=new Set(cited.map(x=>x.file_id));
+    return generated.sort((a:any,b:any)=>Number(citedIds.has(b.file_id))-Number(citedIds.has(a.file_id))).slice(0,10);
+  }
+  // Citation fallback is retained for provider responses where the container listing is unavailable.
+  return cited.slice(0,10);
 }
 async function downloadContainerFile(apiKey:string,file:any){
   const response=await fetch(`https://api.openai.com/v1/containers/${encodeURIComponent(file.container_id)}/files/${encodeURIComponent(file.file_id)}/content`,{
@@ -126,7 +130,8 @@ async function storeOutputs(sb:any,apiKey:string,run:any,payload:any){
         metadata:{
           capability_run_id:run.id,provider:"openai_responses",provider_response_id:run.provider_response_id,
           provider_container_id:file.container_id,provider_file_id:file.file_id,
-          provenance_class:"generated_deliverable",accepted_fact:false,promotion_required_for_project_truth:true
+          provenance_class:"generated_deliverable",accepted_fact:false,promotion_required_for_project_truth:true,
+          derived_from:Array.isArray(run?.metadata?.input_files)?run.metadata.input_files:[]
         }
       }).select("id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at").single();
       if(insertError){
