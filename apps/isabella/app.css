@@ -1398,3 +1398,33 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .work-thread-message{max-width:88%}
   .work-thread-card{padding:14px 2px}
 }
+
+
+/* Build 78.1 — editable Thread lifecycle */
+.work-thread-toolbar-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.work-thread-row{display:flex;align-items:stretch;border-bottom:1px solid rgba(0,0,0,.07)}
+.work-thread-row .work-thread-card{flex:1;border-bottom:0;min-width:0}
+.work-thread-more,.work-thread-head-more{
+  border:0;background:transparent;color:#8a8a8f;font:inherit;font-size:17px;letter-spacing:1px;
+  padding:0 10px;min-width:42px
+}
+.work-thread-more:hover,.work-thread-head-more:hover{color:#222}
+.work-thread-head>div{flex:1;min-width:0}
+.work-thread-head-more{align-self:stretch}
+.work-thread-action-sheet{display:grid;gap:10px}
+.work-thread-action-sheet>button{width:100%;text-align:left}
+.work-thread-action-sheet p{margin:2px 0 0;line-height:1.45;color:#77777d}
+.work-thread-editor .human-inline-error:empty{display:none}
+.work-thread-archive-list{display:grid;gap:0}
+.work-thread-archive-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid rgba(0,0,0,.07)}
+.work-thread-archive-row>div:first-child{display:grid;gap:4px;min-width:0}
+.work-thread-archive-row>div:first-child strong{overflow:hidden;text-overflow:ellipsis}
+.work-thread-archive-row>div:first-child span{font-size:11px;color:#8a8a8f}
+.work-thread-archive-row>div:last-child{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}
+@media(max-width:620px){
+  .work-thread-toolbar-actions{width:100%;justify-content:flex-start}
+  .work-thread-row .work-thread-card{padding-right:4px}
+  .work-thread-more{padding:0 5px;min-width:38px}
+  .work-thread-archive-row{align-items:flex-start;flex-direction:column}
+  .work-thread-archive-row>div:last-child{justify-content:flex-start}
+}

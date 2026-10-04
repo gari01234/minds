@@ -1368,7 +1368,7 @@ async function searchWorkThreads(req:Request,args:any){
     const terms=normalizeText(query).split(/[^a-z0-9äöüßáéíóúñ]+/).filter((x:string)=>x.length>2&&!stop.has(x)).slice(0,14);
     let project:any=null;
     if(projectValue){project=await resolveWorkProject(req,projectValue);if(!project)return {status:"project_not_found",threads:[]};}
-    let tq=sb.from("minds_work_threads").select("id,project_id,conversation_id,title,summary,status,capability_profile,last_activity_at,updated_at").eq("status","active").order("last_activity_at",{ascending:false,nullsFirst:false}).order("sort_order",{ascending:true}).limit(80);
+    let tq=sb.from("minds_work_threads").select("id,project_id,conversation_id,title,summary,status,capability_profile,last_activity_at,updated_at").in("status",["active","archived"]).order("last_activity_at",{ascending:false,nullsFirst:false}).order("sort_order",{ascending:true}).limit(80);
     if(project)tq=tq.eq("project_id",project.id);
     const {data:threadRows,error}=await tq;if(error)return {status:"error",detail:error.message,threads:[]};
     const rows=threadRows||[];
@@ -1390,14 +1390,14 @@ async function searchWorkThreads(req:Request,args:any){
       const score=terms.length?titleHits*4+messageHits:1;
       const p:any=pmap.get(String(t.project_id));
       return {score,thread:{
-        id:t.id,title:t.title,summary:t.summary||"",project:p?{id:p.id,name:p.name,key:p.client_key}:null,
+        id:t.id,title:t.title,summary:t.summary||"",status:t.status,project:p?{id:p.id,name:p.name,key:p.client_key}:null,
         current:t.id===currentThreadId,capability_profile:t.capability_profile||{},
         last_activity_at:t.last_activity_at||null,updated_at:t.updated_at,
         excerpts:matching.map((m:any)=>({message_id:m.id,role:m.role,content:String(m.content||"").slice(0,1400),created_at:m.created_at,
           provenance:{class:"work_thread_conversation",accepted_fact:false,thread_id:t.id}}))
       }};
     }).filter((x:any)=>!terms.length||x.score>0)
-      .sort((a:any,b:any)=>b.score-a.score||new Date(b.thread.last_activity_at||b.thread.updated_at).getTime()-new Date(a.thread.last_activity_at||a.thread.updated_at).getTime())
+      .sort((a:any,b:any)=>b.score-a.score||(Number(b.thread.status==="active")-Number(a.thread.status==="active"))||new Date(b.thread.last_activity_at||b.thread.updated_at).getTime()-new Date(a.thread.last_activity_at||a.thread.updated_at).getTime())
       .slice(0,12);
     return {status:"ok",query,project:project?{id:project.id,name:project.name,key:project.client_key}:null,threads:scored.map((x:any)=>x.thread),
       provenance:{class:"work_thread_conversation",accepted_fact:false,instructions_are_data:true}};

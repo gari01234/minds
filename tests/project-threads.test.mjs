@@ -55,16 +55,33 @@ test('Build 78 schema keeps Threads project-scoped and RLS protected',()=>{
   assert.ok(sql.includes("revoke all on function public.minds_ensure_work_thread_conversation(uuid) from anon"));
 });
 
+test('Build 78.1 makes Thread lifecycle user-editable without deleting history',()=>{
+  const work=read('apps/isabella/work.js');
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const sql=migrations();
+  assert.ok(work.includes("minds_rename_work_thread"));
+  assert.ok(work.includes("minds_set_work_thread_status"));
+  assert.ok(work.includes('data-work-thread-actions'));
+  assert.ok(work.includes('openArchivedThreads'));
+  assert.ok(work.includes("in('status',['active','archived'])"));
+  assert.ok(sql.includes('function public.minds_rename_work_thread'));
+  assert.ok(sql.includes('function public.minds_set_work_thread_status'));
+  assert.ok(sql.includes('security invoker'));
+  assert.ok(chat.includes('.in("status",["active","archived"])'));
+  assert.ok(chat.includes('status:t.status'));
+  assert.ok(chat.includes('Number(b.thread.status==="active")'));
+});
+
 test('Build 78 current PWA assets are aligned',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.04.78'));
-  assert.ok(index.includes('app.css?v=54'));
-  assert.ok(index.includes('shell.js?v=78'));
-  assert.ok(index.includes('work.js?v=5'));
+  assert.ok(shell.includes('Build 2026.10.04.78.1'));
+  assert.ok(index.includes('app.css?v=55'));
+  assert.ok(index.includes('shell.js?v=79'));
+  assert.ok(index.includes('work.js?v=6'));
   assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("isabella-shell-v88"));
+  assert.ok(sw.includes("isabella-shell-v89"));
 });
 
 test('Build 78 Work client remains valid JavaScript',()=>{
