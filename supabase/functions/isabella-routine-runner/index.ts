@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked} from "../_shared/cognitive.ts";
+import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -87,7 +88,7 @@ Deno.serve(async(req:Request)=>{
         sb.from("isabella_memories").select("kind,content,updated_at").eq("user_id",routine.user_id).eq("status","active").order("updated_at",{ascending:false}).limit(16),
         sb.from("conversations").select("id").eq("user_id",routine.user_id).eq("app_scope","isabella").order("updated_at",{ascending:false}).limit(1),
         sb.from("isabella_preferences").select("value").eq("user_id",routine.user_id).eq("preference_key","feed").maybeSingle(),
-        sb.from("isabella_model_claims").select("claim_type,claim,status,confidence").eq("user_id",routine.user_id).in("status",["confirmed","hypothesis"]).order("confidence",{ascending:false}).limit(12),
+        sb.from("isabella_model_claims").select("claim_type,claim,status,confidence").eq("user_id",routine.user_id).eq("status","confirmed").order("confidence",{ascending:false}).limit(12),
         attentionDigest?sb.from("minds_attention_events").select("id,title,body,urgency,reason,reason_code,source_type,event_type,created_at").eq("user_id",routine.user_id).eq("route","briefing").eq("status","pending").order("created_at",{ascending:true}).limit(12):Promise.resolve({data:[],error:null})
       ]);
 
@@ -103,7 +104,14 @@ Deno.serve(async(req:Request)=>{
       }
 
       const localNow=new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
-      const system=`Eres Isabella, la asistente personal de Gari, ejecutando una rutina que él configuró explícitamente. El resultado se insertará como un mensaje proactivo en su chat personal. Mantén la misma voz cercana, natural y precisa de Isabella. No menciones cron, scheduler, backend ni que estás ejecutando una función. Tampoco expongas términos internos de MINDS como Mission, Attention Economy, briefing route, workspace, checkpoint o event_type: tradúcelos a qué ocurrió, si hace falta una decisión y qué debe hacer Gari. Distingue claramente hechos confirmados, cosas que estás comprobando e inferencias todavía inciertas. No inventes información. Usa web_search solo si la instrucción requiere información actual externa. No crees ni modifiques tareas, eventos o rutinas desde esta ejecución.`;
+      const system=`Eres Isabella, la asistente personal de Gari, ejecutando una rutina que él configuró explícitamente. El resultado se insertará como un mensaje proactivo en su chat personal.
+
+${relationshipPolicy("proactive")}
+
+REGLAS DE SUPERFICIE:
+No menciones cron, scheduler, backend ni que estás ejecutando una función. Tampoco expongas términos internos de MINDS como Mission, Attention Economy, briefing route, workspace, checkpoint o event_type: tradúcelos a qué ocurrió, si hace falta una decisión y qué debe hacer Gari. Distingue claramente hechos confirmados, cosas que estás comprobando e inferencias todavía inciertas. No inventes información. Usa web_search solo si la instrucción requiere información actual externa. No crees ni modifiques tareas, eventos o rutinas desde esta ejecución.
+
+Relationship policy: ${ISABELLA_RELATIONSHIP_POLICY_VERSION}`;
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
@@ -115,7 +123,7 @@ Tareas próximas: ${JSON.stringify(tasks||[])}
 MEMORIA RECIENTE:
 ${JSON.stringify(memories||[])}
 
-MODELO PERSONAL ACTIVO:
+MODELO PERSONAL CONFIRMADO (hypotheses no revisadas están excluidas):
 ${JSON.stringify(modelClaims||[])}
 
 PREFERENCIAS DEL FEED Y CLIMA:

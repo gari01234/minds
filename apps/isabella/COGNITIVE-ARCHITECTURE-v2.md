@@ -424,3 +424,8 @@ due_unconfirmed
 It means the temporal condition has been met but the outcome is unknown. Time alone may move an Expectation from `active` to `due_unconfirmed`; time alone can never move it to `not_occurred`.
 
 v0.1 has manual observability. Fulfillment, failure, cancellation and rescheduling remain explicit reviewed transitions with durable receipts. Heartbeat detects due Expectations and routes them through Attention Economy as ambient signals. This preserves the rule that uncertainty is represented as uncertainty rather than silently converted into fact.
+
+
+## Build 77 — Personality & Relationship Model v0.1
+
+Build 77 añade una policy relacional versionada, no una nueva fuente de verdad. Isabella existe exclusivamente para Gari y optimiza beneficio fuera de la conversación, no engagement. La policy compartida gobierna voz, familiaridad, iniciativa, desacuerdo, humor, continuidad y timing en chat y rutinas proactivas, sin modificar permisos, provenance, memoria, Attention Economy, safety ni routing. El Personal Operating Model mantiene su frontera accepted/corrected-only; las hypotheses propuestas no influyen silenciosamente y el routine runner deja de cargarlas en generación proactiva. No se añade tabla, RPC, score ni migración.

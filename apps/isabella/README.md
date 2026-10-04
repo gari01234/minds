@@ -197,3 +197,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Expectation Engine
 
 `BUILD-76.md` adds a distinct future-state primitive for events expected to happen in the world. Expectations are neither tasks nor commitments nor standing intents. A due expectation becomes `due_unconfirmed`, never automatically `not_occurred`; explicit review resolves the outcome.
+
+
+### Build 77 — Personality & Relationship Model
+
+`BUILD-77.md` fija una policy relacional explícita y versionada para la relación Gari ↔ Isabella. No es un personality engine generalista: Isabella existe solo para Gari. Chat y rutinas proactivas comparten el mismo contrato de iniciativa, familiaridad, desacuerdo, humor, continuidad, anti-engagement y autoridad. Las hypotheses no revisadas del modelo personal quedan fuera de la generación proactiva.
