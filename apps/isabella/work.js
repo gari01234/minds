@@ -240,7 +240,7 @@ async function saveTask(existing){
 async function loadThreads(){
   const {data,error}=await sb.from('minds_work_threads')
     .select('id,project_id,conversation_id,title,summary,status,capability_profile,sort_order,last_activity_at,updated_at')
-    .eq('project_id',project.id).eq('status','active')
+    .eq('project_id',project.id).in('status',['active','archived'])
     .order('sort_order',{ascending:true}).order('updated_at',{ascending:false});
   if(error)throw error;threads=data||[];
   const ids=threads.map(x=>x.conversation_id).filter(Boolean);
@@ -258,31 +258,91 @@ function threadDate(value){
   if(!value)return '';
   try{return new Date(value).toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit',year:new Date(value).getFullYear()!==new Date().getFullYear()?'2-digit':undefined})}catch{return''}
 }
+function threadError(message){
+  const el=$('#workThreadEditorError');if(el)el.textContent=message||'';
+  else if(message)setStatus(message);
+}
 async function renderThreads(){
   await loadThreads();
-  if(activeThreadId&&threads.some(x=>x.id===activeThreadId)){await renderThreadConversation(activeThreadId);return}
+  const active=threads.filter(x=>x.status==='active'),archived=threads.filter(x=>x.status==='archived');
+  if(activeThreadId&&active.some(x=>x.id===activeThreadId)){await renderThreadConversation(activeThreadId);return}
   activeThreadId=null;
   const body=$('#workBody');
   body.innerHTML=`<div class="work-threads">
-    <div class="work-desktop-toolbar"><div><strong>Threads</strong><p class="small">Conversaciones de trabajo por tema. Comparten Desktop, Conocimiento y Planner de ${esc(project.name)} sin mezclar sus historiales.</p></div><button data-work-new-thread>＋ Thread</button></div>
-    <div class="work-thread-list">${threads.map(t=>{
+    <div class="work-desktop-toolbar"><div><strong>Threads</strong><p class="small">Conversaciones de trabajo por tema. Comparten Desktop, Conocimiento y Planner de ${esc(project.name)} sin mezclar sus historiales.</p></div><div class="work-thread-toolbar-actions">${archived.length?`<button data-work-archived>Archivados · ${archived.length}</button>`:''}<button data-work-new-thread>＋ Thread</button></div></div>
+    <div class="work-thread-list">${active.map(t=>{
       const preview=String(t.preview?.content||t.summary||'').trim();
       const at=t.last_activity_at||t.preview?.created_at||t.updated_at;
-      return `<button class="work-thread-card" data-work-thread="${t.id}">
-        <span class="work-thread-card-main"><strong>${esc(t.title)}</strong><span>${esc(preview?preview.slice(0,150):'Todavía sin conversación')}</span></span>
-        <span class="work-thread-card-meta">${esc(threadDate(at))}<b>›</b></span>
-      </button>`;
-    }).join('')||'<div class="work-empty work-empty-wide">Todavía no hay Threads en este proyecto.</div>'}</div>
+      return `<div class="work-thread-row">
+        <button class="work-thread-card" data-work-thread="${t.id}">
+          <span class="work-thread-card-main"><strong>${esc(t.title)}</strong><span>${esc(preview?preview.slice(0,150):'Todavía sin conversación')}</span></span>
+          <span class="work-thread-card-meta">${esc(threadDate(at))}<b>›</b></span>
+        </button>
+        <button class="work-thread-more" data-work-thread-actions="${t.id}" aria-label="Opciones de ${esc(t.title)}">•••</button>
+      </div>`;
+    }).join('')||'<div class="work-empty work-empty-wide">Todavía no hay Threads activos en este proyecto.</div>'}</div>
   </div>`;
-  $('[data-work-new-thread]')?.addEventListener('click',()=>void createThread());
-  $('[data-work-thread]').forEach(b=>b.onclick=()=>{activeThreadId=b.dataset.workThread;void renderThreads()});
+  $('[data-work-new-thread]')?.addEventListener('click',createThread);
+  $('[data-work-archived]')?.addEventListener('click',openArchivedThreads);
+  $$('[data-work-thread]').forEach(b=>b.onclick=()=>{activeThreadId=b.dataset.workThread;void renderThreads()});
+  $$('[data-work-thread-actions]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openThreadActions(threads.find(x=>x.id===b.dataset.workThread))});
 }
-async function createThread(){
-  const title=window.prompt('Nombre del Thread');if(!title?.trim())return;
-  const order=(threads.reduce((m,x)=>Math.max(m,Number(x.sort_order||0)),0)||0)+10;
-  const {data,error}=await sb.from('minds_work_threads').insert({project_id:project.id,title:title.trim(),sort_order:order,metadata:{source:'work_ui'}}).select('id').single();
-  if(error){setStatus(error.code==='23505'?'Ya existe un Thread activo con ese nombre.':'No pude crear el Thread.');return}
-  activeThreadId=data.id;setStatus('');await renderThreads();
+function openThreadEditor(thread=null){
+  const isRename=!!thread;
+  window.ISABELLA_APP?.openModal?.(isRename?'Renombrar Thread':'Nuevo Thread',`<div class="form work-thread-editor">
+    <label>Nombre<input id="workThreadName" maxlength="160" value="${esc(thread?.title||'')}" placeholder="Nombre del Thread"></label>
+    <div id="workThreadEditorError" class="human-inline-error"></div>
+    <button id="workThreadSave" class="primary">${isRename?'Guardar nombre':'Crear Thread'}</button>
+  </div>`);
+  const input=$('#workThreadName');input?.focus();input?.select();
+  $('#workThreadSave').onclick=()=>void saveThreadName(thread);
+  input?.addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();void saveThreadName(thread)}});
+}
+async function saveThreadName(thread){
+  const title=String($('#workThreadName')?.value||'').trim();
+  if(!title){threadError('Escribe un nombre para el Thread.');return}
+  threadError('');
+  if(thread){
+    const {error}=await sb.rpc('minds_rename_work_thread',{p_thread_id:thread.id,p_title:title});
+    if(error){threadError(error.code==='23505'?'Ya existe un Thread activo con ese nombre.':'No pude cambiar el nombre del Thread.');return}
+  }else{
+    const order=(threads.reduce((m,x)=>Math.max(m,Number(x.sort_order||0)),0)||0)+10;
+    const {data,error}=await sb.from('minds_work_threads').insert({project_id:project.id,title,sort_order:order,metadata:{source:'work_ui'}}).select('id').single();
+    if(error){threadError(error.code==='23505'?'Ya existe un Thread activo con ese nombre.':'No pude crear el Thread.');return}
+    activeThreadId=data.id;
+  }
+  window.ISABELLA_APP?.closeModal?.();setStatus('');await renderThreads();
+}
+function createThread(){openThreadEditor(null)}
+function openThreadActions(thread){
+  if(!thread)return;
+  window.ISABELLA_APP?.openModal?.(thread.title,`<div class="work-thread-action-sheet">
+    <button id="workThreadRename" class="secondary">Renombrar</button>
+    <button id="workThreadArchive" class="secondary danger-text">Archivar Thread</button>
+    <p class="small">Archivar lo quita de la lista activa, pero conserva toda la conversación para poder recuperarla después.</p>
+  </div>`);
+  $('#workThreadRename').onclick=()=>openThreadEditor(thread);
+  $('#workThreadArchive').onclick=()=>confirmArchiveThread(thread);
+}
+function confirmArchiveThread(thread){
+  window.ISABELLA_APP?.openModal?.('Archivar Thread',`<div class="confirm-copy">¿Archivar “${esc(thread.title)}”? La conversación se conserva y Isabella podrá recuperarla como contexto histórico.</div><div class="confirm-actions"><button id="workThreadArchiveCancel" class="secondary">Cancelar</button><button id="workThreadArchiveConfirm" class="primary">Archivar</button></div>`);
+  $('#workThreadArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
+  $('#workThreadArchiveConfirm').onclick=()=>void setThreadStatus(thread,'archived');
+}
+async function setThreadStatus(thread,status){
+  const {error}=await sb.rpc('minds_set_work_thread_status',{p_thread_id:thread.id,p_status:status});
+  if(error){
+    setStatus(error.code==='23505'?'No puedo restaurarlo porque ya existe un Thread activo con ese nombre.':'No pude actualizar el Thread.');
+    return;
+  }
+  if(status==='archived'&&activeThreadId===thread.id)activeThreadId=null;
+  window.ISABELLA_APP?.closeModal?.();setStatus('');await renderThreads();
+}
+function openArchivedThreads(){
+  const archived=threads.filter(x=>x.status==='archived');
+  window.ISABELLA_APP?.openModal?.('Threads archivados',`<div class="work-thread-archive-list">${archived.map(t=>`<div class="work-thread-archive-row"><div><strong>${esc(t.title)}</strong><span>${esc(threadDate(t.last_activity_at||t.updated_at))}</span></div><div><button class="secondary" data-thread-archive-rename="${t.id}">Renombrar</button><button class="secondary" data-thread-restore="${t.id}">Restaurar</button></div></div>`).join('')||'<div class="small">No hay Threads archivados.</div>'}</div>`);
+  $$('[data-thread-archive-rename]').forEach(b=>b.onclick=()=>openThreadEditor(threads.find(x=>x.id===b.dataset.threadArchiveRename)));
+  $$('[data-thread-restore]').forEach(b=>b.onclick=()=>void setThreadStatus(threads.find(x=>x.id===b.dataset.threadRestore),'active'));
 }
 async function ensureThreadConversation(thread){
   if(thread.conversation_id)return thread.conversation_id;
@@ -309,11 +369,12 @@ async function renderThreadConversation(id){
   try{
     const messages=await loadThreadMessages(thread);
     body.innerHTML=`<section class="work-thread-conversation">
-      <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div></header>
+      <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div><button data-thread-actions class="work-thread-head-more" aria-label="Opciones del Thread">•••</button></header>
       <div class="work-thread-log" id="workThreadLog">${messages.map(threadMessageMarkup).join('')||'<div class="work-thread-empty">Este Thread está vacío. Empieza con la primera pregunta o tarea.</div>'}</div>
       <form class="work-thread-composer" id="workThreadForm"><textarea id="workThreadInput" rows="1" placeholder="Preguntar en ${esc(thread.title)}…"></textarea><button class="send" aria-label="Enviar">↑</button></form>
     </section>`;
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
+    $('[data-thread-actions]').onclick=()=>openThreadActions(thread);
     $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
     requestAnimationFrame(()=>{const log=$('#workThreadLog');if(log)log.scrollTop=log.scrollHeight});
   }catch(e){console.error(e);body.innerHTML='<div class="work-empty">No pude abrir este Thread.</div>'}
