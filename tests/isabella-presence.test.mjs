@@ -75,7 +75,7 @@ test('Tauri ACL is scoped to the single window and MINDS URL',()=>{
 
 test('Build 80 pins native and Supabase client dependencies',()=>{
   assert.ok(cargo.includes('tauri = { version = "=2.12.0"'));
-  assert.ok(cargo.includes('tauri-build = { version = "=2.6.3"'));
+  assert.ok(cargo.includes('tauri-build = { version = "=2.7.1"'));
   assert.ok(cargo.includes('tauri-plugin-opener = "=2.7.0"'));
   assert.ok(html.includes('@supabase/supabase-js@2.117.2'));
 });
