@@ -22,7 +22,7 @@ test('Windows installer workflow is deterministic and publishes the current exe 
   assert.ok(workflow.includes('dtolnay/rust-toolchain@1.90.0'));
   assert.ok(workflow.includes('@tauri-apps/cli@2.12.0 build --bundles nsis'));
   assert.ok(workflow.includes('actions/upload-artifact@v4'));
-  assert.ok(workflow.includes('Isabella-Presence-Windows-0.1.2'));
+  assert.ok(workflow.includes('Isabella-Presence-Windows-0.1.3'));
   assert.ok(workflow.includes('bundle/nsis/*.exe'));
   assert.ok(!workflow.includes('service_role'));
   assert.ok(!workflow.includes('SUPABASE_SERVICE_ROLE_KEY'));
