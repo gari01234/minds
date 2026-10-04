@@ -1,0 +1,17 @@
+[package]
+name = "isabella-presence"
+version = "0.1.0"
+description = "Thin native desktop presence for Isabella/MINDS"
+edition = "2021"
+rust-version = "1.90"
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.12.0", features = ["tray-icon"] }
+tauri-plugin-opener = "=2.7.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
