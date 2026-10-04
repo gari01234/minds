@@ -47,6 +47,9 @@ test('Build 78 schema keeps Threads project-scoped and RLS protected',()=>{
   assert.ok(sql.includes("work_thread'::text")||sql.includes("'work_thread'"));
   assert.ok(sql.includes('enable row level security'));
   assert.ok(sql.includes('work_threads_insert_own_project'));
+  assert.ok(sql.includes("c.app_scope = 'work_thread'"));
+  assert.ok(sql.includes("c.metadata->>'work_thread_id' = id::text"));
+  assert.ok(sql.includes("c.metadata->>'project_id' = project_id::text"));
   assert.ok(sql.includes('minds_ensure_work_thread_conversation'));
   assert.ok(sql.includes("revoke all on function public.minds_ensure_work_thread_conversation(uuid) from anon"));
 });
