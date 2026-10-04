@@ -23,6 +23,7 @@ test('Build 78 keeps one Isabella while giving each Work Thread its own conversa
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const ai=read('apps/isabella/ai.js');
   assert.ok(chat.includes('current_work_thread:currentWorkThread?'));
+  assert.ok(chat.includes('currentWorkThread?[]:(context.recent_local_conversation || [])'));
   assert.ok(chat.includes('app_scope","work_thread"'));
   assert.ok(chat.includes('PROJECT THREAD MODE:'));
   assert.ok(chat.includes('el Thread no crea otra personalidad ni otro cerebro'));
