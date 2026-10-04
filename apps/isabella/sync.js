@@ -27,8 +27,10 @@ function startRealtime(){
   stopRealtime();if(!user||!sb?.channel)return;
   realtimeChannel=sb.channel('isabella-mission-'+user.id)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversation_messages',filter:'user_id=eq.'+user.id},payload=>{
-      const row=payload?.new||{};
-      if(row.role!=='assistant'||!['mission_runtime','attention_runtime'].includes(String(row?.metadata?.source||'')))return;
+      const row=payload?.new||{},source=String(row?.metadata?.source||'');
+      const runtimeAssistant=row.role==='assistant'&&['mission_runtime','attention_runtime'].includes(source);
+      const sharedSurface=source==='presence';
+      if(!runtimeAssistant&&!sharedSurface)return;
       clearTimeout(realtimeTimer);
       realtimeTimer=setTimeout(()=>syncNow({pullOnly:true}),120);
     })
