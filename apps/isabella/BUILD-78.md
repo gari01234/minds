@@ -128,6 +128,36 @@ Threads es el lugar donde se piensa y se trabaja conversacionalmente sobre temas
 
 Isabella coordina las cuatro capas.
 
+## Validación final y producción
+
+El gate oficial `Verify MINDS #80` pasó completo sobre el código desplegado:
+
+- Node: 233 tests, 233 pass, 0 fail;
+- web build: success;
+- Deno check: success, incluyendo `isabella-chat`;
+- Deno runtime tests: success.
+
+Supabase producción quedó con:
+
+- `isabella-chat` ACTIVE v58, `verify_jwt=true`;
+- `minds_work_threads` con RLS activo y políticas separadas de SELECT, INSERT, UPDATE y DELETE;
+- grants de `authenticated` reducidos a SELECT, INSERT, UPDATE y DELETE; `anon` sin grants;
+- `minds_ensure_work_thread_conversation` como SECURITY INVOKER y EXECUTE solo para `authenticated`;
+- el constraint de `conversations.app_scope` ampliado a `work_thread`.
+
+La reconciliación de Edge Function fue exacta byte por byte entre GitHub y producción para el entrypoint, import map y las shared dependencies desplegadas.
+
+Estado inicial de datos:
+
+- Bernried: 5 Threads activos;
+- Schwarz: 0 Threads;
+- conversaciones `work_thread`: 0;
+- mensajes `work_thread`: 0.
+
+Los cinco Threads de Bernried se sembraron como contenedores vacíos: HLS & TWP, Controlling, Aufzug, Garderobe y Fragen Normen. No se importó ni generó contenido conversacional.
+
+Los Security Advisors mantienen únicamente categorías preexistentes; Build 78 no añadió findings de seguridad. Performance Advisor no reporta ninguna nueva foreign key sin índice para `minds_work_threads`; los índices recién creados pueden aparecer inicialmente como `unused_index`, lo cual es informativo hasta que exista uso real.
+
 ## No incluido en v0.1
 
 No hay autonomous agent-to-agent messaging.
