@@ -99,6 +99,54 @@ function localTemporalContext(timeZone:string){
   }
 }
 
+
+async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:string){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]};
+    const start=new Date(currentDate+"T00:00:00Z"),from=new Date(start.getTime()-24*60*60*1000).toISOString(),to=new Date(start.getTime()+8*24*60*60*1000).toISOString();
+    const [taskQ,eventQ]=await Promise.all([
+      sb.from("isabella_tasks")
+        .select("id,client_key,title,due_date,completed_at,archived_at,sort_order,reminder_time,project_id,category_id,notes,priority,start_date")
+        .is("completed_at",null).is("archived_at",null).limit(160),
+      sb.from("isabella_events")
+        .select("id,client_key,title,starts_at,ends_at,all_day,project_id,category_id,notes")
+        .gte("starts_at",from).lt("starts_at",to).order("starts_at",{ascending:true}).limit(120)
+    ]);
+    if(taskQ.error||eventQ.error)return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]};
+    const taskView=(x:any)=>({id:x.client_key||x.id,title:x.title,date:x.due_date||null,reminder_time:x.reminder_time||null,sort_order:Number(x.sort_order||0),project_id:x.project_id||null,category_id:x.category_id||null,priority:x.priority||null,start_date:x.start_date||null,notes:x.notes||""});
+    const tasks=(taskQ.data||[]).map(taskView);
+    const todayTasks=tasks.filter((x:any)=>x.date===currentDate).sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title)));
+    const overdueTasks=tasks.filter((x:any)=>x.date&&x.date<currentDate).sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||a.sort_order-b.sort_order);
+    const undatedTasks=tasks.filter((x:any)=>!x.date).sort((a:any,b:any)=>a.sort_order-b.sort_order).slice(0,30);
+    const futureTasks=tasks.filter((x:any)=>x.date&&x.date>currentDate).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order).slice(0,30);
+    const localDate=(iso:string)=>{
+      try{return new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(iso));}
+      catch{return String(iso||"").slice(0,10);}
+    };
+    const eventView=(x:any)=>({id:x.client_key||x.id,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:!!x.all_day,project_id:x.project_id||null,category_id:x.category_id||null,notes:x.notes||""});
+    const events=(eventQ.data||[]).map(eventView);
+    const todayEvents=events.filter((x:any)=>localDate(x.starts_at)===currentDate);
+    const upcoming=[
+      ...futureTasks.map((x:any)=>({kind:"task",id:x.id,date:x.date,title:x.title,reminder_time:x.reminder_time,project_id:x.project_id,category_id:x.category_id})),
+      ...events.filter((x:any)=>localDate(x.starts_at)>currentDate).map((x:any)=>({kind:"event",id:x.id,date:localDate(x.starts_at),starts_at:x.starts_at,ends_at:x.ends_at,title:x.title,all_day:x.all_day,project_id:x.project_id,category_id:x.category_id}))
+    ].sort((a:any,b:any)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,30);
+    return {status:"ok",today_tasks:todayTasks.slice(0,40),overdue_tasks:overdueTasks.slice(0,40),undated_tasks:undatedTasks,today_events:todayEvents.slice(0,30),upcoming};
+  }catch{return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]}}
+}
+
+async function persistPresenceTurn(req:Request,conversationId:string,clientKey:string,role:"user"|"assistant",content:string,metadata:any={}){
+  const sb=supabaseClient(req);if(!sb)throw new Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();if(authError||!user)throw new Error("unauthorized");
+  const text=String(content||"").trim();if(!conversationId||!clientKey||!text)throw new Error("presence_turn_invalid");
+  const row={
+    user_id:user.id,conversation_id:conversationId,client_key:clientKey,role,content:text,
+    provisional:false,citations:[],metadata:{app:"isabella",source:"presence",surface:"presence",...metadata}
+  };
+  const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key"});
+  if(error)throw error;
+  await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId).eq("user_id",user.id);
+}
+
 function mergeRecentConversations(db: any[], local: any[], currentMessage: string) {
   const combined: any[] = [];
   const seen = new Set<string>();
@@ -2002,6 +2050,9 @@ Deno.serve(async (req: Request) => {
 
   const context = body?.context || {};
   const background = !!body?.background;
+  const surface=String(body?.surface||"").trim();
+  const clientMessageId=String(body?.client_message_id||"").trim();
+  const persistPresence=surface==="presence"&&!background&&/^[A-Za-z0-9:_-]{8,140}$/.test(clientMessageId);
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
@@ -2042,10 +2093,14 @@ Deno.serve(async (req: Request) => {
   const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
   const recent = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
+  const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
 
 PRINCIPIO CENTRAL:
 Primero conversa y entiende la intención como lo haría ChatGPT. Solo usa una herramienta cuando la conversación realmente necesita consultar o modificar algo externo. No conviertas cada mensaje en una operación de agenda.
+
+AGENDA CANÓNICA:
+CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
 
 CONTINUIDAD:
 Esta conversación usa un objeto persistente de OpenAI Conversations. Los turnos previos ya forman parte de tu contexto. No vuelvas a preguntar algo que el usuario ya explicó en la conversación. Si el usuario da información en varios mensajes consecutivos, intégrala como una sola intención continua. Una corrección breve modifica únicamente el dato corregido y conserva el resto de lo ya entendido.
@@ -2215,9 +2270,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     current_weekday:temporal.weekday,
     timezone:temporal.timezone,
     client_current_date:context.current_date||null,
-    today_events:(context.today_events||[]).slice(0,12),
-    today_tasks:(context.today_tasks||[]).slice(0,16),
-    upcoming:(context.upcoming||[]).slice(0,20),
+    agenda_context_source:canonicalAgenda.status==="ok"?"server_canonical":"client_fallback",
+    today_events:(canonicalAgenda.status==="ok"?canonicalAgenda.today_events:(context.today_events||[])).slice(0,30),
+    today_tasks:(canonicalAgenda.status==="ok"?canonicalAgenda.today_tasks:(context.today_tasks||[])).slice(0,40),
+    overdue_tasks:(canonicalAgenda.status==="ok"?canonicalAgenda.overdue_tasks:[]).slice(0,40),
+    undated_tasks:(canonicalAgenda.status==="ok"?canonicalAgenda.undated_tasks:(context.undated_tasks||[])).slice(0,30),
+    upcoming:(canonicalAgenda.status==="ok"?canonicalAgenda.upcoming:(context.upcoming||[])).slice(0,30),
     taxonomy:context.taxonomy||{},
     cognitive_depth:budget.depth,
     route,
@@ -2250,6 +2308,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   if(!background){
     try{
       conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread);
+      if(persistPresence&&conversationInfo?.dbId){
+        await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId});
+      }
     }catch(e){
       await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
     }
@@ -2306,6 +2367,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
             }
           }
           if(!finalText.trim())throw new Error("empty_stream_response");
+          if(persistPresence&&streamConversation?.dbId){
+            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true});
+          }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
           await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
@@ -2704,6 +2768,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
+  if(persistPresence&&conversationInfo?.dbId){
+    await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
+      request_id:clientMessageId,
+      sources:webSources,
+      artifacts:artifactResults.map((a:any)=>({id:a.id,kind:a.kind,title:a.title}))
+    });
+  }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
   await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({

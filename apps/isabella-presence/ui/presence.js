@@ -18,7 +18,7 @@ const openUrl=tauri?.opener?.openUrl||null;
 const listen=tauri?.event?.listen||null;
 
 let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpen=false,chatBusy=false;
-let lastSnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,lastQuickReplies=[];
+let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,lastQuickReplies=[];
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
 function loadSet(key){try{return new Set(JSON.parse(localStorage.getItem(key)||'[]'))}catch{return new Set()}}
@@ -167,11 +167,29 @@ async function queryPresence(){
   if(runQ.error)throw runQ.error;if(attentionQ.error)throw attentionQ.error;
   return projectCards(runQ.data||[],attentionQ.data||[]);
 }
+async function loadConversationHistory({render=true}={}){
+  if(!sb||!user||chatBusy)return false;
+  const {data:convs,error:cErr}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope','isabella').order('updated_at',{ascending:false}).limit(1);
+  if(cErr||!convs?.[0]?.id)return false;
+  const {data:msgs,error:mErr}=await sb.from('conversation_messages')
+    .select('client_key,role,content,created_at,metadata')
+    .eq('user_id',user.id).eq('conversation_id',convs[0].id)
+    .in('role',['user','assistant']).order('created_at',{ascending:false}).limit(14);
+  if(mErr)return false;
+  const next=(msgs||[]).reverse().map(m=>({role:m.role==='assistant'?'assistant':'user',text:cleanText(m.content||''),at:m.created_at,source:m.metadata?.source||null})).filter(x=>x.text);
+  const snapshot=JSON.stringify(next.map(x=>[x.role,x.text,x.at]));
+  if(snapshot===lastHistorySnapshot)return false;
+  lastHistorySnapshot=snapshot;chatTurns=next;
+  if(render)renderConversation();
+  return true;
+}
 async function refresh({force=false}={}){
   if(!sb||!user||polling)return;polling=true;
   try{
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
+    const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
+    else if(historyChanged)renderConversation();
   }catch(e){if(String(e?.message||'').toLowerCase().includes('jwt'))await renderAuth('La sesión de MINDS necesita renovarse.')}
   finally{polling=false}
 }
@@ -182,11 +200,17 @@ async function sendChatText(raw){
   chatTurns.push({role:'user',text:message});$('#chatInput').value='';await renderPresence(lastCards,{auto:false});
   try{
     const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin';
-    const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message,context:{timezone,locale:navigator.language||'es-ES',presence_surface:true},background:false,attachments:[]}});
+    const requestId=globalThis.crypto?.randomUUID?.()||('presence-'+Date.now()+'-'+Math.random().toString(16).slice(2));
+    const {data,error}=await sb.functions.invoke('isabella-chat',{body:{
+      message,context:{timezone,locale:navigator.language||'es-ES',presence_surface:true},background:false,attachments:[],
+      surface:'presence',client_message_id:requestId
+    }});
     if(error)throw error;if(data?.error)throw new Error(data.message||data.detail||data.error);
     chatTurns.push({role:'assistant',text:cleanText(data?.reply||'Te escucho.')});
     pendingReview=!!data?.proposal||(Array.isArray(data?.proposals)&&data.proposals.length>0);
     lastQuickReplies=(Array.isArray(data?.quick_replies)?data.quick_replies:[]).slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value);
+    chatBusy=false;
+    await loadConversationHistory({render:false});
   }catch(e){chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true})}
   finally{chatBusy=false;await renderPresence(lastCards,{auto:false})}
 }
@@ -196,8 +220,9 @@ async function connect(){
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'minds-isabella-presence-auth-v01'}});
   const {data,error}=await sb.auth.getSession();if(error)return renderAuth('No pude leer la sesión de MINDS.');
   user=data.session?.user||null;
-  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void refresh({force:true});startPolling()}else void renderAuth('')});
+  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void loadConversationHistory({render:false}).then(()=>refresh({force:true}));startPolling()}else void renderAuth('')});
   if(!user)return renderAuth('');
+  await loadConversationHistory({render:false});
   await refresh({force:true});startPolling();
 }
 async function sendOtp(event){
@@ -210,10 +235,10 @@ async function verifyOtp(event){
   if(!email||!/^\d{6,10}$/.test(token)){ $('#authMessage').textContent='Introduce el código completo.';return }
   $('#authMessage').textContent='Verificando…';const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
   if(error){$('#authMessage').textContent=error.message;return}
-  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await refresh({force:true});startPolling();
+  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
 }
 async function signOut(){try{await sb?.auth.signOut()}catch{}user=null;chatTurns=[];await renderAuth('Sesión desconectada.')}
-async function expandPanel(){expanded=true;manualOpen=true;await renderPresence(lastCards,{auto:false});setTimeout(()=>$('#chatInput')?.focus(),80)}
+async function expandPanel(){expanded=true;manualOpen=true;await loadConversationHistory({render:false});await renderPresence(lastCards,{auto:false});setTimeout(()=>$('#chatInput')?.focus(),80)}
 async function collapsePanel(){expanded=false;manualOpen=true;await renderPresence(lastCards,{auto:false})}
 function bind(){
   $('#emailForm').addEventListener('submit',sendOtp);$('#otpForm').addEventListener('submit',verifyOtp);$('#chatForm').addEventListener('submit',submitChat);
