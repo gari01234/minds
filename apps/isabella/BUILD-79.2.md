@@ -153,7 +153,7 @@ Producción registró:
 
 ## Validación final y producción
 
-El head de Build 79.2 pasó `Verify MINDS #96`:
+El último gate funcional antes de este cierre documental pasó `Verify MINDS #98`:
 
 - 255 tests;
 - 255 pass;
@@ -172,7 +172,7 @@ No se requieren migraciones SQL para 79.2.
 
 El primer run real de Build 79 permanece como baseline: 1 ejecución completada, 0 fallidas, con PDF + DOCX + preview. 79.2 no crea runs sintéticos de Excel/PowerPoint ni transforma documentos falsos para aparentar éxito. La suite valida que la arquitectura general puede aceptar inputs binarios reales y que todos esos casos atraviesan el mismo runtime.
 
-## Criterio de cierre
+## Checklist de cierre
 
 Build 79.2 se considera cerrado cuando:
 
