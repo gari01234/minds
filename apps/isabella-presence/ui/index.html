@@ -10,48 +10,84 @@
 <body>
 <main id="app" class="presence-shell" data-mode="boot">
   <section id="bootView" class="view boot-view">
-    <div class="orb" aria-hidden="true"><i></i><i></i></div>
-    <div><strong>Isabella</strong><span>Conectando con MINDS…</span></div>
+    <span class="orb tiny" aria-hidden="true"><i></i><i></i></span>
+    <span class="boot-copy"><b>Isabella</b><small>Conectando…</small></span>
   </section>
 
   <section id="authView" class="view auth-view hidden">
     <header class="dragbar" data-tauri-drag-region>
       <div><span class="eyebrow">ISABELLA</span><strong>Presence</strong></div>
-      <button class="icon-button" data-hide aria-label="Ocultar">×</button>
+      <button class="window-button" data-hide aria-label="Ocultar">—</button>
     </header>
     <div class="auth-copy">
-      <div class="orb large" aria-hidden="true"><i></i><i></i></div>
+      <span class="orb large" aria-hidden="true"><i></i><i></i></span>
       <h1>Conectar con MINDS</h1>
-      <p>Usa la misma cuenta de Isabella. Esta shell no tiene credenciales privilegiadas.</p>
+      <p>La misma Isabella, memoria y permisos. Presence no tiene un backend propio.</p>
     </div>
-    <form id="emailForm" class="form">
+    <form id="emailForm" class="auth-form">
       <input id="emailInput" type="email" autocomplete="email" placeholder="tu@email.com" required>
-      <button class="primary" type="submit">Enviar código</button>
+      <button class="dark-button" type="submit">Enviar código</button>
     </form>
-    <form id="otpForm" class="form hidden">
+    <form id="otpForm" class="auth-form hidden">
       <input id="otpInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Código" required>
-      <button class="primary" type="submit">Entrar</button>
+      <button class="dark-button" type="submit">Entrar</button>
     </form>
     <p id="authMessage" class="status-text"></p>
   </section>
 
   <section id="presenceView" class="view presence-view hidden">
-    <button id="compactButton" class="compact-card" type="button" aria-expanded="false">
-      <span class="orb small" aria-hidden="true"><i></i><i></i></span>
-      <span class="compact-copy"><b id="compactState">Isabella</b><small id="compactTitle">Disponible</small></span>
-      <span class="chevron">⌄</span>
-    </button>
+    <div id="pill" class="pill">
+      <button id="pillMain" class="pill-main" type="button" aria-expanded="false">
+        <span id="pillOrb" class="orb tiny" aria-hidden="true"><i></i><i></i></span>
+        <span class="pill-copy">
+          <b id="compactState">Isabella</b>
+          <small id="compactTitle">Disponible</small>
+        </span>
+        <span id="pillCount" class="pill-count hidden"></span>
+      </button>
+      <button id="pillHide" class="pill-hide" type="button" aria-label="Ocultar">×</button>
+    </div>
 
     <section id="panel" class="panel hidden">
-      <header class="dragbar panel-head" data-tauri-drag-region>
-        <div><span class="eyebrow">ISABELLA</span><strong id="panelHeading">Ahora</strong></div>
-        <button class="icon-button" data-hide aria-label="Ocultar">×</button>
+      <header class="panel-head dragbar" data-tauri-drag-region>
+        <div class="identity">
+          <span class="orb micro" aria-hidden="true"><i></i><i></i></span>
+          <div><span class="eyebrow">ISABELLA</span><strong id="panelHeading">Aquí</strong></div>
+        </div>
+        <div class="window-actions">
+          <button id="collapseButton" class="window-button" type="button" aria-label="Colapsar">⌄</button>
+          <button class="window-button" data-hide type="button" aria-label="Ocultar">—</button>
+        </div>
       </header>
-      <div id="cards" class="cards"></div>
-      <footer class="panel-actions">
-        <button id="openMinds" class="primary" type="button">Hablar con Isabella</button>
-        <button id="refreshButton" class="secondary" type="button">Actualizar</button>
-        <button id="signOutButton" class="text-button" type="button">Desconectar</button>
+
+      <div id="panelScroll" class="panel-scroll">
+        <section id="cardsSection" class="cards-section hidden">
+          <div id="cards" class="cards"></div>
+        </section>
+
+        <section id="conversation" class="conversation">
+          <div id="conversationEmpty" class="conversation-empty">
+            <span class="orb medium" aria-hidden="true"><i></i><i></i></span>
+            <p>¿Qué necesitas?</p>
+          </div>
+          <div id="turns" class="turns"></div>
+          <div id="reviewNotice" class="review-notice hidden">
+            <span>Hay un cambio que necesita tu confirmación.</span>
+            <button id="reviewInMinds" type="button">Revisar en MINDS</button>
+          </div>
+          <div id="quickReplies" class="quick-replies"></div>
+        </section>
+      </div>
+
+      <form id="chatForm" class="composer">
+        <input id="chatInput" type="text" autocomplete="off" placeholder="Escribe a Isabella…" maxlength="4000">
+        <button id="sendButton" type="submit" aria-label="Enviar">↑</button>
+      </form>
+
+      <footer class="utility-bar">
+        <button id="openMinds" type="button">Abrir MINDS ↗</button>
+        <button id="refreshButton" type="button">Actualizar</button>
+        <button id="signOutButton" type="button">Desconectar</button>
       </footer>
     </section>
   </section>
