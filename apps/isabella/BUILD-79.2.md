@@ -40,7 +40,7 @@ El objetivo de la suite no es comprobar que una función específica sabe fabric
 
 ## Generic file-input bridge
 
-Build 79 podía producir archivos desde cero, pero todavía no podía entregar un archivo existente al container de general execution.
+Build 79 ya tenía el container general para producir archivos desde cero. La infraestructura server-side de inputs existía parcialmente, pero el bridge desde Isabella aún no pasaba las referencias de archivo al runtime. 79.2 cierra esa cadena de extremo a extremo.
 
 79.2 añade un bridge genérico con dos fuentes:
 
@@ -57,7 +57,10 @@ El runtime:
 4. lo incorpora como `input_file` a la misma petición Responses;
 5. Code Interpreter lo recibe dentro de su container;
 6. el modelo puede editarlo, reutilizarlo o transformarlo;
-7. los outputs vuelven por el mismo artifact bridge de Build 79.
+7. los outputs vuelven por el mismo artifact bridge de Build 79;
+8. cada output transformado conserva en metadata `derived_from` las referencias de los inputs que lo originaron.
+
+Los archivos de entrada con `source=user` dentro del container se excluyen de los outputs persistidos: MINDS solo conserva archivos generados por la ejecución, no reimporta silenciosamente los originales como si fueran resultados nuevos.
 
 No existe routing por extensión hacia motores distintos.
 
@@ -121,7 +124,7 @@ Producción registró:
 - PNG de preview;
 - sin formato solicitado explícitamente por Gari.
 
-79.2 no fabrica ejecuciones sintéticas de Excel o PowerPoint en producción para aparentar cobertura. La suite verifica la arquitectura y deja los siguientes tests de producto para peticiones reales.
+79.2 no fabrica ejecuciones sintéticas de Excel, PowerPoint, edición o transformación en producción para aparentar cobertura. La suite CI verifica contratos, routing, ownership, binary handoff, provenance y background durability. Los tests E2E de producto siguen correspondiendo a peticiones naturales bajo la sesión autenticada de Gari.
 
 ## Invariantes
 
@@ -133,3 +136,16 @@ Producción registró:
 - ownership obligatorio para cada input;
 - no browser, email, MCP ni side effects externos dentro de general execution;
 - background execution no depende de que la PWA siga abierta.
+
+
+## Runtime version
+
+- General execution runtime: `capability-runtime-v0.2.1`.
+- PWA marker: `Build 2026.10.04.79.2`.
+- Service Worker source: `isabella-shell-v92`.
+
+## Criterio de cierre
+
+79.2 pasa si la misma capability `execute_artifact_task → general_execution` puede representar los cinco casos de la matriz y si edición/transformación entregan el binario fuente original al container con ownership comprobado.
+
+79.2 falla si para resolver cualquiera de esos casos aparece una nueva herramienta específica del tipo `make_excel`, `make_powerpoint`, `edit_word` o `transform_pdf`.
