@@ -15,6 +15,62 @@ const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 function uuid(v:any){const s=String(v||"").trim();return /^[0-9a-f-]{36}$/i.test(s)?s:null}
 function outputs(v:any){return [...new Set((Array.isArray(v)?v:[]).map(x=>String(x||"").toLowerCase()).filter(x=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"].includes(x)))].slice(0,4)}
 
+const INPUT_EXTENSIONS=new Set(["doc","docx","pdf","xls","xlsx","ppt","pptx","csv","zip","html","htm","txt","json","md","png","jpg","jpeg","webp"]);
+const MAX_INPUT_FILE_BYTES=12*1024*1024;
+const MAX_INPUT_TOTAL_BYTES=24*1024*1024;
+function safeFilename(v:any){
+  const raw=String(v||"input").split("/").pop()||"input";
+  return raw.replace(/[^a-zA-Z0-9._() -]+/g,"-").replace(/^[-. ]+|[-. ]+$/g,"").slice(0,180)||"input";
+}
+function extension(v:any){const m=String(v||"").toLowerCase().match(/\.([a-z0-9]+)$/);return m?.[1]||""}
+function inputRefs(v:any){
+  const seen=new Set<string>(),out:any[]=[];
+  for(const raw of (Array.isArray(v)?v:[]).slice(0,8)){
+    const source=String(raw?.source||"").trim(),id=uuid(raw?.id);
+    if(!id||!["artifact","work_file"].includes(source))continue;
+    const key=source+":"+id;if(seen.has(key))continue;seen.add(key);
+    out.push({source,id});
+    if(out.length>=6)break;
+  }
+  return out;
+}
+function bytesToBase64(bytes:Uint8Array){
+  let out="";for(let i=0;i<bytes.length;i+=0x8000)out+=String.fromCharCode(...bytes.subarray(i,Math.min(i+0x8000,bytes.length)));
+  return btoa(out);
+}
+async function resolveInputFiles(sb:any,userId:string,refs:any[]){
+  const resolved:any[]=[];let total=0;
+  for(const ref of refs){
+    let row:any=null,bucket="",name="",mime="";
+    if(ref.source==="artifact"){
+      const {data}=await sb.from("minds_artifacts")
+        .select("id,user_id,title,mime_type,storage_path")
+        .eq("id",ref.id).eq("user_id",userId).maybeSingle();
+      if(!data)throw new Error("input_artifact_not_found");
+      row=data;bucket="minds-artifacts";name=safeFilename(data.title||"artifact");mime=String(data.mime_type||"application/octet-stream");
+    }else{
+      const {data}=await sb.from("minds_work_files")
+        .select("id,user_id,project_id,name,mime_type,size_bytes,storage_path")
+        .eq("id",ref.id).eq("user_id",userId).maybeSingle();
+      if(!data)throw new Error("input_work_file_not_found");
+      row=data;bucket="minds-work";name=safeFilename(data.name||"work-file");mime=String(data.mime_type||"application/octet-stream");
+      if(Number(data.size_bytes||0)>MAX_INPUT_FILE_BYTES)throw new Error("input_file_too_large");
+    }
+    const ext=extension(name);
+    if(!INPUT_EXTENSIONS.has(ext))throw new Error("input_file_type_not_supported:"+ext);
+    const {data:blob,error}=await sb.storage.from(bucket).download(row.storage_path);
+    if(error||!blob)throw new Error("input_file_download_failed");
+    const bytes=new Uint8Array(await blob.arrayBuffer());
+    if(!bytes.length||bytes.length>MAX_INPUT_FILE_BYTES)throw new Error("input_file_size_invalid");
+    total+=bytes.length;if(total>MAX_INPUT_TOTAL_BYTES)throw new Error("input_files_total_too_large");
+    resolved.push({
+      source:ref.source,id:ref.id,name,mime,size:bytes.length,
+      file_data:`data:${mime};base64,${bytesToBase64(bytes)}`
+    });
+  }
+  return resolved;
+}
+
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -57,17 +113,20 @@ Deno.serve(async(req:Request)=>{
       }
 
       const desired=outputs(body?.desired_outputs),model=String(body?.model||GENERAL_EXECUTION_MODEL);
+      const requestedInputs=inputRefs(body?.input_files);
+      const resolvedInputs=await resolveInputFiles(sb,user.id,requestedInputs);
+      const inputMetadata=resolvedInputs.map(({source,id,name,mime,size})=>({source,id,name,mime,size}));
       const originKind=workThreadId?"work_thread":"chat";
       const {data:run,error:insertError}=await sb.from("minds_capability_runs").insert({
         user_id:user.id,capability:"general_execution",origin_kind:originKind,conversation_id:conversationId,
         project_id:projectId,work_thread_id:workThreadId,title,request:objective,status:"queued",provider:"openai_responses",
-        metadata:{runtime_version:CAPABILITY_RUNTIME_VERSION,model,desired_outputs:desired,delivery:"chat_or_runner"}
+        metadata:{runtime_version:CAPABILITY_RUNTIME_VERSION,model,desired_outputs:desired,input_files:inputMetadata,delivery:"chat_or_runner"}
       }).select("*").single();
       if(insertError||!run)throw insertError||new Error("capability_run_create_failed");
 
       let provider:any;
       try{
-        provider=await startGeneralExecution(apiKey,{objective,title,desired_outputs:desired,context:body?.context||{},model});
+        provider=await startGeneralExecution(apiKey,{objective,title,desired_outputs:desired,context:body?.context||{},model,input_files:resolvedInputs});
       }catch(e){
         const detail=e instanceof Error?e.message:String(e);
         await sb.from("minds_capability_runs").update({status:"failed",error:detail.slice(0,4000),completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",run.id);
