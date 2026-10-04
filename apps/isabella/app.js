@@ -194,6 +194,24 @@ function formatMessageText(text){
   html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
   return html;
 }
+function cleanGeneratedDeliverableText(text,artifacts=[]){
+  let out=String(text||'');
+  if(!Array.isArray(artifacts)||!artifacts.length)return out;
+  out=out.replace(/^\s*[-*]\s*\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)\s*$/gmi,'');
+  out=out.replace(/\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)/gi,'');
+  out=out.replace(/\(?sandbox:\/mnt\/data\/[^\s)]+\)?/gi,'');
+  out=out.replace(/^\s*[-*]\s*$/gm,'');
+  out=out.replace(/\n{3,}/g,'\n\n').trim();
+  return out;
+}
+function artifactSurfaceGroups(artifacts=[]){
+  const items=(Array.isArray(artifacts)?artifacts:[]).filter(x=>x?.storage_path);
+  const hasMaterial=items.some(x=>String(x?.kind||'')!=='image');
+  return {
+    previews:hasMaterial?items.filter(x=>String(x?.kind||'')==='image'):[],
+    deliverables:hasMaterial?items.filter(x=>String(x?.kind||'')!=='image'):items
+  };
+}
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
 function init(){
@@ -488,6 +506,11 @@ async function openIdeaWorkspace(id,{kickoff=false}={}){
 }
 function closeIdeaWorkspace(){
   $('#ideaWorkspace').classList.add('hidden');$('#ideaWorkspace').setAttribute('aria-hidden','true');document.body.classList.remove('idea-workspace-open');activeIdeaWorkspace=null;
+}
+function artifactPreviewMarkup(a,compact=false){
+  const title=String(a?.title||'Vista previa'),path=String(a?.storage_path||'');if(!path)return '';
+  const cached=cachedSignedAsset('minds-artifacts',path);
+  return `<button class="generated-artifact-preview ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button" aria-label="Abrir vista previa"><img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-artifact-image="${esc(path)}" alt="Vista previa del documento"></button>`;
 }
 function artifactMarkup(a,compact=false){
   const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
@@ -903,7 +926,11 @@ function renderMessages(forceBottom=false){
   const snapshot=captureAssistantScroll();
   box.innerHTML=state.messages.map(m=>{
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}<span class="message-text">${formatMessageText(m.text)}</span>${Array.isArray(m.artifacts)&&m.artifacts.length?`<div class="message-artifacts">${m.artifacts.map(a=>artifactMarkup(a,true)).join('')}</div>`:''}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    const artifactSurface=artifactSurfaceGroups(m.artifacts);
+    const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
+    const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
+    const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
