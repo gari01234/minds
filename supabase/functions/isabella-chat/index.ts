@@ -663,7 +663,6 @@ async function executeArtifactTask(req:Request,args:any,ctx:any={}){
         project_id:ctx?.project_id||null,
         work_thread_id:ctx?.work_thread_id||null,
         conversation_id:ctx?.conversation_id||null,
-        input_files:(Array.isArray(args?.input_files)?args.input_files:[]).slice(0,6).map((x:any)=>({source:String(x?.source||""),id:String(x?.id||"")})),
         context:{
           project:ctx?.project||null,
           work_thread:ctx?.work_thread_title||null,
