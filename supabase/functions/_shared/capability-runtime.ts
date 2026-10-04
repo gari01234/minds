@@ -203,7 +203,7 @@ export async function startGeneralExecution(apiKey:string,input:{objective:strin
     body:JSON.stringify({
       model,background:true,store:true,
       reasoning:{effort:"medium",summary:"auto"},max_output_tokens:3200,max_tool_calls:24,
-      tools:[{type:"code_interpreter",container:{type:"auto",memory_limit:"4g",network_policy:{type:"disabled"}}}],
+      tools:[{type:"code_interpreter",container:{type:"auto",memory_limit:"4g"}}],
       instructions:generalExecutionInstructions(),
       input:[{role:"user",content:[{type:"input_text",text}]}]
     })
