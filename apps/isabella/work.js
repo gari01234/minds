@@ -359,19 +359,40 @@ async function loadThreadMessages(thread){
   if(error)throw error;return data||[];
 }
 function threadArtifactLabel(kind){return ({docx:'WORD',pdf:'PDF',xlsx:'EXCEL',pptx:'POWERPOINT',csv:'CSV',zip:'ZIP',html:'HTML',txt:'TXT',json:'JSON',image:'IMAGEN'}[String(kind||'')]||String(kind||'ARCHIVO').toUpperCase())}
+function cleanThreadDeliverableText(text,artifacts=[]){
+  let out=String(text||'');
+  if(!Array.isArray(artifacts)||!artifacts.length)return out;
+  out=out.replace(/^\s*[-*]\s*\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)\s*$/gmi,'');
+  out=out.replace(/\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)/gi,'');
+  out=out.replace(/\(?sandbox:\/mnt\/data\/[^\s)]+\)?/gi,'');
+  out=out.replace(/^\s*[-*]\s*$/gm,'');
+  return out.replace(/\n{3,}/g,'\n\n').trim();
+}
+function threadArtifactGroups(artifacts=[]){
+  const items=(Array.isArray(artifacts)?artifacts:[]).filter(x=>x?.storage_path);
+  const hasMaterial=items.some(x=>String(x?.kind||'')!=='image');
+  return {previews:hasMaterial?items.filter(x=>String(x?.kind||'')==='image'):[],deliverables:hasMaterial?items.filter(x=>String(x?.kind||'')!=='image'):items};
+}
 function threadMessageMarkup(m){
   const role=m.role==='user'?'user':'assistant';
   const sources=Array.isArray(m.metadata?.sources)?m.metadata.sources:[];
   const artifacts=Array.isArray(m.metadata?.artifacts)?m.metadata.artifacts:[];
-  return `<article class="work-thread-message ${role}"><div class="work-thread-message-copy">${esc(m.content||'').replace(/\n/g,'<br>')}</div>${artifacts.length?`<div class="work-thread-artifacts">${artifacts.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:''}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+  const groups=threadArtifactGroups(artifacts),copy=cleanThreadDeliverableText(m.content,artifacts);
+  const previews=groups.previews.length?`<div class="work-thread-previews">${groups.previews.slice(0,2).map(a=>`<button type="button" data-thread-artifact-preview="${esc(a.storage_path)}" aria-label="Abrir vista previa"><img data-thread-artifact-image="${esc(a.storage_path)}" alt="Vista previa del documento"></button>`).join('')}</div>`:'';
+  const deliverables=groups.deliverables.length?`<div class="work-thread-artifacts">${groups.deliverables.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:'';
+  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
 }
 async function hydrateThreadArtifacts(root=document){
-  const nodes=[...root.querySelectorAll?.('[data-thread-artifact]')||[]];
-  await Promise.all(nodes.map(async node=>{
+  const files=[...root.querySelectorAll?.('[data-thread-artifact]')||[]],images=[...root.querySelectorAll?.('[data-thread-artifact-image]')||[]];
+  await Promise.all([...files,...images].map(async node=>{
     try{
-      const path=String(node.dataset.threadArtifact||'');if(!path)return;
-      const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,3600);
-      if(data?.signedUrl){node.href=data.signedUrl;node.target='_blank';node.rel='noopener'}
+      const path=String(node.dataset.threadArtifact||node.dataset.threadArtifactImage||'');if(!path)return;
+      const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,3600);if(!data?.signedUrl)return;
+      if(node.matches('img')){
+        node.src=data.signedUrl;
+        const button=node.closest('[data-thread-artifact-preview]');
+        if(button)button.onclick=()=>window.open(data.signedUrl,'_blank','noopener');
+      }else{node.href=data.signedUrl;node.target='_blank';node.rel='noopener'}
     }catch{}
   }));
 }
