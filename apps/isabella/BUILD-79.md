@@ -200,6 +200,43 @@ Build 79 falla si Isabella responde únicamente con una tabla Markdown.
 
 Build 79 pasa si infiere el uso físico y produce un entregable utilizable, preferentemente PDF imprimible + DOCX editable, sin exigir que Gari nombre esos formatos.
 
+## Validación final y producción
+
+El gate oficial `Verify MINDS #88` pasó completo sobre el head desplegado:
+
+- Node: 246 tests, 246 pass, 0 fail;
+- web build: success;
+- Deno check: success, incluyendo capability registry/runtime, chat y capability runner;
+- Deno runtime tests: success.
+
+Supabase producción quedó reconciliada exactamente con la rama:
+
+- `isabella-chat` ACTIVE v60, `verify_jwt=true`;
+- `isabella-capability-runtime` ACTIVE v1, `verify_jwt=true`;
+- `isabella-capability-runner` ACTIVE v1, `verify_jwt=false` y autenticación propia por runtime secret;
+- los entrypoints y shared dependencies desplegados coinciden byte por byte con GitHub.
+
+Migraciones productivas:
+
+- `20261004191245_capability_runtime_v01`;
+- `20261004192643_capability_runtime_v011_runner_schedule`.
+
+El cron `minds-capability-runner` corre cada minuto. Los últimos ciclos observados fueron aceptados por pg_cron y el endpoint del runner respondió HTTP 200 con `checked:0` antes de existir trabajos reales pendientes.
+
+Estado inicial de producción al cierre técnico:
+
+- capability runs: 0;
+- active runs: 0;
+- completed runs: 0;
+- failed runs: 0;
+- capability artifacts: 0.
+
+Por tanto Build 79 no sembró ejecuciones sintéticas, artefactos ni mensajes falsos para aparentar un acceptance test.
+
+El acceptance test real de Teilnehmerliste queda deliberadamente reservado para una petición natural de Gari desde Isabella. La infraestructura necesaria está activa; no se declara un resultado material que no haya sido generado realmente por el runtime bajo una sesión de usuario.
+
+Security Advisor no añadió findings atribuibles a `minds_capability_runs`. Performance Advisor muestra inicialmente los índices nuevos como `unused_index`, lo cual es informativo mientras todavía no existen capability runs.
+
 ## Invariantes
 
 - Isabella sigue siendo la única interlocutora.
