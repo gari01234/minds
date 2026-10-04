@@ -115,14 +115,32 @@ test('Build 79 PWA assets are aligned',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.04.79'));
-  assert.ok(index.includes('app.css?v=56'));
-  assert.ok(index.includes('shell.js?v=80'));
-  assert.ok(index.includes('app.js?v=85'));
-  assert.ok(index.includes('work.js?v=7'));
-  assert.ok(index.includes('ambient.js?v=1'));
-  assert.ok(sw.includes("isabella-shell-v90"));
-  assert.ok(sw.includes("'./ambient.js?v=1'"));
+  assert.ok(shell.includes('Build 2026.10.04.79.1'));
+  assert.ok(index.includes('app.css?v=57'));
+  assert.ok(index.includes('shell.js?v=81'));
+  assert.ok(index.includes('app.js?v=86'));
+  assert.ok(index.includes('work.js?v=8'));
+  assert.ok(index.includes('ambient.js?v=2'));
+  assert.ok(sw.includes("isabella-shell-v91"));
+  assert.ok(sw.includes("'./ambient.js?v=2'"));
+});
+
+test('Build 79.1 hides execution plumbing and treats generated PNGs as previews',()=>{
+  const app=read('apps/isabella/app.js');
+  const work=read('apps/isabella/work.js');
+  const ambient=read('apps/isabella/ambient.js');
+  const chat=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(app.includes('cleanGeneratedDeliverableText'));
+  assert.ok(app.includes('artifactSurfaceGroups'));
+  assert.ok(app.includes('generated-artifact-preview'));
+  assert.ok(work.includes('cleanThreadDeliverableText'));
+  assert.ok(work.includes('threadArtifactGroups'));
+  assert.ok(work.includes('work-thread-previews'));
+  assert.ok(ambient.includes('cleanCapabilitySummary'));
+  assert.ok(ambient.includes('primaryArtifacts'));
+  assert.ok(chat.includes('Nunca escribas rutas internas'));
+  assert.ok(chat.includes('sandbox:/mnt/data/...'));
+  assert.ok(chat.includes('trátala como preview'));
 });
 
 test('Build 79 browser clients remain valid JavaScript',()=>{
