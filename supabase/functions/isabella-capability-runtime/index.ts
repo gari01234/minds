@@ -16,6 +16,13 @@ function uuid(v:any){const s=String(v||"").trim();return /^[0-9a-f-]{36}$/i.test
 function outputs(v:any){return [...new Set((Array.isArray(v)?v:[]).map(x=>String(x||"").toLowerCase()).filter(x=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"].includes(x)))].slice(0,4)}
 
 const INPUT_EXTENSIONS=new Set(["doc","docx","pdf","xls","xlsx","ppt","pptx","csv","zip","html","htm","txt","json","md","png","jpg","jpeg","webp"]);
+const INPUT_MIME_BY_EXT:Record<string,string>={
+  doc:"application/msword",docx:"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  pdf:"application/pdf",xls:"application/vnd.ms-excel",xlsx:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ppt:"application/vnd.ms-powerpoint",pptx:"application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  csv:"text/csv",zip:"application/zip",html:"text/html",htm:"text/html",txt:"text/plain",json:"application/json",md:"text/markdown",
+  png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",webp:"image/webp"
+};
 const MAX_INPUT_FILE_BYTES=12*1024*1024;
 const MAX_INPUT_TOTAL_BYTES=24*1024*1024;
 function safeFilename(v:any){
@@ -58,6 +65,7 @@ async function resolveInputFiles(sb:any,userId:string,refs:any[]){
     }
     const ext=extension(name);
     if(!INPUT_EXTENSIONS.has(ext))throw new Error("input_file_type_not_supported:"+ext);
+    if(!mime||mime==="application/octet-stream")mime=INPUT_MIME_BY_EXT[ext]||"application/octet-stream";
     const {data:blob,error}=await sb.storage.from(bucket).download(row.storage_path);
     if(error||!blob)throw new Error("input_file_download_failed");
     const bytes=new Uint8Array(await blob.arrayBuffer());
