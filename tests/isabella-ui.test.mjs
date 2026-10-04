@@ -1183,7 +1183,7 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message))return false'));
+  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message))return false'));
   assert.ok(chat.includes('if(String(route?.complexity||"light")!=="light")return false'));
   assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
