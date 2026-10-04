@@ -58,7 +58,7 @@ function likelyMaterialDeliverable(message=""){
   const t=normalizeText(message);if(!t)return false;
   const explicit=/\b(pdf|word|docx|excel|xlsx|powerpoint|pptx|presentaci[oó]n|präsentation|archivo|datei|hoja de c[aá]lculo|spreadsheet|imagen|image|gr[aá]fic[oa]|chart|zip)\b/i.test(t);
   const physical=/\b(imprim\w*|druck\w*|firm\w*|unterschrift\w*|rellen\w*|ausfüll\w*|editable|editierbar)\b/i.test(t);
-  const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|erstelle\w*|mach\w*)\b/i.test(t);
+  const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|edit\w*|modific\w*|corrig\w*|transform\w*|conviert\w*|convert\w*|actualiz\w*|erstelle\w*|bearbeit\w*|änder\w*|aender\w*|umwandel\w*|mach\w*)\b/i.test(t);
   const object=/\b(lista|listado|tabla|tabelle|teilnehmerliste|formulario|formular|documento|dokument|plantilla|vorlage|informe|bericht|minuta|acta|protokoll|presentaci[oó]n|präsentation|spreadsheet|hoja)\b/i.test(t);
   return explicit||physical||(action&&object);
 }
@@ -646,6 +646,9 @@ async function executeArtifactTask(req:Request,args:any,ctx:any={}){
     let key=Deno.env.get("SUPABASE_ANON_KEY")||"";try{const keys=JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")||"{}");key=keys?.default||key}catch{}
     if(!base||!auth||!key)return {status:"unavailable"};
     const desired=[...new Set((Array.isArray(args?.desired_outputs)?args.desired_outputs:[]).map((x:any)=>String(x||"").toLowerCase()).filter((x:string)=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"].includes(x)))].slice(0,4);
+    const inputs=(Array.isArray(args?.input_files)?args.input_files:[]).slice(0,6)
+      .map((x:any)=>({source:String(x?.source||""),id:String(x?.id||"")}))
+      .filter((x:any)=>["artifact","work_file"].includes(x.source)&&/^[0-9a-f-]{36}$/i.test(x.id));
     const objective=String(args?.objective||args?.instruction||ctx?.message||"").trim();
     if(!objective)return {status:"invalid",detail:"objective_required"};
     const response=await fetch(base+"/functions/v1/isabella-capability-runtime",{
@@ -655,6 +658,7 @@ async function executeArtifactTask(req:Request,args:any,ctx:any={}){
         title:String(args?.title||"Entregable").trim().slice(0,240),
         objective,
         desired_outputs:desired,
+        input_files:inputs,
         project:String(args?.project||ctx?.project||"").trim()||null,
         project_id:ctx?.project_id||null,
         work_thread_id:ctx?.work_thread_id||null,
@@ -2125,6 +2129,7 @@ Ante una petición accionable, intenta llevarla hasta un resultado utilizable en
 Capacidad y autoridad son distintas: puedes crear material sin pedir permiso adicional, pero no envíes, publiques, promociones a verdad de proyecto ni hagas side effects externos salvo que otra herramienta/política lo autorice.
 Si execute_artifact_task devuelve queued/in_progress, di de forma breve que estás trabajando y que el resultado volverá aquí; no digas que está terminado. Si devuelve completed, entrega los archivos y no repitas su contenido entero en chat.
 Nunca escribas rutas internas sandbox:/mnt/data/... ni inventes enlaces Markdown a archivos. La UI de MINDS presenta los artifacts por separado; en el texto solo resume qué has producido y para qué sirve. Si existe una imagen auxiliar de previsualización junto a PDF/DOCX/XLSX/PPTX, trátala como preview, no como otro entregable principal.
+Para editar, corregir, convertir o transformar un archivo existente, usa search_generated_artifacts o search_work para obtener el id exacto y pásalo a execute_artifact_task.input_files. Si importa conservar fórmulas, estructura, estilos, páginas o slides, pasa el archivo binario original al runtime; no lo sustituyas por un resumen textual. Si hay varios archivos plausibles y no puedes identificar con seguridad cuál quiere Gari, pregunta cuál antes de ejecutar.
 No conviertas automáticamente estas tareas en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
 Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Ese tipo de memoria se activa por contexto, con cooldown y límite de activaciones.
