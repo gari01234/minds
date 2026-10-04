@@ -50,3 +50,12 @@ entrypoint = "./functions/isabella-runtime-mcp/index.ts"
 [functions.isabella-operating-model]
 verify_jwt = true
 entrypoint = "./functions/isabella-operating-model/index.ts"
+
+
+[functions.isabella-capability-runtime]
+verify_jwt = true
+entrypoint = "./functions/isabella-capability-runtime/index.ts"
+
+[functions.isabella-capability-runner]
+verify_jwt = false
+entrypoint = "./functions/isabella-capability-runner/index.ts"
