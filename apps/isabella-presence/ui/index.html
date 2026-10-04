@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>Isabella Presence</title>
+<link rel="stylesheet" href="./presence.css">
+</head>
+<body>
+<main id="app" class="presence-shell" data-mode="boot">
+  <section id="bootView" class="view boot-view">
+    <div class="orb" aria-hidden="true"><i></i><i></i></div>
+    <div><strong>Isabella</strong><span>Conectando con MINDS…</span></div>
+  </section>
+
+  <section id="authView" class="view auth-view hidden">
+    <header class="dragbar" data-tauri-drag-region>
+      <div><span class="eyebrow">ISABELLA</span><strong>Presence</strong></div>
+      <button class="icon-button" data-hide aria-label="Ocultar">×</button>
+    </header>
+    <div class="auth-copy">
+      <div class="orb large" aria-hidden="true"><i></i><i></i></div>
+      <h1>Conectar con MINDS</h1>
+      <p>Usa la misma cuenta de Isabella. Esta shell no tiene credenciales privilegiadas.</p>
+    </div>
+    <form id="emailForm" class="form">
+      <input id="emailInput" type="email" autocomplete="email" placeholder="tu@email.com" required>
+      <button class="primary" type="submit">Enviar código</button>
+    </form>
+    <form id="otpForm" class="form hidden">
+      <input id="otpInput" type="text" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Código" required>
+      <button class="primary" type="submit">Entrar</button>
+    </form>
+    <p id="authMessage" class="status-text"></p>
+  </section>
+
+  <section id="presenceView" class="view presence-view hidden">
+    <button id="compactButton" class="compact-card" type="button" aria-expanded="false">
+      <span class="orb small" aria-hidden="true"><i></i><i></i></span>
+      <span class="compact-copy"><b id="compactState">Isabella</b><small id="compactTitle">Disponible</small></span>
+      <span class="chevron">⌄</span>
+    </button>
+
+    <section id="panel" class="panel hidden">
+      <header class="dragbar panel-head" data-tauri-drag-region>
+        <div><span class="eyebrow">ISABELLA</span><strong id="panelHeading">Ahora</strong></div>
+        <button class="icon-button" data-hide aria-label="Ocultar">×</button>
+      </header>
+      <div id="cards" class="cards"></div>
+      <footer class="panel-actions">
+        <button id="openMinds" class="primary" type="button">Hablar con Isabella</button>
+        <button id="refreshButton" class="secondary" type="button">Actualizar</button>
+        <button id="signOutButton" class="text-button" type="button">Desconectar</button>
+      </footer>
+    </section>
+  </section>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2"></script>
+<script src="./presence.js"></script>
+</body>
+</html>

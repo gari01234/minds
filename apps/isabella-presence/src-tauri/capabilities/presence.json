@@ -1,0 +1,22 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "presence",
+  "description": "Minimal OS surface for Isabella. No business logic or privileged credentials.",
+  "windows": ["presence"],
+  "permissions": [
+    "core:event:default",
+    "core:window:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-set-size",
+    "core:window:allow-start-dragging",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [
+        { "url": "https://gari01234.github.io/minds/isabella/" },
+        { "url": "https://gari01234.github.io/minds/isabella/*" }
+      ]
+    }
+  ]
+}
