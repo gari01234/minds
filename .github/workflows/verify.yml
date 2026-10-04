@@ -14,6 +14,7 @@ jobs:
         with:
           node-version: '24'
       - run: node --test tests/*.test.mjs
+      - run: node --check apps/isabella-presence/ui/presence.js
       - run: node scripts/build.mjs
       - uses: denoland/setup-deno@v2
         with:
