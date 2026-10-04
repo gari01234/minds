@@ -35,6 +35,8 @@ test('79.2 general execution accepts owned artifact and Work file inputs generic
   assert.ok(chat.includes('input_files:{type:"array"'));
   assert.ok(chat.includes('enum:["artifact","work_file"]'));
   assert.ok(chat.includes('name:"search_generated_artifacts"'));
+  assert.ok(chat.includes('input_files:inputs'));
+  assert.ok(chat.includes('pasa el archivo binario original al runtime'));
   assert.ok(runtime.includes('resolveInputFiles'));
   assert.ok(runtime.includes('minds_artifacts'));
   assert.ok(runtime.includes('minds_work_files'));
@@ -44,12 +46,22 @@ test('79.2 general execution accepts owned artifact and Work file inputs generic
 });
 
 test('79.2 passes file inputs directly into the same Code Interpreter request',()=>{
+  assert.ok(shared.includes('CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2.1"'));
   assert.ok(shared.includes('type:"input_file"'));
   assert.ok(shared.includes('file_data:file.file_data'));
   assert.ok(shared.includes('type:"code_interpreter"'));
   assert.ok(shared.includes('background:true'));
   assert.ok(shared.includes('input:[{role:"user",content}]'));
   assert.ok(shared.includes('Edit or transform them directly'));
+  assert.ok(shared.includes('Preserve source content, formulas, structure and formatting'));
+});
+
+
+test('79.2 transformed outputs retain source provenance and do not re-emit user inputs',()=>{
+  assert.ok(shared.includes('derived_from:Array.isArray(run?.metadata?.input_files)?run.metadata.input_files:[]'));
+  assert.ok(shared.includes('x.source!=="user"'));
+  assert.ok(shared.includes('const generated:any[]=[]'));
+  assert.ok(shared.includes('citedIds.has'));
 });
 
 test('79.2 keeps background completion independent of the browser session',()=>{
