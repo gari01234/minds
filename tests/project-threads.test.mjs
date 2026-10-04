@@ -29,6 +29,7 @@ test('Build 78 keeps one Isabella while giving each Work Thread its own conversa
   assert.ok(chat.includes('el Thread no crea otra personalidad ni otro cerebro'));
   assert.ok(ai.includes('work_thread_id:options.workThread?.id||null'));
   assert.ok(ai.includes('if(!options.workThread&&!options.background'));
+  assert.equal((ai.match(/if\(!options\.workThread&&!options\.background/g)||[]).length,2);
 });
 
 test('Build 78 makes sibling Threads searchable without promoting them to project truth',()=>{
