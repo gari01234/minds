@@ -1945,7 +1945,7 @@ Deno.serve(async (req: Request) => {
   ]);
   const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
   const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
-  const recent = mergeRecentConversations(recentDb, context.recent_local_conversation || [], effectiveMessage);
+  const recent = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
 
@@ -2142,7 +2142,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   });
 
 
-  const seed = mergeRecentConversations(recentDb, context.recent_local_conversation || [], effectiveMessage);
+  const seed = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
   let conversationInfo:any={id:null,created:false};
   if(!background){
     try{
