@@ -3,6 +3,7 @@ import {openConversation,closeConversation} from "../_shared/conversations.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked,nextToolInput,userMessage,transientInstructions,memoryCheckpoint} from "../_shared/cognitive.ts";
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
+import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -53,8 +54,16 @@ function simpleAgendaMutation(message=""){
   return action&&object;
 }
 
+function likelyMaterialDeliverable(message=""){
+  const t=normalizeText(message);if(!t)return false;
+  const explicit=/\b(pdf|word|docx|excel|xlsx|powerpoint|pptx|presentaci[oó]n|präsentation|archivo|datei|hoja de c[aá]lculo|spreadsheet|imagen|image|gr[aá]fic[oa]|chart|zip)\b/i.test(t);
+  const physical=/\b(imprim\w*|druck\w*|firm\w*|unterschrift\w*|rellen\w*|ausfüll\w*|editable|editierbar)\b/i.test(t);
+  const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|erstelle\w*|mach\w*)\b/i.test(t);
+  const object=/\b(lista|listado|tabla|tabelle|teilnehmerliste|formulario|formular|documento|dokument|plantilla|vorlage|informe|bericht|minuta|acta|protokoll|presentaci[oó]n|präsentation|spreadsheet|hoja)\b/i.test(t);
+  return explicit||physical||(action&&object);
+}
 function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
-  if(background||attachments.length||simpleAgendaMutation(message))return false;
+  if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message))return false;
   if(String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
   const normalized=normalizeText(message);
@@ -453,16 +462,29 @@ const calendarTools = [
   {
     type:"function",
     name:"create_artifact",
-    description:"Create a real artifact directly for the user. Use image when the user explicitly asks Isabella to generate an image. Use docx or pdf when the user explicitly asks for a Word/PDF file or when that file is clearly the requested deliverable. Small tasks stay in chat and must not be turned into Ideas. For docx/pdf provide the complete document content. For image provide a precise visual instruction.",
+    description:"Fast artifact lane. Use image for a direct image-generation request, or docx/pdf only for a simple text document that does not need real tables, spreadsheet logic, presentation layout or general file manipulation. For richer material work use execute_artifact_task.",
     strict:false,
     parameters:{type:"object",properties:{
       kind:{type:"string",enum:["image","docx","pdf"]},
       title:{type:"string"},
-      content:{type:"string",description:"Complete document content for docx/pdf."},
+      content:{type:"string",description:"Complete simple document content for docx/pdf."},
       instruction:{type:"string",description:"Precise visual generation instruction for image."},
       size:{type:"string",enum:["1024x1024","1536x1024","1024x1536"]},
       quality:{type:"string",enum:["low","medium","high"]}
     },required:["kind","title"]}
+  },
+  {
+    type:"function",
+    name:"execute_artifact_task",
+    description:"General material execution environment. Use whenever the user's real goal should end in a usable file rather than merely an explanation, even if they did not name a file extension. Examples: printable participant/signature list -> polished PDF plus editable DOCX; comparison/data table -> XLSX; presentation -> PPTX; conversions, structured forms, bundles or other file work. The environment may continue in the background if the result is not ready within this turn.",
+    strict:false,
+    parameters:{type:"object",properties:{
+      title:{type:"string",description:"Short deliverable title."},
+      objective:{type:"string",description:"Complete material objective. Describe what must be usable when finished; do not merely ask for advice."},
+      desired_outputs:{type:"array",maxItems:4,items:{type:"string",enum:["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"]}},
+      project:{type:"string",description:"Optional Work project name."},
+      supporting_context:{type:"string",description:"Only the minimal already-known context needed to build the deliverable. Do not dump unrelated private memory."}
+    },required:["title","objective"]}
   },
   {
     type:"function",
@@ -611,6 +633,46 @@ async function createArtifact(req:Request,args:any){
     })});
     const data=await response.json();if(!response.ok||data?.error)return {status:"error",detail:data?.detail||data?.error||"artifact_failed"};
     return {status:"created",artifact:data.artifact};
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+
+async function executeArtifactTask(req:Request,args:any,ctx:any={}){
+  try{
+    const base=Deno.env.get("SUPABASE_URL")||"",auth=req.headers.get("Authorization")||"";
+    let key=Deno.env.get("SUPABASE_ANON_KEY")||"";try{const keys=JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")||"{}");key=keys?.default||key}catch{}
+    if(!base||!auth||!key)return {status:"unavailable"};
+    const desired=[...new Set((Array.isArray(args?.desired_outputs)?args.desired_outputs:[]).map((x:any)=>String(x||"").toLowerCase()).filter((x:string)=>["docx","pdf","xlsx","pptx","csv","zip","html","txt","json"].includes(x)))].slice(0,4);
+    const objective=String(args?.objective||args?.instruction||ctx?.message||"").trim();
+    if(!objective)return {status:"invalid",detail:"objective_required"};
+    const response=await fetch(base+"/functions/v1/isabella-capability-runtime",{
+      method:"POST",headers:{"Authorization":auth,"apikey":key,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        action:"start",
+        title:String(args?.title||"Entregable").trim().slice(0,240),
+        objective,
+        desired_outputs:desired,
+        project:String(args?.project||ctx?.project||"").trim()||null,
+        project_id:ctx?.project_id||null,
+        work_thread_id:ctx?.work_thread_id||null,
+        conversation_id:ctx?.conversation_id||null,
+        context:{
+          project:ctx?.project||null,
+          work_thread:ctx?.work_thread_title||null,
+          user_requested_outputs:desired,
+          supporting_context:String(args?.supporting_context||"").trim().slice(0,12000)||null
+        }
+      })
+    });
+    const data=await response.json();
+    if(!response.ok&&!data?.run_id)return {status:"error",detail:data?.detail||data?.error||"capability_execution_failed"};
+    return {
+      status:String(data?.status||data?.run?.status||"unknown"),
+      run_id:data?.run?.id||data?.run_id||null,
+      title:data?.run?.title||String(args?.title||"Entregable"),
+      artifacts:Array.isArray(data?.artifacts)?data.artifacts:[],
+      error:data?.run?.error||data?.detail||null,
+      background:["queued","in_progress"].includes(String(data?.status||data?.run?.status||""))
+    };
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
@@ -1563,7 +1625,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   read_contextual_autonomy:"allow",
   search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
-  offer_quick_replies:"allow",create_artifact:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
+  offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",create_chat_reminder:"confirm",
@@ -2020,7 +2082,7 @@ Tienes web_search para información actual.
 Tienes search_work y read_work_file para Work-MINDS. Si el usuario menciona Bernried o Schwarz, o pregunta por tareas, Unterlagen, emails, decisiones o estado de esos proyectos, identifica el proyecto por el nombre que escribió y consulta Work directamente; no le pidas activar un modo ni cambiar de pantalla. search_work recupera Planner, memoria estructurada, claims y archivos disponibles. Usa read_work_file solo cuando el contenido real de un archivo sea necesario para responder; no leas archivos masivamente.
 Work distingue fuente de conocimiento: un email, plano o documento puede afirmar algo sin convertirlo automáticamente en verdad del proyecto. Los claims tienen status, confidence y provenance_class. Favorece claims confirmed; identifica proposed/disputed como tales. Si surge una decisión, requisito o hecho durable que merece entrar en la memoria estructurada del proyecto, usa propose_project_claim y conserva su procedencia.
 Tienes consult_sofia para pedir a Sofía contexto intelectual de Readings, highlights, notas y teoría cuando ese conocimiento pueda mejorar materialmente la respuesta. Isabella y Sofía forman partes conectadas de MINDS: no consultes a Sofía por rutina ni para temas cotidianos, pero tampoco reconstruyas su territorio desde cero cuando una petición toque lecturas o teoría.
-Tienes create_artifact para producir imágenes, Word (.docx) y PDF reales. Isabella sigue siendo la única interlocutora: crear un archivo no cambia de agente ni abre automáticamente Ideas. Los artefactos generados permanecen visibles en el hilo donde nacieron y también en ••• → Artefactos; cuando le expliques al usuario dónde encontrarlos, usa esa ruta concreta y no hables de una sección genérica que no pueda localizar.
+Tienes execute_artifact_task como entorno general de ejecución material y create_artifact como fast lane simple. No esperes a que Gari nombre una extensión si su objetivo real exige un objeto utilizable fuera del chat. Una lista para imprimir y firmar, formulario, documento maquetado, hoja de cálculo, presentación, archivo transformado o paquete de archivos es un entregable: ejecútalo. execute_artifact_task puede crear DOCX, PDF, XLSX, PPTX, CSV, ZIP, HTML, TXT o JSON usando un container de ejecución. Para una imagen directa usa create_artifact kind=image. Para un DOCX/PDF puramente textual y simple puede bastar create_artifact; si hay tablas reales, layout profesional, cálculo, slides o manipulación de archivos usa execute_artifact_task. Isabella sigue siendo la única interlocutora. Los archivos generados son entregables solicitados, no hechos confirmados del proyecto, y no se promueven silenciosamente a Conocimiento.
 Tienes offer_quick_replies para mostrar 2–4 respuestas rápidas cuando una pregunta pueda resolverse con opciones breves; úsala para reducir fricción, no como decoración.
 Tienes search_memory para recuerdos antiguos o relaciones personales que no estén ya claras en la conversación.
 Tienes search_commitments para consultar objetivos abiertos ya aprobados y propose_commitment para preparar uno nuevo cuando algo deba permanecer vivo entre conversaciones. Un Commitment no ejecuta acciones y siempre requiere revisión antes de crearse.
@@ -2028,7 +2090,11 @@ Tienes search_calendar para consultar agenda/tareas más allá del resumen inmed
 AUTONOMÍA CONTEXTUAL: Shadow Agency aporta evidencia, nunca autorización. Usa read_contextual_autonomy para responder sobre evidencia o permisos reales. No inventes un score global ni deduzcas autorización de una tasa de aceptación. Solo el usuario puede aprobar o revocar un permiso en Más → Permisos de Isabella. No hay herramienta de modelo para cambiar permisos. La ruta rápida puede guardar una tarea sencilla únicamente bajo un permiso contextual vigente aprobado allí; estas herramientas de conversación siguen generando propuestas.
 
 Tienes create_event, update_event, delete_event, create_task, update_task, complete_task, archive_task y delete_task para preparar cambios. Tienes create_routine para preparar una automatización recurrente propia de Isabella y create_chat_reminder para un único mensaje futuro dentro del chat. Tienes update_feed_preferences únicamente para ajustar la localidad habitual del clima o una regla explícita sobre qué situaciones personales merecen emerger en el Feed. El Feed NO es un news feed ni una lista de intereses. Tienes update_assistant_behavior para adoptar una mejora de comportamiento o workflow solo después de que el usuario la acepte explícitamente. Estas herramientas NO ejecutan directamente: la interfaz pedirá confirmación. Nunca digas que algo ya quedó hecho si solo preparaste una propuesta.
-Si el usuario pide una tarea pequeña o inmediata —por ejemplo redactar un email, producir una imagen concreta o preparar un archivo Word/PDF— resuélvela aquí. Usa create_artifact solo cuando haya pedido una imagen real o un archivo; no conviertas automáticamente estas peticiones en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
+COMPLETION / EXECUTION BIAS:
+Ante una petición accionable, intenta llevarla hasta un resultado utilizable en este turno o deja una ejecución durable real antes de terminar. No conviertas una petición de hacer en una explicación de cómo hacer si existe una herramienta capaz de producir el resultado. La herramienta y el formato son detalles internos: Gari no necesita decir "PDF", "Excel", "PowerPoint" ni "usa Python". Infiere el output por la finalidad. Si el resultado se va a imprimir, firmar, rellenar, presentar, editar, calcular, comparar, entregar o reutilizar como archivo, prefiere producir el artefacto. Si basta una respuesta, email para copiar o explicación, el chat sigue siendo el resultado correcto.
+Capacidad y autoridad son distintas: puedes crear material sin pedir permiso adicional, pero no envíes, publiques, promociones a verdad de proyecto ni hagas side effects externos salvo que otra herramienta/política lo autorice.
+Si execute_artifact_task devuelve queued/in_progress, di de forma breve que estás trabajando y que el resultado volverá aquí; no digas que está terminado. Si devuelve completed, entrega los archivos y no repitas su contenido entero en chat.
+No conviertas automáticamente estas tareas en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
 Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Ese tipo de memoria se activa por contexto, con cooldown y límite de activaciones.
 
@@ -2104,6 +2170,8 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
 `;
   const dynamicContext=JSON.stringify({
     relationship_policy_version:ISABELLA_RELATIONSHIP_POLICY_VERSION,
+    capability_registry_version:CAPABILITY_REGISTRY_VERSION,
+    available_capabilities:capabilityPromptSummary(),
     current_work_thread:currentWorkThread?{id:currentWorkThread.id,title:currentWorkThread.title,project:currentWorkThread.project,summary:currentWorkThread.summary,capability_profile:currentWorkThread.capability_profile}:null,
     current_date:temporal.current_date,
     current_local_datetime:temporal.current_local_datetime,
@@ -2379,6 +2447,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   const toolProposals:any[]=[];
   const toolMemories:any[]=[];
   const artifactResults:any[]=[];
+  const capabilityRuns:any[]=[];
   let quickReplies:any[]=[];
   let webSources:any[]=[];
   let sourceTainted=!!routedWork||!!routedSofia;
@@ -2504,6 +2573,19 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await createArtifact(req,args);
         if(result?.artifact)artifactResults.push(result.artifact);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result?.artifact?{status:"created",artifact:{id:result.artifact.id,kind:result.artifact.kind,title:result.artifact.title}}:result)});
+      }else if(call.name==="execute_artifact_task"){
+        const result=await executeArtifactTask(req,args,{
+          message:effectiveMessage,project:route.project||currentWorkThread?.project?.name||null,
+          project_id:currentWorkThread?.project_id||null,work_thread_id:currentWorkThread?.id||null,
+          work_thread_title:currentWorkThread?.title||null,conversation_id:conversationInfo.id||null
+        });
+        if(Array.isArray(result?.artifacts))for(const a of result.artifacts)if(a?.id&&!artifactResults.some((x:any)=>x.id===a.id))artifactResults.push(a);
+        if(result?.run_id)capabilityRuns.push({id:result.run_id,status:result.status,title:result.title||args?.title||null,background:!!result.background});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
+          status:result?.status||"error",run_id:result?.run_id||null,background:!!result?.background,
+          artifacts:(result?.artifacts||[]).map((a:any)=>({id:a.id,kind:a.kind,title:a.title})),
+          error:result?.error||result?.detail||null
+        })});
       }else if(call.name==="consult_sofia"){
         const result=await consultSofia(req,args,effectiveMessage);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
@@ -2575,7 +2657,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,

@@ -207,3 +207,8 @@ A separate runtime ledger records provider/session/turn identity and lifecycle w
 ### Build 78 — Project Threads & Shared Work Context
 
 `BUILD-78.md` extiende Work con una cuarta superficie, Threads. Cada Thread pertenece a un proyecto, conserva una conversación persistente propia y comparte el Desktop, Planner y Conocimiento del proyecto sin convertir conversaciones hermanas en verdad confirmada. Isabella sigue siendo la única interlocutora y puede recuperar contexto transversal entre Threads mediante provenance explícito. Los Threads reutilizan `conversations / conversation_messages`; no introducen agentes visibles ni memoria autobiográfica paralela.
+
+
+### Build 79 — Capability Runtime & Ambient Presence
+
+`BUILD-79.md` introduce el primer capability plane general de Isabella. MINDS conserva memoria, autoridad, provenance, proyectos y Attention; un runtime externo acotado aporta ejecución material mediante OpenAI Responses + Code Interpreter y puede seguir trabajando en background. Isabella decide por finalidad cuándo una petición debe terminar en un archivo utilizable y no necesita que Gari nombre PDF, Excel o PowerPoint. `ambient.js` proyecta los runs activos como una presencia mínima dentro de la PWA; `AMBIENT-PRESENCE-PROTOCOL-v0.1.md` define la frontera para una futura shell nativa always-on-top sin crear otro agente.

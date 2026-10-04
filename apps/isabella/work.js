@@ -358,10 +358,22 @@ async function loadThreadMessages(thread){
     .order('created_at',{ascending:true}).limit(400);
   if(error)throw error;return data||[];
 }
+function threadArtifactLabel(kind){return ({docx:'WORD',pdf:'PDF',xlsx:'EXCEL',pptx:'POWERPOINT',csv:'CSV',zip:'ZIP',html:'HTML',txt:'TXT',json:'JSON',image:'IMAGEN'}[String(kind||'')]||String(kind||'ARCHIVO').toUpperCase())}
 function threadMessageMarkup(m){
   const role=m.role==='user'?'user':'assistant';
   const sources=Array.isArray(m.metadata?.sources)?m.metadata.sources:[];
-  return `<article class="work-thread-message ${role}"><div class="work-thread-message-copy">${esc(m.content||'').replace(/\n/g,'<br>')}</div>${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+  const artifacts=Array.isArray(m.metadata?.artifacts)?m.metadata.artifacts:[];
+  return `<article class="work-thread-message ${role}"><div class="work-thread-message-copy">${esc(m.content||'').replace(/\n/g,'<br>')}</div>${artifacts.length?`<div class="work-thread-artifacts">${artifacts.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:''}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+}
+async function hydrateThreadArtifacts(root=document){
+  const nodes=[...root.querySelectorAll?.('[data-thread-artifact]')||[]];
+  await Promise.all(nodes.map(async node=>{
+    try{
+      const path=String(node.dataset.threadArtifact||'');if(!path)return;
+      const {data}=await sb.storage.from('minds-artifacts').createSignedUrl(path,3600);
+      if(data?.signedUrl){node.href=data.signedUrl;node.target='_blank';node.rel='noopener'}
+    }catch{}
+  }));
 }
 async function renderThreadConversation(id){
   const thread=threads.find(x=>x.id===id);if(!thread){activeThreadId=null;await renderThreads();return}
@@ -376,6 +388,7 @@ async function renderThreadConversation(id){
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
     $('[data-thread-actions]').onclick=()=>openThreadActions(thread);
     $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
+    void hydrateThreadArtifacts(body);
     requestAnimationFrame(()=>{const log=$('#workThreadLog');if(log)log.scrollTop=log.scrollHeight});
   }catch(e){console.error(e);body.innerHTML='<div class="work-empty">No pude abrir este Thread.</div>'}
 }

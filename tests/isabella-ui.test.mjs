@@ -553,14 +553,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.04.78.1'));
+  assert.ok(shell.includes('Build 2026.10.04.79'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=55'));
-  assert.ok(index.includes('shell.js?v=79'));
-  assert.ok(index.includes('app.js?v=84'));
+  assert.ok(index.includes('app.css?v=56'));
+  assert.ok(index.includes('shell.js?v=80'));
+  assert.ok(index.includes('app.js?v=85'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v89'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v90'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -669,7 +669,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=6'));
+  assert.ok(index.includes('work.js?v=7'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -1183,7 +1183,7 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message))return false'));
+  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message))return false'));
   assert.ok(chat.includes('if(String(route?.complexity||"light")!=="light")return false'));
   assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
