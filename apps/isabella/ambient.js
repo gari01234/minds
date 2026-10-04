@@ -53,6 +53,17 @@ async function signedArtifacts(ids=[]){
 function artifactLabel(kind){
   return ({docx:'WORD',pdf:'PDF',xlsx:'EXCEL',pptx:'POWERPOINT',csv:'CSV',zip:'ZIP',html:'HTML',txt:'TXT',json:'JSON',image:'IMAGEN'}[String(kind||'')]||String(kind||'ARCHIVO').toUpperCase());
 }
+function cleanCapabilitySummary(text){
+  return String(text||'')
+    .replace(/^\s*[-*]\s*\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)\s*$/gmi,'')
+    .replace(/\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)/gi,'')
+    .replace(/\(?sandbox:\/mnt\/data\/[^\s)]+\)?/gi,'')
+    .replace(/\n{3,}/g,'\n\n').trim();
+}
+function primaryArtifacts(items=[]){
+  const rows=Array.isArray(items)?items:[];
+  return rows.some(x=>String(x?.kind||'')!=='image')?rows.filter(x=>String(x?.kind||'')!=='image'):rows;
+}
 async function render(runs){
   inject();
   const root=$('#isabellaAmbient');if(!root)return;
@@ -74,7 +85,7 @@ async function render(runs){
   const visible=[...active,...recent.filter(x=>!active.some(a=>a.id===x.id)).slice(0,2)].slice(0,4);
   const rows=[];
   for(const run of visible){
-    const s=stateOf(run),artifacts=run.status==='completed'?await signedArtifacts(run.artifact_ids||[]):[];
+    const s=stateOf(run),allArtifacts=run.status==='completed'?await signedArtifacts(run.artifact_ids||[]):[],artifacts=primaryArtifacts(allArtifacts);
     rows.push(`<article class="ambient-run ${esc(s.key)}">
       <div class="ambient-run-state"><span></span><div><b>${esc(run.title||'Trabajo')}</b><small>${esc(s.verb)}</small></div></div>
       ${run.summary?`<p>${esc(String(run.summary).slice(0,260))}</p>`:''}
