@@ -108,6 +108,39 @@ Los tests de Build 77 verifican que existe una única policy compartida; chat y 
 
 También verifican que el routine runner no vuelve a incluir claims con status `hypothesis`.
 
+
+## Validación final y producción
+
+El gate oficial `Verify MINDS #75` pasó completo sobre el código desplegado:
+
+- Node: 227 tests, 227 pass;
+- web build: success;
+- Deno check: success, incluyendo `isabella-chat` y `isabella-routine-runner` y por transitividad la nueva shared policy;
+- Deno runtime tests: success.
+
+Producción quedó reconciliada byte por byte con la rama:
+
+- `isabella-chat` ACTIVE v57, `verify_jwt=true`;
+- `isabella-routine-runner` ACTIVE v11, `verify_jwt=false` y autenticación propia por runtime secret;
+- todos los entrypoints y shared dependencies desplegados coinciden exactamente con GitHub.
+
+Build 77 no aplicó migraciones. La última migración productiva continúa siendo:
+
+`20261003113943_expectation_engine_v012_heartbeat_single_detector`
+
+El estado personal antes y después del deploy permaneció:
+
+- 45 operating-model observations;
+- 3 hypotheses proposed;
+- 0 operating-model reviews;
+- 0 accepted/corrected operating rules;
+- 0 Expectations;
+- 0 Expectation reviews.
+
+Por tanto el despliegue no fabricó aprendizaje, preferencias ni estado futuro.
+
+Security Advisor y Performance Advisor conservaron el mismo conjunto de categorías preexistentes antes y después del deploy. Build 77 no añadió tablas, funciones SQL, policies, índices ni findings de base de datos.
+
 ## Decisión
 
 Personality & Relationship Model v0.1 entra como policy relacional explícita, específica para Gari y subordinada a las fronteras ya existentes de MINDS.
