@@ -140,7 +140,7 @@ async function ask(message,state,options={}){
       options.onTextReset?.();await window.ISABELLA_SYNC_PULL_NOW?.();throw e;
     }
   }
-  if(!options.background&&!attachments.length){
+  if(!options.workThread&&!options.background&&!attachments.length){
     const streamed=await askDirectStream(message,state,options,replyContext);
     if(streamed)return streamed;
   }
