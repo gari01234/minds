@@ -62,7 +62,7 @@ test('Build 72.5A derives ownership in the database and exposes no direct writes
 test('Build 72.5A does not switch production Mission execution to OpenAI Agents',()=>{
   const runner=read('supabase/functions/isabella-mission-runner/index.ts');
   assert.ok(runner.includes('minds_claim_mission_runs'));
-  assert.ok(runner.includes('minds_apply_mission_step'));
+  assert.ok(runner.includes('minds_apply_mission_step_v2'));
   assert.ok(runner.includes('https://api.openai.com/v1/responses'));
   assert.ok(!runner.includes('openai_agents'));
   assert.ok(!runner.includes('_shared/mission-runtime'));
