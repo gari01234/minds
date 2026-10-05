@@ -101,5 +101,8 @@ test('Build 81 acceptance meeting Skill v2 composes Work without new authority',
   assert.ok(skillMigration.includes("'search_work_threads'"));
   assert.ok(skillMigration.includes("'execute_artifact_task'"));
   assert.ok(skillMigration.includes('version = 2'));
+  assert.ok(skillMigration.includes("'search_memory'"));
+  assert.ok(skillMigration.includes("'search_commitments'"));
+  assert.equal((skillMigration.match(/where slug = 'preparar-reunion'/g)||[]).length,1);
   assert.ok(build.includes('Acceptance Skill — preparar-reunion v2'));
 });
