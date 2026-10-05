@@ -1426,6 +1426,7 @@ async function createCommitmentProposal(p){
       source:'isabella_chat',
       persistent_work:persistent,
       persistent_work_version:persistent?String(p.persistent_work_version||'persistent-work-v0.1'):null,
+      notify_mode:persistent?String(p.notify_mode||'policy'):'policy',
       skill_trace:skillTrace
     }
   };
@@ -1455,11 +1456,6 @@ async function createCommitmentProposal(p){
     return;
   }
   const run=missionResult?.run||{};
-  if(p.notify_mode&&p.notify_mode!=='policy'){
-    try{
-      await sb.from('minds_mission_runs').update({metadata:{...(run.metadata||{}),notify_mode:p.notify_mode}}).eq('id',run.id);
-    }catch{}
-  }
   closeModal();
   say('assistant',`Listo. Me encargo de “${data?.title||p.title}”. Puedes cerrar MINDS; seguiré avanzando y volveré a ti si necesito una decisión o cuando haya algo que realmente merezca tu atención.`);
 }
