@@ -175,7 +175,7 @@ async function recordUsage(sb:any,run:any,payload:any){
     await sb.from("minds_ai_usage").insert({
       user_id:run.user_id,feature:"capability_general_execution",model:String(run.metadata?.model||GENERAL_EXECUTION_MODEL),
       input_tokens:input,cached_input_tokens:cached,output_tokens:output,total_tokens:Number(usage.total_tokens||input+output),
-      metadata:{capability_run_id:run.id,provider_response_id:run.provider_response_id}
+      metadata:{capability_run_id:run.id,provider_response_id:run.provider_response_id,skill_trace:normalizeSkillTrace(run?.metadata?.skill_trace)}
     });
   }catch{}
 }
