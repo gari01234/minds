@@ -65,15 +65,36 @@ function runCard(run){
     completedAt:parseTime(run.completed_at),priority:run.status==='failed'?90:(run.status==='in_progress'?70:(run.status==='queued'?65:30)),
     cancellable:['queued','in_progress'].includes(run.status),needsUser:false};
 }
+function missionCard(run){
+  const status=String(run.status||'');
+  const state=status==='queued'?{kind:'preparing',label:'Preparando'}:
+    status==='running'?{kind:'working',label:'Trabajando'}:
+    status==='waiting'?{kind:'waiting',label:'Esperando'}:
+    {kind:'idle',label:'Isabella'};
+  const waitBody=status==='waiting'
+    ?(run.wait_kind==='expectation'?'Estoy esperando que ocurra algo antes de seguir. No necesitas hacer nada ahora.':
+      run.wait_kind==='capability'?'Estoy preparando una parte de este trabajo. No necesitas hacer nada ahora.':
+      'Esto sigue en marcha. Lo retomaré en el momento previsto.')
+    :'';
+  return {
+    id:'mission:'+run.id+':'+status+':'+String(run.wait_kind||''),
+    source:'mission',sourceId:run.id,kind:state.kind,label:state.label,
+    title:String(run.instruction||'Trabajo en curso').trim().slice(0,90),
+    body:cleanText(waitBody||run.result_summary||''),status,updatedAt:parseTime(run.updated_at),
+    priority:status==='running'?78:(status==='queued'?74:24),
+    cancellable:false,needsUser:false
+  };
+}
 function attentionCard(event){
   const needsUser=event.route==='interrupt'&&event.requires_user===true;
   return {id:'attention:'+event.id,source:'attention',sourceId:event.id,kind:needsUser?'question':'ambient',
     label:needsUser?'Necesito tu decisión':'Para tener en cuenta',title:String(event.title||'Actualización').trim(),body:String(event.body||'').trim(),
     status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser};
 }
-function projectCards(runs,events){
+function projectCards(runs,missions,events){
   const cards=[];
   for(const run of runs||[]){
+    if(run?.metadata?.surface_hidden===true)continue;
     const prev=priorRunStatus.get(run.id);
     if(['queued','in_progress'].includes(run.status))observedActiveRuns.add(run.id);
     const card=runCard(run);
@@ -81,6 +102,9 @@ function projectCards(runs,events){
     else if(run.status==='completed'&&observedActiveRuns.has(run.id)&&now()-card.completedAt<COMPLETION_HOLD_MS)cards.push(card);
     priorRunStatus.set(run.id,run.status);
     if(prev&&prev!==run.status&&run.status==='completed')rememberSeen('transition:'+run.id+':completed');
+  }
+  for(const mission of missions||[]){
+    if(['queued','running','waiting'].includes(String(mission.status||'')))cards.push(missionCard(mission));
   }
   for(const event of events||[])if(event.route==='ambient'||(event.route==='interrupt'&&event.requires_user===true))cards.push(attentionCard(event));
   return cards.sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt).slice(0,6);
@@ -195,12 +219,13 @@ async function cancelRun(id){
 }
 async function queryPresence(){
   const sinceRuns=new Date(now()-20*60*1000).toISOString(),sinceAttention=new Date(now()-48*60*60*1000).toISOString();
-  const [runQ,attentionQ]=await Promise.all([
-    sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
+  const [runQ,missionQ,attentionQ]=await Promise.all([
+    sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
+    sb.from('minds_mission_runs').select('id,status,phase,instruction,result_summary,blocker_question,wait_kind,wake_at,metadata,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
     sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
-  if(runQ.error)throw runQ.error;if(attentionQ.error)throw attentionQ.error;
-  return projectCards(runQ.data||[],attentionQ.data||[]);
+  if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
+  return projectCards(runQ.data||[],missionQ.data||[],attentionQ.data||[]);
 }
 async function loadConversationHistory({render=true}={}){
   if(!sb||!user||chatBusy)return false;
