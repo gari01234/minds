@@ -13,6 +13,8 @@ const ai=read('apps/isabella/ai.js');
 const app=read('apps/isabella/app.js');
 const skillsReadme=read('apps/isabella/skills/README.md');
 const build=read('apps/isabella/BUILD-81.md');
+const meetingSkill=read('apps/isabella/skills/preparar-reunion/SKILL.md');
+const skillMigration=read('supabase/migrations/20261005093000_skills_composition_v01.sql');
 
 test('Build 81 formalizes Skill as procedure without authority',()=>{
   assert.ok(skillRegistry.includes('SKILL_RUNTIME_VERSION="minds-skills-v0.1"'));
@@ -26,6 +28,7 @@ test('Build 81 resolves preferred tools through the real runtime policy',()=>{
   assert.ok(chat.includes('normalizeSkillRecord(x,"system",policyMode)'));
   assert.ok(chat.includes('normalizeSkillRecord(x,"personal",policyMode)'));
   assert.ok(chat.includes('web_search:"allow"'));
+  assert.ok(chat.includes('search_work_threads:"allow"'));
   assert.ok(skillRegistry.includes('tool_hints:toolHints.filter(x=>x.policy!=="deny")'));
   assert.ok(skillRegistry.includes('unavailable_tools:toolHints.filter(x=>x.policy==="deny")'));
 });
@@ -87,4 +90,16 @@ test('Build 81 keeps a single general material runtime',()=>{
   for(const forbidden of ['make_excel','make_xlsx','make_powerpoint','make_pptx','edit_word']){
     assert.ok(!chat.includes('name:"'+forbidden+'"'));
   }
+});
+
+
+test('Build 81 acceptance meeting Skill v2 composes Work without new authority',()=>{
+  assert.ok(meetingSkill.includes('version: 2'));
+  assert.ok(meetingSkill.includes('Threads'));
+  assert.ok(meetingSkill.includes('Capability Runtime general'));
+  assert.ok(skillMigration.includes("where slug = 'preparar-reunion'"));
+  assert.ok(skillMigration.includes("'search_work_threads'"));
+  assert.ok(skillMigration.includes("'execute_artifact_task'"));
+  assert.ok(skillMigration.includes('version = 2'));
+  assert.ok(build.includes('Acceptance Skill — preparar-reunion v2'));
 });
