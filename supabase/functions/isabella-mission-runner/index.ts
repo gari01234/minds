@@ -100,7 +100,7 @@ async function dependencyContext(sb:any,run:any){
   }
   if(wake.kind==="expectation"){
     const {data:exp}=await sb.from("minds_expectations")
-      .select("id,title,expected_event,status,due_at,due_precision,timezone,fulfilled_at,missed_at,cancelled_at")
+      .select("id,title,expected_event,status,due_at,due_precision,timezone,fulfilled_at,not_occurred_at,cancelled_at,resolution_source")
       .eq("id",wake.ref).eq("user_id",run.user_id).maybeSingle();
     return exp?{kind:"expectation",...exp}:{kind:"expectation",ref:wake.ref,status:"missing"};
   }
