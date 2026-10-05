@@ -37,15 +37,18 @@ test('Build 81 composes at most four deduplicated Skills',()=>{
   assert.ok(chat.includes('loadedSkillManifests.get(requestedSlug)'));
 });
 
-test('Build 81 keeps personal Skill loading independent of the system-only legacy FK ledger',()=>{
+test('Build 81 audits system and personal Skills in one provenance ledger',()=>{
   const loadStart=chat.indexOf('async function loadSkill');
   const loadEnd=chat.indexOf('function cognitiveBudget',loadStart);
   const block=chat.slice(loadStart,loadEnd);
+  const migration=read('supabase/migrations/20261005093000_skills_composition_v01.sql');
   assert.ok(block.includes('source:"system"|"personal"'));
-  assert.ok(block.includes('if(source==="system")'));
   assert.ok(block.includes('from("isabella_skill_runs").insert'));
-  assert.ok(block.indexOf('if(source==="system")')<block.indexOf('from("isabella_skill_runs").insert'));
-  assert.ok(block.includes('return {status:"loaded",skill}'));
+  assert.ok(block.includes('skill_source:skill.source'));
+  assert.ok(block.includes('skill_name:skill.name'));
+  assert.ok(migration.includes('drop constraint if exists isabella_skill_runs_skill_slug_fkey'));
+  assert.ok(migration.includes("check (skill_source in ('system','personal'))"));
+  assert.ok(migration.includes('isabella_skill_runs_user_source_slug_created_idx'));
 });
 
 test('Build 81 records sanitized Skill trace in parent and capability runs',()=>{
