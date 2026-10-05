@@ -26,7 +26,7 @@ test('Build 82 evolves Mission Runs rather than introducing a second job system'
 test('Build 82 keeps durable work bounded',()=>{
   assert.ok(migration.includes('max_iterations between 1 and 32'));
   assert.ok(migration.includes("v_wake_at>now()+interval '90 days'"));
-  assert.ok(runner.includes('one bounded material deliverable'));
+  assert.ok(runner.includes('ONE bounded material deliverable'));
   assert.ok(chat.includes('boundedPersistentCheckpoints(args?.max_iterations,24)'));
 });
 
