@@ -389,7 +389,7 @@ returns jsonb
 language plpgsql
 security definer
 set search_path=public,auth
-as $
+as $$
 declare
   v_result jsonb;
   v_run public.minds_mission_runs%rowtype;
@@ -412,7 +412,7 @@ begin
   end if;
 
   return (v_result-'run')||jsonb_build_object('run',to_jsonb(v_run));
-end $;
+end $$;
 
 revoke all on function public.minds_start_mission_run_with_attention(uuid,text,uuid,integer,text) from public,anon;
 grant execute on function public.minds_start_mission_run_with_attention(uuid,text,uuid,integer,text) to authenticated;

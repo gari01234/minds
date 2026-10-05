@@ -11,25 +11,19 @@ const runner=read('supabase/functions/isabella-mission-runner/index.ts');
 const capabilityRunner=read('supabase/functions/isabella-capability-runner/index.ts');
 const migration=read('supabase/migrations/20261005072000_persistent_work_v01.sql');
 const presence=read('apps/isabella-presence/ui/presence.js');
+const ambient=read('apps/isabella/ambient.js');
 const human=read('shared/human-surface.js');
 const protocol=read('apps/isabella/PERSISTENT-WORK-PROTOCOL-v0.1.md');
 
 test('Build 82 migration keeps valid PL/pgSQL dollar quoting',()=>{
-  assert.ok(migration.includes('minds_start_mission_run_with_attention'));
-  assert.ok(migration.includes('as $\ndeclare'));
-  assert.ok(migration.includes('end $;'));
-  assert.ok(!migration.includes('as $\ndeclare'));
-  assert.ok(!migration.includes('end $;'));
+  const start=migration.indexOf('minds_start_mission_run_with_attention');
+  const block=migration.slice(start,start+2200);
+  assert.ok(start>=0);
+  assert.ok(block.includes('as $$\ndeclare'));
+  assert.ok(block.includes('end $$;'));
+  assert.ok(!block.includes('as $\ndeclare'));
+  assert.ok(!block.includes('end $;'));
 });
-
-test('Build 82 migration keeps valid PL/pgSQL dollar quoting',()=>{
-  assert.ok(migration.includes('minds_start_mission_run_with_attention'));
-  assert.ok(migration.includes('as $\\ndeclare'));
-  assert.ok(migration.includes('end $;'));
-  assert.ok(!migration.includes('as $\\ndeclare'));
-  assert.ok(!migration.includes('end $;'));
-});
-
 test('Build 82 evolves Mission Runs rather than introducing a second job system',()=>{
   assert.ok(migration.includes("status in ('queued','running','waiting','waiting_for_user','paused','completed','failed','cancelled')"));
   assert.ok(migration.includes("wait_kind is null or wait_kind in ('time','capability','expectation')"));
@@ -91,6 +85,7 @@ test('Build 82 waiting is explicitly not a user blocker',()=>{
 test('Build 82 Presence projects the objective and hides subordinate machinery',()=>{
   assert.ok(presence.includes("sb.from('minds_mission_runs')"));
   assert.ok(presence.includes("if(run?.metadata?.surface_hidden===true)continue"));
+  assert.ok(ambient.includes("surface_hidden!==true"));
   assert.ok(presence.includes("status==='waiting'?{kind:'waiting',label:'Esperando'}"));
   assert.ok(!presence.includes("['working','preparing','waiting'].includes(card.kind)"));
 });
