@@ -8,14 +8,14 @@
 <link rel="stylesheet" href="./presence.css">
 </head>
 <body>
-<main id="app" class="presence-shell" data-mode="boot">
+<main id="app" class="presence-shell" data-mode="boot" data-panel-view="status">
   <section id="bootView" class="view boot-view">
     <span class="orb tiny" aria-hidden="true"><i></i><i></i></span>
     <span class="boot-copy"><b>Isabella</b><small>Conectando…</small></span>
   </section>
 
   <section id="authView" class="view auth-view hidden">
-    <header class="dragbar" data-tauri-drag-region>
+    <header class="dragbar auth-head" data-tauri-drag-region>
       <div><span class="eyebrow">ISABELLA</span><strong>Presence</strong></div>
       <button class="window-button" data-hide aria-label="Ocultar">—</button>
     </header>
@@ -52,20 +52,34 @@
       <header class="panel-head dragbar" data-tauri-drag-region>
         <div class="identity">
           <span class="orb micro" aria-hidden="true"><i></i><i></i></span>
-          <div><span class="eyebrow">ISABELLA</span><strong id="panelHeading">Aquí</strong></div>
+          <div><span class="eyebrow">ISABELLA</span><strong id="panelHeading">Ahora</strong></div>
         </div>
+
+        <nav class="surface-tabs" aria-label="Vista de Presence">
+          <button id="statusTab" class="surface-tab on" type="button">Ahora</button>
+          <button id="chatTab" class="surface-tab" type="button">Chat</button>
+        </nav>
+
         <div class="window-actions">
-          <button id="collapseButton" class="window-button" type="button" aria-label="Colapsar">⌄</button>
-          <button class="window-button" data-hide type="button" aria-label="Ocultar">—</button>
+          <button id="openMinds" class="window-button" type="button" aria-label="Abrir MINDS" title="Abrir MINDS">↗</button>
+          <button id="collapseButton" class="window-button" type="button" aria-label="Colapsar" title="Colapsar">⌃</button>
+          <button class="window-button" data-hide type="button" aria-label="Ocultar" title="Ocultar">—</button>
         </div>
       </header>
 
-      <div id="panelScroll" class="panel-scroll">
-        <section id="cardsSection" class="cards-section hidden">
+      <section id="statusView" class="panel-view status-view">
+        <div id="cardsSection" class="cards-section hidden">
           <div id="cards" class="cards"></div>
-        </section>
+          <button id="moreSignals" class="more-signals hidden" type="button"></button>
+        </div>
+        <div id="statusEmpty" class="status-empty hidden">
+          <span class="orb medium" aria-hidden="true"><i></i><i></i></span>
+          <div><strong>Nada necesita tu atención ahora.</strong><small>Isabella sigue disponible desde la bandeja.</small></div>
+        </div>
+      </section>
 
-        <section id="conversation" class="conversation">
+      <section id="chatView" class="panel-view chat-view hidden">
+        <div id="panelScroll" class="panel-scroll">
           <div id="conversationEmpty" class="conversation-empty">
             <span class="orb medium" aria-hidden="true"><i></i><i></i></span>
             <p>¿Qué necesitas?</p>
@@ -76,19 +90,12 @@
             <button id="reviewInMinds" type="button">Revisar en MINDS</button>
           </div>
           <div id="quickReplies" class="quick-replies"></div>
-        </section>
-      </div>
-
-      <form id="chatForm" class="composer">
-        <input id="chatInput" type="text" autocomplete="off" placeholder="Escribe a Isabella…" maxlength="4000">
-        <button id="sendButton" type="submit" aria-label="Enviar">↑</button>
-      </form>
-
-      <footer class="utility-bar">
-        <button id="openMinds" type="button">Abrir MINDS ↗</button>
-        <button id="refreshButton" type="button">Actualizar</button>
-        <button id="signOutButton" type="button">Desconectar</button>
-      </footer>
+        </div>
+        <form id="chatForm" class="composer">
+          <input id="chatInput" type="text" autocomplete="off" placeholder="Escribe a Isabella…" maxlength="4000">
+          <button id="sendButton" type="submit" aria-label="Enviar">↑</button>
+        </form>
+      </section>
     </section>
   </section>
 </main>
