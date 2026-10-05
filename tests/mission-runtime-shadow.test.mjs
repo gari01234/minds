@@ -81,7 +81,7 @@ test('Build 72.5B shadow runner is internal custom-auth and never scheduled',()=
 test('Build 72.5B native production Mission runner remains unchanged by provider selection',()=>{
   const runner=read('supabase/functions/isabella-mission-runner/index.ts');
   assert.ok(runner.includes('minds_claim_mission_runs'));
-  assert.ok(runner.includes('minds_apply_mission_step'));
+  assert.ok(runner.includes('minds_apply_mission_step_v2'));
   assert.ok(runner.includes('https://api.openai.com/v1/responses'));
   assert.ok(!runner.includes('openai_agents'));
   assert.ok(!runner.includes('isabella-agent-shadow'));

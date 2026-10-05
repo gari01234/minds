@@ -25,6 +25,13 @@ test('Build 72 exposes a small human-state contract instead of a second ontology
   assert.equal(waiting.owner,'you');
   assert.equal(waiting.action,'decide');
   assert.equal(waiting.detail,'¿A o B?');
+  const waitingExternal=hs.mission({status:'waiting',wait_kind:'expectation'});
+  assert.equal(waitingExternal.headline,'Estoy esperando que ocurra algo antes de seguir.');
+  assert.equal(waitingExternal.owner,'external');
+  assert.equal(waitingExternal.action,'none');
+  const waitingMaterial=hs.mission({status:'waiting',wait_kind:'capability'});
+  assert.equal(waitingMaterial.headline,'Estoy preparando una parte de este trabajo.');
+  assert.equal(waitingMaterial.owner,'isabella');
 });
 
 test('Build 72 distinguishes done, uncertain and blocked states without pretending emotions',()=>{
@@ -50,7 +57,7 @@ test('Build 72 uses human state first and technical detail on demand in Isabella
   const app=read('apps/isabella/app.js');
   const index=read('apps/isabella/index.html');
   const css=read('apps/isabella/app.css');
-  assert.ok(index.includes('../shared/human-surface.js?v=1'));
+  assert.ok(index.includes('../shared/human-surface.js?v=2'));
   assert.ok(app.includes('function humanStateHTML'));
   assert.ok(app.includes('Ver detalle técnico'));
   assert.ok(app.includes("modal('Trabajo de Isabella'"));
@@ -96,8 +103,22 @@ test('Build 72 humanizes proactive durable-work messages and briefings',()=>{
 
 test('Build 72 does not create a new top-level product surface',()=>{
   const shell=read('apps/isabella/shell.js');
-  assert.ok(shell.includes('Build 2026.10.04.79.2'));
+  assert.ok(shell.includes('Build 2026.10.05.82'));
   assert.ok(!shell.includes('data-nav="human"'));
   assert.ok(!shell.includes('data-nav="state"'));
   assert.ok(!shell.includes('Human Surface'));
+});
+
+
+test('Build 82 exposes waiting as no-action continuity instead of a blocker',()=>{
+  const hs=loadHumanSurface();
+  for(const kind of ['time','capability','expectation']){
+    const state=hs.mission({status:'waiting',wait_kind:kind});
+    assert.equal(state.action,'none');
+    assert.match(state.detail,/No necesitas hacer nada ahora/);
+  }
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("'queued','running','waiting','waiting_for_user','paused'"));
+  assert.ok(app.includes("wait_kind,wait_ref,wake_at,metadata"));
+  assert.ok(app.includes("<span>Espera</span>"));
 });

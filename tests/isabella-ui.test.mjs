@@ -553,14 +553,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.04.79.2'));
+  assert.ok(shell.includes('Build 2026.10.05.82'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=57'));
-  assert.ok(index.includes('shell.js?v=82'));
-  assert.ok(index.includes('app.js?v=86'));
+  assert.ok(index.includes('shell.js?v=83'));
+  assert.ok(index.includes('app.js?v=87'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v92'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v93'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1273,12 +1273,12 @@ test('Build 68 persists bounded Durable Mission Runs with leases, retries and us
 test('Build 68 mission runner advances one checkpoint at a time and cannot mutate external user state',()=>{
   const r=read('supabase/functions/isabella-mission-runner/index.ts');
   assert.ok(r.includes('minds_claim_mission_runs'));
-  assert.ok(r.includes('minds_apply_mission_step'));
+  assert.ok(r.includes('minds_apply_mission_step_v2'));
   assert.ok(r.includes('minds_fail_mission_step'));
   assert.ok(r.includes('feature:"mission_runtime"'));
   assert.ok(r.includes('tools:[{type:"web_search"'));
-  assert.ok(r.includes('Advance this mission by one bounded, materially useful checkpoint'));
-  assert.ok(r.includes('Do not create or modify tasks, events, routines, personal memory, Work claims, files or external systems.'));
+  assert.ok(r.includes('Advance this objective by one materially useful checkpoint.'));
+  assert.ok(r.includes('Do not create or modify tasks, events, routines, memory, project claims, messages, external systems or project truth.'));
   assert.ok(!r.includes('from("isabella_tasks").insert'));
   assert.ok(!r.includes("from('isabella_tasks').insert"));
   assert.ok(!r.includes('from("isabella_events").insert'));
@@ -1294,8 +1294,8 @@ test('Build 68 lets Isabella start and control durable Missions only around appr
   assert.ok(chat.includes('name:"read_mission_run"'));
   assert.ok(chat.includes('name:"control_mission_run"'));
   assert.ok(chat.includes('active_mission_runs:activeMissionRuns'));
-  assert.ok(chat.includes('Usa start_mission_run únicamente cuando ya exista un Commitment aprobado'));
-  assert.ok(chat.includes('No prometas trabajo indefinido'));
+  assert.ok(chat.includes('Usa start_mission_run directamente solo cuando el Commitment ya exista y Gari pida continuar ese objetivo.'));
+  assert.ok(chat.includes('No prometas trabajo ilimitado: Persistent Work sigue teniendo checkpoints y reintentos acotados.'));
   assert.ok(chat.includes('durable_mission_used:'));
   assert.ok(chat.includes('avísame cuando|avisame cuando'));
 });

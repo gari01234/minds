@@ -128,3 +128,13 @@ test('Presence renders assistant Markdown instead of exposing raw syntax',()=>{
   assert.ok(html.includes('id="statusView"'));
   assert.ok(html.includes('id="chatView"'));
 });
+
+
+test('Build 82 Presence projects one persistent objective and hides subordinate capability machinery',()=>{
+  assert.ok(ui.includes("sb.from('minds_mission_runs')"));
+  assert.ok(ui.includes("function missionCard(run)"));
+  assert.ok(ui.includes("status==='waiting'?{kind:'waiting',label:'Esperando'}"));
+  assert.ok(ui.includes("if(run?.metadata?.surface_hidden===true)continue"));
+  assert.ok(ui.includes("['queued','running','waiting'].includes"));
+  assert.ok(!ui.includes("cancellable:true,needsUser:false,source:'mission'"));
+});

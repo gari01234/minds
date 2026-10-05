@@ -65,7 +65,8 @@ test('Build 79 durable capability runner can finish after the initiating chat cl
   assert.ok(capability.includes('startGeneralExecution'));
   assert.ok(runner.includes('.in("status",["queued","in_progress"])'));
   assert.ok(runner.includes('reconcileCapabilityRun'));
-  assert.ok(runner.includes('{deliver:true}'));
+  assert.ok(runner.includes('const missionParent=String(run?.metadata?.delivery||"")==="mission_parent"'));
+  assert.ok(runner.includes('{deliver:!missionParent}'));
   assert.ok(runtime.includes('conversation_messages'));
   assert.ok(runtime.includes('clientKey="capability:"+run.id'));
 });
@@ -115,13 +116,14 @@ test('Build 79 PWA assets are aligned',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.04.79.2'));
+  assert.ok(shell.includes('Build 2026.10.05.82'));
   assert.ok(index.includes('app.css?v=57'));
-  assert.ok(index.includes('shell.js?v=82'));
-  assert.ok(index.includes('app.js?v=86'));
+  assert.ok(index.includes('shell.js?v=83'));
+  assert.ok(index.includes('app.js?v=87'));
   assert.ok(index.includes('work.js?v=8'));
   assert.ok(index.includes('ambient.js?v=2'));
-  assert.ok(sw.includes("isabella-shell-v92"));
+  assert.ok(index.includes('../shared/human-surface.js?v=2'));
+  assert.ok(sw.includes("isabella-shell-v93"));
   assert.ok(sw.includes("'./ambient.js?v=2'"));
 });
 

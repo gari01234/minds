@@ -1137,13 +1137,13 @@ function proposalEditor(p,onDone){
     if(p.kind==='commitment'){
     const sourceNote=p.source_open_loop?'<div class="small">Origen: asunto abierto detectado en un checkpoint. Al confirmar se conservará esa procedencia sin convertirla en hecho.</div><blockquote>'+esc(p.source_open_loop)+'</blockquote>':'';
     modal('Revisar continuidad',`<div class="form proposal-editor">
-      <div class="small">Un Commitment mantiene un objetivo vivo entre conversaciones. No crea tareas, rutinas ni acciones por sí mismo.</div>
+      <div class="small">${p.persistent_work?'Al confirmar, Isabella mantendrá este objetivo vivo y empezará a trabajarlo en segundo plano. El trabajo interno no obtiene permisos adicionales y cualquier acción externa seguirá su confirmación normal.':'Un Commitment mantiene un objetivo vivo entre conversaciones. No crea tareas, rutinas ni acciones por sí mismo.'}</div>
       ${sourceNote}
       <label>Nombre<input id="commitmentTitle" value="${esc(p.title||'')}" placeholder="Qué mantener vivo"></label>
       <label>Objetivo<textarea id="commitmentObjective" rows="5">${esc(p.objective||'')}</textarea></label>
       <div class="form-grid-2"><label>Ámbito<select id="commitmentScope">${[['global','Global'],['personal','Personal'],['project','Proyecto'],['theory','Theory'],['other','Otro']].map(([v,l])=>`<option value="${v}" ${v===(p.scope||'global')?'selected':''}>${l}</option>`).join('')}</select></label><label>Proyecto (opcional)<input id="commitmentProject" value="${esc(p.project||'')}" placeholder="Bernried, Schwarz…"></label></div>
       <label>Criterio de cierre (opcional)<textarea id="commitmentCriteria" rows="3">${esc(p.completion_criteria||'')}</textarea></label>
-      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">Mantener vivo</button></div>
+      <div class="confirm-actions"><button id="proposalEditCancel" class="secondary">Volver</button><button id="proposalEditSave" class="primary">${p.persistent_work?'Encárgate':'Mantener vivo'}</button></div>
     </div>`);
     $('#proposalEditCancel').onclick=()=>onDone?.(null);
     $('#proposalEditSave').onclick=()=>onDone?.({...p,title:$('#commitmentTitle').value.trim(),objective:$('#commitmentObjective').value.trim(),scope:$('#commitmentScope').value,project:$('#commitmentProject').value.trim()||null,completion_criteria:$('#commitmentCriteria').value.trim()||null});
@@ -1292,7 +1292,7 @@ function reviewedProposal(original,corrected){
 function proposalDetails(p){
   if(p.kind==='expectation')return `<p>${esc(p.expected_event||'')}</p><div class="small">${esc(p.due_date||'')}${p.due_time?' · '+esc(p.due_time):' · sin hora exacta'} · Si vence sin evidencia, quedará pendiente de comprobar.</div>`;
   if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
-  if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
+  if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.persistent_work?'<div class="small" style="margin-top:7px">Al confirmar, Isabella empezará a trabajar en esto y podrá continuar aunque cierres MINDS. Te pedirá algo solo si realmente queda bloqueada.</div>':''}${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
   if(p.kind==='work_claim')return `<p class="small">Estado: ${esc(p.status||'proposed')} · Procedencia: ${esc(p.provenance_class||'inferred')}</p>${p.evidence_excerpt?`<blockquote>${esc(p.evidence_excerpt)}</blockquote>`:''}${p.supersedes_id?'<p class="small">Sustituirá una formulación anterior y conservará su historia.</p>':''}`;
   if(p.kind==='skill_proposal')return `<p>${esc(p.description||'')}</p><details open><summary>Instrucciones de la habilidad</summary><p style="white-space:pre-wrap;max-height:35vh;overflow:auto">${esc(p.instructions||'')}</p></details>`;
   return '';
@@ -1406,7 +1406,12 @@ async function createCommitmentProposal(p){
   const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
   const proj=p.project?await dbWorkProjectByName(p.project):null;
   if(p.project&&!proj){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude identificar el proyecto. Corrige su nombre antes de guardar.');return}
-  if(!String(p.title||'').trim()||!String(p.objective||'').trim()){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','El Commitment necesita un nombre y un objetivo.');return}
+  if(!String(p.title||'').trim()||!String(p.objective||'').trim()){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','El trabajo necesita un nombre y un objetivo claros.');return}
+  const persistent=!!p.persistent_work;
+  const skillTrace=Array.isArray(p.skill_trace)?p.skill_trace.slice(0,4).map(x=>({
+    slug:String(x?.slug||'').slice(0,80),name:String(x?.name||'').slice(0,180),
+    version:Math.max(1,Number(x?.version||1)),source:x?.source==='personal'?'personal':'system'
+  })).filter(x=>x.slug&&x.name):[];
   const payload={
     agent:'isabella',
     title:String(p.title).trim(),
@@ -1417,11 +1422,42 @@ async function createCommitmentProposal(p){
     source_kind:p.source_flush_id&&p.source_open_loop?'checkpoint':'user',
     source_flush_id:p.source_flush_id||null,
     source_open_loop:p.source_open_loop||null,
-    metadata:{source:'isabella_chat'}
+    metadata:{
+      source:'isabella_chat',
+      persistent_work:persistent,
+      persistent_work_version:persistent?String(p.persistent_work_version||'persistent-work-v0.1'):null,
+      notify_mode:persistent?String(p.notify_mode||'policy'):'policy',
+      skill_trace:skillTrace
+    }
   };
   const {data,error}=await sb.rpc('minds_create_commitment',{p_commitment:payload,p_request_id:p.request_id||crypto.randomUUID(),p_confirmed:true});
-  if(error){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude mantenerlo vivo todavía: '+error.message);return}
-  closeModal();say('assistant',`Listo. Mantendré “${data?.title||p.title}” vivo como Commitment de MINDS. No lo convertiré automáticamente en tareas ni acciones.`);
+  if(error){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude mantener este objetivo vivo todavía: '+error.message);return}
+  if(!persistent){
+    closeModal();say('assistant',`Listo. Mantendré “${data?.title||p.title}” vivo. No lo convertiré automáticamente en tareas ni acciones.`);return;
+  }
+
+  const {data:workspaceResult,error:workspaceError}=await sb.rpc('minds_ensure_commitment_workspace',{p_commitment_id:data?.id});
+  const workspace=workspaceResult?.workspace||null;
+  if(workspaceError||workspaceResult?.status!=='ok'||!workspace?.id){
+    closeModal();
+    say('assistant',`Mantendré “${data?.title||p.title}” vivo, pero no pude empezar el trabajo persistente todavía. El objetivo no se perdió; puedo reintentarlo.`);
+    return;
+  }
+
+  const instruction=String(p.continuation_instruction||p.objective||'').trim().slice(0,6000);
+  const checkpoints=Math.max(1,Math.min(32,Number(p.max_checkpoints||24)));
+  const missionRequest=String(p.mission_request_id||crypto.randomUUID());
+  const {data:missionResult,error:missionError}=await sb.rpc('minds_start_mission_run',{
+    p_workspace_id:workspace.id,p_instruction:instruction,p_request_id:missionRequest,p_max_iterations:checkpoints
+  });
+  if(missionError||!['ok','already_active'].includes(String(missionResult?.status||''))){
+    closeModal();
+    say('assistant',`Mantendré “${data?.title||p.title}” vivo, pero no pude arrancar el trabajo en segundo plano. El objetivo quedó guardado y puedo retomarlo.`);
+    return;
+  }
+  const run=missionResult?.run||{};
+  closeModal();
+  say('assistant',`Listo. Me encargo de “${data?.title||p.title}”. Puedes cerrar MINDS; seguiré avanzando y volveré a ti si necesito una decisión o cuando haya algo que realmente merezca tu atención.`);
 }
 async function createWorkClaimProposal(p){
   const sb=window.MINDS_SUPABASE;if(!sb){closeModal();return}
@@ -2054,17 +2090,18 @@ async function missionWorkspacePanel(id){
     const [wQ,iQ,rQ]=await Promise.all([
       sb.from('minds_commitment_workspaces').select('id,commitment_id,title,objective_snapshot,completion_criteria_snapshot,status,summary,updated_at').eq('id',id).single(),
       sb.from('minds_commitment_workspace_items').select('id,kind,status,content,provenance_class,source_kind,source_ref,created_at').eq('workspace_id',id).order('created_at',{ascending:true}).limit(200),
-      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,started_at,completed_at,updated_at').eq('workspace_id',id).order('created_at',{ascending:false}).limit(12)
+      sb.from('minds_mission_runs').select('id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,wait_kind,wait_ref,wake_at,metadata,started_at,completed_at,updated_at').eq('workspace_id',id).order('created_at',{ascending:false}).limit(12)
     ]);
     if(wQ.error)throw wQ.error;if(iQ.error)throw iQ.error;if(rQ.error)throw rQ.error;
-    const w=wQ.data,items=iQ.data||[],runs=rQ.data||[],current=runs.find(x=>['queued','running','waiting_for_user','paused'].includes(x.status))||runs[0]||null;
+    const w=wQ.data,items=iQ.data||[],runs=rQ.data||[],current=runs.find(x=>['queued','running','waiting','waiting_for_user','paused'].includes(x.status))||runs[0]||null;
     const labels={plan:'Plan',finding:'Hallazgo',source:'Fuente',question:'Pregunta',decision:'Decisión propuesta',note:'Nota'};
     const itemRows=items.map(x=>`<div class="doctor-log"><b>${esc(labels[x.kind]||x.kind)}</b><span>${esc(x.content)}</span><time>${new Date(x.created_at).toLocaleString('es-ES')}</time><details class="human-tech"><summary>Procedencia</summary><div class="small">${esc(x.status)} · ${esc(x.provenance_class)} · ${esc(x.source_kind)}</div></details></div>`).join('');
-    const runControls=current&&['queued','running'].includes(current.status)?`<button class="secondary" data-mission-run-action="pause" data-run-id="${esc(current.id)}">Pausar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='paused'?`<button class="secondary" data-mission-run-action="resume" data-run-id="${esc(current.id)}">Reanudar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='waiting_for_user'?`<button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:'';
+    const runControls=current&&['queued','running','waiting'].includes(current.status)?`<button class="secondary" data-mission-run-action="pause" data-run-id="${esc(current.id)}">Pausar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='paused'?`<button class="secondary" data-mission-run-action="resume" data-run-id="${esc(current.id)}">Reanudar</button><button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:current?.status==='waiting_for_user'?`<button class="secondary" data-mission-run-action="cancel" data-run-id="${esc(current.id)}">Cancelar</button>`:'';
     const workspaceState=humanSurface()?.workspace?.(w.status);
     const workspaceTechnical=`<div class="human-tech-grid"><span>Mission Workspace</span><b>${esc(w.status)}</b><span>Actualizado</span><b>${new Date(w.updated_at).toLocaleString('es-ES')}</b></div>`;
     const runState=current?humanSurface()?.mission?.(current,w.title):null;
-    const runTechnical=current?`<div class="human-tech-grid"><span>Mission Run</span><b>${esc(current.status)}</b><span>Fase</span><b>${esc(current.phase||'—')}</b><span>Checkpoint</span><b>${Number(current.iteration||0)} / ${Number(current.max_iterations||0)}</b><span>Reintentos</span><b>${Number(current.retry_count||0)}</b><span>Actualizado</span><b>${new Date(current.updated_at).toLocaleString('es-ES')}</b></div>`:'';
+    const waitTechnical=current?.status==='waiting'?`<span>Espera</span><b>${esc(current.wait_kind||'—')}</b>${current.wake_at?`<span>Retoma</span><b>${new Date(current.wake_at).toLocaleString('es-ES')}</b>`:''}`:'';
+    const runTechnical=current?`<div class="human-tech-grid"><span>Mission Run</span><b>${esc(current.status)}</b><span>Fase</span><b>${esc(current.phase||'—')}</b><span>Checkpoint</span><b>${Number(current.iteration||0)} / ${Number(current.max_iterations||0)}</b><span>Reintentos</span><b>${Number(current.retry_count||0)}</b>${waitTechnical}<span>Actualizado</span><b>${new Date(current.updated_at).toLocaleString('es-ES')}</b></div>`:'';
     const runPanel=current?`<div class="mission-run-card">${humanStateHTML(runState,runTechnical)}${current.last_error&&current.status==='failed'?`<div class="human-inline-error">${esc(current.last_error)}</div>`:''}${runControls?`<div class="confirm-actions">${runControls}</div>`:''}</div>`:'';
     modal('Trabajo de Isabella',`<div class="continuity-intro"><b>${esc(w.title)}</b><p>${esc(w.objective_snapshot)}</p>${w.completion_criteria_snapshot?`<div class="commitment-criteria"><span>Cuándo estará resuelto</span>${esc(w.completion_criteria_snapshot)}</div>`:''}${humanStateHTML(workspaceState,workspaceTechnical)}${w.summary?`<div class="continuity-cause"><span>Lo que sé hasta ahora</span><p>${esc(w.summary)}</p></div>`:''}${runPanel}<div class="small">Aquí conservo el trabajo intermedio para poder continuar entre conversaciones. Los hallazgos siguen siendo evidencia de trabajo, no memoria personal ni hechos confirmados; tampoco puedo ejecutar acciones externas o confirmar una decisión por mi cuenta.</div></div><div class="small section-label">Lo que he ido reuniendo</div>${itemRows||'<div class="empty-panel">Todavía no he registrado avances en este trabajo.</div>'}`);
     document.querySelectorAll('[data-mission-run-action]').forEach(b=>b.onclick=()=>void missionRunControlUI(b.dataset.runId,b.dataset.missionRunAction,id));
