@@ -60,9 +60,9 @@ Composition is procedural: the model receives multiple instructions and decides 
 
 Personal Skills remain human-reviewed and versioned.
 
-The legacy `isabella_skill_runs` table references system Skill slugs only. Build 81 therefore keeps that ledger for system Skills and records every system/personal Skill used in the parent `minds_agent_runs.metadata.skills` trace.
+The original `isabella_skill_runs` ledger referenced only system Skill slugs. Build 81 evolves it into a provenance ledger for both `system` and `personal` Skills by adding `skill_source` and `skill_name`, removing the system-only foreign key and preserving all historical rows as `system`.
 
-This fixes personal Skill loading without a schema migration and preserves historical system run data.
+Every loaded Skill is therefore auditable in the Skill ledger and also summarized in the parent `minds_agent_runs.metadata.skills` trace.
 
 ## Capability composition
 
@@ -87,8 +87,8 @@ Build 81 passes when:
 2. a denied/unknown preferred tool is unavailable;
 3. every normalized Skill has empty grants;
 4. composition deduplicates and stops at four Skills;
-5. personal Skills can load without writing to the system-only legacy Skill ledger;
-6. system Skill usage remains backward-compatible with the legacy ledger;
+5. personal and system Skills are audited in the same source-aware Skill ledger;
+6. historical system Skill usage remains preserved;
 7. parent agent runs record sanitized Skill/version provenance;
 8. general execution, artifacts and completion messages inherit only the sanitized trace;
 9. Build 79's single general runtime remains intact;
