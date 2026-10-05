@@ -38,6 +38,12 @@ function mission(run={},subject=''){
   const suffix=name?' sobre “'+name+'”':'';
   if(s==='queued')return state('queued','Voy a trabajar en esto.','Está preparado y empezará en cuanto haya capacidad.',{owner:'isabella',tone:'active',technical:{kind:'mission_run',status:s}});
   if(s==='running')return state('working','Estoy trabajando en esto.','Puedes salir de MINDS; el trabajo continuará en el servidor.',{owner:'isabella',tone:'active',technical:{kind:'mission_run',status:s}});
+  if(s==='waiting'){
+    const kind=known(run.wait_kind);
+    if(kind==='expectation')return state('waiting','Estoy esperando que ocurra algo antes de seguir.','No necesitas hacer nada ahora. Retomaré el trabajo cuando esa expectativa quede resuelta.',{owner:'external',tone:'waiting',technical:{kind:'mission_run',status:s,wait_kind:kind}});
+    if(kind==='capability')return state('waiting','Estoy preparando una parte de este trabajo.','No necesitas hacer nada ahora. Retomaré el objetivo cuando ese trabajo material termine.',{owner:'isabella',tone:'waiting',technical:{kind:'mission_run',status:s,wait_kind:kind}});
+    return state('waiting','Esto sigue en marcha.','No necesitas hacer nada ahora. Lo retomaré en el momento previsto.',{owner:'isabella',tone:'waiting',technical:{kind:'mission_run',status:s,wait_kind:kind||'time'}});
+  }
   if(s==='waiting_for_user')return state('waiting_on_you','Necesito que decidas algo antes de poder seguir.',known(run.blocker_question)||'Sin esa decisión no puedo avanzar'+suffix+'.',{owner:'you',action:'decide',tone:'attention',technical:{kind:'mission_run',status:s}});
   if(s==='paused')return state('paused','Este trabajo está pausado.','Conservo lo avanzado y puedo continuar cuando tú quieras.',{owner:'you',action:'resume',tone:'muted',technical:{kind:'mission_run',status:s}});
   if(s==='completed')return state('done','He terminado este trabajo.',known(run.result_summary)||'El resultado ya está disponible.',{tone:'complete',technical:{kind:'mission_run',status:s}});
