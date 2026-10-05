@@ -604,7 +604,7 @@ const calendarTools = [
       notify_mode:{type:"string",enum:["policy","interrupt_on_complete","silent_on_complete"],description:"Use interrupt_on_complete only if Gari explicitly asks to be notified when done; silent_on_complete only if he explicitly asks not to be notified."},
       source_flush_id:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: memory_checkpoint.id."},
       source_open_loop:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: exact stored text."}
-    },required:["title","objective"]
+    },required:["title","objective"]}
   },
   {
     type:"function",
