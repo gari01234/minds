@@ -1,10 +1,10 @@
-const CACHE_NAME = 'isabella-shell-v92';
+const CACHE_NAME = 'isabella-shell-v93';
 const SHELL = [
   './',
   './index.html',
   './app.css?v=57',
-  './shell.js?v=82',
-  './app.js?v=86',
+  './shell.js?v=83',
+  './app.js?v=87',
   './work.js?v=8',
   './sync.js?v=pwa27',
   './ai.js?v=47',\n  './ambient.js?v=2',
@@ -14,7 +14,7 @@ const SHELL = [
   './icon-192.png?v=2',
   './icon-512.png?v=2',
   '../shared/supabase-client.js',
-  '../shared/human-surface.js?v=1'
+  '../shared/human-surface.js?v=2'
 ];
 
 self.addEventListener('install', event => {
