@@ -280,7 +280,7 @@ begin
     elsif r.wait_kind='expectation' then
       select status into v_dep_status from public.minds_expectations
       where id::text=r.wait_ref and user_id=r.user_id;
-      v_ready:=v_dep_status in ('fulfilled','missed','cancelled');
+      v_ready:=v_dep_status in ('fulfilled','not_occurred','cancelled');
     end if;
     if not v_ready then continue; end if;
 
