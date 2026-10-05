@@ -116,15 +116,16 @@ async function refresh(){
     const {data:{session}}=await sb.auth.getSession();if(!session){$('#isabellaAmbient')?.classList.add('hidden');return}
     const since=new Date(Date.now()-10*60*1000).toISOString();
     const {data,error}=await sb.from('minds_capability_runs')
-      .select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,started_at,completed_at,updated_at')
+      .select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at')
       .gte('updated_at',since)
       .order('updated_at',{ascending:false})
       .limit(8);
     if(error)return;
-    const snapshot=JSON.stringify((data||[]).map(x=>[x.id,x.status,x.updated_at,x.artifact_ids,x.summary,x.error]));
+    const visible=(data||[]).filter(x=>x?.metadata?.surface_hidden!==true);
+    const snapshot=JSON.stringify(visible.map(x=>[x.id,x.status,x.updated_at,x.artifact_ids,x.summary,x.error]));
     if(snapshot===lastSnapshot)return;
     lastSnapshot=snapshot;
-    await render(data||[]);
+    await render(visible);
   }catch{}
 }
 function start(){
