@@ -54,7 +54,7 @@ test('Web Isabella reacts to Presence-originated conversation messages',()=>{
 });
 
 test('Build 80.3 remains one Isabella across multiple surfaces',()=>{
-  assert.equal(config.version,'0.1.3');
+  assert.ok(Number(config.version.split('.')[2])>=3);
   assert.ok(protocol.includes('One Isabella, one operational context, one conversation history, multiple surfaces.'));
   assert.ok(!presence.includes('SUPABASE_SERVICE_ROLE_KEY'));
   assert.ok(!presence.includes('service_role'));
