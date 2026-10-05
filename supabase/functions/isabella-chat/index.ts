@@ -6,6 +6,7 @@ import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_share
 import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
+import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -294,18 +295,27 @@ function proposalFromTool(name: string, a: any) {
     project:String(a.project||"").trim()||null,
     source_kind:"conversation"
   };
-  if (name === "propose_commitment") return {
-    action:"create",
-    kind:"commitment",
-    title:String(a.title||"").trim(),
-    objective:String(a.objective||"").trim(),
-    scope:["global","personal","project","theory","other"].includes(String(a.scope||""))?String(a.scope):"global",
-    project:String(a.project||"").trim()||null,
-    completion_criteria:String(a.completion_criteria||"").trim()||null,
-    source_flush_id:String(a.source_flush_id||"").trim()||null,
-    source_open_loop:String(a.source_open_loop||"").trim()||null,
-    source_kind:a.source_flush_id&&a.source_open_loop?"checkpoint":"user"
-  };
+  if (name === "propose_commitment") {
+    const persistentWork=a.persistent_work===true;
+    return {
+      action:"create",
+      kind:"commitment",
+      title:String(a.title||"").trim(),
+      objective:String(a.objective||"").trim(),
+      scope:["global","personal","project","theory","other"].includes(String(a.scope||""))?String(a.scope):"global",
+      project:String(a.project||"").trim()||null,
+      completion_criteria:String(a.completion_criteria||"").trim()||null,
+      source_flush_id:String(a.source_flush_id||"").trim()||null,
+      source_open_loop:String(a.source_open_loop||"").trim()||null,
+      source_kind:a.source_flush_id&&a.source_open_loop?"checkpoint":"user",
+      persistent_work:persistentWork,
+      continuation_instruction:persistentWork?String(a.continuation_instruction||a.objective||"").trim().slice(0,6000):null,
+      max_checkpoints:persistentWork?boundedPersistentCheckpoints(a.max_checkpoints,24):null,
+      notify_mode:persistentWork&&["policy","interrupt_on_complete","silent_on_complete"].includes(String(a.notify_mode||""))
+        ?String(a.notify_mode):"policy",
+      persistent_work_version:persistentWork?PERSISTENT_WORK_VERSION:null
+    };
+  }
   if (name === "propose_project_claim") return {
     action:"create",
     kind:"work_claim",
@@ -580,18 +590,22 @@ const calendarTools = [
   {
     type:"function",
     name:"propose_commitment",
-    description:"Propose a durable MINDS Commitment: something the user wants kept alive across conversations even when no immediate task or clock time exists. A Commitment is not a task, routine or standing reminder and never executes actions by itself. Use only when the user explicitly asks to keep something alive/open, or when you surface a genuinely important open matter for review. Never create one silently from memory_checkpoint.open_loops. If the user explicitly elevates an exact open loop from memory_checkpoint, preserve its provenance with source_flush_id=memory_checkpoint.id and source_open_loop equal to the exact stored string.",
+    description:"Propose a durable MINDS Commitment. Set persistent_work=true when Gari explicitly delegates an objective to Isabella beyond this turn — for example 'encárgate de', 'sigue trabajando en', 'prepáralo para el jueves' or asks Isabella to continue and return later. One user confirmation can then create the Commitment and start Persistent Work. A Commitment never grants external side effects or extra authority. For a simple objective that only needs to remain remembered/open, leave persistent_work=false.",
     strict:false,
     parameters:{type:"object",properties:{
       title:{type:"string",description:"Short human-readable name."},
       objective:{type:"string",description:"What MINDS should keep alive over time."},
       scope:{type:"string",enum:["global","personal","project","theory","other"]},
       project:{type:"string",description:"Optional project name, e.g. Bernried or Schwarz."},
-      completion_criteria:{type:"string",description:"Optional condition that would make this no longer open."},
+      completion_criteria:{type:"string",description:"Condition that makes the objective genuinely complete."},
+      persistent_work:{type:"boolean",description:"True only when Gari explicitly delegates ongoing work beyond this turn."},
+      continuation_instruction:{type:"string",description:"Concrete bounded instruction Persistent Work should keep advancing after confirmation."},
+      max_checkpoints:{type:"number",description:"Maximum durable checkpoints, normally 12-24; hard-capped by MINDS."},
+      notify_mode:{type:"string",enum:["policy","interrupt_on_complete","silent_on_complete"],description:"Use interrupt_on_complete only if Gari explicitly asks to be notified when done; silent_on_complete only if he explicitly asks not to be notified."},
       source_flush_id:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: memory_checkpoint.id."},
       source_open_loop:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: exact stored text."}
-    },required:["title","objective"]}
-  },
+    },required:["title","objective"]
+  },,
   {
     type:"function",
     name:"propose_project_claim",
@@ -2159,12 +2173,14 @@ Antes de trabajar sobre un workspace existente, usa su summary/items del context
 Una entrada kind=decision siempre queda en status proposed por enforcement del servidor: el workspace no puede confirmar decisiones por sí mismo. Nunca promociones automáticamente una entrada del workspace a personal memory, Work claim confirmado, Task/Event o acción externa. Si el usuario quiere convertir algo en una acción persistente, usa la herramienta normal y respeta confirmación/Shadow Agency.
 Usa update_commitment_workspace_summary para mantener una síntesis breve del estado de trabajo solo después de un avance material. El summary es una vista operativa, no una fuente de verdad.
 
-DURABLE MISSION RUNTIME:
-CONTEXTO PRIVADO puede contener active_mission_runs. Son ejecuciones persistentes de trabajo interno asociadas a Mission Workspaces. Pueden sobrevivir al request actual y continuar mediante checkpoints server-side.
-Usa start_mission_run únicamente cuando ya exista un Commitment aprobado y el usuario pida explícitamente que Isabella continúe trabajando más allá de este turno, trabaje en segundo plano, avance autónomamente una misión o vuelva cuando termine. No inicies trabajo durable por una mención casual, una pregunta de estado o una tarea trivial.
-Un Mission Run solo puede investigar, leer contexto disponible, planificar, sintetizar y escribir scratchpad operativo. No autoriza tareas/eventos, mensajes externos, memoria personal, claims confirmados ni mutaciones de proyecto. Esas acciones siguen usando sus herramientas normales y sus políticas.
-Si active_mission_runs muestra status=waiting_for_user y el usuario responde a la pregunta bloqueante, usa control_mission_run action=resume con esa nueva instrucción. Si pide detener temporalmente usa pause; si quiere terminarlo definitivamente usa cancel. Usa read_mission_run cuando pregunte por progreso detallado.
-No prometas trabajo indefinido: cada run tiene max_iterations y reintentos acotados. Si llega al límite sin completar, vuelve a waiting_for_user. Cuando termina, necesita una decisión o falla definitivamente, el runtime entrega un mensaje proactivo idempotente en el chat de Isabella.
+PERSISTENT WORK:
+CONTEXTO PRIVADO puede contener active_mission_runs. Son continuaciones durables de objetivos ya aprobados dentro de sus Commitment Workspaces. Pueden sobrevivir al request actual, avanzar por checkpoints, delegar trabajo material acotado al Capability Runtime y quedar esperando una condición sin necesitar que Gari mantenga el chat abierto.
+Si Gari dice explícitamente “encárgate de…”, “sigue trabajando en…”, “prepáralo para…” o delega de forma equivalente un objetivo que debe continuar más allá de este turno y todavía no existe Commitment aprobado, usa propose_commitment con persistent_work=true. Esa única propuesta es la revisión humana de la continuidad: tras confirmarla, la interfaz puede crear Commitment + Workspace + Persistent Work. No pidas una segunda confirmación para arrancar el trabajo interno.
+Usa start_mission_run directamente solo cuando el Commitment ya exista y Gari pida continuar ese objetivo. No inicies Persistent Work por una mención casual, una pregunta de estado ni una tarea que puede completarse razonablemente en este turno.
+Persistent Work puede investigar públicamente, leer el contexto autorizado del workspace/proyecto, aplicar Skills procedimentales ya aprobadas, sintetizar, escribir scratchpad operativo y delegar entregables materiales al general_execution existente. Esa delegación NO añade autoridad: general_execution sigue sin side effects externos, y un artifact generado sigue sin ser verdad de proyecto.
+Un run puede quedar status=waiting sin necesitar a Gari cuando espera: (a) una hora futura concreta, (b) un Capability Run subordinado, o (c) una Expectation existente que Gari ya revisó. No confundas waiting con waiting_for_user. Waiting significa “no necesitas hacer nada ahora”; waiting_for_user significa que falta una decisión o input privado de Gari.
+Si active_mission_runs muestra waiting_for_user y Gari responde a la pregunta bloqueante, usa control_mission_run action=resume con esa nueva instrucción. Si pide detener temporalmente usa pause; si quiere terminarlo definitivamente usa cancel. Usa read_mission_run cuando pregunte por progreso detallado.
+No prometas trabajo ilimitado: Persistent Work sigue teniendo checkpoints y reintentos acotados. Cuando termina, necesita una decisión o falla definitivamente, Attention Economy decide cómo y cuándo volver a Gari. Los sub-runtimes internos no deben convertirse en interrupciones separadas.
 
 ATTENTION ECONOMY:
 Los resultados proactivos no equivalen automáticamente a una interrupción. MINDS decide entre interrupt, briefing, ambient y silent con una política explicable. Un bloqueo que necesita respuesta del usuario se considera interrupción dura. Un trabajo terminado normalmente puede esperar al briefing; una señal personal/productiva no urgente puede quedar en Feed; una señal insuficiente puede permanecer silenciosa.
@@ -2644,7 +2660,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         continue;
       }
       if(proposal){
-        const reviewedProposal={...proposal,request_id:proposal.request_id||crypto.randomUUID()};
+        const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace)}:{}),request_id:proposal.request_id||crypto.randomUUID()};
         toolProposals.push(reviewedProposal);
         if(mode==="confirm")await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
           run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
