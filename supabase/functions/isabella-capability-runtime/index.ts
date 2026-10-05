@@ -4,6 +4,7 @@ import {
   CAPABILITY_RUNTIME_VERSION,GENERAL_EXECUTION_MODEL,startGeneralExecution,
   reconcileCapabilityRun,cancelGeneralExecution
 } from "../_shared/capability-runtime.ts";
+import {SKILL_RUNTIME_VERSION,normalizeSkillTrace} from "../_shared/skill-registry.ts";
 
 const cors={
   "Access-Control-Allow-Origin":"*",
@@ -121,6 +122,7 @@ Deno.serve(async(req:Request)=>{
       }
 
       const desired=outputs(body?.desired_outputs),model=String(body?.model||GENERAL_EXECUTION_MODEL);
+      const skillTrace=normalizeSkillTrace(body?.skill_trace??body?.context?.skill_trace);
       const requestedInputs=inputRefs(body?.input_files);
       const resolvedInputs=await resolveInputFiles(sb,user.id,requestedInputs);
       const inputMetadata=resolvedInputs.map(({source,id,name,mime,size})=>({source,id,name,mime,size}));
@@ -128,13 +130,20 @@ Deno.serve(async(req:Request)=>{
       const {data:run,error:insertError}=await sb.from("minds_capability_runs").insert({
         user_id:user.id,capability:"general_execution",origin_kind:originKind,conversation_id:conversationId,
         project_id:projectId,work_thread_id:workThreadId,title,request:objective,status:"queued",provider:"openai_responses",
-        metadata:{runtime_version:CAPABILITY_RUNTIME_VERSION,model,desired_outputs:desired,input_files:inputMetadata,delivery:"chat_or_runner"}
+        metadata:{
+          runtime_version:CAPABILITY_RUNTIME_VERSION,model,desired_outputs:desired,input_files:inputMetadata,delivery:"chat_or_runner",
+          skill_runtime:skillTrace.length?SKILL_RUNTIME_VERSION:null,skill_trace:skillTrace
+        }
       }).select("*").single();
       if(insertError||!run)throw insertError||new Error("capability_run_create_failed");
 
       let provider:any;
       try{
-        provider=await startGeneralExecution(apiKey,{objective,title,desired_outputs:desired,context:body?.context||{},model,input_files:resolvedInputs});
+        provider=await startGeneralExecution(apiKey,{
+          objective,title,desired_outputs:desired,
+          context:{...(body?.context&&typeof body.context==="object"?body.context:{}),skill_trace:skillTrace},
+          model,input_files:resolvedInputs
+        });
       }catch(e){
         const detail=e instanceof Error?e.message:String(e);
         await sb.from("minds_capability_runs").update({status:"failed",error:detail.slice(0,4000),completed_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",run.id);
