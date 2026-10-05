@@ -21,8 +21,9 @@ Deno.serve(async(req:Request)=>{
   const results:any[]=[];
   for(const run of runs||[]){
     try{
-      const rec=await reconcileCapabilityRun(sb,apiKey,run,{deliver:true});
-      results.push({id:run.id,status:rec.status,artifacts:rec.artifacts?.length||0});
+      const missionParent=String(run?.metadata?.delivery||"")==="mission_parent";
+      const rec=await reconcileCapabilityRun(sb,apiKey,run,{deliver:!missionParent});
+      results.push({id:run.id,status:rec.status,artifacts:rec.artifacts?.length||0,mission_parent:missionParent});
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);
       await sb.from("minds_capability_runs").update({error:detail.slice(0,4000),updated_at:new Date().toISOString()}).eq("id",run.id);
