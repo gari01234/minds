@@ -605,7 +605,7 @@ const calendarTools = [
       source_flush_id:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: memory_checkpoint.id."},
       source_open_loop:{type:"string",description:"Only when elevating an exact memory_checkpoint.open_loops item: exact stored text."}
     },required:["title","objective"]
-  },,
+  },
   {
     type:"function",
     name:"propose_project_claim",
