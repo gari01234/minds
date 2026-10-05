@@ -2660,7 +2660,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         continue;
       }
       if(proposal){
-        const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace)}:{}),request_id:proposal.request_id||crypto.randomUUID()};
+        const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace),mission_request_id:crypto.randomUUID()}:{}),request_id:proposal.request_id||crypto.randomUUID()};
         toolProposals.push(reviewedProposal);
         if(mode==="confirm")await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
           run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
