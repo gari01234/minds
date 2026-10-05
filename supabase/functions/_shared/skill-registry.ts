@@ -33,7 +33,7 @@ export type SkillTraceV1={
 function text(v:unknown,max:number){
   return String(v??"").trim().slice(0,max);
 }
-function slug(v:unknown){
+export function normalizeSkillSlug(v:unknown){
   return text(v,80).normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase()
     .replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"");
 }
@@ -57,7 +57,7 @@ export function normalizeSkillRecord(
   resolvePolicy:(tool:string)=>SkillToolPolicy
 ):SkillManifestV1{
   const x=(input&&typeof input==="object"?input:{}) as Record<string,unknown>;
-  const cleanSlug=slug(x.slug),name=text(x.name,180),description=text(x.description,1600),instructions=text(x.instructions,16000);
+  const cleanSlug=normalizeSkillSlug(x.slug),name=text(x.name,180),description=text(x.description,1600),instructions=text(x.instructions,16000);
   if(!cleanSlug||!name||!description||!instructions)throw new Error("skill_manifest_invalid");
   const requested=stringList(x.preferred_tools);
   const toolHints=requested.map(id=>({id,policy:resolvePolicy(id)}));
@@ -94,7 +94,7 @@ export function normalizeSkillTrace(input:unknown):SkillTraceV1[]{
   const out:SkillTraceV1[]=[];
   for(const raw of Array.isArray(input)?input:[]){
     const x=(raw&&typeof raw==="object"?raw:{}) as Record<string,unknown>;
-    const s=slug(x.slug),n=text(x.name,180),src=String(x.source||"")==="personal"?"personal":"system";
+    const s=normalizeSkillSlug(x.slug),n=text(x.name,180),src=String(x.source||"")==="personal"?"personal":"system";
     if(!s||!n)continue;
     const row={slug:s,name:n,version:version(x.version),source:src as SkillSource};
     if(!out.some(v=>v.slug===row.slug&&v.source===row.source&&v.version===row.version))out.push(row);
