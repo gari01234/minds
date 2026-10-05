@@ -5,7 +5,7 @@ import {checked,nextToolInput,userMessage,transientInstructions,memoryCheckpoint
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
-import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
+import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -1684,7 +1684,7 @@ async function loadSkill(req: Request, rawSlug: string, conversationId: string|n
     const {data:authData,error:authError}=await sb.auth.getUser();
     const userId=authData?.user?.id;
     if(authError||!userId)return {status:"unauthorized"};
-    const clean=String(rawSlug||"").trim().toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80);
+    const clean=normalizeSkillSlug(rawSlug);
     if(!clean)return {status:"invalid_slug"};
     let {data}=await sb.from("minds_user_skills")
       .select("slug,name,description,instructions,preferred_tools,version")
@@ -2694,7 +2694,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         }
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="load_skill"){
-        const requestedSlug=String(args.slug||"").trim().toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"").slice(0,80);
+        const requestedSlug=normalizeSkillSlug(args.slug);
         let result:any;
         const cached=loadedSkillManifests.get(requestedSlug);
         if(cached){
