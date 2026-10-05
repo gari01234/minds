@@ -69,7 +69,8 @@ test('79.2 keeps background completion independent of the browser session',()=>{
   assert.ok(runtime.includes('provider_response_id'));
   assert.ok(runner.includes('minds_capability_runs'));
   assert.ok(runner.includes('reconcileCapabilityRun'));
-  assert.ok(runner.includes('{deliver:true}'));
+  assert.ok(runner.includes('const missionParent=String(run?.metadata?.delivery||"")==="mission_parent"'));
+  assert.ok(runner.includes('{deliver:!missionParent}'));
 });
 
 test('79.2 input files remain bounded and owned',()=>{
