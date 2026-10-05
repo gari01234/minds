@@ -1442,12 +1442,12 @@ async function missionRunContext(req:Request){
   try{
     const sb=supabaseClient(req);if(!sb)return [];
     const {data,error}=await sb.from("minds_mission_runs")
-      .select("id,workspace_id,status,phase,iteration,max_iterations,result_summary,blocker_question,last_error,metadata,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,status)")
+      .select("id,workspace_id,status,phase,iteration,max_iterations,result_summary,blocker_question,last_error,wait_kind,wait_ref,wake_at,metadata,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,status)")
       .order("updated_at",{ascending:false}).limit(8);
     if(error)return [];
     return (data||[]).map((x:any)=>({
       id:x.id,workspace_id:x.workspace_id,status:x.status,phase:x.phase,iteration:x.iteration,max_iterations:x.max_iterations,
-      result_summary:x.result_summary||"",blocker_question:x.blocker_question||null,last_error:x.last_error||null,
+      result_summary:x.result_summary||"",blocker_question:x.blocker_question||null,last_error:x.last_error||null,wait_kind:x.wait_kind||null,wait_ref:x.wait_ref||null,wake_at:x.wake_at||null,
       title:(x.minds_commitment_workspaces as any)?.title||null,commitment_id:(x.minds_commitment_workspaces as any)?.commitment_id||null,
       updated_at:x.updated_at,latest_user_input:x?.metadata?.last_user_input||null
     }));
@@ -1470,7 +1470,7 @@ async function startMissionRun(req:Request,args:any){
       p_workspace_id:workspaceId,
       p_instruction:String(args?.instruction||"").trim(),
       p_request_id:crypto.randomUUID(),
-      p_max_iterations:Math.max(1,Math.min(Number(args?.max_iterations||4),8)),
+      p_max_iterations:boundedPersistentCheckpoints(args?.max_iterations,24),
       p_notify_mode:notifyMode
     });
     return checked(result,"start_mission_run");
@@ -1481,7 +1481,7 @@ async function readMissionRun(req:Request,args:any){
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
     const id=String(args?.run_id||"").trim();if(!id)return {status:"invalid"};
     const {data:run,error}=await sb.from("minds_mission_runs")
-      .select("id,workspace_id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,sources,metadata,started_at,completed_at,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,summary)")
+      .select("id,workspace_id,status,phase,iteration,max_iterations,retry_count,result_summary,blocker_question,last_error,wait_kind,wait_ref,wake_at,sources,metadata,started_at,completed_at,created_at,updated_at,minds_commitment_workspaces(title,commitment_id,summary)")
       .eq("id",id).maybeSingle();
     if(error||!run)return {status:"missing"};
     const {data:events}=await sb.from("minds_mission_run_events")
