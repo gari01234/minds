@@ -1,4 +1,6 @@
-export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2.1";
+import {normalizeSkillTrace} from "./skill-registry.ts";
+
+export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.3.0";
 export const GENERAL_EXECUTION_MODEL="gpt-6-astra";
 
 const KIND_BY_EXT:Record<string,{kind:string,mime:string}>={
@@ -131,7 +133,8 @@ async function storeOutputs(sb:any,apiKey:string,run:any,payload:any){
           capability_run_id:run.id,provider:"openai_responses",provider_response_id:run.provider_response_id,
           provider_container_id:file.container_id,provider_file_id:file.file_id,
           provenance_class:"generated_deliverable",accepted_fact:false,promotion_required_for_project_truth:true,
-          derived_from:Array.isArray(run?.metadata?.input_files)?run.metadata.input_files:[]
+          derived_from:Array.isArray(run?.metadata?.input_files)?run.metadata.input_files:[],
+          skill_trace:normalizeSkillTrace(run?.metadata?.skill_trace)
         }
       }).select("id,workspace_id,source_kind,kind,title,mime_type,storage_path,metadata,created_at").single();
       if(insertError){
@@ -153,6 +156,7 @@ async function deliverCompletion(sb:any,run:any,artifacts:any[],summary:string){
   const metadata={
     app:run.origin_kind==="work_thread"?"work_thread":"isabella",
     capability_run_id:run.id,generated_deliverable:true,
+    skill_trace:normalizeSkillTrace(run?.metadata?.skill_trace),
     artifacts:artifacts.map((x:any)=>({
       id:x.id,workspace_id:x.workspace_id,source_kind:x.source_kind,kind:x.kind,title:x.title,
       mime_type:x.mime_type,storage_path:x.storage_path,metadata:x.metadata,created_at:x.created_at
