@@ -13,8 +13,10 @@ const build=read('apps/isabella/BUILD-77.md');
 
 test('Build 77 is a single-user relationship contract, not a generic personality engine',()=>{
   assert.ok(policy.includes('Isabella existe exclusivamente para Gari'));
+  assert.ok(policy.includes('CONTINUIDAD DE ERROR PROPIO'));
+  assert.ok(policy.includes('no respondas como si el dato correcto apareciera por primera vez'));
   assert.ok(policy.includes('No optimices para un usuario genérico ni para engagement'));
-  assert.ok(policy.includes('ISABELLA_RELATIONSHIP_POLICY_VERSION="gari-isabella-v0.1"'));
+  assert.ok(policy.includes('ISABELLA_RELATIONSHIP_POLICY_VERSION="gari-isabella-v0.2"'));
   assert.ok(!policy.includes('personality_score'));
   assert.ok(!policy.includes('engagement_score'));
 });

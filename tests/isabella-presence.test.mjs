@@ -61,12 +61,12 @@ test('Presence uses the same public Supabase boundary under RLS',()=>{
 test('Presence is hidden by default and behaves as a pill rather than a dashboard',()=>{
   assert.equal(config.app.windows[0].visible,false);
   assert.equal(config.app.windows[0].focus,false);
-  assert.equal(config.app.windows[0].width,284);
-  assert.equal(config.app.windows[0].height,74);
+  assert.equal(config.app.windows[0].width,306);
+  assert.equal(config.app.windows[0].height,60);
   assert.ok(html.includes('id="pill"'));
   assert.ok(html.includes('id="collapseButton"'));
-  assert.ok(ui.includes("const SIZES={pill:[284,74],panel:[370,472]"));
-  assert.ok(ui.includes("expanded=false;manualOpen=true"));
+  assert.ok(ui.includes("const SIZES={pill:[306,60],status:[420,220],chat:[420,320]"));
+  assert.ok(ui.includes("panelView='status'"));
 });
 
 test('Presence positions only its own window near the active monitor edge',()=>{
@@ -108,4 +108,23 @@ test('Presence dependencies remain pinned',()=>{
   assert.ok(cargo.includes('tauri-build = { version = "=2.7.1"'));
   assert.ok(cargo.includes('tauri-plugin-opener = "=2.7.0"'));
   assert.ok(html.includes('@supabase/supabase-js@2.117.2'));
+});
+
+
+test('Presence uses a top-center hidden-petit-home interaction model',()=>{
+  assert.ok(ui.includes("Math.round(origin.x+(area.width-w)/2)"));
+  assert.ok(ui.includes("$('#app').dataset.mode=expanded?'home':'petit'"));
+  assert.ok(ui.includes("if(candidate.needsUser){expanded=true;panelView='status'"));
+  assert.ok(ui.includes("if(event.key==='Escape')"));
+  assert.ok(ui.includes("homeCollapseTimer=setTimeout"));
+  assert.ok(html.includes('id="statusTab"'));
+  assert.ok(html.includes('id="chatTab"'));
+});
+
+test('Presence renders assistant Markdown instead of exposing raw syntax',()=>{
+  assert.ok(ui.includes('function markdownHtml(value)'));
+  assert.ok(ui.includes("replace(/\\*\\*([^*]+)\\*\\*/g"));
+  assert.ok(ui.includes("t.role==='assistant'?markdownHtml(t.text):esc(t.text)"));
+  assert.ok(html.includes('id="statusView"'));
+  assert.ok(html.includes('id="chatView"'));
 });
