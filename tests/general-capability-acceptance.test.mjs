@@ -46,7 +46,7 @@ test('79.2 general execution accepts owned artifact and Work file inputs generic
 });
 
 test('79.2 passes file inputs directly into the same Code Interpreter request',()=>{
-  assert.ok(shared.includes('CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.2.1"'));
+  assert.ok(shared.includes('CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.3.0"'));
   assert.ok(shared.includes('type:"input_file"'));
   assert.ok(shared.includes('file_data:file.file_data'));
   assert.ok(shared.includes('type:"code_interpreter"'));
