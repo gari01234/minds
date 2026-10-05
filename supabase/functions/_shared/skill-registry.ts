@@ -34,7 +34,8 @@ function text(v:unknown,max:number){
   return String(v??"").trim().slice(0,max);
 }
 function slug(v:unknown){
-  return text(v,80).toLowerCase().replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"");
+  return text(v,80).normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase()
+    .replace(/[^a-z0-9-]+/g,"-").replace(/^-+|-+$/g,"");
 }
 function version(v:unknown){
   const n=Math.trunc(Number(v));
