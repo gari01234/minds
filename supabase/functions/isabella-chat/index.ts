@@ -1727,7 +1727,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   web_search:"allow",read_contextual_autonomy:"allow",
-  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",search_work_threads:"allow",read_work_file:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
