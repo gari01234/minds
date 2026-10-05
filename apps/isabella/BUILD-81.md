@@ -38,7 +38,7 @@ It is not:
 - a runtime;
 - a source of project truth.
 
-`preferred_tools` is interpreted only as a hint. Each requested tool is classified through the existing runtime policy as allow / confirm / deny.
+`preferred_tools` is advisory metadata only. Every requested tool is resolved through the real runtime action policy as `allow`, `confirm` or `deny`.
 
 The normalized Skill contract always exposes:
 
@@ -46,23 +46,34 @@ The normalized Skill contract always exposes:
 
 `grants = []`
 
-Unknown or denied tool names are returned as unavailable rather than becoming implicit capabilities.
+Unknown or denied tool names are returned as unavailable. A Skill cannot turn `confirm` into `allow`, create contextual permission, bypass provenance, promote project truth or override the Relationship Contract.
 
 ## Composition
 
-Isabella can load up to four complementary Skills in one turn.
+Isabella can load up to four materially complementary Skills in one turn.
 
-Duplicate Skills do not consume additional composition slots.
+Duplicate loads are deduplicated.
 
-Composition is procedural: the model receives multiple instructions and decides how to use existing tools. No specialist swarm or second planning runtime is created.
+Composition remains procedural: the model receives multiple compatible procedures and then calls the same existing tools. No Skill executor, specialist swarm, second planner or agent graph is created.
 
-## Personal Skills
+## System and personal Skills
 
-Personal Skills remain human-reviewed and versioned.
+System Skills remain in `isabella_skills` and are mirrored in the repository.
 
-The original `isabella_skill_runs` ledger referenced only system Skill slugs. Build 81 evolves it into a provenance ledger for both `system` and `personal` Skills by adding `skill_source` and `skill_name`, removing the system-only foreign key and preserving all historical rows as `system`.
+Personal Skills remain human-reviewed, user-scoped and versioned through the existing proposal flow in `minds_user_skills` / `minds_user_skill_versions`.
 
-Every loaded Skill is therefore auditable in the Skill ledger and also summarized in the parent `minds_agent_runs.metadata.skills` trace.
+A reviewed personal Skill can override a system Skill with the same slug for Gari, but it cannot change runtime authority.
+
+Build 81 evolves the existing `isabella_skill_runs` ledger instead of creating a second run table. The old FK to `isabella_skills(slug)` is removed because an audit record must survive catalog changes and must also support personal Skills. Each load now records:
+
+- slug;
+- version;
+- source: `system | personal`;
+- Skill name snapshot;
+- conversation;
+- trigger message.
+
+Existing historical rows are preserved and backfilled as system Skills.
 
 ## Capability composition
 
@@ -73,11 +84,38 @@ When a Skill-guided turn starts `general_execution`, only a sanitized Skill trac
 - version;
 - source.
 
-The Capability Runtime sanitizes this trace again at its API boundary.
+Instructions and preferred tool lists are deliberately excluded.
 
-The trace is stored in the capability run, generated artifact metadata and completion message. Skill instructions are never written into those metadata fields.
+The Capability Runtime sanitizes the trace again at its API boundary and stores it in:
 
-Capability Runtime moves to `capability-runtime-v0.3.0` because the provenance contract changes; execution authority does not.
+- `minds_capability_runs.metadata.skill_trace`;
+- generated artifact metadata;
+- completion message metadata;
+- capability usage provenance.
+
+Capability Runtime advances to `capability-runtime-v0.3.0` because the provenance contract changes. Execution authority does not.
+
+Generated artifact ≠ project truth, regardless of which Skill guided the work.
+
+## Acceptance Skill — preparar-reunion v2
+
+`preparar-reunion` is upgraded to v2 as the first explicit Build 81 acceptance workflow.
+
+It can combine, when materially necessary:
+
+- canonical agenda;
+- structured Work state;
+- Work Threads;
+- specific project files;
+- commitments;
+- general artifact execution;
+- reviewed task proposals.
+
+The Skill explicitly preserves Build 78 provenance rules: a Thread is conversation, not confirmed project knowledge; a generated artifact is a deliverable, not project truth.
+
+If the goal requires an agenda, Teilnehmerliste, protocol, tracking table or similar usable object, the Skill points Isabella to the existing `execute_artifact_task` runtime rather than creating a format-specific capability.
+
+During reconciliation Build 81 also fixes a pre-existing omission: `search_work_threads` already existed as a read-only tool and dispatch path but was missing from `ACTION_POLICY`. It is restored as `allow`, consistent with Build 78.
 
 ## Acceptance
 
@@ -87,15 +125,17 @@ Build 81 passes when:
 2. a denied/unknown preferred tool is unavailable;
 3. every normalized Skill has empty grants;
 4. composition deduplicates and stops at four Skills;
-5. personal and system Skills are audited in the same source-aware Skill ledger;
-6. historical system Skill usage remains preserved;
+5. system and personal Skill loads are written to one durable audit ledger;
+6. deleting or replacing a Skill cannot cascade-delete its historical run evidence;
 7. parent agent runs record sanitized Skill/version provenance;
-8. general execution, artifacts and completion messages inherit only the sanitized trace;
-9. Build 79's single general runtime remains intact;
-10. the existing Habilidades review/versioning UI remains intact.
+8. general execution, artifacts, completion messages and usage provenance inherit only the sanitized trace;
+9. `preparar-reunion` v2 can reference Work Threads and general execution without gaining authority;
+10. Build 79's single general material runtime remains intact;
+11. the existing Habilidades review/versioning UI remains intact;
+12. Verify MINDS remains green.
 
 ## Deferred
 
 Build 81 does not implement Persistent Work. A Skill can teach a multi-step procedure, but keeping an objective alive for hours or days belongs to Build 82.
 
-Build 81 also does not add new plugins or local-computer authority.
+Build 81 also does not add plugins, local-computer authority, provider write-through or autonomous Skill self-modification.
