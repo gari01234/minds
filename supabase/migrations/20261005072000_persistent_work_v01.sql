@@ -377,6 +377,46 @@ begin
   return jsonb_build_object('status','ok','run',to_jsonb(v_run));
 end $$;
 
+
+create or replace function public.minds_start_mission_run_with_attention(
+  p_workspace_id uuid,
+  p_instruction text,
+  p_request_id uuid,
+  p_max_iterations integer,
+  p_notify_mode text
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path=public,auth
+as $
+declare
+  v_result jsonb;
+  v_run public.minds_mission_runs%rowtype;
+  v_mode text:=case when p_notify_mode in ('policy','interrupt_on_complete','silent_on_complete') then p_notify_mode else 'policy' end;
+begin
+  v_result:=public.minds_start_mission_run(p_workspace_id,p_instruction,p_request_id,p_max_iterations);
+  if v_result->>'status' not in ('ok','already_active') then return v_result; end if;
+  if v_result->'run'->>'id' is null then return v_result; end if;
+
+  select * into v_run from public.minds_mission_runs
+  where id=(v_result->'run'->>'id')::uuid and user_id=auth.uid()
+  for update;
+  if not found then return jsonb_build_object('status','unavailable'); end if;
+
+  if v_result->>'status'='ok' then
+    update public.minds_mission_runs
+    set metadata=metadata||jsonb_build_object('notify_mode',v_mode),updated_at=now()
+    where id=v_run.id
+    returning * into v_run;
+  end if;
+
+  return (v_result-'run')||jsonb_build_object('run',to_jsonb(v_run));
+end $;
+
+revoke all on function public.minds_start_mission_run_with_attention(uuid,text,uuid,integer,text) from public,anon;
+grant execute on function public.minds_start_mission_run_with_attention(uuid,text,uuid,integer,text) to authenticated;
+
 revoke all on function public.minds_apply_mission_step_v2(uuid,uuid,jsonb) from public,anon,authenticated;
 revoke all on function public.minds_reactivate_mission_waits(integer) from public,anon,authenticated;
 grant execute on function public.minds_apply_mission_step_v2(uuid,uuid,jsonb) to service_role;
