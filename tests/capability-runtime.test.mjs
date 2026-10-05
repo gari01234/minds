@@ -65,7 +65,8 @@ test('Build 79 durable capability runner can finish after the initiating chat cl
   assert.ok(capability.includes('startGeneralExecution'));
   assert.ok(runner.includes('.in("status",["queued","in_progress"])'));
   assert.ok(runner.includes('reconcileCapabilityRun'));
-  assert.ok(runner.includes('{deliver:true}'));
+  assert.ok(runner.includes('const missionParent=String(run?.metadata?.delivery||"")==="mission_parent"'));
+  assert.ok(runner.includes('{deliver:!missionParent}'));
   assert.ok(runtime.includes('conversation_messages'));
   assert.ok(runtime.includes('clientKey="capability:"+run.id'));
 });
