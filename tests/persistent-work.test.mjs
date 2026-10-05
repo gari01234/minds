@@ -14,6 +14,14 @@ const presence=read('apps/isabella-presence/ui/presence.js');
 const human=read('shared/human-surface.js');
 const protocol=read('apps/isabella/PERSISTENT-WORK-PROTOCOL-v0.1.md');
 
+test('Build 82 migration keeps valid PL/pgSQL dollar quoting',()=>{
+  assert.ok(migration.includes('minds_start_mission_run_with_attention'));
+  assert.ok(migration.includes('as $\ndeclare'));
+  assert.ok(migration.includes('end $;'));
+  assert.ok(!migration.includes('as $\ndeclare'));
+  assert.ok(!migration.includes('end $;'));
+});
+
 test('Build 82 evolves Mission Runs rather than introducing a second job system',()=>{
   assert.ok(migration.includes("status in ('queued','running','waiting','waiting_for_user','paused','completed','failed','cancelled')"));
   assert.ok(migration.includes("wait_kind is null or wait_kind in ('time','capability','expectation')"));
