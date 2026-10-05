@@ -1701,13 +1701,12 @@ async function loadSkill(req: Request, rawSlug: string, conversationId: string|n
     }
     if(!data)return {status:"not_found",slug:clean};
     const skill=normalizeSkillRecord(data,source,policyMode);
-    if(source==="system"){
-      const {error:legacyError}=await sb.from("isabella_skill_runs").insert({
-        user_id:userId,skill_slug:skill.slug,skill_version:skill.version,
-        conversation_id:conversationId||null,trigger_message:String(triggerMessage||"").slice(0,1200)
-      });
-      if(legacyError)return {status:"audit_error",detail:legacyError.message};
-    }
+    const {error:auditError}=await sb.from("isabella_skill_runs").insert({
+      user_id:userId,skill_slug:skill.slug,skill_version:skill.version,
+      skill_source:skill.source,skill_name:skill.name,
+      conversation_id:conversationId||null,trigger_message:String(triggerMessage||"").slice(0,1200)
+    });
+    if(auditError)return {status:"audit_error",detail:auditError.message};
     return {status:"loaded",skill};
   }catch(e){return {status:"error",detail:String(e)}}
 }
