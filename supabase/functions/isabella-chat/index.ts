@@ -4,6 +4,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked,nextToolInput,userMessage,transientInstructions,memoryCheckpoint} from "../_shared/cognitive.ts";
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
+import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -119,16 +120,23 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     const overdueTasks=tasks.filter((x:any)=>x.date&&x.date<currentDate).sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||a.sort_order-b.sort_order);
     const undatedTasks=tasks.filter((x:any)=>!x.date).sort((a:any,b:any)=>a.sort_order-b.sort_order).slice(0,30);
     const futureTasks=tasks.filter((x:any)=>x.date&&x.date>currentDate).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order).slice(0,30);
-    const localDate=(iso:string)=>{
-      try{return new Intl.DateTimeFormat("en-CA",{timeZone,year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date(iso));}
-      catch{return String(iso||"").slice(0,10);}
+    const eventView=(x:any)=>{
+      const presentation=presentZonedRange(x.starts_at,x.ends_at,timeZone,!!x.all_day);
+      return {
+        id:x.client_key||x.id,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:!!x.all_day,
+        project_id:x.project_id||null,category_id:x.category_id||null,notes:x.notes||"",
+        ...presentation
+      };
     };
-    const eventView=(x:any)=>({id:x.client_key||x.id,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:!!x.all_day,project_id:x.project_id||null,category_id:x.category_id||null,notes:x.notes||""});
     const events=(eventQ.data||[]).map(eventView);
-    const todayEvents=events.filter((x:any)=>localDate(x.starts_at)===currentDate);
+    const todayEvents=events.filter((x:any)=>x.local_date===currentDate);
     const upcoming=[
       ...futureTasks.map((x:any)=>({kind:"task",id:x.id,date:x.date,title:x.title,reminder_time:x.reminder_time,project_id:x.project_id,category_id:x.category_id})),
-      ...events.filter((x:any)=>localDate(x.starts_at)>currentDate).map((x:any)=>({kind:"event",id:x.id,date:localDate(x.starts_at),starts_at:x.starts_at,ends_at:x.ends_at,title:x.title,all_day:x.all_day,project_id:x.project_id,category_id:x.category_id}))
+      ...events.filter((x:any)=>x.local_date>currentDate).map((x:any)=>({
+        kind:"event",id:x.id,date:x.local_date,starts_at:x.starts_at,ends_at:x.ends_at,title:x.title,all_day:x.all_day,
+        local_start_time:x.local_start_time,local_end_time:x.local_end_time,display_time:x.display_time,timezone:x.timezone,
+        project_id:x.project_id,category_id:x.category_id
+      }))
     ].sort((a:any,b:any)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,30);
     return {status:"ok",today_tasks:todayTasks.slice(0,40),overdue_tasks:overdueTasks.slice(0,40),undated_tasks:undatedTasks,today_events:todayEvents.slice(0,30),upcoming};
   }catch{return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]}}
@@ -2101,6 +2109,7 @@ Primero conversa y entiende la intención como lo haría ChatGPT. Solo usa una h
 
 AGENDA CANÓNICA:
 CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
+Los eventos canónicos incluyen local_date, local_start_time, local_end_time, display_time y timezone calculados por MINDS. Para comunicar horas usa SIEMPRE esos campos locales cuando existan. starts_at/ends_at son timestamps de almacenamiento y no deben mostrarse ni reinterpretarse como hora local. No hagas conversiones UTC manuales si display_time ya está disponible.
 
 CONTINUIDAD:
 Esta conversación usa un objeto persistente de OpenAI Conversations. Los turnos previos ya forman parte de tu contexto. No vuelvas a preguntar algo que el usuario ya explicó en la conversación. Si el usuario da información en varios mensajes consecutivos, intégrala como una sola intención continua. Una corrección breve modifica únicamente el dato corregido y conserva el resto de lo ya entendido.
