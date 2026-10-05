@@ -86,6 +86,7 @@ begin
       'commitment_id',v_workspace.commitment_id,
       'persistent_work',true,
       'persistent_work_version','persistent-work-v0.1',
+      'notify_mode',coalesce(nullif(v_commitment.metadata->>'notify_mode',''),'policy'),
       'skill_trace',coalesce(v_commitment.metadata->'skill_trace','[]'::jsonb)
     )
   ) returning * into v_run;
