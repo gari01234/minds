@@ -58,8 +58,15 @@ test('Build 81 records sanitized Skill trace in parent and capability runs',()=>
 });
 
 test('Build 81 does not leak Skill instructions into capability provenance',()=>{
-  assert.ok(skillRegistry.includes('return {slug:s,name:n,version:version(x.version),source:src'));
-  assert.ok(!skillRegistry.includes('SkillTraceV1={\n  slug:string;\n  name:string;\n  version:number;\n  source:SkillSource;\n  instructions'));
+  const traceStart=skillRegistry.indexOf('export type SkillTraceV1={');
+  const traceEnd=skillRegistry.indexOf('};',traceStart);
+  const traceType=skillRegistry.slice(traceStart,traceEnd);
+  assert.ok(traceStart>=0);
+  assert.ok(traceType.includes('slug:string'));
+  assert.ok(traceType.includes('version:number'));
+  assert.ok(traceType.includes('source:SkillSource'));
+  assert.ok(!traceType.includes('instructions'));
+  assert.ok(!traceType.includes('preferred_tools'));
   assert.ok(runtime.includes('normalizeSkillTrace(body?.skill_trace??body?.context?.skill_trace)'));
 });
 
