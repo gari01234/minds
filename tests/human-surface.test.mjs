@@ -25,6 +25,13 @@ test('Build 72 exposes a small human-state contract instead of a second ontology
   assert.equal(waiting.owner,'you');
   assert.equal(waiting.action,'decide');
   assert.equal(waiting.detail,'¿A o B?');
+  const waitingExternal=hs.mission({status:'waiting',wait_kind:'expectation'});
+  assert.equal(waitingExternal.headline,'Estoy esperando que ocurra algo antes de seguir.');
+  assert.equal(waitingExternal.owner,'external');
+  assert.equal(waitingExternal.action,'none');
+  const waitingMaterial=hs.mission({status:'waiting',wait_kind:'capability'});
+  assert.equal(waitingMaterial.headline,'Estoy preparando una parte de este trabajo.');
+  assert.equal(waitingMaterial.owner,'isabella');
 });
 
 test('Build 72 distinguishes done, uncertain and blocked states without pretending emotions',()=>{
@@ -100,4 +107,18 @@ test('Build 72 does not create a new top-level product surface',()=>{
   assert.ok(!shell.includes('data-nav="human"'));
   assert.ok(!shell.includes('data-nav="state"'));
   assert.ok(!shell.includes('Human Surface'));
+});
+
+
+test('Build 82 exposes waiting as no-action continuity instead of a blocker',()=>{
+  const hs=loadHumanSurface();
+  for(const kind of ['time','capability','expectation']){
+    const state=hs.mission({status:'waiting',wait_kind:kind});
+    assert.equal(state.action,'none');
+    assert.match(state.detail,/No necesitas hacer nada ahora/);
+  }
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("'queued','running','waiting','waiting_for_user','paused'"));
+  assert.ok(app.includes("wait_kind,wait_ref,wake_at,metadata"));
+  assert.ok(app.includes("<span>Espera</span>"));
 });
