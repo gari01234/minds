@@ -171,7 +171,7 @@ async function renderPresence(cards,{auto=true}={}){
   }
   const candidate=autoCandidate(cards);
   if(candidate&&auto){
-    if(candidate.needsUser){expanded=true;panelView='status';rememberSeen(candidate.id);await sizeWindow('status');await showWindow({focus:false});return}
+    if(candidate.needsUser){expanded=true;panelView='status';rememberSeen(candidate.id);return renderPresence(cards,{auto:false})}
     await sizeWindow('pill');await showWindow({focus:false});return;
   }
   if(!candidate&&auto)setTimeout(()=>{if(!manualOpen&&!expanded&&!chatBusy&&!autoCandidate(lastCards))appWindow?.hide().catch(()=>{})},550);
@@ -287,7 +287,7 @@ async function collapsePanel(){expanded=false;manualOpen=true;panelView='status'
 function bind(){
   $('#emailForm').addEventListener('submit',sendOtp);$('#otpForm').addEventListener('submit',verifyOtp);$('#chatForm').addEventListener('submit',submitChat);
   $('#pillMain').onclick=expandPanel;$('#pillHide').onclick=hideWindow;$('#collapseButton').onclick=collapsePanel;
-  $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');$('#moreSignals').onclick=()=>setPanelView('chat');
+  $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');
   $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds();
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
