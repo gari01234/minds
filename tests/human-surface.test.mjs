@@ -57,7 +57,7 @@ test('Build 72 uses human state first and technical detail on demand in Isabella
   const app=read('apps/isabella/app.js');
   const index=read('apps/isabella/index.html');
   const css=read('apps/isabella/app.css');
-  assert.ok(index.includes('../shared/human-surface.js?v=1'));
+  assert.ok(index.includes('../shared/human-surface.js?v=2'));
   assert.ok(app.includes('function humanStateHTML'));
   assert.ok(app.includes('Ver detalle técnico'));
   assert.ok(app.includes("modal('Trabajo de Isabella'"));
@@ -103,7 +103,7 @@ test('Build 72 humanizes proactive durable-work messages and briefings',()=>{
 
 test('Build 72 does not create a new top-level product surface',()=>{
   const shell=read('apps/isabella/shell.js');
-  assert.ok(shell.includes('Build 2026.10.04.79.2'));
+  assert.ok(shell.includes('Build 2026.10.05.82'));
   assert.ok(!shell.includes('data-nav="human"'));
   assert.ok(!shell.includes('data-nav="state"'));
   assert.ok(!shell.includes('Human Surface'));
