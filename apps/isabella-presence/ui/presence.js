@@ -294,7 +294,7 @@ async function loadAgenda({force=false}={}){
     const base=parseIso(taskCalendarMonth+'-01'),monthFirst=isoDate(base),nextMonth=new Date(base.getFullYear(),base.getMonth()+1,1),monthLast=isoDate(addDays(nextMonth,-1));
     const startIso=new Date(base.getFullYear(),base.getMonth(),1).toISOString(),endIso=new Date(base.getFullYear(),base.getMonth()+1,1).toISOString();
     const results=await Promise.all([
-      sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,notes,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('due_date').order('sort_order').limit(300),
+      sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,notes,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('due_date').order('sort_order').limit(300),
       sb.from('isabella_events').select('id,title,starts_at,ends_at,all_day,category_id,project_id').gte('starts_at',startIso).lt('starts_at',endIso).order('starts_at').limit(200),
       sb.from('isabella_categories').select('id,name,color').order('sort_order').limit(50),
       sb.from('isabella_projects').select('id,name,category_id,color,archived').eq('archived',false).limit(100)
@@ -395,6 +395,10 @@ async function deleteTaskDetail(){
   if(!window.confirm(`¿Eliminar “${task.title}”?`))return;
   $('#taskDetailDelete').disabled=true;
   try{
+    if(task.client_key){
+      const {error:tombstoneError}=await sb.from('isabella_deleted_items').upsert({entity_type:'task',client_key:task.client_key,deleted_at:new Date().toISOString()},{onConflict:'user_id,entity_type,client_key'});
+      if(tombstoneError)throw tombstoneError;
+    }
     const {error}=await sb.from('isabella_tasks').delete().eq('id',task.id).eq('user_id',user.id);if(error)throw error;
     closeTaskDetail();lastAgendaAt=0;await loadAgenda({force:true});
   }catch{}finally{$('#taskDetailDelete').disabled=false}
