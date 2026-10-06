@@ -146,7 +146,7 @@ test('Presence 0.2 exposes a canonical MINDS task calendar without another task 
   assert.ok(ui.includes("sb.from('isabella_events').select("));
   assert.ok(ui.includes("sb.from('isabella_categories').select("));
   assert.ok(ui.includes("sb.from('isabella_projects').select("));
-  assert.ok(ui.includes("panelView=['status','tasks','chat'].includes(next)?next:'status'"));
+  assert.ok(ui.includes("const target=['status','tasks','chat'].includes(next)?next:'status'"));
   assert.ok(ui.includes("Agrega para ${label} una tarea: "));
   assert.ok(!ui.includes('presence_tasks'));
 });
