@@ -6,7 +6,7 @@ const MINDS_URL='https://gari01234.github.io/minds/isabella/';
 const POLL_MS=15000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
 const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01',LOCAL_TASK_DATE_KEY='minds-presence-task-date-v01';
-const $=s=>document.querySelector(s),$=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const now=()=>Date.now();
 const parseTime=v=>{const n=Date.parse(String(v||''));return Number.isFinite(n)?n:0};
@@ -259,7 +259,7 @@ function renderTaskCalendar(){
     const cls=['calendar-day',outside?'is-outside':'',key===todayIso()?'is-today':'',key===selectedTaskDate?'is-selected':'',itemDates.has(key)?'has-items':''].filter(Boolean).join(' ');
     return `<button class="${cls}" type="button" data-calendar-date="${key}" aria-label="${esc(new Intl.DateTimeFormat('es-ES',{dateStyle:'full'}).format(d))}">${d.getDate()}</button>`;
   }).join('');
-  $('[data-calendar-date]').forEach(b=>b.onclick=()=>void selectTaskDate(b.dataset.calendarDate));
+  document.querySelectorAll('[data-calendar-date]').forEach(b=>b.onclick=()=>void selectTaskDate(b.dataset.calendarDate));
 }
 function renderTaskDay(){
   const label=agendaDateLabel(selectedTaskDate);$('#tasksDayEyebrow').textContent=label.eyebrow;$('#tasksDayTitle').textContent=label.title;
@@ -276,7 +276,7 @@ function renderTaskDay(){
   $('#taskList').innerHTML=open.length?open.map(taskRowHtml).join(''):'<div class="task-empty">No hay tareas para este día.</div>';
   $('#completedTasks').classList.toggle('hidden',!done.length);
   $('#completedTasks').innerHTML=done.length?`<details><summary>Completadas · ${done.length}</summary><div class="completed-list">${done.map(taskRowHtml).join('')}</div></details>`:'';
-  $('[data-task-toggle]').forEach(b=>b.onclick=()=>void toggleAgendaTask(b.dataset.taskToggle));
+  document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=()=>void toggleAgendaTask(b.dataset.taskToggle));
 }
 function renderAgenda(){renderTaskCalendar();renderTaskDay()}
 async function loadAgenda({force=false}={}){
