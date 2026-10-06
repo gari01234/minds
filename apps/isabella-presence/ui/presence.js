@@ -3,13 +3,21 @@
 const SUPABASE_URL='https://lodexwyyynlarkqgkyhy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X';
 const MINDS_URL='https://gari01234.github.io/minds/isabella/';
-const POLL_MS=5000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
+const POLL_MS=15000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
-const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01';
-const $=s=>document.querySelector(s);
+const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01',LOCAL_TASK_DATE_KEY='minds-presence-task-date-v01';
+const $=s=>document.querySelector(s),$=s=>[...document.querySelectorAll(s)];
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const now=()=>Date.now();
 const parseTime=v=>{const n=Date.parse(String(v||''));return Number.isFinite(n)?n:0};
+const pad=n=>String(n).padStart(2,'0');
+const isoDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const todayIso=()=>isoDate(new Date());
+const parseIso=v=>{const [y,m,d]=String(v||'').split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const monthStart=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth(),1)};
+const monthEnd=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth()+1,0)};
+const monthKey=v=>{const d=parseIso(v);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`};
 const tauri=window.__TAURI__||null;
 const appWindow=tauri?.window?.getCurrentWindow?.()||null;
 const currentMonitor=tauri?.window?.currentMonitor||null;
@@ -21,6 +29,8 @@ const listen=tauri?.event?.listen||null;
 let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpen=false,chatBusy=false,panelView='status',homeCollapseTimer=null;
 let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),pendingReplyContext=null,lastQuickReplies=[];
 let panelSize=loadPanelSize(),lastAppliedSizeKey='';
+let selectedTaskDate=/^\d{4}-\d{2}-\d{2}$/.test(localStorage.getItem(LOCAL_TASK_DATE_KEY)||'')?localStorage.getItem(LOCAL_TASK_DATE_KEY):todayIso();
+let taskCalendarMonth=monthKey(selectedTaskDate),agendaTasks=[],agendaEvents=[],agendaCategories=new Map(),agendaProjects=new Map(),lastAgendaAt=0,agendaBusy=false;
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
 function loadSet(key){try{return new Set(JSON.parse(localStorage.getItem(key)||'[]'))}catch{return new Set()}}
@@ -61,7 +71,7 @@ function markdownHtml(value){
   }
   flush();return out.join('');
 }
-function currentPanelSize(){return panelView==='chat'?'chat':'status'}
+function currentPanelSize(){return panelView==='chat'?'chat':panelView==='tasks'?'tasks':'status'}
 function clearHomeCollapse(){if(homeCollapseTimer){clearTimeout(homeCollapseTimer);homeCollapseTimer=null}}
 function armHomeCollapse(){
   clearHomeCollapse();
@@ -143,8 +153,8 @@ function autoCandidate(cards){
   }
   return null;
 }
-const SIZES={pill:[306,60],status:[420,220],chat:[420,320],auth:[370,390],boot:[306,60]};
-const PANEL_MIN={width:360,statusHeight:180,chatHeight:220};
+const SIZES={pill:[306,60],status:[420,220],tasks:[720,500],chat:[420,320],auth:[370,390],boot:[306,60]};
+const PANEL_MIN={width:360,statusHeight:180,tasksHeight:320,chatHeight:220};
 async function positionWindow(mode,widthOverride=null){
   if(!appWindow||!currentMonitor||!LogicalPosition)return;
   try{
@@ -159,8 +169,8 @@ async function positionWindow(mode,widthOverride=null){
 async function sizeWindow(mode){
   if(!appWindow||!LogicalSize)return;
   const fallback=SIZES[mode]||SIZES.pill;
-  const isPanel=mode==='status'||mode==='chat';
-  const minHeight=mode==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+  const isPanel=['status','tasks','chat'].includes(mode);
+  const minHeight=mode==='chat'?PANEL_MIN.chatHeight:mode==='tasks'?PANEL_MIN.tasksHeight:PANEL_MIN.statusHeight;
   const w=isPanel&&panelSize?Math.max(PANEL_MIN.width,panelSize.width):fallback[0];
   const h=isPanel&&panelSize?Math.max(minHeight,panelSize.height):fallback[1];
   const key=mode+':'+w+'x'+h;
