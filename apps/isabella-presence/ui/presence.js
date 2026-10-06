@@ -348,9 +348,9 @@ async function renderPresence(cards,{auto=true}={}){
   $('#cards').innerHTML=focal?cardHtml(focal):'';
   $('#moreSignals').textContent=cards.length>1?`${cards.length-1} señal${cards.length===2?'':'es'} más`:'';
   $('#moreSignals').classList.toggle('hidden',cards.length<2);
-  $('#panelHeading').textContent=panelView==='chat'?'Chat':(focal?.needsUser?'Necesito tu decisión':(focal?.label||'Ahora'));
-  $('#statusTab').classList.toggle('on',panelView==='status');$('#chatTab').classList.toggle('on',panelView==='chat');
-  $('#statusView').classList.toggle('hidden',panelView!=='status');$('#chatView').classList.toggle('hidden',panelView!=='chat');
+  $('#panelHeading').textContent=panelView==='chat'?'Chat':panelView==='tasks'?'Tareas':(focal?.needsUser?'Necesito tu decisión':(focal?.label||'Ahora'));
+  $('#statusTab').classList.toggle('on',panelView==='status');$('#tasksTab').classList.toggle('on',panelView==='tasks');$('#chatTab').classList.toggle('on',panelView==='chat');
+  $('#statusView').classList.toggle('hidden',panelView!=='status');$('#tasksView').classList.toggle('hidden',panelView!=='tasks');$('#chatView').classList.toggle('hidden',panelView!=='chat');
   $('#panel').classList.toggle('hidden',!expanded);$('#pill').classList.toggle('hidden',expanded);
   $('#pillMain').setAttribute('aria-expanded',expanded?'true':'false');$('#app').dataset.mode=expanded?'home':'petit';$('#app').dataset.panelView=panelView;
   renderConversation();bindCardActions();
@@ -437,6 +437,7 @@ async function refresh({force=false}={}){
     await syncPendingReview({discover:!pendingReviewRequestId});
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
     const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
+    if(panelView==='tasks'&&expanded)await loadAgenda({force});
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
     else if(historyChanged)renderConversation();
   }catch(e){if(String(e?.message||'').toLowerCase().includes('jwt'))await renderAuth('La sesión de MINDS necesita renovarse.')}
@@ -491,8 +492,9 @@ async function verifyOtp(event){
   user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
 }
 async function setPanelView(next){
-  panelView=next==='chat'?'chat':'status';expanded=true;manualOpen=true;
+  panelView=['status','tasks','chat'].includes(next)?next:'status';expanded=true;manualOpen=true;
   if(panelView==='chat')await loadConversationHistory({render:false});
+  if(panelView==='tasks')await loadAgenda({force:true});
   await renderPresence(lastCards,{auto:false});
   if(panelView==='chat')setTimeout(()=>$('#chatInput')?.focus(),70);
 }
@@ -505,9 +507,12 @@ async function collapsePanel(){expanded=false;manualOpen=true;panelView='status'
 function bind(){
   $('#emailForm').addEventListener('submit',sendOtp);$('#otpForm').addEventListener('submit',verifyOtp);$('#chatForm').addEventListener('submit',submitChat);
   $('#pillMain').onclick=expandPanel;$('#pillHide').onclick=hideWindow;$('#collapseButton').onclick=collapsePanel;
-  $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');
+  $('#statusTab').onclick=()=>setPanelView('status');$('#tasksTab').onclick=()=>setPanelView('tasks');$('#chatTab').onclick=()=>setPanelView('chat');
   $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds(pendingReviewRequestId||null);
   $('#clearReplyContext').onclick=clearReplyContext;
+  $('#calendarPrev').onclick=()=>void shiftTaskMonth(-1);$('#calendarNext').onclick=()=>void shiftTaskMonth(1);
+  $('#calendarMonthLabel').onclick=()=>void selectTaskDate(todayIso());$('#tasksToday').onclick=()=>void selectTaskDate(todayIso());
+  $('#quickTaskForm').addEventListener('submit',createAgendaTask);$('#taskViaChat').onclick=()=>void addTaskViaChat();
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();if(expanded)void collapsePanel();else void hideWindow();return}
@@ -517,7 +522,7 @@ function bind(){
   $('#chatInput').addEventListener('input',armHomeCollapse);
   window.addEventListener('resize',()=>{
     if(!expanded)return;
-    const minHeight=panelView==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+    const minHeight=panelView==='chat'?PANEL_MIN.chatHeight:panelView==='tasks'?PANEL_MIN.tasksHeight:PANEL_MIN.statusHeight;
     if(window.innerWidth>=PANEL_MIN.width&&window.innerHeight>=minHeight){
       savePanelSize(window.innerWidth,window.innerHeight);
       lastAppliedSizeKey='';
