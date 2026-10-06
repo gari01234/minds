@@ -234,7 +234,6 @@ test('Presence review deep links resolve the exact pending shadow decision',()=>
 test('Work binds project switches through querySelectorAll and does not stall before render error handling',()=>{
   const work=read('apps/isabella/work.js');
   assert.ok(work.includes("$('[data-work-project]').forEach"));
-  assert.ok(!work.includes("$('[data-work-project]').forEach"));
 });
 
 test('Chat and artifact images are lazy-hydrated to avoid repeated private Storage egress',()=>{
@@ -715,8 +714,9 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
   assert.ok(app.includes('const signedAssetCache=new Map()'));
   assert.ok(app.includes('messageRenderKey'));
   assert.ok(app.includes('if(nextRenderKey===lastMessagesRenderKey)'));
-  assert.ok(app.includes("cachedSignedAsset('isabella-uploads',path)"));
-  assert.ok(app.includes("signedAssetUrl('isabella-uploads',path,3600)"));
+  assert.ok(app.includes("observeStorageImage(img,'isabella-uploads'"));
+  assert.ok(app.includes("signedAssetUrl(bucket,path,expires=3600)"));
+  assert.ok(app.includes("const cached=cachedSignedAsset(bucket,path)"));
   assert.ok(app.includes('lastMessagesRenderKey=nextRenderKey'));
   assert.ok(app.includes("artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}"));
 });
