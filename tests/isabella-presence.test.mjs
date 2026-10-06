@@ -14,7 +14,7 @@ const protocolV1=read('apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.1.md');
 const protocolV2=read('apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.2.md');
 const build=read('apps/isabella/BUILD-80.md');
 const build82=read('apps/isabella/BUILD-80.2.md');
-const attentionMigration=read('supabase/migrations/20261006154500_resolve_mission_attention_on_resume.sql');
+const attentionMigration=read('supabase/migrations/20261006153921_resolve_mission_attention_on_resume.sql');
 
 const forbiddenClientSecrets=['service_role','SUPABASE_SERVICE_ROLE_KEY','OPENAI_API_KEY','provider_response_id','gpt-6-astra','gpt-5.6-luna'];
 
