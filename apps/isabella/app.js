@@ -547,13 +547,12 @@ function closeIdeaWorkspace(){
 }
 function artifactPreviewMarkup(a,compact=false){
   const title=String(a?.title||'Vista previa'),path=String(a?.storage_path||'');if(!path)return '';
-  const cached=cachedSignedAsset('minds-artifacts',path);
-  return `<button class="generated-artifact-preview ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button" aria-label="Abrir vista previa"><img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-artifact-image="${esc(path)}" alt="Vista previa del documento"></button>`;
+  return `<button class="generated-artifact-preview ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button" aria-label="Abrir vista previa"><img loading="lazy" data-artifact-image="${esc(path)}" alt="Vista previa del documento"></button>`;
 }
 function artifactMarkup(a,compact=false){
   const kind=String(a?.kind||''),title=String(a?.title||'Artefacto'),path=String(a?.storage_path||'');
   if(!path)return '';
-  if(kind==='image'){const cached=cachedSignedAsset('minds-artifacts',path);return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`}
+  if(kind==='image'){return `<button class="generated-artifact generated-image ${compact?'compact':''}" data-artifact-open-image="${esc(path)}" data-artifact-title="${esc(title)}" type="button"><img loading="lazy" data-artifact-image="${esc(path)}" alt="${esc(title)}"><span class="generated-image-caption"><span>IMAGEN</span><strong>${esc(title)}</strong><em>Abrir ↗</em></span></button>`}
   const label=({docx:'WORD',pdf:'PDF',xlsx:'EXCEL',pptx:'POWERPOINT',csv:'CSV',zip:'ZIP',html:'HTML',txt:'TXT',json:'JSON'}[kind]||kind.toUpperCase());
   return `<a class="generated-artifact generated-file ${compact?'compact':''}" data-artifact-file="${esc(path)}" href="#" target="_blank" rel="noopener"><span>${esc(label)}</span><strong>${esc(title)}</strong><em>Abrir archivo ↗</em></a>`;
 }
@@ -568,14 +567,32 @@ function bindArtifactActions(root=document){
     b.onclick=()=>void openArtifactImage(String(b.dataset.artifactOpenImage||''),String(b.dataset.artifactTitle||'Imagen'));
   });
 }
+let lazyStorageImageObserver=null;
+function observeStorageImage(node,bucket,path){
+  if(!node||!path||node.dataset.loaded==='1')return;
+  if(!('IntersectionObserver' in window)){
+    void signedAssetUrl(bucket,path,3600).then(url=>{if(url&&node.isConnected){node.src=url;node.dataset.loaded='1'}});
+    return;
+  }
+  if(!lazyStorageImageObserver)lazyStorageImageObserver=new IntersectionObserver(entries=>{
+    for(const entry of entries){
+      if(!entry.isIntersecting)continue;
+      const img=entry.target,b=img.dataset.storageBucket,p=img.dataset.storagePath;
+      lazyStorageImageObserver.unobserve(img);
+      if(!b||!p)continue;
+      void signedAssetUrl(b,p,3600).then(url=>{if(url&&img.isConnected){img.src=url;img.dataset.loaded='1'}});
+    }
+  },{root:null,rootMargin:'240px 0px'});
+  node.dataset.storageBucket=bucket;node.dataset.storagePath=path;lazyStorageImageObserver.observe(node);
+}
 async function hydrateArtifactFiles(root=document){
-  const nodes=[...root.querySelectorAll('[data-artifact-image],[data-artifact-file]')].filter(x=>!x.dataset.loaded);
-  if(!nodes.length){bindArtifactActions(root);return}
-  await Promise.all(nodes.map(async node=>{
-    const path=node.dataset.artifactImage||node.dataset.artifactFile;if(!path)return;
+  const images=[...root.querySelectorAll('[data-artifact-image]')].filter(x=>!x.dataset.loaded);
+  for(const img of images)observeStorageImage(img,'minds-artifacts',img.dataset.artifactImage||'');
+  const files=[...root.querySelectorAll('[data-artifact-file]')].filter(x=>!x.dataset.loaded);
+  await Promise.all(files.map(async node=>{
+    const path=node.dataset.artifactFile;if(!path)return;
     const signed=await artifactSignedUrl(path,3600);if(!signed)return;
-    if(node.matches('img'))node.src=signed;else node.href=signed;
-    node.dataset.loaded='1';
+    node.href=signed;node.dataset.loaded='1';
   }));
   bindArtifactActions(root);
 }
@@ -968,7 +985,7 @@ function renderMessages(forceBottom=false){
     const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||''),cached=cachedSignedAsset('isabella-uploads',path);return `<img ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||'');return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
@@ -1700,12 +1717,7 @@ async function uploadChatImages(files){
 }
 async function hydrateChatImages(){
   const imgs=[...document.querySelectorAll('img[data-chat-image-path]')].filter(x=>!x.dataset.loaded);
-  if(!imgs.length)return;
-  await Promise.all(imgs.map(async img=>{
-    const path=img.dataset.chatImagePath;if(!path)return;
-    const signed=await signedAssetUrl('isabella-uploads',path,3600);
-    if(signed&&img.isConnected){img.src=signed;img.dataset.loaded='1'}
-  }));
+  for(const img of imgs)observeStorageImage(img,'isabella-uploads',img.dataset.chatImagePath||'');
 }
 
 function bind(){
