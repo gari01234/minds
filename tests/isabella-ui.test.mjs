@@ -222,6 +222,15 @@ test('Message reactions use an explicit action instead of hijacking long-press s
 });
 
 
+test('Presence review deep links resolve the exact pending shadow decision',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("searchParams.get('review')"));
+  assert.ok(app.includes("sb.from('minds_shadow_decisions')"));
+  assert.ok(app.includes(".eq('request_id',requestId).eq('status','pending')"));
+  assert.ok(app.includes("show('assistant')"));
+  assert.ok(app.includes("confirmProposal({...row.candidate,request_id:requestId})"));
+});
+
 test('browser entry scripts are syntactically valid JavaScript',()=>{
   for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
