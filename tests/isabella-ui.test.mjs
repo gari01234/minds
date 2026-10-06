@@ -231,9 +231,10 @@ test('Presence review deep links resolve the exact pending shadow decision',()=>
   assert.ok(app.includes("confirmProposal({...row.candidate,request_id:requestId})"));
 });
 
-test('Work binds project switches through querySelectorAll and does not stall before render error handling',()=>{
+test('Work binds project switches through querySelectorAll and cannot regress to singular querySelector.forEach',()=>{
   const work=read('apps/isabella/work.js');
   assert.ok(work.includes("$('[data-work-project]').forEach"));
+  assert.equal(/(?<!\$)\$\('\[data-work-project\]'\)\.forEach/.test(work),false);
 });
 
 test('Chat and artifact images are lazy-hydrated to avoid repeated private Storage egress',()=>{
