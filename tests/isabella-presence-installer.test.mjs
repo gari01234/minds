@@ -9,7 +9,7 @@ const workflow=read('.github/workflows/windows-presence-installer.yml');
 const doc=read('apps/isabella/BUILD-80.1.md');
 
 test('Presence remains an NSIS-distributed Windows app after Build 80.1',()=>{
-  assert.match(config.version,/^0\.1\.[1-9]\d*$/);
+  assert.match(config.version,/^0\.(?:[1-9]\d*)\.(?:\d+)$/);
   assert.equal(config.bundle.active,true);
   assert.deepEqual(config.bundle.targets,['nsis']);
   assert.ok(config.bundle.icon.includes('icons/icon.ico'));
@@ -22,7 +22,7 @@ test('Windows installer workflow is deterministic and publishes the current exe 
   assert.ok(workflow.includes('dtolnay/rust-toolchain@1.90.0'));
   assert.ok(workflow.includes('@tauri-apps/cli@2.12.0 build --bundles nsis'));
   assert.ok(workflow.includes('actions/upload-artifact@v4'));
-  assert.ok(workflow.includes('Isabella-Presence-Windows-0.1.7'));
+  assert.ok(workflow.includes('Isabella-Presence-Windows-0.2.0'));
   assert.ok(workflow.includes('bundle/nsis/*.exe'));
   assert.ok(!workflow.includes('service_role'));
   assert.ok(!workflow.includes('SUPABASE_SERVICE_ROLE_KEY'));

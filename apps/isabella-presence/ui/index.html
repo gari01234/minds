@@ -57,6 +57,7 @@
 
         <nav class="surface-tabs" aria-label="Vista de Presence">
           <button id="statusTab" class="surface-tab on" type="button">Ahora</button>
+          <button id="tasksTab" class="surface-tab" type="button">Tareas</button>
           <button id="chatTab" class="surface-tab" type="button">Chat</button>
         </nav>
 
@@ -75,6 +76,34 @@
         <div id="statusEmpty" class="status-empty hidden">
           <span class="orb medium" aria-hidden="true"><i></i><i></i></span>
           <div><strong>Nada necesita tu atención ahora.</strong><small>Isabella sigue disponible desde la bandeja.</small></div>
+        </div>
+      </section>
+
+      <section id="tasksView" class="panel-view tasks-view hidden">
+        <div class="tasks-layout">
+          <aside class="tasks-calendar">
+            <div class="calendar-head">
+              <button id="calendarPrev" class="calendar-arrow" type="button" aria-label="Mes anterior">‹</button>
+              <button id="calendarMonthLabel" class="calendar-month-label" type="button" title="Volver a hoy"></button>
+              <button id="calendarNext" class="calendar-arrow" type="button" aria-label="Mes siguiente">›</button>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true"><span>L</span><span>M</span><span>X</span><span>J</span><span>V</span><span>S</span><span>D</span></div>
+            <div id="calendarGrid" class="calendar-grid"></div>
+          </aside>
+          <section class="tasks-day">
+            <div class="tasks-day-head">
+              <div><small id="tasksDayEyebrow"></small><h2 id="tasksDayTitle"></h2></div>
+              <button id="tasksToday" class="tasks-today" type="button">Hoy</button>
+            </div>
+            <div id="dayEvents" class="day-events hidden"></div>
+            <div id="taskList" class="task-list"></div>
+            <div id="completedTasks" class="completed-tasks hidden"></div>
+            <form id="quickTaskForm" class="quick-task-form">
+              <input id="quickTaskInput" type="text" autocomplete="off" maxlength="300" placeholder="Agregar una tarea…">
+              <button id="quickTaskAdd" type="submit" aria-label="Agregar tarea">＋</button>
+            </form>
+            <button id="taskViaChat" class="task-via-chat" type="button">Pedir a Isabella ↗</button>
+          </section>
         </div>
       </section>
 

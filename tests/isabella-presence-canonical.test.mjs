@@ -36,8 +36,10 @@ test('Presence turns persist in the canonical Isabella conversation',()=>{
   assert.ok(chat.includes('onConflict:"user_id,conversation_id,client_key"'));
   assert.ok(chat.includes('source:"presence"'));
   assert.ok(chat.includes('surface:"presence"'));
-  assert.ok(!presence.includes('.insert('));
-  assert.ok(!presence.includes('.update('));
+  assert.ok(!presence.includes("sb.from('conversation_messages').insert("));
+  assert.ok(!presence.includes("sb.from('conversation_messages').update("));
+  assert.ok(!presence.includes("sb.from('minds_mission_runs').update("));
+  assert.ok(!presence.includes("sb.from('minds_attention_events').insert("));
 });
 
 test('Presence reloads durable canonical history',()=>{
@@ -54,7 +56,8 @@ test('Web Isabella reacts to Presence-originated conversation messages',()=>{
 });
 
 test('Build 80.3 remains one Isabella across multiple surfaces',()=>{
-  assert.ok(Number(config.version.split('.')[2])>=3);
+  const [major,minor,patch]=config.version.split('.').map(Number);
+  assert.ok(major>0||minor>1||(minor===1&&patch>=3));
   assert.ok(protocol.includes('One Isabella, one operational context, one conversation history, multiple surfaces.'));
   assert.ok(!presence.includes('SUPABASE_SERVICE_ROLE_KEY'));
   assert.ok(!presence.includes('service_role'));

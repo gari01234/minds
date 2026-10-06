@@ -49,15 +49,17 @@ test('Inline conversation delegates to canonical Isabella and routes confirmatio
   assert.ok(!ui.includes('allow_proposal'));
 });
 
-test('Presence uses the same public Supabase boundary under RLS',()=>{
+test('Presence uses the same public Supabase boundary under RLS and only user-driven task writes',()=>{
   assert.ok(ui.includes("https://lodexwyyynlarkqgkyhy.supabase.co"));
   assert.ok(ui.includes('sb_publishable_'));
   assert.ok(ui.includes('signInWithOtp'));
   assert.ok(ui.includes('shouldCreateUser:false'));
   assert.ok(ui.includes('verifyOtp'));
-  assert.ok(!ui.includes('.insert('));
-  assert.ok(!ui.includes('.update('));
+  assert.ok(ui.includes("sb.from('isabella_tasks').insert({title,due_date:selectedTaskDate"));
+  assert.ok(ui.includes("sb.from('isabella_tasks').update({completed_at,updated_at:new Date().toISOString()}).eq('id',id)"));
   assert.ok(!ui.includes('.delete('));
+  assert.ok(!ui.includes("sb.from('minds_attention_events').insert("));
+  assert.ok(!ui.includes("sb.from('minds_mission_runs').update("));
 });
 
 test('Presence is hidden by default and behaves as a pill rather than a dashboard',()=>{
@@ -70,7 +72,7 @@ test('Presence is hidden by default and behaves as a pill rather than a dashboar
   assert.equal(config.app.windows[0].minHeight,60);
   assert.ok(html.includes('id="pill"'));
   assert.ok(html.includes('id="collapseButton"'));
-  assert.ok(ui.includes("const SIZES={pill:[306,60],status:[420,220],chat:[420,320]"));
+  assert.ok(ui.includes("const SIZES={pill:[306,60],status:[420,220],tasks:[720,500],chat:[420,320]"));
   assert.ok(ui.includes("panelView='status'"));
 });
 
@@ -90,7 +92,7 @@ test('Presence positions only its own window near the active monitor edge',()=>{
 });
 
 test('Presence transport remains replaceable polling rather than assumed Realtime',()=>{
-  assert.ok(ui.includes('const POLL_MS=5000'));
+  assert.ok(ui.includes('const POLL_MS=15000'));
   assert.ok(ui.includes('setInterval(()=>refresh(),POLL_MS)'));
   assert.ok(!ui.includes('.channel('));
   assert.ok(protocolV1.includes('no están publicados actualmente en `supabase_realtime`'));
@@ -131,6 +133,20 @@ test('Presence uses a top-center hidden-petit-home interaction model',()=>{
   assert.ok(ui.includes("homeCollapseTimer=setTimeout"));
   assert.ok(html.includes('id="statusTab"'));
   assert.ok(html.includes('id="chatTab"'));
+});
+
+test('Presence 0.2 exposes a canonical MINDS task calendar without another task store',()=>{
+  assert.ok(html.includes('id="tasksTab"'));
+  assert.ok(html.includes('id="calendarGrid"'));
+  assert.ok(html.includes('id="taskList"'));
+  assert.ok(html.includes('id="quickTaskForm"'));
+  assert.ok(ui.includes("sb.from('isabella_tasks').select("));
+  assert.ok(ui.includes("sb.from('isabella_events').select("));
+  assert.ok(ui.includes("sb.from('isabella_categories').select("));
+  assert.ok(ui.includes("sb.from('isabella_projects').select("));
+  assert.ok(ui.includes("panelView=['status','tasks','chat'].includes(next)?next:'status'"));
+  assert.ok(ui.includes("Agrega para ${label} una tarea: "));
+  assert.ok(!ui.includes('presence_tasks'));
 });
 
 test('Presence keeps the exact blocker context when replying to a decision',()=>{

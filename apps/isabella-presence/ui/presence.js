@@ -3,13 +3,21 @@
 const SUPABASE_URL='https://lodexwyyynlarkqgkyhy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X';
 const MINDS_URL='https://gari01234.github.io/minds/isabella/';
-const POLL_MS=5000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
+const POLL_MS=15000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
-const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01';
+const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01',LOCAL_TASK_DATE_KEY='minds-presence-task-date-v01';
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const now=()=>Date.now();
 const parseTime=v=>{const n=Date.parse(String(v||''));return Number.isFinite(n)?n:0};
+const pad=n=>String(n).padStart(2,'0');
+const isoDate=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+const todayIso=()=>isoDate(new Date());
+const parseIso=v=>{const [y,m,d]=String(v||'').split('-').map(Number);return new Date(y,m-1,d)};
+const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
+const monthStart=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth(),1)};
+const monthEnd=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth()+1,0)};
+const monthKey=v=>{const d=parseIso(v);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`};
 const tauri=window.__TAURI__||null;
 const appWindow=tauri?.window?.getCurrentWindow?.()||null;
 const currentMonitor=tauri?.window?.currentMonitor||null;
@@ -21,6 +29,8 @@ const listen=tauri?.event?.listen||null;
 let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpen=false,chatBusy=false,panelView='status',homeCollapseTimer=null;
 let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),pendingReplyContext=null,lastQuickReplies=[];
 let panelSize=loadPanelSize(),lastAppliedSizeKey='';
+let selectedTaskDate=/^\d{4}-\d{2}-\d{2}$/.test(localStorage.getItem(LOCAL_TASK_DATE_KEY)||'')?localStorage.getItem(LOCAL_TASK_DATE_KEY):todayIso();
+let taskCalendarMonth=monthKey(selectedTaskDate),agendaTasks=[],agendaEvents=[],agendaCategories=new Map(),agendaProjects=new Map(),lastAgendaAt=0,agendaBusy=false;
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
 function loadSet(key){try{return new Set(JSON.parse(localStorage.getItem(key)||'[]'))}catch{return new Set()}}
@@ -61,7 +71,7 @@ function markdownHtml(value){
   }
   flush();return out.join('');
 }
-function currentPanelSize(){return panelView==='chat'?'chat':'status'}
+function currentPanelSize(){return panelView==='chat'?'chat':panelView==='tasks'?'tasks':'status'}
 function clearHomeCollapse(){if(homeCollapseTimer){clearTimeout(homeCollapseTimer);homeCollapseTimer=null}}
 function armHomeCollapse(){
   clearHomeCollapse();
@@ -143,8 +153,8 @@ function autoCandidate(cards){
   }
   return null;
 }
-const SIZES={pill:[306,60],status:[420,220],chat:[420,320],auth:[370,390],boot:[306,60]};
-const PANEL_MIN={width:360,statusHeight:180,chatHeight:220};
+const SIZES={pill:[306,60],status:[420,220],tasks:[720,500],chat:[420,320],auth:[370,390],boot:[306,60]};
+const PANEL_MIN={width:360,statusHeight:180,tasksHeight:320,chatHeight:220};
 async function positionWindow(mode,widthOverride=null){
   if(!appWindow||!currentMonitor||!LogicalPosition)return;
   try{
@@ -159,8 +169,8 @@ async function positionWindow(mode,widthOverride=null){
 async function sizeWindow(mode){
   if(!appWindow||!LogicalSize)return;
   const fallback=SIZES[mode]||SIZES.pill;
-  const isPanel=mode==='status'||mode==='chat';
-  const minHeight=mode==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+  const isPanel=['status','tasks','chat'].includes(mode);
+  const minHeight=mode==='chat'?PANEL_MIN.chatHeight:mode==='tasks'?PANEL_MIN.tasksHeight:PANEL_MIN.statusHeight;
   const w=isPanel&&panelSize?Math.max(PANEL_MIN.width,panelSize.width):fallback[0];
   const h=isPanel&&panelSize?Math.max(minHeight,panelSize.height):fallback[1];
   const key=mode+':'+w+'x'+h;
@@ -209,6 +219,122 @@ function renderConversation(){
   $('#app').dataset.busy=chatBusy?'true':'false';
   requestAnimationFrame(()=>{const s=$('#panelScroll');if(s)s.scrollTop=s.scrollHeight});
 }
+
+function agendaDateLabel(value){
+  const d=parseIso(value),today=parseIso(todayIso()),tomorrow=addDays(today,1),yesterday=addDays(today,-1);
+  if(value===isoDate(today))return {eyebrow:'Hoy',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  if(value===isoDate(tomorrow))return {eyebrow:'Mañana',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  if(value===isoDate(yesterday))return {eyebrow:'Ayer',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  return {eyebrow:new Intl.DateTimeFormat('es-ES',{weekday:'long'}).format(d),title:new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'long',year:d.getFullYear()!==today.getFullYear()?'numeric':undefined}).format(d)};
+}
+function agendaEventDate(value){const d=new Date(value);return Number.isNaN(d.getTime())?'':isoDate(d)}
+function agendaEventTime(event){
+  if(event.all_day)return 'Todo el día';
+  const d=new Date(event.starts_at);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('es-ES',{hour:'2-digit',minute:'2-digit'}).format(d);
+}
+function taskMeta(task){
+  const bits=[],project=agendaProjects.get(task.project_id),category=agendaCategories.get(task.category_id);
+  if(project?.name)bits.push(project.name);else if(category?.name)bits.push(category.name);
+  if(task.reminder_time)bits.push('⏰ '+String(task.reminder_time).slice(0,5));
+  if(task.due_date&&task.due_date<todayIso()&&!task.completed_at)bits.push('Vencida · '+new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short'}).format(parseIso(task.due_date)));
+  return bits;
+}
+function taskRowHtml(task){
+  const meta=taskMeta(task),important=String(task.priority||'')==='high';
+  return `<div class="task-row ${task.completed_at?'is-done':''}" data-task-row="${esc(task.id)}">
+    <button class="task-toggle" type="button" data-task-toggle="${esc(task.id)}" aria-label="${task.completed_at?'Reabrir':'Completar'}">${task.completed_at?'✓':''}</button>
+    <div class="task-copy"><span class="task-title">${esc(task.title)}</span>${meta.length?`<div class="task-meta">${meta.map((x,i)=>`<span class="${i===meta.length-1&&String(x).startsWith('Vencida')?'task-overdue':''}">${esc(x)}</span>`).join('')}</div>`:''}</div>
+    <span class="task-star ${important?'is-important':''}" aria-hidden="true">${important?'★':'☆'}</span>
+  </div>`;
+}
+function renderTaskCalendar(){
+  const base=parseIso(taskCalendarMonth+'-01'),start=new Date(base),offset=(base.getDay()+6)%7;start.setDate(start.getDate()-offset);
+  const itemDates=new Set([
+    ...agendaTasks.map(x=>x.due_date).filter(Boolean),
+    ...agendaEvents.map(x=>agendaEventDate(x.starts_at)).filter(Boolean)
+  ]);
+  $('#calendarMonthLabel').textContent=new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric'}).format(base);
+  $('#calendarGrid').innerHTML=Array.from({length:42},(_,i)=>{
+    const d=addDays(start,i),key=isoDate(d),outside=d.getMonth()!==base.getMonth();
+    const cls=['calendar-day',outside?'is-outside':'',key===todayIso()?'is-today':'',key===selectedTaskDate?'is-selected':'',itemDates.has(key)?'has-items':''].filter(Boolean).join(' ');
+    return `<button class="${cls}" type="button" data-calendar-date="${key}" aria-label="${esc(new Intl.DateTimeFormat('es-ES',{dateStyle:'full'}).format(d))}">${d.getDate()}</button>`;
+  }).join('');
+  document.querySelectorAll('[data-calendar-date]').forEach(b=>b.onclick=()=>void selectTaskDate(b.dataset.calendarDate));
+}
+function renderTaskDay(){
+  const label=agendaDateLabel(selectedTaskDate);$('#tasksDayEyebrow').textContent=label.eyebrow;$('#tasksDayTitle').textContent=label.title;
+  const dayEvents=agendaEvents.filter(x=>agendaEventDate(x.starts_at)===selectedTaskDate).sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));
+  $('#dayEvents').classList.toggle('hidden',!dayEvents.length);
+  $('#dayEvents').innerHTML=dayEvents.map(e=>`<div class="day-event"><time>${esc(agendaEventTime(e))}</time><strong>${esc(e.title)}</strong></div>`).join('');
+  let dayTasks=agendaTasks.filter(x=>x.due_date===selectedTaskDate);
+  if(selectedTaskDate===todayIso())dayTasks=[...agendaTasks.filter(x=>x.due_date&&x.due_date<selectedTaskDate&&!x.completed_at),...dayTasks];
+  const byId=new Map(dayTasks.map(x=>[x.id,x]));dayTasks=[...byId.values()];
+  const open=dayTasks.filter(x=>!x.completed_at).sort((a,b)=>{
+    const ap=a.priority==='high'?0:1,bp=b.priority==='high'?0:1;return ap-bp||Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.title).localeCompare(String(b.title),'es');
+  });
+  const done=dayTasks.filter(x=>!!x.completed_at);
+  $('#taskList').innerHTML=open.length?open.map(taskRowHtml).join(''):'<div class="task-empty">No hay tareas para este día.</div>';
+  $('#completedTasks').classList.toggle('hidden',!done.length);
+  $('#completedTasks').innerHTML=done.length?`<details><summary>Completadas · ${done.length}</summary><div class="completed-list">${done.map(taskRowHtml).join('')}</div></details>`:'';
+  document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=()=>void toggleAgendaTask(b.dataset.taskToggle));
+}
+function renderAgenda(){renderTaskCalendar();renderTaskDay()}
+async function loadAgenda({force=false}={}){
+  if(!sb||!user||agendaBusy)return;
+  if(!force&&Date.now()-lastAgendaAt<AGENDA_REFRESH_MS){renderAgenda();return}
+  agendaBusy=true;
+  try{
+    const base=parseIso(taskCalendarMonth+'-01'),monthFirst=isoDate(base),nextMonth=new Date(base.getFullYear(),base.getMonth()+1,1),monthLast=isoDate(addDays(nextMonth,-1));
+    const startIso=new Date(base.getFullYear(),base.getMonth(),1).toISOString(),endIso=new Date(base.getFullYear(),base.getMonth()+1,1).toISOString();
+    const queries=[
+      sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('sort_order').limit(300),
+      sb.from('isabella_events').select('id,title,starts_at,ends_at,all_day,category_id,project_id').gte('starts_at',startIso).lt('starts_at',endIso).order('starts_at').limit(200),
+      sb.from('isabella_categories').select('id,name,color').order('sort_order').limit(50),
+      sb.from('isabella_projects').select('id,name,category_id,color,archived').eq('archived',false).limit(100)
+    ];
+    if(taskCalendarMonth===monthKey(todayIso()))queries.push(sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).is('completed_at',null).lt('due_date',todayIso()).order('due_date').limit(50));
+    const results=await Promise.all(queries);for(const q of results)if(q.error)throw q.error;
+    const all=[...(results[0].data||[]),...(results[4]?.data||[])],unique=new Map(all.map(x=>[x.id,x]));
+    agendaTasks=[...unique.values()];agendaEvents=results[1].data||[];
+    agendaCategories=new Map((results[2].data||[]).map(x=>[x.id,x]));agendaProjects=new Map((results[3].data||[]).map(x=>[x.id,x]));
+    lastAgendaAt=Date.now();renderAgenda();
+  }catch(e){
+    $('#taskList').innerHTML='<div class="task-empty">No pude cargar tus tareas ahora mismo.</div>';
+  }finally{agendaBusy=false}
+}
+async function selectTaskDate(value){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||'')))return;
+  selectedTaskDate=value;localStorage.setItem(LOCAL_TASK_DATE_KEY,value);
+  const nextMonth=monthKey(value),changed=nextMonth!==taskCalendarMonth;taskCalendarMonth=nextMonth;
+  if(changed){lastAgendaAt=0;await loadAgenda({force:true})}else renderAgenda();
+}
+async function shiftTaskMonth(delta){
+  const base=parseIso(taskCalendarMonth+'-01'),next=new Date(base.getFullYear(),base.getMonth()+delta,1);
+  await selectTaskDate(isoDate(next));
+}
+async function createAgendaTask(event){
+  event?.preventDefault?.();const input=$('#quickTaskInput'),title=String(input?.value||'').trim();
+  if(!title||!sb||!user)return;
+  $('#quickTaskAdd').disabled=true;
+  try{
+    const {error}=await sb.from('isabella_tasks').insert({title,due_date:selectedTaskDate,metadata:{source:'presence_manual'}});
+    if(error)throw error;input.value='';lastAgendaAt=0;await loadAgenda({force:true});
+  }catch{}finally{$('#quickTaskAdd').disabled=false}
+}
+async function toggleAgendaTask(id){
+  const task=agendaTasks.find(x=>x.id===id);if(!task||!sb)return;
+  const completed_at=task.completed_at?null:new Date().toISOString();
+  try{
+    const {error}=await sb.from('isabella_tasks').update({completed_at,updated_at:new Date().toISOString()}).eq('id',id);
+    if(error)throw error;task.completed_at=completed_at;renderTaskDay();
+  }catch{}
+}
+async function addTaskViaChat(){
+  await setPanelView('chat');
+  const label=new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(parseIso(selectedTaskDate));
+  $('#chatInput').value=`Agrega para ${label} una tarea: `;$('#chatInput').focus();armHomeCollapse();
+}
+
 async function renderPresence(cards,{auto=true}={}){
   lastCards=cards;showOnly('presenceView');
   const focal=cards[0]||null;
@@ -222,9 +348,9 @@ async function renderPresence(cards,{auto=true}={}){
   $('#cards').innerHTML=focal?cardHtml(focal):'';
   $('#moreSignals').textContent=cards.length>1?`${cards.length-1} señal${cards.length===2?'':'es'} más`:'';
   $('#moreSignals').classList.toggle('hidden',cards.length<2);
-  $('#panelHeading').textContent=panelView==='chat'?'Chat':(focal?.needsUser?'Necesito tu decisión':(focal?.label||'Ahora'));
-  $('#statusTab').classList.toggle('on',panelView==='status');$('#chatTab').classList.toggle('on',panelView==='chat');
-  $('#statusView').classList.toggle('hidden',panelView!=='status');$('#chatView').classList.toggle('hidden',panelView!=='chat');
+  $('#panelHeading').textContent=panelView==='chat'?'Chat':panelView==='tasks'?'Tareas':(focal?.needsUser?'Necesito tu decisión':(focal?.label||'Ahora'));
+  $('#statusTab').classList.toggle('on',panelView==='status');$('#tasksTab').classList.toggle('on',panelView==='tasks');$('#chatTab').classList.toggle('on',panelView==='chat');
+  $('#statusView').classList.toggle('hidden',panelView!=='status');$('#tasksView').classList.toggle('hidden',panelView!=='tasks');$('#chatView').classList.toggle('hidden',panelView!=='chat');
   $('#panel').classList.toggle('hidden',!expanded);$('#pill').classList.toggle('hidden',expanded);
   $('#pillMain').setAttribute('aria-expanded',expanded?'true':'false');$('#app').dataset.mode=expanded?'home':'petit';$('#app').dataset.panelView=panelView;
   renderConversation();bindCardActions();
@@ -311,6 +437,7 @@ async function refresh({force=false}={}){
     await syncPendingReview({discover:!pendingReviewRequestId});
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
     const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
+    if(panelView==='tasks'&&expanded)await loadAgenda({force});
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
     else if(historyChanged)renderConversation();
   }catch(e){if(String(e?.message||'').toLowerCase().includes('jwt'))await renderAuth('La sesión de MINDS necesita renovarse.')}
@@ -365,8 +492,9 @@ async function verifyOtp(event){
   user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
 }
 async function setPanelView(next){
-  panelView=next==='chat'?'chat':'status';expanded=true;manualOpen=true;
+  panelView=['status','tasks','chat'].includes(next)?next:'status';expanded=true;manualOpen=true;
   if(panelView==='chat')await loadConversationHistory({render:false});
+  if(panelView==='tasks')await loadAgenda({force:true});
   await renderPresence(lastCards,{auto:false});
   if(panelView==='chat')setTimeout(()=>$('#chatInput')?.focus(),70);
 }
@@ -379,9 +507,12 @@ async function collapsePanel(){expanded=false;manualOpen=true;panelView='status'
 function bind(){
   $('#emailForm').addEventListener('submit',sendOtp);$('#otpForm').addEventListener('submit',verifyOtp);$('#chatForm').addEventListener('submit',submitChat);
   $('#pillMain').onclick=expandPanel;$('#pillHide').onclick=hideWindow;$('#collapseButton').onclick=collapsePanel;
-  $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');
+  $('#statusTab').onclick=()=>setPanelView('status');$('#tasksTab').onclick=()=>setPanelView('tasks');$('#chatTab').onclick=()=>setPanelView('chat');
   $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds(pendingReviewRequestId||null);
   $('#clearReplyContext').onclick=clearReplyContext;
+  $('#calendarPrev').onclick=()=>void shiftTaskMonth(-1);$('#calendarNext').onclick=()=>void shiftTaskMonth(1);
+  $('#calendarMonthLabel').onclick=()=>void selectTaskDate(todayIso());$('#tasksToday').onclick=()=>void selectTaskDate(todayIso());
+  $('#quickTaskForm').addEventListener('submit',createAgendaTask);$('#taskViaChat').onclick=()=>void addTaskViaChat();
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();if(expanded)void collapsePanel();else void hideWindow();return}
@@ -391,7 +522,7 @@ function bind(){
   $('#chatInput').addEventListener('input',armHomeCollapse);
   window.addEventListener('resize',()=>{
     if(!expanded)return;
-    const minHeight=panelView==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+    const minHeight=panelView==='chat'?PANEL_MIN.chatHeight:panelView==='tasks'?PANEL_MIN.tasksHeight:PANEL_MIN.statusHeight;
     if(window.innerWidth>=PANEL_MIN.width&&window.innerHeight>=minHeight){
       savePanelSize(window.innerWidth,window.innerHeight);
       lastAppliedSizeKey='';

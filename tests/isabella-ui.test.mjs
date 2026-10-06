@@ -231,8 +231,22 @@ test('Presence review deep links resolve the exact pending shadow decision',()=>
   assert.ok(app.includes("confirmProposal({...row.candidate,request_id:requestId})"));
 });
 
+test('Work binds project switches through querySelectorAll and does not stall before render error handling',()=>{
+  const work=read('apps/isabella/work.js');
+  assert.ok(work.includes("$('[data-work-project]').forEach"));
+});
+
+test('Chat and artifact images are lazy-hydrated to avoid repeated private Storage egress',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('function observeStorageImage'));
+  assert.ok(app.includes("new IntersectionObserver"));
+  assert.ok(app.includes("observeStorageImage(img,'isabella-uploads'"));
+  assert.ok(app.includes("observeStorageImage(img,'minds-artifacts'"));
+  assert.ok(app.includes('loading="lazy" data-chat-image-path'));
+});
+
 test('browser entry scripts are syntactically valid JavaScript',()=>{
-  for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
+  for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js','apps/isabella/work.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
   }
 });
@@ -566,10 +580,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=57'));
   assert.ok(index.includes('shell.js?v=83'));
-  assert.ok(index.includes('app.js?v=88'));
+  assert.ok(index.includes('app.js?v=89'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v94'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v95'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -678,7 +692,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=8'));
+  assert.ok(index.includes('work.js?v=9'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -700,8 +714,9 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
   assert.ok(app.includes('const signedAssetCache=new Map()'));
   assert.ok(app.includes('messageRenderKey'));
   assert.ok(app.includes('if(nextRenderKey===lastMessagesRenderKey)'));
-  assert.ok(app.includes("cachedSignedAsset('isabella-uploads',path)"));
-  assert.ok(app.includes("signedAssetUrl('isabella-uploads',path,3600)"));
+  assert.ok(app.includes("observeStorageImage(img,'isabella-uploads'"));
+  assert.ok(app.includes("signedAssetUrl(bucket,path,expires=3600)"));
+  assert.ok(app.includes("const cached=cachedSignedAsset(bucket,path)"));
   assert.ok(app.includes('lastMessagesRenderKey=nextRenderKey'));
   assert.ok(app.includes("artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}"));
 });
