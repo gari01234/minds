@@ -18,6 +18,15 @@ const addDays=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x};
 const monthStart=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth(),1)};
 const monthEnd=v=>{const d=parseIso(v);return new Date(d.getFullYear(),d.getMonth()+1,0)};
 const monthKey=v=>{const d=parseIso(v);return `${d.getFullYear()}-${pad(d.getMonth()+1)}`};
+function fallbackColor(seed=''){
+  const palette=['#5A9EC1','#6D7278','#8A72C7','#D08A6A','#9A9466','#2F6FB0','#4F8A62','#B678A2'];
+  let h=0;for(const ch of String(seed))h=(h*31+ch.charCodeAt(0))>>>0;
+  return palette[h%palette.length];
+}
+function agendaItemColor(item){
+  const project=agendaProjects.get(item?.project_id),category=agendaCategories.get(item?.category_id);
+  return project?.color||category?.color||fallbackColor(item?.project_id||item?.category_id||item?.id||'item');
+}
 const tauri=window.__TAURI__||null;
 const appWindow=tauri?.window?.getCurrentWindow?.()||null;
 const currentMonitor=tauri?.window?.currentMonitor||null;
@@ -30,7 +39,7 @@ let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpe
 let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),pendingReplyContext=null,lastQuickReplies=[];
 let panelSize=loadPanelSize(),lastAppliedSizeKey='';
 let selectedTaskDate=/^\d{4}-\d{2}-\d{2}$/.test(localStorage.getItem(LOCAL_TASK_DATE_KEY)||'')?localStorage.getItem(LOCAL_TASK_DATE_KEY):todayIso();
-let taskCalendarMonth=monthKey(selectedTaskDate),agendaTasks=[],agendaEvents=[],agendaCategories=new Map(),agendaProjects=new Map(),lastAgendaAt=0,agendaBusy=false;
+let taskCalendarMonth=monthKey(selectedTaskDate),agendaTasks=[],agendaEvents=[],agendaCategories=new Map(),agendaProjects=new Map(),lastAgendaAt=0,agendaBusy=false,activeTaskDetailId=null,draggedTaskId=null;
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
 function loadSet(key){try{return new Set(JSON.parse(localStorage.getItem(key)||'[]'))}catch{return new Set()}}
