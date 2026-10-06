@@ -91,6 +91,14 @@
           </div>
           <div id="quickReplies" class="quick-replies"></div>
         </div>
+        <div id="replyContextNotice" class="reply-context hidden">
+          <div class="reply-context-copy">
+            <small>Respondiendo a</small>
+            <strong id="replyContextTitle"></strong>
+            <span id="replyContextQuestion"></span>
+          </div>
+          <button id="clearReplyContext" type="button" aria-label="Dejar de responder a esta decisión">×</button>
+        </div>
         <form id="chatForm" class="composer">
           <input id="chatInput" type="text" autocomplete="off" placeholder="Escribe a Isabella…" maxlength="4000">
           <button id="sendButton" type="submit" aria-label="Enviar">↑</button>

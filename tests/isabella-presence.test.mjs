@@ -133,6 +133,15 @@ test('Presence uses a top-center hidden-petit-home interaction model',()=>{
   assert.ok(html.includes('id="chatTab"'));
 });
 
+test('Presence keeps the exact blocker context when replying to a decision',()=>{
+  assert.ok(html.includes('id="replyContextNotice"'));
+  assert.ok(html.includes('id="replyContextQuestion"'));
+  assert.ok(ui.includes('pendingReplyContext=card.replyContext'));
+  assert.ok(ui.includes('reply_context:replyContext'));
+  assert.ok(ui.includes('mission_run_id:String(metadata.mission_run_id||event.source_id||\'\')'));
+  assert.ok(ui.includes("$('#clearReplyContext').onclick=clearReplyContext"));
+});
+
 test('Presence renders assistant Markdown instead of exposing raw syntax',()=>{
   assert.ok(ui.includes('function markdownHtml(value)'));
   assert.ok(ui.includes("replace(/\\*\\*([^*]+)\\*\\*/g"));

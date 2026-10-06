@@ -19,7 +19,7 @@ const openUrl=tauri?.opener?.openUrl||null;
 const listen=tauri?.event?.listen||null;
 
 let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpen=false,chatBusy=false,panelView='status',homeCollapseTimer=null;
-let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),lastQuickReplies=[];
+let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),pendingReplyContext=null,lastQuickReplies=[];
 let panelSize=loadPanelSize(),lastAppliedSizeKey='';
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
@@ -105,9 +105,15 @@ function missionCard(run){
 }
 function attentionCard(event){
   const needsUser=event.route==='interrupt'&&event.requires_user===true;
+  const metadata=event?.metadata&&typeof event.metadata==='object'?event.metadata:{};
   return {id:'attention:'+event.id,source:'attention',sourceId:event.id,kind:needsUser?'question':'ambient',
     label:needsUser?'Necesito tu decisión':'Para tener en cuenta',title:String(event.title||'Actualización').trim(),body:String(event.body||'').trim(),
-    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser};
+    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser,
+    replyContext:needsUser?{
+      attention_id:String(event.id||''),source_type:String(event.source_type||''),source_id:String(event.source_id||''),
+      mission_run_id:String(metadata.mission_run_id||event.source_id||''),title:String(event.title||'').trim(),
+      question:String(event.body||'').trim()
+    }:null};
 }
 function projectCards(runs,missions,events){
   const cards=[];
@@ -194,6 +200,9 @@ function renderConversation(){
   $('#conversationEmpty').classList.toggle('hidden',chatTurns.length>0||chatBusy);
   $('#turns').innerHTML=chatTurns.slice(-5).map(t=>`<div class="turn ${esc(t.role)}${t.error?' error':''}">${t.role==='assistant'?markdownHtml(t.text):esc(t.text)}</div>`).join('')+(chatBusy?'<div class="turn assistant"><p>Pensando…</p></div>':'');
   $('#reviewNotice').classList.toggle('hidden',!pendingReview);
+  $('#replyContextNotice').classList.toggle('hidden',!pendingReplyContext);
+  $('#replyContextTitle').textContent=pendingReplyContext?.title||'';
+  $('#replyContextQuestion').textContent=pendingReplyContext?.question||'';
   $('#quickReplies').innerHTML=lastQuickReplies.map((q,i)=>`<button type="button" data-quick="${i}">${esc(q.label)}</button>`).join('');
   document.querySelectorAll('[data-quick]').forEach(b=>b.onclick=()=>sendChatText(lastQuickReplies[Number(b.dataset.quick)]?.value||''));
   $('#sendButton').disabled=chatBusy;
@@ -235,10 +244,22 @@ function bindCardActions(){
 }
 function focusQuestion(cardId){
   const card=lastCards.find(x=>x.id===cardId);if(!card)return;
+  pendingReplyContext=card.replyContext||{
+    attention_id:card.source==='attention'?String(card.sourceId||''):'',
+    source_type:String(card.source||''),source_id:String(card.sourceId||''),
+    mission_run_id:card.source==='mission'?String(card.sourceId||''):'',
+    title:String(card.title||'').trim(),question:String(card.body||'').trim()
+  };
   expanded=true;manualOpen=true;panelView='chat';rememberSeen(card.id);void renderPresence(lastCards,{auto:false}).then(()=>{
-    $('#chatInput').value='Sobre “'+card.title+'”: ';
+    $('#chatInput').value='';
+    $('#chatInput').placeholder='Escribe tu respuesta a esta decisión…';
     $('#chatInput').focus();armHomeCollapse();
   });
+}
+function clearReplyContext(){
+  pendingReplyContext=null;
+  const input=$('#chatInput');if(input)input.placeholder='Escribe a Isabella…';
+  renderConversation();
 }
 async function cancelRun(id){
   if(!sb||!id)return;
@@ -298,13 +319,14 @@ async function refresh({force=false}={}){
 function startPolling(){if(timer)clearInterval(timer);timer=setInterval(()=>refresh(),POLL_MS)}
 async function sendChatText(raw){
   const message=String(raw||'').trim();if(!message||chatBusy||!sb||!user)return;
+  const replyContext=pendingReplyContext?{...pendingReplyContext}:null;
   expanded=true;manualOpen=true;chatBusy=true;pendingReview=false;lastQuickReplies=[];
   chatTurns.push({role:'user',text:message});$('#chatInput').value='';await renderPresence(lastCards,{auto:false});
   try{
     const timezone=Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin';
     const requestId=globalThis.crypto?.randomUUID?.()||('presence-'+Date.now()+'-'+Math.random().toString(16).slice(2));
     const {data,error}=await sb.functions.invoke('isabella-chat',{body:{
-      message,context:{timezone,locale:navigator.language||'es-ES',presence_surface:true},background:false,attachments:[],
+      message,context:{timezone,locale:navigator.language||'es-ES',presence_surface:true,reply_context:replyContext},background:false,attachments:[],
       surface:'presence',client_message_id:requestId
     }});
     if(error)throw error;if(data?.error)throw new Error(data.message||data.detail||data.error);
@@ -313,6 +335,7 @@ async function sendChatText(raw){
     const reviewId=String(proposals.find(x=>/^[0-9a-f-]{36}$/i.test(String(x?.request_id||'')))?.request_id||'');
     if(reviewId)setPendingReviewRequestId(reviewId);else await syncPendingReview({discover:true});
     lastQuickReplies=(Array.isArray(data?.quick_replies)?data.quick_replies:[]).slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value);
+    if(replyContext)clearReplyContext();
     chatBusy=false;
     await loadConversationHistory({render:false});
   }catch(e){chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true})}
@@ -358,6 +381,7 @@ function bind(){
   $('#pillMain').onclick=expandPanel;$('#pillHide').onclick=hideWindow;$('#collapseButton').onclick=collapsePanel;
   $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');
   $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds(pendingReviewRequestId||null);
+  $('#clearReplyContext').onclick=clearReplyContext;
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();if(expanded)void collapsePanel();else void hideWindow();return}
