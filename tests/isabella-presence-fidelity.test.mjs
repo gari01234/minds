@@ -29,14 +29,15 @@ test('Relationship Contract v0.2 preserves continuity when Isabella corrects her
   assert.ok(relationship.includes('reconoce explícitamente en una frase breve qué dijiste mal'));
 });
 
-test('Presence 0.1.7 is a top-edge contextual island',()=>{
-  assert.equal(config.version,'0.1.7');
+test('Presence 0.2.0 is a top-edge contextual island',()=>{
+  assert.equal(config.version,'0.2.0');
   assert.equal(config.app.windows[0].width,306);
   assert.equal(config.app.windows[0].height,60);
-  assert.ok(presence.includes("const SIZES={pill:[306,60],status:[420,220],chat:[420,320]"));
+  assert.ok(presence.includes("const SIZES={pill:[306,60],status:[420,220],tasks:[720,500],chat:[420,320]"));
   assert.ok(presence.includes('Math.round(origin.x+(area.width-w)/2)'));
   assert.ok(presence.includes("$('#app').dataset.mode=expanded?'home':'petit'"));
   assert.ok(html.includes('id="statusTab"'));
+  assert.ok(html.includes('id="tasksTab"'));
   assert.ok(html.includes('id="chatTab"'));
 });
 
