@@ -24,8 +24,8 @@ function fallbackColor(seed=''){
   return palette[h%palette.length];
 }
 function agendaItemColor(item){
-  const project=agendaProjects.get(item?.project_id),category=agendaCategories.get(item?.category_id);
-  return project?.color||category?.color||fallbackColor(item?.project_id||item?.category_id||item?.id||'item');
+  const project=agendaProjects.get(item?.project_id),category=agendaCategories.get(item?.category_id),raw=String(project?.color||category?.color||'');
+  return /^#[0-9a-f]{3,8}$/i.test(raw)?raw:fallbackColor(item?.project_id||item?.category_id||item?.id||'item');
 }
 const tauri=window.__TAURI__||null;
 const appWindow=tauri?.window?.getCurrentWindow?.()||null;
@@ -310,6 +310,7 @@ async function loadAgenda({force=false}={}){
 }
 async function selectTaskDate(value){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||'')))return;
+  if(activeTaskDetailId)closeTaskDetail();
   selectedTaskDate=value;localStorage.setItem(LOCAL_TASK_DATE_KEY,value);
   const nextMonth=monthKey(value),changed=nextMonth!==taskCalendarMonth;taskCalendarMonth=nextMonth;
   if(changed){lastAgendaAt=0;await loadAgenda({force:true})}else renderAgenda();
@@ -504,7 +505,14 @@ async function queryPresence(){
     sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
   if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
-  return projectCards(runQ.data||[],missionQ.data||[],attentionQ.data||[]);
+  const missions=missionQ.data||[],missionById=new Map(missions.map(x=>[String(x.id),x]));
+  const attention=(attentionQ.data||[]).filter(event=>{
+    if(event.requires_user===true&&event.source_type==='mission'){
+      return missionById.get(String(event.source_id||''))?.status==='waiting_for_user';
+    }
+    return true;
+  });
+  return projectCards(runQ.data||[],missions,attention);
 }
 async function loadConversationHistory({render=true}={}){
   if(!sb||!user||chatBusy)return false;
@@ -595,7 +603,9 @@ async function verifyOtp(event){
   user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
 }
 async function setPanelView(next){
-  panelView=['status','tasks','chat'].includes(next)?next:'status';expanded=true;manualOpen=true;
+  const target=['status','tasks','chat'].includes(next)?next:'status';
+  if(target!=='tasks'&&activeTaskDetailId)closeTaskDetail();
+  panelView=target;expanded=true;manualOpen=true;
   if(panelView==='chat')await loadConversationHistory({render:false});
   if(panelView==='tasks')await loadAgenda({force:true});
   await renderPresence(lastCards,{auto:false});
@@ -616,9 +626,18 @@ function bind(){
   $('#calendarPrev').onclick=()=>void shiftTaskMonth(-1);$('#calendarNext').onclick=()=>void shiftTaskMonth(1);
   $('#calendarMonthLabel').onclick=()=>void selectTaskDate(todayIso());$('#tasksToday').onclick=()=>void selectTaskDate(todayIso());
   $('#quickTaskForm').addEventListener('submit',createAgendaTask);$('#taskViaChat').onclick=()=>void addTaskViaChat();
+  $('#taskDetailClose').onclick=closeTaskDetail;$('#taskDetailForm').addEventListener('submit',saveTaskDetail);$('#taskDetailDelete').onclick=()=>void deleteTaskDetail();
+  $('#taskDetailStar').onclick=()=>{
+    const star=$('#taskDetailStar'),important=star.dataset.priority!=='high';
+    star.dataset.priority=important?'high':'normal';star.textContent=important?'★':'☆';star.classList.toggle('is-important',important);
+  };
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
-    if(event.key==='Escape'){event.preventDefault();if(expanded)void collapsePanel();else void hideWindow();return}
+    if(event.key==='Escape'){
+      event.preventDefault();
+      if(activeTaskDetailId){closeTaskDetail();return}
+      if(expanded)void collapsePanel();else void hideWindow();return
+    }
     if(expanded)armHomeCollapse();
   });
   document.addEventListener('pointerdown',()=>{if(expanded)armHomeCollapse()},{passive:true});
