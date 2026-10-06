@@ -29,8 +29,8 @@ test('Relationship Contract v0.2 preserves continuity when Isabella corrects her
   assert.ok(relationship.includes('reconoce explícitamente en una frase breve qué dijiste mal'));
 });
 
-test('Presence 0.1.5 is a top-edge contextual island',()=>{
-  assert.equal(config.version,'0.1.5');
+test('Presence 0.1.6 is a top-edge contextual island',()=>{
+  assert.equal(config.version,'0.1.6');
   assert.equal(config.app.windows[0].width,306);
   assert.equal(config.app.windows[0].height,60);
   assert.ok(presence.includes("const SIZES={pill:[306,60],status:[420,220],chat:[420,320]"));
