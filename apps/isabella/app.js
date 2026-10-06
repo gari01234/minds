@@ -374,7 +374,10 @@ function show(name){
   syncOrbCompact();
   save();
   if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
-  if(name==='calendar')renderCalendar();
+  if(name==='calendar'){
+    renderCalendar();
+    if(previous!=='calendar')setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
+  }
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
   if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);
