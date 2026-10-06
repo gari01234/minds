@@ -237,6 +237,14 @@ test('Work binds project switches through querySelectorAll and cannot regress to
   assert.equal(/(?<!\$)\$\('\[data-work-project\]'\)\.forEach/.test(work),false);
 });
 
+test('MINDS Calendar refreshes canonical task state when opened or when the browser regains focus',()=>{
+  const app=read('apps/isabella/app.js'),sync=read('apps/isabella/sync.js');
+  assert.ok(app.includes("if(previous!=='calendar')setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0)"));
+  assert.ok(app.includes("document.addEventListener('visibilitychange'"));
+  assert.ok(app.includes("state.screen==='calendar'"));
+  assert.ok(sync.includes("priority:t.priority||'normal'"));
+});
+
 test('Chat and artifact images are lazy-hydrated to avoid repeated private Storage egress',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes('function observeStorageImage'));
