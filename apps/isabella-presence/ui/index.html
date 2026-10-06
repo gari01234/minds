@@ -104,6 +104,27 @@
             </form>
             <button id="taskViaChat" class="task-via-chat" type="button">Pedir a Isabella ↗</button>
           </section>
+          <aside id="taskDetail" class="task-detail hidden" aria-hidden="true">
+            <header class="task-detail-head">
+              <div><small>TAREA</small><strong>Editar</strong></div>
+              <button id="taskDetailClose" type="button" aria-label="Cerrar">×</button>
+            </header>
+            <form id="taskDetailForm" class="task-detail-form">
+              <div class="task-detail-title-row">
+                <input id="taskDetailTitle" type="text" maxlength="300" aria-label="Título de la tarea">
+                <button id="taskDetailStar" class="task-detail-star" type="button" aria-label="Marcar como importante">☆</button>
+              </div>
+              <label>Fecha<input id="taskDetailDate" type="date"></label>
+              <label>Recordatorio<input id="taskDetailReminder" type="time"></label>
+              <label>Categoría<select id="taskDetailCategory"></select></label>
+              <label>Proyecto<select id="taskDetailProject"></select></label>
+              <label>Notas<textarea id="taskDetailNotes" rows="4"></textarea></label>
+              <div class="task-detail-actions">
+                <button id="taskDetailDelete" class="task-detail-delete" type="button">Eliminar</button>
+                <button id="taskDetailSave" class="task-detail-save" type="submit">Guardar</button>
+              </div>
+            </form>
+          </aside>
         </div>
       </section>
 
