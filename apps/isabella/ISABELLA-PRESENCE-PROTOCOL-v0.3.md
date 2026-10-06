@@ -46,3 +46,25 @@ Presence still does not gain new authority. Proposals that require confirmation 
 ## Invariant
 
 One Isabella, one operational context, one conversation history, multiple surfaces.
+
+
+## Tareas as a projection, not a second planner
+
+The Tareas surface reads and mutates the same canonical `isabella_tasks` rows used by MINDS.
+
+A selected calendar day means exactly that date. Presence must not silently inject overdue tasks into Today. Overdue is a separate semantic view if introduced later.
+
+Manual task gestures in Presence — create, complete, edit, delete, mark important and reorder — are explicit user actions under authenticated RLS. They do not grant Isabella additional autonomous authority.
+
+Task order is persisted in `sort_order`; importance is persisted in `priority`; date remains `due_date`. MINDS must pull canonical task state when its calendar is opened so edits made in Presence appear on the full surface.
+
+## Ahora
+
+Ahora is an attention surface, not a task inbox and not a history feed.
+
+It may show:
+- a current decision that genuinely blocks progress;
+- active work whose state is meaningful now;
+- a recent completion or failure that merits surfacing.
+
+A delivered decision whose underlying Mission is no longer `waiting_for_user` is obsolete and must not remain actionable. Resuming a Mission resolves its prior waiting-for-user Attention event at the ledger level.
