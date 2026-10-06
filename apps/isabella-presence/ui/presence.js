@@ -5,6 +5,7 @@ const SUPABASE_PUBLISHABLE_KEY='sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X';
 const MINDS_URL='https://gari01234.github.io/minds/isabella/';
 const POLL_MS=5000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
+const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01';
 const $=s=>document.querySelector(s);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const now=()=>Date.now();
@@ -18,11 +19,28 @@ const openUrl=tauri?.opener?.openUrl||null;
 const listen=tauri?.event?.listen||null;
 
 let sb=null,user=null,email='',timer=null,polling=false,expanded=false,manualOpen=false,chatBusy=false,panelView='status',homeCollapseTimer=null;
-let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,lastQuickReplies=[];
+let lastSnapshot='',lastHistorySnapshot='',lastCards=[],priorRunStatus=new Map(),observedActiveRuns=new Set(),chatTurns=[],pendingReview=false,pendingReviewRequestId=String(localStorage.getItem(LOCAL_REVIEW_KEY)||''),lastQuickReplies=[];
+let panelSize=loadPanelSize(),lastAppliedSizeKey='';
 let seen=loadSet(LOCAL_SEEN_KEY),suppressed=loadSet(LOCAL_SUPPRESS_KEY);
 
 function loadSet(key){try{return new Set(JSON.parse(localStorage.getItem(key)||'[]'))}catch{return new Set()}}
 function saveSet(key,set){try{localStorage.setItem(key,JSON.stringify([...set].slice(-200)))}catch{}}
+function loadPanelSize(){
+  try{
+    const value=JSON.parse(localStorage.getItem(LOCAL_PANEL_SIZE_KEY)||'null');
+    const width=Math.round(Number(value?.width||0)),height=Math.round(Number(value?.height||0));
+    return width>=360&&height>=180?{width,height}:null;
+  }catch{return null}
+}
+function savePanelSize(width,height){
+  const next={width:Math.max(360,Math.round(Number(width)||0)),height:Math.max(180,Math.round(Number(height)||0))};
+  panelSize=next;try{localStorage.setItem(LOCAL_PANEL_SIZE_KEY,JSON.stringify(next))}catch{}
+}
+function setPendingReviewRequestId(value){
+  const id=/^[0-9a-f-]{36}$/i.test(String(value||''))?String(value):'';
+  pendingReviewRequestId=id;pendingReview=!!id;
+  try{if(id)localStorage.setItem(LOCAL_REVIEW_KEY,id);else localStorage.removeItem(LOCAL_REVIEW_KEY)}catch{}
+}
 function rememberSeen(id){if(id){seen.add(String(id));saveSet(LOCAL_SEEN_KEY,seen)}}
 function rememberSuppressed(id){if(id){suppressed.add(String(id));saveSet(LOCAL_SUPPRESS_KEY,suppressed)}}
 function cleanText(v){return String(v||'').replace(/\[[^\]\n]+\]\(sandbox:\/mnt\/data\/[^)]+\)/gi,'').replace(/\(?sandbox:\/mnt\/data\/[^\s)]+\)?/gi,'').replace(/\n{3,}/g,'\n\n').trim()}
@@ -120,21 +138,32 @@ function autoCandidate(cards){
   return null;
 }
 const SIZES={pill:[306,60],status:[420,220],chat:[420,320],auth:[370,390],boot:[306,60]};
-async function positionWindow(mode){
+const PANEL_MIN={width:360,statusHeight:180,chatHeight:220};
+async function positionWindow(mode,widthOverride=null){
   if(!appWindow||!currentMonitor||!LogicalPosition)return;
   try{
     const monitor=await currentMonitor();if(!monitor)return;
     const scale=monitor.scaleFactor||1;
     const origin=monitor.position?.toLogical?monitor.position.toLogical(scale):{x:(monitor.position?.x||0)/scale,y:(monitor.position?.y||0)/scale};
     const area=monitor.size?.toLogical?monitor.size.toLogical(scale):{width:(monitor.size?.width||0)/scale,height:(monitor.size?.height||0)/scale};
-    const [w]=SIZES[mode]||SIZES.pill;
+    const [fallbackW]=SIZES[mode]||SIZES.pill,w=Number(widthOverride)||fallbackW;
     await appWindow.setPosition(new LogicalPosition(Math.round(origin.x+(area.width-w)/2),Math.round(origin.y)));
   }catch{}
 }
 async function sizeWindow(mode){
   if(!appWindow||!LogicalSize)return;
-  const [w,h]=SIZES[mode]||SIZES.pill;
-  try{await appWindow.setSize(new LogicalSize(w,h));await positionWindow(mode)}catch{}
+  const fallback=SIZES[mode]||SIZES.pill;
+  const isPanel=mode==='status'||mode==='chat';
+  const minHeight=mode==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+  const w=isPanel&&panelSize?Math.max(PANEL_MIN.width,panelSize.width):fallback[0];
+  const h=isPanel&&panelSize?Math.max(minHeight,panelSize.height):fallback[1];
+  const key=mode+':'+w+'x'+h;
+  if(lastAppliedSizeKey===key)return;
+  try{
+    await appWindow.setSize(new LogicalSize(w,h));
+    await positionWindow(mode,w);
+    lastAppliedSizeKey=key;
+  }catch{}
 }
 async function showWindow({focus=false}={}){
   if(!appWindow)return;
@@ -145,8 +174,8 @@ async function hideWindow(){
   const focal=autoCandidate(lastCards);if(focal)rememberSuppressed(focal.id);
   try{await appWindow?.hide()}catch{}
 }
-async function openMinds(attentionId=null){
-  const target=attentionId?MINDS_URL+'?attention='+encodeURIComponent(attentionId):MINDS_URL;
+async function openMinds(reviewId=null){
+  const target=reviewId?MINDS_URL+'?review='+encodeURIComponent(reviewId):MINDS_URL;
   try{if(openUrl)await openUrl(target);else window.open(target,'_blank')}catch{}
 }
 function showOnly(id){for(const el of ['bootView','authView','presenceView'])$('#'+el)?.classList.toggle('hidden',el!==id)}
@@ -243,9 +272,22 @@ async function loadConversationHistory({render=true}={}){
   if(render)renderConversation();
   return true;
 }
+async function syncPendingReview({discover=false}={}){
+  if(!sb||!user)return;
+  try{
+    let query=sb.from('minds_shadow_decisions').select('request_id,status,created_at').eq('status','pending');
+    if(pendingReviewRequestId)query=query.eq('request_id',pendingReviewRequestId).limit(1);
+    else if(discover)query=query.gte('created_at',new Date(now()-24*60*60*1000).toISOString()).order('created_at',{ascending:false}).limit(1);
+    else return;
+    const {data,error}=await query;if(error)return;
+    const next=String(data?.[0]?.request_id||'');
+    if(next!==pendingReviewRequestId)setPendingReviewRequestId(next);
+  }catch{}
+}
 async function refresh({force=false}={}){
   if(!sb||!user||polling)return;polling=true;
   try{
+    await syncPendingReview({discover:!pendingReviewRequestId});
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
     const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
@@ -267,7 +309,9 @@ async function sendChatText(raw){
     }});
     if(error)throw error;if(data?.error)throw new Error(data.message||data.detail||data.error);
     chatTurns.push({role:'assistant',text:cleanText(data?.reply||'Te escucho.')});
-    pendingReview=!!data?.proposal||(Array.isArray(data?.proposals)&&data.proposals.length>0);
+    const proposals=[data?.proposal,...(Array.isArray(data?.proposals)?data.proposals:[])].filter(Boolean);
+    const reviewId=String(proposals.find(x=>/^[0-9a-f-]{36}$/i.test(String(x?.request_id||'')))?.request_id||'');
+    if(reviewId)setPendingReviewRequestId(reviewId);else await syncPendingReview({discover:true});
     lastQuickReplies=(Array.isArray(data?.quick_replies)?data.quick_replies:[]).slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value);
     chatBusy=false;
     await loadConversationHistory({render:false});
@@ -313,7 +357,7 @@ function bind(){
   $('#emailForm').addEventListener('submit',sendOtp);$('#otpForm').addEventListener('submit',verifyOtp);$('#chatForm').addEventListener('submit',submitChat);
   $('#pillMain').onclick=expandPanel;$('#pillHide').onclick=hideWindow;$('#collapseButton').onclick=collapsePanel;
   $('#statusTab').onclick=()=>setPanelView('status');$('#chatTab').onclick=()=>setPanelView('chat');
-  $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds();
+  $('#openMinds').onclick=()=>openMinds();$('#reviewInMinds').onclick=()=>openMinds(pendingReviewRequestId||null);
   document.querySelectorAll('[data-hide]').forEach(b=>b.onclick=hideWindow);
   document.addEventListener('keydown',event=>{
     if(event.key==='Escape'){event.preventDefault();if(expanded)void collapsePanel();else void hideWindow();return}
@@ -321,6 +365,14 @@ function bind(){
   });
   document.addEventListener('pointerdown',()=>{if(expanded)armHomeCollapse()},{passive:true});
   $('#chatInput').addEventListener('input',armHomeCollapse);
+  window.addEventListener('resize',()=>{
+    if(!expanded)return;
+    const minHeight=panelView==='chat'?PANEL_MIN.chatHeight:PANEL_MIN.statusHeight;
+    if(window.innerWidth>=PANEL_MIN.width&&window.innerHeight>=minHeight){
+      savePanelSize(window.innerWidth,window.innerHeight);
+      lastAppliedSizeKey='';
+    }
+  });
   if(listen){
     listen('presence:manual-open',async()=>{manualOpen=true;expanded=false;panelView='status';if(user)await renderPresence(lastCards,{auto:false});else await renderAuth('')}).catch(()=>{});
     listen('presence:manual-hide',()=>{manualOpen=false;expanded=false;panelView='status';clearHomeCollapse();const focal=autoCandidate(lastCards);if(focal)rememberSuppressed(focal.id)}).catch(()=>{});
