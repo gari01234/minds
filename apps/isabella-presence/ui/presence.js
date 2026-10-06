@@ -249,24 +249,26 @@ function taskMeta(task){
   return bits;
 }
 function taskRowHtml(task){
-  const meta=taskMeta(task),important=String(task.priority||'')==='high';
-  return `<div class="task-row ${task.completed_at?'is-done':''}" data-task-row="${esc(task.id)}">
-    <button class="task-toggle" type="button" data-task-toggle="${esc(task.id)}" aria-label="${task.completed_at?'Reabrir':'Completar'}">${task.completed_at?'✓':''}</button>
-    <div class="task-copy"><span class="task-title">${esc(task.title)}</span>${meta.length?`<div class="task-meta">${meta.map((x,i)=>`<span class="${i===meta.length-1&&String(x).startsWith('Vencida')?'task-overdue':''}">${esc(x)}</span>`).join('')}</div>`:''}</div>
-    <span class="task-star ${important?'is-important':''}" aria-hidden="true">${important?'★':'☆'}</span>
+  const meta=taskMeta(task),important=String(task.priority||'')==='high',done=!!task.completed_at;
+  return `<div class="task-row ${done?'is-done':''}" data-task-row="${esc(task.id)}" draggable="${done?'false':'true'}">
+    <button class="task-toggle" type="button" data-task-toggle="${esc(task.id)}" aria-label="${done?'Reabrir':'Completar'}">${done?'✓':''}</button>
+    <button class="task-copy" type="button" data-task-edit="${esc(task.id)}"><span class="task-title">${esc(task.title)}</span>${meta.length?`<span class="task-meta">${meta.map((x,i)=>`<span class="${i===meta.length-1&&String(x).startsWith('Vencida')?'task-overdue':''}">${esc(x)}</span>`).join('')}</span>`:''}</button>
+    <button class="task-star ${important?'is-important':''}" type="button" data-task-star="${esc(task.id)}" aria-label="${important?'Quitar de importantes':'Marcar como importante'}">${important?'★':'☆'}</button>
+    <span class="task-drag" aria-hidden="true" title="Arrastrar para reordenar">⋮⋮</span>
   </div>`;
 }
 function renderTaskCalendar(){
   const base=parseIso(taskCalendarMonth+'-01'),start=new Date(base),offset=(base.getDay()+6)%7;start.setDate(start.getDate()-offset);
-  const itemDates=new Set([
-    ...agendaTasks.map(x=>x.due_date).filter(Boolean),
-    ...agendaEvents.map(x=>agendaEventDate(x.starts_at)).filter(Boolean)
-  ]);
   $('#calendarMonthLabel').textContent=new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric'}).format(base);
   $('#calendarGrid').innerHTML=Array.from({length:42},(_,i)=>{
     const d=addDays(start,i),key=isoDate(d),outside=d.getMonth()!==base.getMonth();
-    const cls=['calendar-day',outside?'is-outside':'',key===todayIso()?'is-today':'',key===selectedTaskDate?'is-selected':'',itemDates.has(key)?'has-items':''].filter(Boolean).join(' ');
-    return `<button class="${cls}" type="button" data-calendar-date="${key}" aria-label="${esc(new Intl.DateTimeFormat('es-ES',{dateStyle:'full'}).format(d))}">${d.getDate()}</button>`;
+    const colors=[...new Set([
+      ...agendaTasks.filter(x=>x.due_date===key).map(agendaItemColor),
+      ...agendaEvents.filter(x=>agendaEventDate(x.starts_at)===key).map(agendaItemColor)
+    ].filter(Boolean))].slice(0,4);
+    const cls=['calendar-day',outside?'is-outside':'',key===todayIso()?'is-today':'',key===selectedTaskDate?'is-selected':''].filter(Boolean).join(' ');
+    const dots=colors.length?`<span class="calendar-dots">${colors.map(color=>`<i style="--dot-color:${esc(color)}"></i>`).join('')}</span>`:'';
+    return `<button class="${cls}" type="button" data-calendar-date="${key}" aria-label="${esc(new Intl.DateTimeFormat('es-ES',{dateStyle:'full'}).format(d))}"><span>${d.getDate()}</span>${dots}</button>`;
   }).join('');
   document.querySelectorAll('[data-calendar-date]').forEach(b=>b.onclick=()=>void selectTaskDate(b.dataset.calendarDate));
 }
@@ -275,17 +277,13 @@ function renderTaskDay(){
   const dayEvents=agendaEvents.filter(x=>agendaEventDate(x.starts_at)===selectedTaskDate).sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));
   $('#dayEvents').classList.toggle('hidden',!dayEvents.length);
   $('#dayEvents').innerHTML=dayEvents.map(e=>`<div class="day-event"><time>${esc(agendaEventTime(e))}</time><strong>${esc(e.title)}</strong></div>`).join('');
-  let dayTasks=agendaTasks.filter(x=>x.due_date===selectedTaskDate);
-  if(selectedTaskDate===todayIso())dayTasks=[...agendaTasks.filter(x=>x.due_date&&x.due_date<selectedTaskDate&&!x.completed_at),...dayTasks];
-  const byId=new Map(dayTasks.map(x=>[x.id,x]));dayTasks=[...byId.values()];
-  const open=dayTasks.filter(x=>!x.completed_at).sort((a,b)=>{
-    const ap=a.priority==='high'?0:1,bp=b.priority==='high'?0:1;return ap-bp||Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.title).localeCompare(String(b.title),'es');
-  });
-  const done=dayTasks.filter(x=>!!x.completed_at);
+  const dayTasks=agendaTasks.filter(x=>x.due_date===selectedTaskDate);
+  const open=dayTasks.filter(x=>!x.completed_at).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.title).localeCompare(String(b.title),'es'));
+  const done=dayTasks.filter(x=>!!x.completed_at).sort((a,b)=>Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.title).localeCompare(String(b.title),'es'));
   $('#taskList').innerHTML=open.length?open.map(taskRowHtml).join(''):'<div class="task-empty">No hay tareas para este día.</div>';
   $('#completedTasks').classList.toggle('hidden',!done.length);
   $('#completedTasks').innerHTML=done.length?`<details><summary>Completadas · ${done.length}</summary><div class="completed-list">${done.map(taskRowHtml).join('')}</div></details>`:'';
-  document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=()=>void toggleAgendaTask(b.dataset.taskToggle));
+  bindAgendaTaskActions();
 }
 function renderAgenda(){renderTaskCalendar();renderTaskDay()}
 async function loadAgenda({force=false}={}){
@@ -295,18 +293,17 @@ async function loadAgenda({force=false}={}){
   try{
     const base=parseIso(taskCalendarMonth+'-01'),monthFirst=isoDate(base),nextMonth=new Date(base.getFullYear(),base.getMonth()+1,1),monthLast=isoDate(addDays(nextMonth,-1));
     const startIso=new Date(base.getFullYear(),base.getMonth(),1).toISOString(),endIso=new Date(base.getFullYear(),base.getMonth()+1,1).toISOString();
-    const queries=[
-      sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('sort_order').limit(300),
+    const results=await Promise.all([
+      sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,notes,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('due_date').order('sort_order').limit(300),
       sb.from('isabella_events').select('id,title,starts_at,ends_at,all_day,category_id,project_id').gte('starts_at',startIso).lt('starts_at',endIso).order('starts_at').limit(200),
       sb.from('isabella_categories').select('id,name,color').order('sort_order').limit(50),
       sb.from('isabella_projects').select('id,name,category_id,color,archived').eq('archived',false).limit(100)
-    ];
-    if(taskCalendarMonth===monthKey(todayIso()))queries.push(sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).is('completed_at',null).lt('due_date',todayIso()).order('due_date').limit(50));
-    const results=await Promise.all(queries);for(const q of results)if(q.error)throw q.error;
-    const all=[...(results[0].data||[]),...(results[4]?.data||[])],unique=new Map(all.map(x=>[x.id,x]));
-    agendaTasks=[...unique.values()];agendaEvents=results[1].data||[];
+    ]);
+    for(const q of results)if(q.error)throw q.error;
+    agendaTasks=results[0].data||[];agendaEvents=results[1].data||[];
     agendaCategories=new Map((results[2].data||[]).map(x=>[x.id,x]));agendaProjects=new Map((results[3].data||[]).map(x=>[x.id,x]));
     lastAgendaAt=Date.now();renderAgenda();
+    if(activeTaskDetailId&&!agendaTasks.some(x=>x.id===activeTaskDetailId))closeTaskDetail();
   }catch(e){
     $('#taskList').innerHTML='<div class="task-empty">No pude cargar tus tareas ahora mismo.</div>';
   }finally{agendaBusy=false}
