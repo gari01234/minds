@@ -9,7 +9,7 @@ const workflow=read('.github/workflows/windows-presence-installer.yml');
 const doc=read('apps/isabella/BUILD-80.1.md');
 
 test('Presence remains an NSIS-distributed Windows app after Build 80.1',()=>{
-  assert.match(config.version,/^0\.1\.[1-9]\d*$/);
+  assert.match(config.version,/^0\.(?:[1-9]\d*)\.(?:\d+)$/);
   assert.equal(config.bundle.active,true);
   assert.deepEqual(config.bundle.targets,['nsis']);
   assert.ok(config.bundle.icon.includes('icons/icon.ico'));
