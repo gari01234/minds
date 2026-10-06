@@ -219,6 +219,122 @@ function renderConversation(){
   $('#app').dataset.busy=chatBusy?'true':'false';
   requestAnimationFrame(()=>{const s=$('#panelScroll');if(s)s.scrollTop=s.scrollHeight});
 }
+
+function agendaDateLabel(value){
+  const d=parseIso(value),today=parseIso(todayIso()),tomorrow=addDays(today,1),yesterday=addDays(today,-1);
+  if(value===isoDate(today))return {eyebrow:'Hoy',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  if(value===isoDate(tomorrow))return {eyebrow:'Mañana',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  if(value===isoDate(yesterday))return {eyebrow:'Ayer',title:new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(d)};
+  return {eyebrow:new Intl.DateTimeFormat('es-ES',{weekday:'long'}).format(d),title:new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'long',year:d.getFullYear()!==today.getFullYear()?'numeric':undefined}).format(d)};
+}
+function agendaEventDate(value){const d=new Date(value);return Number.isNaN(d.getTime())?'':isoDate(d)}
+function agendaEventTime(event){
+  if(event.all_day)return 'Todo el día';
+  const d=new Date(event.starts_at);return Number.isNaN(d.getTime())?'':new Intl.DateTimeFormat('es-ES',{hour:'2-digit',minute:'2-digit'}).format(d);
+}
+function taskMeta(task){
+  const bits=[],project=agendaProjects.get(task.project_id),category=agendaCategories.get(task.category_id);
+  if(project?.name)bits.push(project.name);else if(category?.name)bits.push(category.name);
+  if(task.reminder_time)bits.push('⏰ '+String(task.reminder_time).slice(0,5));
+  if(task.due_date&&task.due_date<todayIso()&&!task.completed_at)bits.push('Vencida · '+new Intl.DateTimeFormat('es-ES',{day:'numeric',month:'short'}).format(parseIso(task.due_date)));
+  return bits;
+}
+function taskRowHtml(task){
+  const meta=taskMeta(task),important=String(task.priority||'')==='high';
+  return `<div class="task-row ${task.completed_at?'is-done':''}" data-task-row="${esc(task.id)}">
+    <button class="task-toggle" type="button" data-task-toggle="${esc(task.id)}" aria-label="${task.completed_at?'Reabrir':'Completar'}">${task.completed_at?'✓':''}</button>
+    <div class="task-copy"><span class="task-title">${esc(task.title)}</span>${meta.length?`<div class="task-meta">${meta.map((x,i)=>`<span class="${i===meta.length-1&&String(x).startsWith('Vencida')?'task-overdue':''}">${esc(x)}</span>`).join('')}</div>`:''}</div>
+    <span class="task-star ${important?'is-important':''}" aria-hidden="true">${important?'★':'☆'}</span>
+  </div>`;
+}
+function renderTaskCalendar(){
+  const base=parseIso(taskCalendarMonth+'-01'),start=new Date(base),offset=(base.getDay()+6)%7;start.setDate(start.getDate()-offset);
+  const itemDates=new Set([
+    ...agendaTasks.map(x=>x.due_date).filter(Boolean),
+    ...agendaEvents.map(x=>agendaEventDate(x.starts_at)).filter(Boolean)
+  ]);
+  $('#calendarMonthLabel').textContent=new Intl.DateTimeFormat('es-ES',{month:'long',year:'numeric'}).format(base);
+  $('#calendarGrid').innerHTML=Array.from({length:42},(_,i)=>{
+    const d=addDays(start,i),key=isoDate(d),outside=d.getMonth()!==base.getMonth();
+    const cls=['calendar-day',outside?'is-outside':'',key===todayIso()?'is-today':'',key===selectedTaskDate?'is-selected':'',itemDates.has(key)?'has-items':''].filter(Boolean).join(' ');
+    return `<button class="${cls}" type="button" data-calendar-date="${key}" aria-label="${esc(new Intl.DateTimeFormat('es-ES',{dateStyle:'full'}).format(d))}">${d.getDate()}</button>`;
+  }).join('');
+  $('[data-calendar-date]').forEach(b=>b.onclick=()=>void selectTaskDate(b.dataset.calendarDate));
+}
+function renderTaskDay(){
+  const label=agendaDateLabel(selectedTaskDate);$('#tasksDayEyebrow').textContent=label.eyebrow;$('#tasksDayTitle').textContent=label.title;
+  const dayEvents=agendaEvents.filter(x=>agendaEventDate(x.starts_at)===selectedTaskDate).sort((a,b)=>String(a.starts_at).localeCompare(String(b.starts_at)));
+  $('#dayEvents').classList.toggle('hidden',!dayEvents.length);
+  $('#dayEvents').innerHTML=dayEvents.map(e=>`<div class="day-event"><time>${esc(agendaEventTime(e))}</time><strong>${esc(e.title)}</strong></div>`).join('');
+  let dayTasks=agendaTasks.filter(x=>x.due_date===selectedTaskDate);
+  if(selectedTaskDate===todayIso())dayTasks=[...agendaTasks.filter(x=>x.due_date&&x.due_date<selectedTaskDate&&!x.completed_at),...dayTasks];
+  const byId=new Map(dayTasks.map(x=>[x.id,x]));dayTasks=[...byId.values()];
+  const open=dayTasks.filter(x=>!x.completed_at).sort((a,b)=>{
+    const ap=a.priority==='high'?0:1,bp=b.priority==='high'?0:1;return ap-bp||Number(a.sort_order||0)-Number(b.sort_order||0)||String(a.title).localeCompare(String(b.title),'es');
+  });
+  const done=dayTasks.filter(x=>!!x.completed_at);
+  $('#taskList').innerHTML=open.length?open.map(taskRowHtml).join(''):'<div class="task-empty">No hay tareas para este día.</div>';
+  $('#completedTasks').classList.toggle('hidden',!done.length);
+  $('#completedTasks').innerHTML=done.length?`<details><summary>Completadas · ${done.length}</summary><div class="completed-list">${done.map(taskRowHtml).join('')}</div></details>`:'';
+  $('[data-task-toggle]').forEach(b=>b.onclick=()=>void toggleAgendaTask(b.dataset.taskToggle));
+}
+function renderAgenda(){renderTaskCalendar();renderTaskDay()}
+async function loadAgenda({force=false}={}){
+  if(!sb||!user||agendaBusy)return;
+  if(!force&&Date.now()-lastAgendaAt<AGENDA_REFRESH_MS){renderAgenda();return}
+  agendaBusy=true;
+  try{
+    const base=parseIso(taskCalendarMonth+'-01'),monthFirst=isoDate(base),nextMonth=new Date(base.getFullYear(),base.getMonth()+1,1),monthLast=isoDate(addDays(nextMonth,-1));
+    const startIso=new Date(base.getFullYear(),base.getMonth(),1).toISOString(),endIso=new Date(base.getFullYear(),base.getMonth()+1,1).toISOString();
+    const queries=[
+      sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).gte('due_date',monthFirst).lte('due_date',monthLast).order('sort_order').limit(300),
+      sb.from('isabella_events').select('id,title,starts_at,ends_at,all_day,category_id,project_id').gte('starts_at',startIso).lt('starts_at',endIso).order('starts_at').limit(200),
+      sb.from('isabella_categories').select('id,name,color').order('sort_order').limit(50),
+      sb.from('isabella_projects').select('id,name,category_id,color,archived').eq('archived',false).limit(100)
+    ];
+    if(taskCalendarMonth===monthKey(todayIso()))queries.push(sb.from('isabella_tasks').select('id,title,due_date,completed_at,category_id,project_id,priority,reminder_time,sort_order,updated_at').is('archived_at',null).is('completed_at',null).lt('due_date',todayIso()).order('due_date').limit(50));
+    const results=await Promise.all(queries);for(const q of results)if(q.error)throw q.error;
+    const all=[...(results[0].data||[]),...(results[4]?.data||[])],unique=new Map(all.map(x=>[x.id,x]));
+    agendaTasks=[...unique.values()];agendaEvents=results[1].data||[];
+    agendaCategories=new Map((results[2].data||[]).map(x=>[x.id,x]));agendaProjects=new Map((results[3].data||[]).map(x=>[x.id,x]));
+    lastAgendaAt=Date.now();renderAgenda();
+  }catch(e){
+    $('#taskList').innerHTML='<div class="task-empty">No pude cargar tus tareas ahora mismo.</div>';
+  }finally{agendaBusy=false}
+}
+async function selectTaskDate(value){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(value||'')))return;
+  selectedTaskDate=value;localStorage.setItem(LOCAL_TASK_DATE_KEY,value);
+  const nextMonth=monthKey(value),changed=nextMonth!==taskCalendarMonth;taskCalendarMonth=nextMonth;
+  if(changed){lastAgendaAt=0;await loadAgenda({force:true})}else renderAgenda();
+}
+async function shiftTaskMonth(delta){
+  const base=parseIso(taskCalendarMonth+'-01'),next=new Date(base.getFullYear(),base.getMonth()+delta,1);
+  await selectTaskDate(isoDate(next));
+}
+async function createAgendaTask(event){
+  event?.preventDefault?.();const input=$('#quickTaskInput'),title=String(input?.value||'').trim();
+  if(!title||!sb||!user)return;
+  $('#quickTaskAdd').disabled=true;
+  try{
+    const {error}=await sb.from('isabella_tasks').insert({title,due_date:selectedTaskDate,metadata:{source:'presence_manual'}});
+    if(error)throw error;input.value='';lastAgendaAt=0;await loadAgenda({force:true});
+  }catch{}finally{$('#quickTaskAdd').disabled=false}
+}
+async function toggleAgendaTask(id){
+  const task=agendaTasks.find(x=>x.id===id);if(!task||!sb)return;
+  const completed_at=task.completed_at?null:new Date().toISOString();
+  try{
+    const {error}=await sb.from('isabella_tasks').update({completed_at,updated_at:new Date().toISOString()}).eq('id',id);
+    if(error)throw error;task.completed_at=completed_at;renderTaskDay();
+  }catch{}
+}
+async function addTaskViaChat(){
+  await setPanelView('chat');
+  const label=new Intl.DateTimeFormat('es-ES',{weekday:'long',day:'numeric',month:'long'}).format(parseIso(selectedTaskDate));
+  $('#chatInput').value=`Agrega para ${label} una tarea: `;$('#chatInput').focus();armHomeCollapse();
+}
+
 async function renderPresence(cards,{auto=true}={}){
   lastCards=cards;showOnly('presenceView');
   const focal=cards[0]||null;
