@@ -14,6 +14,7 @@ const protocolV1=read('apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.1.md');
 const protocolV2=read('apps/isabella/ISABELLA-PRESENCE-PROTOCOL-v0.2.md');
 const build=read('apps/isabella/BUILD-80.md');
 const build82=read('apps/isabella/BUILD-80.2.md');
+const attentionMigration=read('supabase/migrations/20261006154500_resolve_mission_attention_on_resume.sql');
 
 const forbiddenClientSecrets=['service_role','SUPABASE_SERVICE_ROLE_KEY','OPENAI_API_KEY','provider_response_id','gpt-6-astra','gpt-5.6-luna'];
 
@@ -49,15 +50,16 @@ test('Inline conversation delegates to canonical Isabella and routes confirmatio
   assert.ok(!ui.includes('allow_proposal'));
 });
 
-test('Presence uses the same public Supabase boundary under RLS and only user-driven task writes',()=>{
+test('Presence uses the same public Supabase boundary under RLS and only explicit task UI writes',()=>{
   assert.ok(ui.includes("https://lodexwyyynlarkqgkyhy.supabase.co"));
   assert.ok(ui.includes('sb_publishable_'));
   assert.ok(ui.includes('signInWithOtp'));
   assert.ok(ui.includes('shouldCreateUser:false'));
   assert.ok(ui.includes('verifyOtp'));
   assert.ok(ui.includes("sb.from('isabella_tasks').insert({title,due_date:selectedTaskDate"));
-  assert.ok(ui.includes("sb.from('isabella_tasks').update({completed_at,updated_at:new Date().toISOString()}).eq('id',id)"));
-  assert.ok(!ui.includes('.delete('));
+  assert.ok(ui.includes("sb.from('isabella_tasks').update({completed_at,updated_at:new Date().toISOString()})"));
+  assert.ok(ui.includes("sb.from('isabella_tasks').delete()"));
+  assert.ok(ui.includes("sb.from('isabella_deleted_items').upsert("));
   assert.ok(!ui.includes("sb.from('minds_attention_events').insert("));
   assert.ok(!ui.includes("sb.from('minds_mission_runs').update("));
 });
@@ -147,6 +149,31 @@ test('Presence 0.2 exposes a canonical MINDS task calendar without another task 
   assert.ok(ui.includes("panelView=['status','tasks','chat'].includes(next)?next:'status'"));
   assert.ok(ui.includes("Agrega para ${label} una tarea: "));
   assert.ok(!ui.includes('presence_tasks'));
+});
+
+test('Presence tasks are the exact selected-day projection and never silently inject overdue tasks into Today',()=>{
+  assert.ok(ui.includes("const dayTasks=agendaTasks.filter(x=>x.due_date===selectedTaskDate)"));
+  assert.ok(!ui.includes(".lt('due_date',todayIso())"));
+  assert.ok(!ui.includes("agendaTasks.filter(x=>x.due_date&&x.due_date<selectedTaskDate"));
+});
+
+test('Presence task rows support edit, importance and canonical drag order',()=>{
+  assert.ok(html.includes('id="taskDetail"'));
+  assert.ok(html.includes('id="taskDetailForm"'));
+  assert.ok(ui.includes('function openTaskDetail(id)'));
+  assert.ok(ui.includes('function saveTaskDetail(event)'));
+  assert.ok(ui.includes('function toggleAgendaTaskPriority(id)'));
+  assert.ok(ui.includes('function persistTaskOrder()'));
+  assert.ok(ui.includes('data-task-drag'));
+  assert.ok(ui.includes("priority=task.priority==='high'?'normal':'high'"));
+  assert.ok(ui.includes("sort_order:(i+1)*10"));
+});
+
+test('Presence Now excludes obsolete mission decisions and the ledger resolves them on resume',()=>{
+  assert.ok(ui.includes("missionById.get(String(event.source_id||''))?.status==='waiting_for_user'"));
+  assert.ok(attentionMigration.includes("status='resolved'"));
+  assert.ok(attentionMigration.includes("coalesce(metadata->>'mission_event','')='waiting_for_user'"));
+  assert.ok(attentionMigration.includes("source_id=v_run.id::text"));
 });
 
 test('Presence keeps the exact blocker context when replying to a decision',()=>{
