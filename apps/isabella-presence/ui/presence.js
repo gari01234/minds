@@ -250,11 +250,11 @@ function taskMeta(task){
 }
 function taskRowHtml(task){
   const meta=taskMeta(task),important=String(task.priority||'')==='high',done=!!task.completed_at;
-  return `<div class="task-row ${done?'is-done':''}" data-task-row="${esc(task.id)}" draggable="${done?'false':'true'}">
+  return `<div class="task-row ${done?'is-done':''}" data-task-row="${esc(task.id)}">
     <button class="task-toggle" type="button" data-task-toggle="${esc(task.id)}" aria-label="${done?'Reabrir':'Completar'}">${done?'✓':''}</button>
     <button class="task-copy" type="button" data-task-edit="${esc(task.id)}"><span class="task-title">${esc(task.title)}</span>${meta.length?`<span class="task-meta">${meta.map((x,i)=>`<span class="${i===meta.length-1&&String(x).startsWith('Vencida')?'task-overdue':''}">${esc(x)}</span>`).join('')}</span>`:''}</button>
     <button class="task-star ${important?'is-important':''}" type="button" data-task-star="${esc(task.id)}" aria-label="${important?'Quitar de importantes':'Marcar como importante'}">${important?'★':'☆'}</button>
-    <span class="task-drag" aria-hidden="true" title="Arrastrar para reordenar">⋮⋮</span>
+    <span class="task-drag" draggable="${done?'false':'true'}" data-task-drag="${esc(task.id)}" aria-hidden="true" title="Arrastrar para reordenar">⋮⋮</span>
   </div>`;
 }
 function renderTaskCalendar(){
