@@ -261,6 +261,9 @@ function init(){
   const reviewId=reviewRequestIdFromUrl();
   show(reviewId?'assistant':state.screen);
   if(reviewId)setTimeout(()=>void handleReviewDeepLink(),0);
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible'&&state.screen==='calendar')window.ISABELLA_SYNC_PULL_NOW?.();
+  });
 }
 let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false;
 function proactiveTerms(text){
@@ -374,7 +377,10 @@ function show(name){
   syncOrbCompact();
   save();
   if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);
-  if(name==='calendar')renderCalendar();
+  if(name==='calendar'){
+    renderCalendar();
+    if(previous!=='calendar')setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
+  }
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
   if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);

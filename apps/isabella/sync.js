@@ -124,7 +124,7 @@ async function ensureTaxonomy(state){
 function taskRow(t,maps){
   if(t.done&&!t.completedAt)t.completedAt=new Date().toISOString();
   if(!t.done)t.completedAt=null;
-  return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date||null,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),reminder_time:t.date?(t.reminderTime||null):null,category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updated_at:t.updatedAt||new Date().toISOString()};
+  return {user_id:user.id,client_key:t.id,title:t.title,due_date:t.date||null,completed_at:t.completedAt||null,archived_at:t.archivedAt||null,sort_order:Number(t.sortOrder||0),reminder_time:t.date?(t.reminderTime||null):null,category_id:maps.catByKey.get(t.categoryId)?.id||null,project_id:maps.projByKey.get(t.projectId)?.id||null,priority:t.priority||'normal',recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updated_at:t.updatedAt||new Date().toISOString()};
 }
 function eventRow(e,maps){
   const start=localDateTime(e.date,e.start),end=new Date(start.getTime()+((e.duration||60)*60000));
@@ -260,7 +260,7 @@ async function pullState(local,maps){
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
   const deletedTaskIds=new Set(local.deletedTaskIds||[]);
   const deletedEventIds=new Set(local.deletedEventIds||[]);
-  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date||null,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),reminderTime:t.due_date&&t.reminder_time?String(t.reminder_time).slice(0,5):null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updatedAt:t.updated_at||null}));
+  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date||null,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),reminderTime:t.due_date&&t.reminder_time?String(t.reminder_time).slice(0,5):null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,priority:t.priority||'normal',recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updatedAt:t.updated_at||null}));
   const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updatedAt:e.updated_at||null}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
