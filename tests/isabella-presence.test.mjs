@@ -37,11 +37,13 @@ test('Presence reads capability and Attention ledgers and uses existing runtimes
   assert.ok(!ui.includes('presence-runtime'));
 });
 
-test('Inline conversation delegates to canonical Isabella and does not confirm proposals',()=>{
+test('Inline conversation delegates to canonical Isabella and routes confirmation back to MINDS',()=>{
   assert.ok(html.includes('id="chatInput"'));
   assert.ok(html.includes('Escribe a Isabella'));
-  assert.ok(ui.includes("pendingReview=!!data?.proposal"));
-  assert.ok(ui.includes("$('#reviewInMinds').onclick=()=>openMinds()"));
+  assert.ok(ui.includes("setPendingReviewRequestId"));
+  assert.ok(ui.includes("sb.from('minds_shadow_decisions')"));
+  assert.ok(ui.includes("MINDS_URL+'?review='"));
+  assert.ok(ui.includes("$('#reviewInMinds').onclick=()=>openMinds(pendingReviewRequestId||null)"));
   assert.ok(ui.includes("lastQuickReplies"));
   assert.ok(!ui.includes('confirm_proposal'));
   assert.ok(!ui.includes('allow_proposal'));
@@ -63,10 +65,20 @@ test('Presence is hidden by default and behaves as a pill rather than a dashboar
   assert.equal(config.app.windows[0].focus,false);
   assert.equal(config.app.windows[0].width,306);
   assert.equal(config.app.windows[0].height,60);
+  assert.equal(config.app.windows[0].resizable,true);
+  assert.equal(config.app.windows[0].minWidth,306);
+  assert.equal(config.app.windows[0].minHeight,60);
   assert.ok(html.includes('id="pill"'));
   assert.ok(html.includes('id="collapseButton"'));
   assert.ok(ui.includes("const SIZES={pill:[306,60],status:[420,220],chat:[420,320]"));
   assert.ok(ui.includes("panelView='status'"));
+});
+
+test('Presence keeps a user-resized reading panel instead of snapping back on refresh',()=>{
+  assert.ok(ui.includes("LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01'"));
+  assert.ok(ui.includes("window.addEventListener('resize'"));
+  assert.ok(ui.includes("savePanelSize(window.innerWidth,window.innerHeight)"));
+  assert.ok(ui.includes("if(lastAppliedSizeKey===key)return"));
 });
 
 test('Presence positions only its own window near the active monitor edge',()=>{

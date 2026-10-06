@@ -214,6 +214,40 @@ function artifactSurfaceGroups(artifacts=[]){
 }
 function minutes(t){const[a,b]=t.split(':').map(Number);return a*60+b}
 function greet(){const h=new Date().getHours();return h<12?'Buenos días.':h<19?'Buenas tardes.':'Buenas noches.'}
+let reviewDeepLinkHandled=false;
+function reviewRequestIdFromUrl(){
+  try{
+    const id=new URL(window.location.href).searchParams.get('review')||'';
+    return /^[0-9a-f-]{36}$/i.test(id)?id:'';
+  }catch{return ''}
+}
+function clearReviewDeepLink(){
+  try{
+    const url=new URL(window.location.href);url.searchParams.delete('review');
+    history.replaceState(history.state,'',url.pathname+url.search+url.hash);
+  }catch{}
+}
+async function handleReviewDeepLink(){
+  if(reviewDeepLinkHandled)return false;
+  const requestId=reviewRequestIdFromUrl();if(!requestId)return false;
+  const sb=window.MINDS_SUPABASE;if(!sb)return false;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return false;
+    const {data:rows,error}=await sb.from('minds_shadow_decisions')
+      .select('request_id,candidate,status,created_at')
+      .eq('request_id',requestId).eq('status','pending')
+      .order('created_at',{ascending:false}).limit(1);
+    if(error)return false;
+    reviewDeepLinkHandled=true;show('assistant');clearReviewDeepLink();
+    const row=rows?.[0]||null;
+    if(row?.candidate){
+      confirmProposal({...row.candidate,request_id:requestId});
+      return true;
+    }
+    modal('Revisión',`<div class="small">Esta propuesta ya no está pendiente o ya fue resuelta. Puedes volver al chat de Isabella para continuar.</div>`);
+    return true;
+  }catch{return false}
+}
 function init(){
   repairKnownDuplicate();
   state.messages=normalizeMessages(state.messages);
@@ -224,7 +258,9 @@ function init(){
   renderMessages(true);
   renderToday();
   renderCalendar();
-  show(state.screen);
+  const reviewId=reviewRequestIdFromUrl();
+  show(reviewId?'assistant':state.screen);
+  if(reviewId)setTimeout(()=>void handleReviewDeepLink(),0);
 }
 let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false;
 function proactiveTerms(text){
@@ -311,6 +347,8 @@ async function afterSync(){
   if(proactiveCycleBusy)return;
   proactiveCycleBusy=true;
   try{
+    const reviewOpened=await handleReviewDeepLink();
+    if(reviewOpened)return;
     void maybePrewarmFeed();
     void maybePrewarmResearch();
     void maybeReactivateIdeas();

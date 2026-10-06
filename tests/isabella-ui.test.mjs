@@ -222,6 +222,15 @@ test('Message reactions use an explicit action instead of hijacking long-press s
 });
 
 
+test('Presence review deep links resolve the exact pending shadow decision',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes("searchParams.get('review')"));
+  assert.ok(app.includes("sb.from('minds_shadow_decisions')"));
+  assert.ok(app.includes(".eq('request_id',requestId).eq('status','pending')"));
+  assert.ok(app.includes("show('assistant')"));
+  assert.ok(app.includes("confirmProposal({...row.candidate,request_id:requestId})"));
+});
+
 test('browser entry scripts are syntactically valid JavaScript',()=>{
   for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
@@ -553,14 +562,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.05.82'));
+  assert.ok(shell.includes('Build 2026.10.06.82.1'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=57'));
   assert.ok(index.includes('shell.js?v=83'));
-  assert.ok(index.includes('app.js?v=87'));
+  assert.ok(index.includes('app.js?v=88'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v93'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v94'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
