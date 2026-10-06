@@ -566,7 +566,7 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=57'));
   assert.ok(index.includes('shell.js?v=83'));
-  assert.ok(index.includes('app.js?v=87'));
+  assert.ok(index.includes('app.js?v=88'));
   assert.ok(index.includes('sync.js?v=pwa27'));
   assert.ok(index.includes('ai.js?v=47'));
   assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v93'"));
