@@ -231,8 +231,23 @@ test('Presence review deep links resolve the exact pending shadow decision',()=>
   assert.ok(app.includes("confirmProposal({...row.candidate,request_id:requestId})"));
 });
 
+test('Work binds project switches through querySelectorAll and does not stall before render error handling',()=>{
+  const work=read('apps/isabella/work.js');
+  assert.ok(work.includes("$('[data-work-project]').forEach"));
+  assert.ok(!work.includes("$('[data-work-project]').forEach"));
+});
+
+test('Chat and artifact images are lazy-hydrated to avoid repeated private Storage egress',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('function observeStorageImage'));
+  assert.ok(app.includes("new IntersectionObserver"));
+  assert.ok(app.includes("observeStorageImage(img,'isabella-uploads'"));
+  assert.ok(app.includes("observeStorageImage(img,'minds-artifacts'"));
+  assert.ok(app.includes('loading="lazy" data-chat-image-path'));
+});
+
 test('browser entry scripts are syntactically valid JavaScript',()=>{
-  for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js']){
+  for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js','apps/isabella/work.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
   }
 });
