@@ -153,7 +153,7 @@ begin
     into v_terms
     from jsonb_array_elements_text(p_spec->'trigger_terms');
   end if;
-  v_terms:=coalesce(v_terms,array[]::text[])[1:12];
+  v_terms:=(coalesce(v_terms,array[]::text[]))[1:12];
 
   if v_project is not null and not exists(
     select 1 from public.isabella_projects where id=v_project and user_id=u and archived=false
