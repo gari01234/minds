@@ -11,6 +11,9 @@ const routing=read('supabase/migrations/20261008234500_review_routing_v01.sql');
 const admission=read('supabase/migrations/20261009001500_review_admission_v01.sql');
 const chat=read('supabase/functions/isabella-chat/index.ts');
 const fast=read('supabase/functions/isabella-fast-stream/index.ts');
+const app=read('apps/isabella/app.js');
+const shell=read('apps/isabella/shell.js');
+const css=read('apps/isabella/app.css');
 const build=read('BUILD-87.md');
 
 test('Build 87.1 review debt is a projection over existing canonical stores',()=>{
@@ -185,4 +188,49 @@ test('Build 87.4 suppression is inspectable, reversible and authority-neutral',(
   assert.ok(admission.includes("'reissue_if_state_changes',true"));
   assert.ok(admission.includes("'authority_changed',false"));
   assert.ok(build.includes('Suppression never applies to permission, Project Claim, Project Variant, operating-rule'));
+});
+
+
+test('Build 87.5 exposes Review Economy as a secondary surface, not top-level navigation',()=>{
+  assert.ok(shell.includes('data-action="reviews">Revisiones'));
+  assert.ok(app.includes("if(a==='reviews')void reviewEconomyPanel()"));
+  assert.ok(app.includes('async function reviewEconomyPanel()'));
+  assert.ok(!shell.includes('data-nav="reviews"'));
+});
+
+test('Build 87.5 groups only server-declared compatible batches and reuses one explicit batch confirmation',()=>{
+  assert.ok(app.includes("from('minds_review_batches_v1')"));
+  assert.ok(app.includes("from('minds_review_routing_v1')"));
+  assert.ok(app.includes('const proposals=items.map(reviewProposalFromItem).filter(Boolean)'));
+  assert.ok(app.includes('confirmProposals(proposals)'));
+  assert.ok(app.includes('Una sola revisión humana en lugar de'));
+});
+
+test('Build 87.5 keeps authority-boundary and behavior-rule review individually actionable',()=>{
+  assert.ok(app.includes("item.item_kind==='shadow_decision'||x.item_kind==='operating_hypothesis'")||app.includes("x.item_kind==='shadow_decision'||x.item_kind==='operating_hypothesis'"));
+  assert.ok(app.includes("x.review_lane!=='cheap_reversible'"));
+  assert.ok(app.includes("x.item_kind==='operating_hypothesis'?'Revisar regla':'Revisar'"));
+  assert.ok(app.includes("row.item_kind==='operating_hypothesis'"));
+  assert.ok(app.includes('memoryPanel()'));
+});
+
+test('Build 87.5 Human Surface explains batching, expiry and no hidden score without approving anything on load',()=>{
+  assert.ok(app.includes('Nada se aprueba por estar agrupado'));
+  assert.ok(app.includes('Review Economy elimina duplicados dentro de una misma ejecución'));
+  assert.ok(app.includes("summary.scoring||'none'"));
+  const start=app.indexOf('async function reviewEconomyPanel()');
+  const end=app.indexOf('function commitmentStatusLabel',start);
+  const panel=app.slice(start,end);
+  assert.equal(/applyProposal\(/.test(panel),false);
+  assert.equal(/proposalFeedback\(['"]accepted/.test(panel),false);
+  assert.ok(css.includes('.review-economy-panel'));
+});
+
+test('Build 87 acceptance reduces a compatible group from N confirmations to one without changing canonical authority',()=>{
+  assert.ok(batching.includes('having count(*)>=2'));
+  assert.ok(app.includes('confirmProposals(proposals)'));
+  assert.ok(routing.includes("'authority_changed',false"));
+  assert.ok(admission.includes("'authority_changed',false"));
+  assert.ok(build.includes('No automatic approval.'));
+  assert.ok(build.includes('No authority escalation.'));
 });
