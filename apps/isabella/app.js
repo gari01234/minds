@@ -1959,7 +1959,7 @@ function bindCalendarItems(){
   initEventDrag();
 }
 function initTaskDesktopDrag(){
-  $('.task-item[data-date]:not(.task-done)').forEach(row=>{
+  $$('.task-item[data-date]:not(.task-done)').forEach(row=>{
     if(row.dataset.desktopDragBound)return;
     row.dataset.desktopDragBound='1';row.draggable=true;
     row.addEventListener('dragstart',e=>{
@@ -1969,7 +1969,7 @@ function initTaskDesktopDrag(){
     });
     row.addEventListener('dragover',e=>{
       if(!calendarDraggedTaskId||calendarDraggedTaskId===row.dataset.id)return;
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       const targetDate=row.dataset.date||null;
       if(state.view!=='week'&&targetDate!==calendarDraggedSourceDate)return;
       e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect='move';
@@ -1981,7 +1981,7 @@ function initTaskDesktopDrag(){
     row.addEventListener('drop',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();e.stopPropagation();
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       const targetDate=row.dataset.date||calendarDraggedSourceDate;
       dragged.dataset.date=targetDate;
       commitTaskOrderFromContainer(row.parentNode,targetDate,calendarDraggedTaskId);
@@ -2001,7 +2001,7 @@ function initWeekDateDrag(){
     day.addEventListener('dragover',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target');
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       if(!e.target.closest?.('.task-item')){
         day.querySelector('.week-free')?.remove();
         day.appendChild(dragged);dragged.dataset.date=day.dataset.weekDate||'';
@@ -2011,7 +2011,7 @@ function initWeekDateDrag(){
     day.addEventListener('drop',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();day.classList.remove('week-drop-target');
-      const date=day.dataset.weekDate,dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);
+      const date=day.dataset.weekDate,dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);
       if(!date||!dragged)return;
       dragged.dataset.date=date;
       commitTaskOrderFromContainer(day,date,calendarDraggedTaskId);
