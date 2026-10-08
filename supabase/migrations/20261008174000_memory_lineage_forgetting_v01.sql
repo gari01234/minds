@@ -622,3 +622,59 @@ limit least(greatest(p_limit,1),30);
 $$;
 
 grant execute on function public.isabella_entity_recall(text,integer) to authenticated;
+
+
+-- Semantic recall enforces the same forgetting boundary as lexical recall.
+create or replace function public.isabella_semantic_recall_scoped(
+  p_embedding extensions.vector(1536),
+  p_scope_key text,
+  p_allow_cross_scope boolean default false,
+  p_limit integer default 10
+)
+returns table(
+  source_type text,
+  source_id text,
+  content text,
+  score real,
+  source_scope_key text,
+  provenance_class text
+)
+language sql
+stable
+security invoker
+set search_path=public,extensions
+as $$
+  select
+    e.source_type,e.source_id,e.content,
+    (1-(e.embedding<=>p_embedding))::real as score,
+    e.exposure_scope_key,e.provenance_class
+  from public.isabella_embeddings e
+  where e.user_id=auth.uid()
+    and (
+      p_allow_cross_scope
+      or e.exposure_scope_key='global'
+      or e.exposure_scope_key=coalesce(nullif(trim(p_scope_key),''),'global')
+    )
+    and not (
+      e.source_type='memory'
+      and exists(
+        select 1 from public.minds_memory_forget_tombstones t
+        where t.user_id=e.user_id and t.source_kind='memory' and t.source_id=e.source_id
+      )
+    )
+    and not (
+      e.source_type='conversation'
+      and exists(
+        select 1
+        from public.conversation_messages cm
+        join public.conversations c on c.id=cm.conversation_id and c.user_id=cm.user_id
+        join public.minds_memory_forget_tombstones t
+          on t.user_id=cm.user_id and t.source_kind='conversation' and t.source_id=c.id::text
+        where cm.user_id=e.user_id and cm.id::text=e.source_id
+      )
+    )
+  order by e.embedding<=>p_embedding
+  limit least(greatest(p_limit,1),30);
+$$;
+
+grant execute on function public.isabella_semantic_recall_scoped(extensions.vector,text,boolean,integer) to authenticated;
