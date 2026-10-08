@@ -8,6 +8,9 @@ const migration=read('supabase/migrations/20261008224500_review_debt_v01.sql');
 const batching=read('supabase/migrations/20261008232000_review_batching_expiry_v01.sql');
 const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
 const routing=read('supabase/migrations/20261008234500_review_routing_v01.sql');
+const admission=read('supabase/migrations/20261009001500_review_admission_v01.sql');
+const chat=read('supabase/functions/isabella-chat/index.ts');
+const fast=read('supabase/functions/isabella-fast-stream/index.ts');
 const build=read('BUILD-87.md');
 
 test('Build 87.1 review debt is a projection over existing canonical stores',()=>{
@@ -140,4 +143,46 @@ test('Build 87.3 authority review does not become an interrupt merely because it
   assert.ok(routing.includes("when 'review_required' then v_route:='briefing';v_reason:='review_required'"));
   assert.ok(routing.includes("when 'review_window_closing' then v_route:='ambient';v_reason:='review_window_closing'"));
   assert.ok(build.includes('Authority-boundary review routes to briefing by default'));
+});
+
+
+test('Build 87.4 admission is an audit receipt layer, not another proposal store',()=>{
+  assert.ok(admission.includes('create table if not exists public.minds_review_admission_events'));
+  assert.ok(admission.includes("outcome in ('admitted','duplicate','suppressed')"));
+  assert.ok(admission.includes('existing_decision_id uuid null references public.minds_shadow_decisions'));
+  assert.ok(!admission.includes('candidate jsonb not null'));
+});
+
+test('Build 87.4 semantic duplicate suppression is limited to one agent run',()=>{
+  assert.ok(admission.includes("s.context->>'run_id'=v_run_id"));
+  assert.ok(admission.includes("'same_run_semantic_duplicate'"));
+  assert.ok(admission.includes("status='pending'"));
+  assert.ok(admission.includes('admission_fingerprint'));
+  assert.ok(build.includes('later turns remain new user acts and are never silently swallowed'));
+});
+
+test('Build 87.4 only suppresses provable no-op task state changes',()=>{
+  assert.ok(admission.includes("v_action in ('complete_task','archive_task')"));
+  assert.ok(admission.includes("completed_at is not null"));
+  assert.ok(admission.includes("archived_at is not null"));
+  assert.ok(admission.includes("'task_already_completed'"));
+  assert.ok(admission.includes("'task_already_archived'"));
+  const fn=admission.slice(admission.indexOf('create or replace function public.minds_admit_shadow_decision'));
+  assert.ok(!fn.includes('minds_operating_model_hypotheses'));
+  assert.ok(!fn.includes('minds_work_claims'));
+  assert.ok(!fn.includes('minds_project_model_variants'));
+});
+
+test('Build 87.4 full and fast Isabella respect admission before surfacing review',()=>{
+  assert.ok(chat.includes('minds_admit_shadow_decision'));
+  assert.ok(chat.includes('status:"no_review_needed"'));
+  assert.ok(chat.includes('proposalForReview'));
+  assert.ok(fast.includes('minds_admit_shadow_decision'));
+  assert.ok(fast.includes('review_suppressed'));
+});
+
+test('Build 87.4 suppression is inspectable, reversible and authority-neutral',()=>{
+  assert.ok(admission.includes("'reissue_if_state_changes',true"));
+  assert.ok(admission.includes("'authority_changed',false"));
+  assert.ok(build.includes('Suppression never applies to permission, Project Claim, Project Variant, operating-rule'));
 });
