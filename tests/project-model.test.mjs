@@ -166,3 +166,52 @@ test('Build 84.3 exposes deliberate re-comparison without new authority',()=>{
   assert.ok(chat.includes('call.name==="compare_project_source"'));
   assert.ok(chat.includes('Compare one completed source-first ingestion against the current project Claim baseline.'));
 });
+
+
+test('Build 84.4 source comparison publishes one idempotent Project Model revision',()=>{
+  const m=read('supabase/migrations/20261008133000_project_model_revision_writer_v01.sql');
+  assert.ok(m.includes('add column if not exists trigger_key text'));
+  assert.ok(m.includes('minds_project_model_revision_trigger_uidx'));
+  assert.ok(m.includes('function public.minds_publish_project_model_revision_from_comparison'));
+  assert.ok(m.includes("v_trigger_key:='source_comparison:'||v_comparison.id::text"));
+  assert.ok(m.includes("'already_published'"));
+  assert.ok(chat.includes('minds_publish_project_model_revision_from_comparison'));
+});
+
+test('Build 84.4 revision projects authority without mutating it',()=>{
+  const m=read('supabase/migrations/20261008133000_project_model_revision_writer_v01.sql');
+  assert.ok(m.includes("case when c.status='confirmed' then 'accepted' else 'inferred' end"));
+  assert.ok(m.includes("case when r.status='confirmed' then 'accepted' else 'inferred' end"));
+  assert.ok(m.includes("'authority_mutation',false"));
+  assert.ok(!m.includes("update public.minds_work_claims"));
+  assert.ok(!m.includes("update public.minds_work_claim_relations"));
+  assert.ok(!m.includes("update public.isabella_tasks"));
+  assert.ok(!m.includes("update public.minds_expectations"));
+  assert.ok(!m.includes("update public.minds_commitments"));
+  assert.ok(!m.includes("update public.minds_mission_runs"));
+});
+
+test('Build 84.4 preserves open Movements and makes uncertainty explicit',()=>{
+  const m=read('supabase/migrations/20261008133000_project_model_revision_writer_v01.sql');
+  assert.ok(m.includes("'movement'"));
+  assert.ok(m.includes("m.status not in ('completed','archived','cancelled','failed','occurred','not_occurred','resolved','rejected')"));
+  assert.ok(m.includes("'gap'"));
+  assert.ok(m.includes("i.verdict='unclear'"));
+  assert.ok(m.includes("p.observation_mode='unobserved'"));
+});
+
+test('Build 84.4 contradictions and modifications become unresolved Variants, not silent truth changes',()=>{
+  const m=read('supabase/migrations/20261008133000_project_model_revision_writer_v01.sql');
+  assert.ok(m.includes('create table if not exists public.minds_project_model_variants'));
+  assert.ok(m.includes("variant_kind in ('contradiction','modification','uncertainty')"));
+  assert.ok(m.includes("and i.verdict in ('contradicts','modifies')"));
+  assert.ok(m.includes("'open',i.source_claim_id,i.target_claim_id"));
+  assert.ok(m.includes("'authority_mutation',false"));
+});
+
+test('Build 84.4 snapshot exposes current revision elements and Variants',()=>{
+  const m=read('supabase/migrations/20261008133000_project_model_revision_writer_v01.sql');
+  assert.ok(m.includes("'revision_elements'"));
+  assert.ok(m.includes("'variants'"));
+  assert.ok(m.includes('from public.minds_project_model_variants'));
+});

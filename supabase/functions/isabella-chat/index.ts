@@ -1644,7 +1644,7 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       .eq("id",ingestionId).maybeSingle();
     if(ingestionError||!ingestion||ingestion.status!=="completed")return {status:"ingestion_not_ready"};
 
-    const [{data:allClaims,error:claimError},{data:revision,error:revisionError}]=await Promise.all([
+    const [{data:allClaims,error:claimError},{data:revision,error:revisionQueryError}]=await Promise.all([
       sb.from("minds_work_claims")
         .select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,valid_from,valid_to,learned_at,confirmed_at,updated_at,metadata")
         .eq("project_id",ingestion.project_id)
@@ -1655,7 +1655,7 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
         .eq("project_id",ingestion.project_id).eq("status","current")
         .order("created_at",{ascending:false}).limit(1).maybeSingle()
     ]);
-    if(claimError||revisionError)return {status:"baseline_error",detail:claimError?.message||revisionError?.message||"baseline_query_failed"};
+    if(claimError||revisionQueryError)return {status:"baseline_error",detail:claimError?.message||revisionQueryError?.message||"baseline_query_failed"};
 
     const rows=allClaims||[];
     const sourceClaims=rows.filter((x:any)=>String(x?.metadata?.ingestion_id||"")===ingestionId).slice(0,120);
@@ -1694,11 +1694,17 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       .select("id,status,compared_claim_count,relation_count,baseline_fingerprint,metadata,created_at")
       .eq("project_id",ingestion.project_id).eq("ingestion_id",ingestionId)
       .eq("baseline_fingerprint",baselineFingerprint).maybeSingle();
-    if(prior?.status==="completed")return {
-      status:"already_compared",comparison_id:prior.id,baseline_fingerprint:baselineFingerprint,
-      compared_claim_count:prior.compared_claim_count,relation_count:prior.relation_count,
-      coverage:prior?.metadata?.coverage||coverage
-    };
+    if(prior?.status==="completed"){
+      const {data:revisionWrite,error:revisionError}=await service.rpc("minds_publish_project_model_revision_from_comparison",{
+        p_user_id:user.id,p_comparison_id:prior.id
+      });
+      return {
+        status:"already_compared",comparison_id:prior.id,baseline_fingerprint:baselineFingerprint,
+        compared_claim_count:prior.compared_claim_count,relation_count:prior.relation_count,
+        coverage:prior?.metadata?.coverage||coverage,
+        revision:revisionError?{status:"revision_error",detail:revisionError.message}:revisionWrite
+      };
+    }
 
     const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
     const prompt={
@@ -1781,12 +1787,19 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       p_model:model,p_coverage:coverage,p_items:items
     });
     if(commitError)return {status:"commit_error",detail:commitError.message};
+    const comparisonId=String(committed?.comparison_id||"");
+    const {data:revisionWrite,error:revisionError}=comparisonId
+      ?await service.rpc("minds_publish_project_model_revision_from_comparison",{
+          p_user_id:user.id,p_comparison_id:comparisonId
+        })
+      :{data:null,error:{message:"comparison_id_missing"} as any};
     return {
       ...committed,
       ingestion_id:ingestionId,
-      current_revision_id:revision?.id||null,
+      previous_revision_id:revision?.id||null,
       coverage,
       findings:items.slice(0,16),
+      revision:revisionError?{status:"revision_error",detail:revisionError.message}:revisionWrite,
       provenance:{
         class:"project_model_comparison",
         comparison_is_inference:true,
