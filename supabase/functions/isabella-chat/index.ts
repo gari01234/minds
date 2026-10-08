@@ -595,7 +595,7 @@ const calendarTools = [
   {
     type:"function",
     name:"create_standing_intent",
-    description:"Propose prospective memory: remind the user when a future conversational situation occurs, rather than at a clock time. Examples: 'cuando vuelva a hablar de Dachentwässerung, recuérdame X'. This is persistent and requires user confirmation.",
+    description:"Propose a contextual Reminder for a future conversational situation, rather than a clock time. This is NOT monitoring: MINDS only sees the condition when Gari brings the situation back into conversation. Examples: 'cuando vuelva a hablar de Dachentwässerung, recuérdame X'. Persistent and requires user confirmation.",
     strict:false,
     parameters:{type:"object",properties:{
       trigger_text:{type:"string",description:"Human-readable situation that should activate the reminder."},
@@ -2536,8 +2536,8 @@ async function standingIntentMatches(req:Request,message:string,projectName:stri
     const sb=supabaseClient(req);if(!sb)return [];
     const now=Date.now();
     const {data}=await sb.from("minds_standing_intents")
-      .select("id,trigger_text,reminder_text,trigger_terms,project_id,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,isabella_projects(name,client_key)")
-      .eq("status","active").order("created_at",{ascending:true}).limit(200);
+      .select("id,mode,observation_mode,channel_kind,trigger_text,reminder_text,trigger_terms,project_id,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,isabella_projects(name,client_key)")
+      .eq("mode","reminder").eq("status","armed").order("created_at",{ascending:true}).limit(200);
     const msg=normalizeText(message),out:any[]=[];
     for(const x of data||[]){
       if(x.expires_at&&new Date(x.expires_at).getTime()<=now)continue;
@@ -2550,7 +2550,7 @@ async function standingIntentMatches(req:Request,message:string,projectName:stri
       if(!terms.length)continue;
       const hits=terms.filter((v:string)=>msg.includes(v)).length;
       const need=terms.length<=2?terms.length:Math.min(2,Math.ceil(terms.length*.45));
-      if(hits>=need)out.push({id:x.id,trigger_text:x.trigger_text,reminder_text:x.reminder_text,project:p?.name||null,trigger_count:x.trigger_count,max_triggers:x.max_triggers});
+      if(hits>=need)out.push({id:x.id,mode:"reminder",coverage:"via_user",monitoring:false,trigger_text:x.trigger_text,reminder_text:x.reminder_text,project:p?.name||null,trigger_count:x.trigger_count,max_triggers:x.max_triggers});
     }
     return out.slice(0,3);
   }catch{return []}
@@ -2684,8 +2684,8 @@ Cuando una petición compleja necesita más de una especialidad, prefiere orches
 La orquestación enruta evidencia por rol. Research solo puede trabajar con contexto público y nunca recibe memos privados aguas arriba. Work y Document preservan procedencia de proyecto; Document puede seleccionar y leer de forma acotada los archivos más relevantes. Planning y Memory pueden recibir memos previos etiquetados como evidencia, pero no como instrucciones ni hechos automáticamente confirmados.
 No uses especialistas para producir consenso artificial. Si dos fuentes o especialistas discrepan, conserva la tensión para tu síntesis final en vez de forzar una respuesta común.
 
-STANDING INTENTS:
-CONTEXTO PRIVADO puede contener standing_intent_matches. Son recordatorios prospectivos que el usuario aprobó previamente. Si aparece uno, intégralo una sola vez de forma natural en esta respuesta. No lo repitas en turnos posteriores salvo una nueva activación y no lo conviertas automáticamente en una tarea.
+PROSPECTIVE MEMORY:
+CONTEXTO PRIVADO puede contener standing_intent_matches. En Build 86 estos matches son Recordatorios contextuales aprobados: mode=reminder, coverage=via_user, monitoring=false. Si aparece uno, intégralo una sola vez de forma natural en esta respuesta. No digas que estabas vigilando una fuente externa: el disparador reapareció en la conversación. No lo repitas salvo una nueva activación y no lo conviertas automáticamente en una tarea.
 
 CONTINUITY CORE:
 CONTEXTO PRIVADO puede contener active_commitments. Un Commitment es un objetivo abierto que el usuario revisó y aprobó para que MINDS lo mantenga vivo a lo largo del tiempo. No es una Task, Routine ni Standing Intent y no autoriza ninguna acción por sí mismo. Úsalo como contexto operativo: una tarea puede contribuir a un Commitment sin completarlo automáticamente.
@@ -2750,7 +2750,7 @@ Nunca escribas rutas internas sandbox:/mnt/data/... ni inventes enlaces Markdown
 Para editar, corregir, convertir o transformar un archivo existente, usa search_generated_artifacts o search_work para obtener el id exacto y pásalo a execute_artifact_task.input_files. Si importa conservar fórmulas, estructura, estilos, páginas o slides, pasa el archivo binario original al runtime; no lo sustituyas por un resumen textual. Si hay varios archivos plausibles y no puedes identificar con seguridad cuál quiere Gari, pregunta cuál antes de ejecutar.
 No conviertas automáticamente estas tareas en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
-Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Ese tipo de memoria se activa por contexto, con cooldown y límite de activaciones.
+Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Esto es un Recordatorio contextual, NO vigilancia: MINDS solo detecta la situación cuando vuelve a aparecer en la conversación. No digas "lo vigilaré" ni "te avisaré si cambia" para esta capacidad.
 
 EXPECTATIONS:
 Usa propose_expectation únicamente cuando el usuario quiera que MINDS mantenga pendiente un hecho futuro del mundo con una fecha esperada: otra persona responde, envía un documento, toma una decisión o entrega algo. No es una Task: una Task representa algo que Gari debe hacer. No es un Standing Intent: ese se activa cuando reaparece una situación. No es un Commitment: ese mantiene vivo un objetivo. Si el usuario solo menciona una posibilidad sin pedir seguimiento, no persistas nada.
