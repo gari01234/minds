@@ -37,10 +37,12 @@ A repeating Reminder may re-arm after a recorded firing until `max_triggers` is 
 - Lifecycle moves from active/completed to pending/armed/fired/done/cancelled/expired.
 - Delivery acknowledgement remains idempotent and records the firing before re-arming or finishing.
 
-### 86.2 — Watch channel contracts
+### 86.2 — Watch channel contracts **Implemented**
 - Add a registry of observation channels with provider, observation mode, freshness capability and enabled state.
 - A true Watch cannot be armed unless the named channel is autonomous and its freshness contract is valid.
 - Unsupported monitoring requests must fail closed into an explicit `watch_unavailable` result; Isabella may then offer a Reminder instead.
+
+Implementation note: 86.2 deliberately registers **no fake provider**. The channel registry and arming contract exist, and Isabella can inspect them through `check_watch_capability`; until an actual autonomous source is connected and service-verified, true Watch creation fails closed instead of pretending that conversational recall is monitoring.
 
 ### 86.3 — Heartbeat observation + return routing
 - Heartbeat checks armed Watches only through their declared channel adapter.
