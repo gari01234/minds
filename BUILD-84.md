@@ -70,8 +70,8 @@ The tool contract explicitly tells Isabella that her own Model is interpretation
 
 ## Build 84 sequence
 
-84.1 — Evidence schema + read-only Project Model snapshot.  
-84.2 — Source-first document extraction and Referent resolution.  
+84.1 — Evidence schema + read-only Project Model snapshot. **Implemented.**  
+84.2 — Source-first document extraction and Referent resolution. **Implemented for Work files; creates only proposed sourced Claims and working Referents.**  
 84.3 — Model comparison: confirm / contradict / modify / unchanged.  
 84.4 — Triggered revision writer + Variants.  
 84.5 — Work inspection surface: what Isabella thinks, why, coverage, change since last revision.  
