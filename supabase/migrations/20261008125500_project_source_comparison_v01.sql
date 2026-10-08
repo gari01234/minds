@@ -64,6 +64,7 @@ create or replace function public.minds_commit_project_source_comparison(
   p_baseline_revision_id uuid,
   p_baseline_fingerprint text,
   p_model text,
+  p_coverage jsonb,
   p_items jsonb
 )
 returns jsonb
@@ -219,7 +220,8 @@ begin
   set compared_claim_count=v_count,relation_count=v_relations,
       metadata=jsonb_build_object(
         'comparison_is_inference',true,
-        'changes_claim_authority',false
+        'changes_claim_authority',false,
+        'coverage',case when jsonb_typeof(p_coverage)='object' then p_coverage else '{}'::jsonb end
       )
   where id=v_comparison.id
   returning * into v_comparison;
@@ -233,7 +235,7 @@ begin
   );
 end $$;
 
-revoke all on function public.minds_commit_project_source_comparison(uuid,uuid,uuid,uuid,text,text,jsonb)
+revoke all on function public.minds_commit_project_source_comparison(uuid,uuid,uuid,uuid,text,text,jsonb,jsonb)
   from public,anon,authenticated;
-grant execute on function public.minds_commit_project_source_comparison(uuid,uuid,uuid,uuid,text,text,jsonb)
+grant execute on function public.minds_commit_project_source_comparison(uuid,uuid,uuid,uuid,text,text,jsonb,jsonb)
   to service_role;
