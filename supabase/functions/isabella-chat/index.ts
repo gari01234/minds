@@ -2052,19 +2052,27 @@ async function searchCalendar(req: Request, args: any) {
   }catch{return {events:[],tasks:[]}}
 }
 
-async function searchMemoryTool(req: Request, query: string, apiKey: string) {
-  let [lexical,semantic,entities]=await Promise.all([longTermRecall(req,query,18),semanticRecall(req,query,apiKey,14,40),entityRecall(req,query,16)]);
+async function searchMemoryTool(req:Request,query:string,apiKey:string,scopeKey="global",allowCrossScope=false,runId:string|null=null){
+  let [lexical,semantic,entities]=await Promise.all([
+    longTermRecall(req,query,18,scopeKey,allowCrossScope,runId),
+    semanticRecall(req,query,apiKey,14,40,scopeKey,allowCrossScope,runId),
+    entityRecall(req,query,16)
+  ]);
   let stage="direct";const queries=[query];
   if(lexical.length+semantic.length<5){
     const model=Deno.env.get("OPENAI_UTILITY_MODEL")||Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
     try{
       const r=await fetch("https://api.openai.com/v1/responses",{method:"POST",headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({model,instructions:'Genera hasta 2 consultas breves alternativas para buscar recuerdos sobre esta pregunta. Solo términos presentes o sinónimos; no inventes personas, proyectos o fechas. Devuelve JSON {queries:string[]}.',reasoning:{effort:"low"},max_output_tokens:250,input:[{role:"user",content:query}]})});
-      const p=await r.json();await recordUsage(req,"active_memory_worker",model,p?.usage,{stage:"query_expansion"});
+      const p=await r.json();await recordUsage(req,"active_memory_worker",model,p?.usage,{stage:"query_expansion",scope_key:scopeKey,allow_cross_scope:allowCrossScope});
       if(r.ok){
         const expanded=parseModelJson(extractText(p));
         for(const q of (Array.isArray(expanded?.queries)?expanded.queries:[]).slice(0,2))if(typeof q==="string"&&q.trim()&&!queries.includes(q))queries.push(q.trim());
         for(const q of queries.slice(1)){
-          const [l,s,e]=await Promise.all([longTermRecall(req,q,18),semanticRecall(req,q,apiKey,14,0),entityRecall(req,q,16)]);
+          const [l,s,e]=await Promise.all([
+            longTermRecall(req,q,18,scopeKey,allowCrossScope,runId),
+            semanticRecall(req,q,apiKey,14,0,scopeKey,allowCrossScope,runId),
+            entityRecall(req,q,16)
+          ]);
           lexical.push(...l);semantic.push(...s);entities.push(...e);
         }
         stage=queries.length>1?"expanded":"direct";
@@ -2072,7 +2080,15 @@ async function searchMemoryTool(req: Request, query: string, apiKey: string) {
     }catch{/* Direct evidence remains usable if expansion fails. */}
   }
   const unique=(rows:any[])=>rows.filter((x,i,a)=>a.findIndex(y=>JSON.stringify(y)===JSON.stringify(x))===i);
-  return {stage,queries,lexical:unique(lexical),semantic:unique(semantic),entities:unique(entities),provenance:{accepted_fact:false,rule:"Return sources with uncertainty and time; absent evidence is not proof something never happened."}};
+  return {
+    stage,queries,scope_key:scopeKey,cross_scope:!!allowCrossScope,
+    lexical:unique(lexical),semantic:unique(semantic),entities:unique(entities),
+    provenance:{
+      accepted_fact:false,
+      retrieved_is_not_new_memory:true,
+      rule:"Return sources with uncertainty, scope and time; absent evidence is not proof something never happened."
+    }
+  };
 }
 
 async function skillCatalog(req: Request) {
@@ -2508,12 +2524,13 @@ Deno.serve(async (req: Request) => {
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const initialSemantic=!background&&!!route.deep_memory;
+  const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
-    fastAgenda?Promise.resolve([]):longTermRecall(req, effectiveMessage,budget.lexical),
+    fastAgenda?Promise.resolve([]):longTermRecall(req,effectiveMessage,budget.lexical,exposureScope.key,explicitCrossScope,run?.id||null),
     fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
-    initialSemantic&&!fastAgenda?semanticRecall(req, effectiveMessage, apiKey,budget.semantic,budget.indexBatch):Promise.resolve([]),
+    initialSemantic&&!fastAgenda?semanticRecall(req,effectiveMessage,apiKey,budget.semantic,budget.indexBatch,exposureScope.key,explicitCrossScope,run?.id||null):Promise.resolve([]),
     fastAgenda?Promise.resolve([]):recentProposalFeedback(req,budget.feedback),
     fastAgenda?Promise.resolve([]):entityRecall(req, effectiveMessage,budget.entities),
     background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req),
@@ -2541,8 +2558,8 @@ AGENDA CANÓNICA:
 CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
 Los eventos canónicos incluyen local_date, local_start_time, local_end_time, display_time y timezone calculados por MINDS. Para comunicar horas usa SIEMPRE esos campos locales cuando existan. starts_at/ends_at son timestamps de almacenamiento y no deben mostrarse ni reinterpretarse como hora local. No hagas conversiones UTC manuales si display_time ya está disponible.
 
-CONTINUIDAD:
-Esta conversación usa un objeto persistente de OpenAI Conversations. Los turnos previos ya forman parte de tu contexto. No vuelvas a preguntar algo que el usuario ya explicó en la conversación. Si el usuario da información en varios mensajes consecutivos, intégrala como una sola intención continua. Una corrección breve modifica únicamente el dato corregido y conserva el resto de lo ya entendido.
+CONTINUIDAD Y EXPOSICIÓN:
+Esta conversación visible puede contener muchos ámbitos, pero MINDS te entrega una ventana persistente separada por exposure_scope. Solo los turnos del ámbito activo forman parte automáticamente de tu contexto de trabajo. No arrastres información de otro proyecto o del ámbito personal solo porque exista en el historial visible. Si el usuario pregunta explícitamente por algo del pasado o pide cruzar ámbitos, usa search_memory: la herramienta devuelve procedencia y scope. Recuperar algo no lo convierte en un recuerdo nuevo ni en un hecho confirmado. Dentro del mismo scope, no vuelvas a preguntar algo que el usuario ya explicó. Si el usuario da información en varios mensajes consecutivos del mismo asunto, intégrala como una sola intención continua. Una corrección breve modifica únicamente el dato corregido y conserva el resto de lo ya entendido.
 Ejemplo: "Agrega un Termin" → "el 15 de octubre a las 15:00" → "5 y no 15" → "con los Bauherren de Bernried" describe UN MISMO evento. "Termin", "Besprechung", reunión o cita significa event salvo indicación contraria.
 
 PROJECT THREAD MODE:
@@ -3227,7 +3244,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await updatePersonalModelClaim(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_memory"){
-        const result=await searchMemoryTool(req,String(args.query||effectiveMessage),apiKey);
+        const result=await searchMemoryTool(req,String(args.query||effectiveMessage),apiKey,exposureScope.key,explicitMemoryCrossScope(effectiveMessage),run?.id||null);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_calendar"){
         const result=await searchCalendar(req,args);
