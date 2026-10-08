@@ -1121,14 +1121,15 @@ test('Build 63 makes server-local time authoritative over historical greetings',
 });
 
 
-test('Build 64 bounds the OpenAI working conversation while preserving full Supabase history',()=>{
+test('Build 64 bounded OpenAI working context survives Build 85 as scope-local rolling windows',()=>{
   const conv=read('supabase/functions/_shared/conversations.ts');
   assert.ok(conv.includes('ROTATE_EVERY_MESSAGES=48'));
-  assert.ok(conv.includes("from('conversation_messages').select('id',{count:'exact',head:true})"));
-  assert.ok(conv.includes("reason:'rolling_context_window'"));
-  assert.ok(conv.includes(".slice(-24).map"));
-  assert.ok(conv.includes("openai_rotation_message_count:messageCount"));
-  assert.ok(conv.includes("Full history remains in Supabase"));
+  assert.ok(conv.includes("minds_scoped_message_count"));
+  assert.ok(conv.includes("reason:'rolling_scope_window'"));
+  assert.ok(conv.includes(".slice(-24)"));
+  assert.ok(conv.includes("rotation_message_count:messageCount"));
+  assert.ok(conv.includes("Full visible history remains in Supabase"));
+  assert.ok(conv.includes("openai_scope_conversations"));
 });
 
 test('Build 64 gives light turns a lower-latency cognitive budget without weakening deep turns',()=>{
@@ -1168,7 +1169,8 @@ test('Build 64 exposes latency-path observability for real production measuremen
   assert.ok(chat.includes('fast_path:fastAgenda'));
   assert.ok(chat.includes('conversation_rotated:!!conversationInfo.rotated'));
   assert.ok(chat.includes('conversation_message_count:conversationInfo.messageCount||null'));
-  assert.ok(chat.includes('context_policy:"rolling_transient_v2"'));
+  assert.ok(chat.includes('context_policy:"scoped_exposure_v1"'));
+  assert.ok(chat.includes('exposure_scope:exposureScope'));
 });
 
 
