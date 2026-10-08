@@ -23,7 +23,9 @@ test('Build 78 keeps one Isabella while giving each Work Thread its own conversa
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const ai=read('apps/isabella/ai.js');
   assert.ok(chat.includes('current_work_thread:currentWorkThread?'));
-  assert.ok(chat.includes('currentWorkThread?[]:(context.recent_local_conversation || [])'));
+  assert.ok(chat.includes('mergeRecentConversations(recentDb, [], effectiveMessage)'));
+  assert.ok(chat.includes('strictScope:false'));
+  assert.ok(chat.includes('kind:"work_thread"'));
   assert.ok(chat.includes('app_scope","work_thread"'));
   assert.ok(chat.includes('PROJECT THREAD MODE:'));
   assert.ok(chat.includes('el Thread no crea otra personalidad ni otro cerebro'));
@@ -76,12 +78,12 @@ test('Build 78 current PWA assets are aligned',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.08.84.5'));
+  assert.ok(shell.includes('Build 2026.10.08.85.1'));
   assert.ok(index.includes('app.css?v=59'));
-  assert.ok(index.includes('shell.js?v=84'));
+  assert.ok(index.includes('shell.js?v=85'));
   assert.ok(index.includes('work.js?v=13'));
-  assert.ok(index.includes('ai.js?v=48'));
-  assert.ok(sw.includes("isabella-shell-v100"));
+  assert.ok(index.includes('ai.js?v=49'));
+  assert.ok(sw.includes("isabella-shell-v101"));
 });
 
 test('Build 78 Work client remains valid JavaScript',()=>{
