@@ -536,7 +536,7 @@ test('Build 36 sanitizes legacy memory kinds before Supabase sync',()=>{
   assert.ok(app.includes('function normalizeMemoryKind(kind)'));
   assert.ok(sync.includes('function normalizeMemoryKind(kind)'));
   assert.ok(sync.includes(".filter(m=>typeof m!=='object'||m.status!=='deleted')"));
-  assert.ok(sync.includes("kind:typeof m==='object'?normalizeMemoryKind(m.kind):'context'"));
+  assert.ok(sync.includes("kind:obj?normalizeMemoryKind(obj.kind):'context'"));
   assert.ok(sync.includes("['active','corrected','rejected','archived'].includes"));
 });
 
@@ -610,14 +610,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.08.85.1'));
+  assert.ok(shell.includes('Build 2026.10.08.85.2'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=59'));
-  assert.ok(index.includes('shell.js?v=85'));
+  assert.ok(index.includes('shell.js?v=86'));
   assert.ok(index.includes('app.js?v=94'));
-  assert.ok(index.includes('sync.js?v=pwa29'));
+  assert.ok(index.includes('sync.js?v=pwa30'));
   assert.ok(index.includes('ai.js?v=49'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v101'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v102'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
