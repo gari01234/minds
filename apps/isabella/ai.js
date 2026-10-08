@@ -147,9 +147,10 @@ async function ask(message,state,options={}){
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
     }catch(e){
-      // The full Isabella path remains the safety fallback only after an explicit gate refusal.
-      // A lost response may follow a committed authorized task. Never retry as a new proposal.
-      options.onTextReset?.();await window.ISABELLA_SYNC_PULL_NOW?.();throw e;
+      // The fast path already retries idempotently with one client request id and refreshes
+      // canonical state before surfacing an ambiguous transport failure. Never fall through
+      // to full Isabella as a fresh proposal.
+      options.onTextReset?.();throw e;
     }
   }
   if(!options.workThread&&!options.background&&!attachments.length){
