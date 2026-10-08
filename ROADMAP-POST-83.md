@@ -111,6 +111,8 @@ with conservative cooldown, trigger and expiry bounds. Creation and cancellation
 
 ## Build 87 — Review Economy v0.1
 
+Status: active. 87.1 Review Debt Ledger implemented; batching/expiry/routing/suppression remain.
+
 Treat human judgment as a scarce resource.
 
 The problem is not only interruption. As MINDS creates more hypotheses, claims, permissions, variants and memory proposals, explicit review can itself become coordination debt.
