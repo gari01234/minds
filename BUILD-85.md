@@ -24,7 +24,7 @@ The product behavior should resemble human contextual memory: Isabella may know 
 
 ## Build 85 sequence
 
-### 85.1 — Scoped conversation exposure
+### 85.1 — Scoped conversation exposure **Implemented**
 - Every new conversation message receives an explicit exposure scope version, kind, key and structural provenance class.
 - Main Isabella chat may move between `global` and `project:<uuid>` scopes while remaining one visible conversation.
 - Work Threads keep their own exact `work_thread:<uuid>` scope.
