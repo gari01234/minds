@@ -22,7 +22,7 @@ test('Bernried acceptance corpus contains twenty source-grounded cognitive integ
   assert.equal(fixture.cases.length,20);
   assert.equal(new Set(fixture.cases.map(x=>x.id)).size,20);
   for(const c of fixture.cases){
-    assert.match(c.id,/^B\\d{2}$/);
+    assert.match(c.id,/^B\d{2}$/);
     assert.ok(c.title&&c.source&&c.given&&c.expected);
     assert.ok(Array.isArray(c.invariants)&&c.invariants.length>0);
     for(const invariant of c.invariants)assert.ok(fixture.invariants.includes(invariant));
