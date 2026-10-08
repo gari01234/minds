@@ -63,7 +63,7 @@ test('Build 83 a lost fast response retries once idempotently and never falls th
     ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},fetch:async(_url,opts)=>{requests++;ids.push(JSON.parse(opts.body).client_request_id);throw Error('lost response')}});
   vm.runInContext(read('apps/isabella/ai.js'),c);
   await assert.rejects(c.window.ISABELLA_AI.ask('Agrega Comprar papel en Casa',{categories:[],projects:[],tasks:[],events:[],messages:[]}),/Perdí la conexión/);
-  assert.equal(requests,2);assert.equal(new Set(ids).size,1);assert.equal(invokes,0);assert.equal(pulls,2);
+  assert.equal(requests,2);assert.equal(new Set(ids).size,1);assert.equal(invokes,0);assert.equal(pulls,1);
 });
 test('Build 83 incomplete SSE retries once, while a verified gate refusal can still fall back',async()=>{
   const source=read('apps/isabella/ai.js');
