@@ -55,6 +55,25 @@ const MEMORY_KIND_ALIASES={schedule:'routine',habit:'routine',working_style:'pre
 function normalizeMemoryKind(kind){const k=String(kind||'context').trim().toLowerCase();return MEMORY_KINDS.has(k)?k:(MEMORY_KIND_ALIASES[k]||'context')}
 const taskOrder=(a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))||String(a.title||'').localeCompare(String(b.title||''),'es');
 function nextTaskOrder(date){const key=date||null,xs=state.tasks.filter(t=>(t.date||null)===key&&!t.archivedAt);return xs.length?Math.max(...xs.map(t=>Number(t.sortOrder||0)))+10:10}
+let calendarDraggedTaskId=null,calendarDraggedSourceDate=null,calendarDragCommitted=false;
+function orderedPendingTaskElements(container,date){
+  if(!container)return[];
+  return [...container.children].filter(x=>x.matches?.('.task-item[data-date]')&&!x.classList.contains('task-done')&&x.dataset.date===date);
+}
+function commitTaskOrderFromContainer(container,date,movedId=null){
+  const ids=orderedPendingTaskElements(container,date).map(x=>x.dataset.id).filter(Boolean);
+  if(movedId&&!ids.includes(movedId))ids.push(movedId);
+  let changed=false;
+  ids.forEach((id,i)=>{
+    const t=state.tasks.find(x=>x.id===id);if(!t)return;
+    const nextOrder=(i+1)*10,nextDate=date;
+    if(t.date===nextDate&&Number(t.sortOrder||0)===nextOrder)return;
+    const before=clone(t);t.date=nextDate;t.sortOrder=nextOrder;
+    mutation('task',t.date===before.date?'reorder':'move_date',before,t,'manual');changed=true;
+  });
+  if(changed)save();
+  return changed;
+}
 function mutation(entityType,action,before,after,source='manual'){
   const entityKey=(after||before)?.id;
   if(!entityKey)return;
@@ -1934,27 +1953,69 @@ function bindCalendarItems(){
     el.addEventListener('touchend',e=>{if(e.target.closest('.task-check'))return;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;e.stopPropagation();if(el.dataset.dragActive==='1'||el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(Math.abs(dx)>56&&Math.abs(dx)>Math.abs(dy)*1.2){if(dx>0&&el.dataset.kind==='task')toggleTaskDone(el.dataset.id);else if(dx<0)itemActions(el.dataset.kind,el.dataset.id);return}if(!moved&&!el.closest('.drag-handle'))editItem(el.dataset.kind,el.dataset.id)},{passive:true});
     el.addEventListener('click',e=>{if(e.detail===0||'ontouchstart' in window)return;if(el.dataset.justDragged==='1'){el.dataset.justDragged='0';return}if(e.target.closest('.drag-handle,.task-check'))return;editItem(el.dataset.kind,el.dataset.id)});
   });
+  initTaskDesktopDrag();
   initWeekDateDrag();
   initTaskDrag();
   initEventDrag();
 }
+function initTaskDesktopDrag(){
+  $('.task-item[data-date]:not(.task-done)').forEach(row=>{
+    if(row.dataset.desktopDragBound)return;
+    row.dataset.desktopDragBound='1';row.draggable=true;
+    row.addEventListener('dragstart',e=>{
+      calendarDraggedTaskId=row.dataset.id||null;calendarDraggedSourceDate=row.dataset.date||null;calendarDragCommitted=false;
+      row.dataset.justDragged='1';row.classList.add('dragging');
+      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',calendarDraggedTaskId||'');e.dataTransfer.setData('application/x-isabella-task',calendarDraggedTaskId||'')}catch{}
+    });
+    row.addEventListener('dragover',e=>{
+      if(!calendarDraggedTaskId||calendarDraggedTaskId===row.dataset.id)return;
+      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const targetDate=row.dataset.date||null;
+      if(state.view!=='week'&&targetDate!==calendarDraggedSourceDate)return;
+      e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+      const r=row.getBoundingClientRect(),parent=row.parentNode;
+      if(dragged.parentNode!==parent||e.clientY<r.top+r.height/2)parent.insertBefore(dragged,row);
+      else parent.insertBefore(dragged,row.nextSibling);
+      dragged.dataset.date=targetDate||'';
+    });
+    row.addEventListener('drop',e=>{
+      if(!calendarDraggedTaskId)return;
+      e.preventDefault();e.stopPropagation();
+      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const targetDate=row.dataset.date||calendarDraggedSourceDate;
+      dragged.dataset.date=targetDate;
+      commitTaskOrderFromContainer(row.parentNode,targetDate,calendarDraggedTaskId);
+      calendarDragCommitted=true;renderCalendar();
+    });
+    row.addEventListener('dragend',()=>{
+      row.classList.remove('dragging');
+      setTimeout(()=>{row.dataset.justDragged='0'},120);
+      if(!calendarDragCommitted)renderCalendar();
+      calendarDraggedTaskId=null;calendarDraggedSourceDate=null;calendarDragCommitted=false;
+    });
+  });
+}
 function initWeekDateDrag(){
   if(state.view!=='week')return;
-  $$('.week .task-item[draggable="true"]').forEach(card=>{
-    card.addEventListener('dragstart',e=>{
-      card.dataset.justDragged='1';card.classList.add('dragging');
-      try{e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',card.dataset.id||'')}catch{}
+  $('.week .wday[data-week-date]').forEach(day=>{
+    day.addEventListener('dragover',e=>{
+      if(!calendarDraggedTaskId)return;
+      e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target');
+      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      if(!e.target.closest?.('.task-item')){
+        day.querySelector('.week-free')?.remove();
+        day.appendChild(dragged);dragged.dataset.date=day.dataset.weekDate||'';
+      }
     });
-    card.addEventListener('dragend',()=>{card.classList.remove('dragging');setTimeout(()=>{card.dataset.justDragged='0'},120)});
-  });
-  $$('.week .wday[data-week-date]').forEach(day=>{
-    day.addEventListener('dragover',e=>{if(!e.dataTransfer)return;e.preventDefault();e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target')});
     day.addEventListener('dragleave',e=>{if(!day.contains(e.relatedTarget))day.classList.remove('week-drop-target')});
     day.addEventListener('drop',e=>{
+      if(!calendarDraggedTaskId)return;
       e.preventDefault();day.classList.remove('week-drop-target');
-      const id=e.dataTransfer?.getData('text/plain'),t=state.tasks.find(x=>x.id===id),date=day.dataset.weekDate;
-      if(!t||!date||t.date===date)return;
-      const before=clone(t);t.date=date;t.sortOrder=nextTaskOrder(date);mutation('task','move_date',before,t,'manual');save();renderCalendar();
+      const date=day.dataset.weekDate,dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);
+      if(!date||!dragged)return;
+      dragged.dataset.date=date;
+      commitTaskOrderFromContainer(day,date,calendarDraggedTaskId);
+      calendarDragCommitted=true;renderCalendar();
     });
   });
 }
@@ -2055,9 +2116,8 @@ function initTaskDrag(){
       row.dataset.justDragged='1';
       setTimeout(()=>{row.dataset.justDragged='0'},180);
       const ids=taskSiblings().map(x=>x.dataset.id);
-      ids.forEach((id,i)=>{const t=state.tasks.find(x=>x.id===id);if(t)t.sortOrder=(i+1)*10});
-      if(ids.join('|')!==beforeOrder.join('|'))mutation('task','reorder',{id:row.dataset.id,date:row.dataset.date,order:beforeOrder},{id:row.dataset.id,date:row.dataset.date,order:ids},'manual');
-      save();renderCalendar();
+      if(ids.join('|')!==beforeOrder.join('|'))commitTaskOrderFromContainer(row.parentNode,row.dataset.date,row.dataset.id);
+      renderCalendar();
     };
     row.addEventListener('touchstart',ev=>{
       if(ev.touches.length!==1)return;
