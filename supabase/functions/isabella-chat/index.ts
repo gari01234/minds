@@ -767,7 +767,8 @@ function bytesToBase64(bytes: Uint8Array) {
 }
 
 async function sha256Hex(bytes:Uint8Array){
-  const digest=await crypto.subtle.digest("SHA-256",bytes);
+  const copy=new Uint8Array(bytes.byteLength);copy.set(bytes);
+  const digest=await crypto.subtle.digest("SHA-256",copy.buffer);
   return [...new Uint8Array(digest)].map(x=>x.toString(16).padStart(2,"0")).join("");
 }
 
