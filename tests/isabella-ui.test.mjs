@@ -536,7 +536,7 @@ test('Build 36 sanitizes legacy memory kinds before Supabase sync',()=>{
   assert.ok(app.includes('function normalizeMemoryKind(kind)'));
   assert.ok(sync.includes('function normalizeMemoryKind(kind)'));
   assert.ok(sync.includes(".filter(m=>typeof m!=='object'||m.status!=='deleted')"));
-  assert.ok(sync.includes("kind:typeof m==='object'?normalizeMemoryKind(m.kind):'context'"));
+  assert.ok(sync.includes("kind:obj?normalizeMemoryKind(obj.kind):'context'"));
   assert.ok(sync.includes("['active','corrected','rejected','archived'].includes"));
 });
 
