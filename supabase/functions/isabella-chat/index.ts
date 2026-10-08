@@ -766,23 +766,35 @@ function bytesToBase64(bytes: Uint8Array) {
   return btoa(out);
 }
 
-async function loadImageAttachments(req: Request, raw: any[]) {
+async function loadChatAttachments(req: Request, raw: any[]) {
   const items=(Array.isArray(raw)?raw:[]).slice(0,3);
   if(!items.length)return [];
   const sb=supabaseClient(req); if(!sb)return [];
   const {data:{user},error:authError}=await sb.auth.getUser();
   if(authError||!user)return [];
   const out:any[]=[];
+  let total=0;
+  const imageMimes=new Set(["image/jpeg","image/png","image/webp"]);
+  const fileMimes=new Set([
+    "application/pdf","text/plain","text/markdown","text/csv","application/json",
+    "application/msword","application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-powerpoint","application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/vnd.ms-excel","application/vnd.openxmlformats-officedocument.spreadsheetml.sheet","message/rfc822"
+  ]);
   for(const item of items){
     const path=String(item?.path||"").trim();
-    const mime=String(item?.mime||"image/jpeg").trim().toLowerCase();
+    const mime=String(item?.mime||"application/octet-stream").trim().toLowerCase();
+    const filename=String(item?.name||path.split("/").pop()||"archivo").slice(0,180);
     if(!path.startsWith(user.id+"/"))continue;
-    if(!["image/jpeg","image/png","image/webp"].includes(mime))continue;
+    if(!imageMimes.has(mime)&&!fileMimes.has(mime))continue;
     const {data,error}=await sb.storage.from("isabella-uploads").download(path);
     if(error||!data)continue;
     const bytes=new Uint8Array(await data.arrayBuffer());
-    if(bytes.length>10*1024*1024)continue;
-    out.push({type:"input_image",image_url:"data:"+mime+";base64,"+bytesToBase64(bytes),detail:"auto"});
+    if(bytes.length>12*1024*1024||total+bytes.length>24*1024*1024)continue;
+    total+=bytes.length;
+    const encoded=bytesToBase64(bytes);
+    if(imageMimes.has(mime))out.push({type:"input_image",image_url:"data:"+mime+";base64,"+encoded,detail:"auto"});
+    else out.push({type:"input_file",file_data:encoded,filename});
   }
   return out;
 }
@@ -2079,7 +2091,7 @@ Deno.serve(async (req: Request) => {
   const message = userMessage(String(body?.message || ""));
   const attachments = Array.isArray(body?.attachments)?body.attachments.slice(0,3):[];
   if (!message && !attachments.length) return json({ error: "message_required" }, 400);
-  const effectiveMessage = message || "Te envío esta imagen para que la tengas en cuenta y continúes la conversación.";
+  const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
 
   const context = body?.context || {};
   const background = !!body?.background;
@@ -2606,9 +2618,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   const specialistOrchestrations:any[]=[];
   const orchestrationFingerprints=new Set<string>();
   let roundsUsed=0;
-  const imageInputs=background?[]:await loadImageAttachments(req,attachments);
+  const attachmentInputs=background?[]:await loadChatAttachments(req,attachments);
   const turnText=effectiveMessage;
-  let input:any = [{role:"user",content:[{type:"input_text",text:turnText},...imageInputs]}];
+  let input:any = [{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
