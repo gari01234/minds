@@ -7,6 +7,7 @@ const read=p=>readFileSync(new URL(p,root),'utf8');
 const migration=read('supabase/migrations/20261008224500_review_debt_v01.sql');
 const batching=read('supabase/migrations/20261008232000_review_batching_expiry_v01.sql');
 const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
+const routing=read('supabase/migrations/20261008234500_review_routing_v01.sql');
 const build=read('BUILD-87.md');
 
 test('Build 87.1 review debt is a projection over existing canonical stores',()=>{
@@ -108,4 +109,35 @@ test('Build 87.2 summary exposes batching and expiry without an opaque score',()
   assert.ok(batching.includes("'expirable_items'"));
   assert.ok(batching.includes("'protected_items'"));
   assert.ok(batching.includes("'scoring','none'"));
+});
+
+
+test('Build 87.3 separates authority boundary, bounded change and cheap reversible review lanes',()=>{
+  assert.ok(routing.includes('create or replace view public.minds_review_routing_v1'));
+  assert.ok(routing.includes("'authority_boundary'"));
+  assert.ok(routing.includes("'bounded_change'"));
+  assert.ok(routing.includes("'cheap_reversible'"));
+  assert.ok(routing.includes("q.review_class in ('authority','project_truth','behavior_rule','delegation')"));
+});
+
+test('Build 87.3 interruption is reserved for a real blocking dependency',()=>{
+  assert.ok(routing.includes('dependency_blocking'));
+  assert.ok(routing.includes("'requires_user',q.dependency_blocking"));
+  assert.ok(routing.includes("when 'review_required' then v_route:='briefing'"));
+  assert.ok(routing.includes("when 'review_window_closing' then v_route:='ambient'"));
+  assert.ok(routing.includes("v_silent:=q.review_lane='cheap_reversible'"));
+});
+
+test('Build 87.3 delegates final delivery route to Attention Economy without review mutation',()=>{
+  assert.ok(routing.includes('v_attention:=public.minds_route_attention(v_uid,v_candidate)'));
+  assert.ok(routing.includes("'authority_changed',false"));
+  const decision=routing.slice(routing.indexOf('create or replace function public.minds_review_attention_decision'));
+  assert.equal(/\bupdate\s+public\.minds_(shadow_decisions|work_claims|operating_model_hypotheses|project_model_variants)/i.test(decision),false);
+  assert.equal(/\binsert\s+into\s+public\.minds_(shadow_decisions|work_claims|operating_model_hypotheses|project_model_variants)/i.test(decision),false);
+});
+
+test('Build 87.3 authority review does not become an interrupt merely because it is important',()=>{
+  assert.ok(routing.includes("when 'review_required' then v_route:='briefing';v_reason:='review_required'"));
+  assert.ok(routing.includes("when 'review_window_closing' then v_route:='ambient';v_reason:='review_window_closing'"));
+  assert.ok(build.includes('Authority-boundary review routes to briefing by default'));
 });
