@@ -254,6 +254,31 @@ test('Chat and artifact images are lazy-hydrated to avoid repeated private Stora
   assert.ok(app.includes('loading="lazy" data-chat-image-path'));
 });
 
+
+test('Build 83 chat accepts and preserves real document attachments',()=>{
+  const shell=read('apps/isabella/shell.js');
+  const app=read('apps/isabella/app.js');
+  const server=read('supabase/functions/isabella-chat/index.ts');
+  assert.ok(shell.includes('accept="image/*,.pdf,.txt,.md,.csv,.json,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.eml"'));
+  assert.ok(app.includes('CHAT_UPLOAD_MAX_BYTES=12*1024*1024'));
+  assert.ok(app.includes('CHAT_UPLOAD_MAX_TOTAL_BYTES=24*1024*1024'));
+  assert.ok(app.includes('async function uploadChatFiles'));
+  assert.ok(app.includes('data-chat-file-path'));
+  assert.ok(server.includes('async function loadChatAttachments'));
+  assert.ok(server.includes('type:"input_file"'));
+  assert.ok(server.includes('filename'));
+});
+
+test('Build 83 Work uses one visible planner scroll surface so cards cannot collapse inside buckets',()=>{
+  const css=read('apps/isabella/app.css');
+  const work=read('apps/isabella/work.js');
+  assert.ok(css.includes('.work-board{overflow-x:auto!important;overflow-y:auto!important;align-items:flex-start!important}'));
+  assert.ok(css.includes('.work-bucket-scroll{flex:none!important'));
+  assert.ok(work.includes("tasks.some(t=>!t.work_bucket_id)"));
+  assert.ok(work.includes("name:'Ohne Bucket'"));
+  assert.ok(work.includes("from('isabella_tasks')"));
+});
+
 test('browser entry scripts are syntactically valid JavaScript',()=>{
   for(const path of ['apps/isabella/app.js','apps/isabella/ai.js','apps/isabella/shell.js','apps/isabella/work.js']){
     assert.doesNotThrow(()=>new Function(read(path)),path+' must parse');
@@ -585,14 +610,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.06.82.2'));
+  assert.ok(shell.includes('Build 2026.10.08.83.0'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=57'));
-  assert.ok(index.includes('shell.js?v=83'));
-  assert.ok(index.includes('app.js?v=90'));
+  assert.ok(index.includes('app.css?v=58'));
+  assert.ok(index.includes('shell.js?v=84'));
+  assert.ok(index.includes('app.js?v=91'));
   assert.ok(index.includes('sync.js?v=pwa28'));
-  assert.ok(index.includes('ai.js?v=47'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v96'"));
+  assert.ok(index.includes('ai.js?v=48'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v97'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1160,7 +1185,7 @@ test('Build 65 uses a strict one-round create gate before full Isabella',()=>{
   assert.equal(fast('Agrega la tarea si no choca con el Kick-off'),false);
   assert.equal(fast('Mueve la tarea de Wagner al lunes'),false);
   assert.ok(ai.includes("/functions/v1/isabella-fast-stream"));
-  assert.ok(ai.includes("The full Isabella path remains the safety fallback"));
+  assert.ok(ai.includes("Never fall through"));
 });
 
 test('Build 70 fast transport uses SSE and delegates authorized writes to the guarded database RPC',()=>{
