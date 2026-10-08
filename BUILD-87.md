@@ -26,10 +26,13 @@ The goal is not to reduce review by accepting more things automatically. The goa
 - Summarize debt with counts and age bands; no opaque score.
 - Do not move, accept, reject or expire anything in this slice.
 
-### 87.2 — Compatible batching + proposal expiry
-- Define which reversible review items can share one human review.
-- Add explicit expiry only to proposal classes where staleness is safer than accumulation.
-- Never expire unresolved contradictions, permission changes or accepted-rule proposals merely because they are old.
+### 87.2 — Compatible batching + proposal expiry **Implemented**
+- Only low-consequence, highly reversible create-task/create-event shadow decisions are batch-compatible in v0.1.
+- Compatibility requires the same proposal kind, action, scope, target date and origin class (direct vs inferred); source-tainted or recurring proposals never batch.
+- Batch compatibility is a read-only projection. One batch never grants authority and cannot be bulk-applied before the Human Surface explicitly reviews it.
+- Stale task/event shadow proposals expire deterministically: at least 24 h after creation, no later than 7 days, and no later than one day after their target date when dated.
+- Expiry is executed by the deterministic Heartbeat and leaves an audit receipt in the original shadow decision context.
+- Operating-rule hypotheses, Project Claims, Project Model Variants, permissions, permission changes, commitments and claim-authority proposals are protected from age-based expiry.
 
 ### 87.3 — Consequence / reversibility review routing
 - Separate cheap correction from authority-boundary review.
