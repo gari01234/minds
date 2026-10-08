@@ -1694,11 +1694,17 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       .select("id,status,compared_claim_count,relation_count,baseline_fingerprint,metadata,created_at")
       .eq("project_id",ingestion.project_id).eq("ingestion_id",ingestionId)
       .eq("baseline_fingerprint",baselineFingerprint).maybeSingle();
-    if(prior?.status==="completed")return {
-      status:"already_compared",comparison_id:prior.id,baseline_fingerprint:baselineFingerprint,
-      compared_claim_count:prior.compared_claim_count,relation_count:prior.relation_count,
-      coverage:prior?.metadata?.coverage||coverage
-    };
+    if(prior?.status==="completed"){
+      const {data:revisionWrite,error:revisionError}=await service.rpc("minds_publish_project_model_revision_from_comparison",{
+        p_user_id:user.id,p_comparison_id:prior.id
+      });
+      return {
+        status:"already_compared",comparison_id:prior.id,baseline_fingerprint:baselineFingerprint,
+        compared_claim_count:prior.compared_claim_count,relation_count:prior.relation_count,
+        coverage:prior?.metadata?.coverage||coverage,
+        revision:revisionError?{status:"revision_error",detail:revisionError.message}:revisionWrite
+      };
+    }
 
     const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
     const prompt={
@@ -1781,12 +1787,19 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       p_model:model,p_coverage:coverage,p_items:items
     });
     if(commitError)return {status:"commit_error",detail:commitError.message};
+    const comparisonId=String(committed?.comparison_id||"");
+    const {data:revisionWrite,error:revisionError}=comparisonId
+      ?await service.rpc("minds_publish_project_model_revision_from_comparison",{
+          p_user_id:user.id,p_comparison_id:comparisonId
+        })
+      :{data:null,error:{message:"comparison_id_missing"} as any};
     return {
       ...committed,
       ingestion_id:ingestionId,
-      current_revision_id:revision?.id||null,
+      previous_revision_id:revision?.id||null,
       coverage,
       findings:items.slice(0,16),
+      revision:revisionError?{status:"revision_error",detail:revisionError.message}:revisionWrite,
       provenance:{
         class:"project_model_comparison",
         comparison_is_inference:true,
