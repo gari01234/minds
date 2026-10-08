@@ -86,6 +86,8 @@ This is where the useful OpenClaw patterns belong: provenance classes, recall-lo
 
 ## Build 86 — Watch / Prospective Memory v0.2
 
+Status: closed and accepted on the no-provider production baseline. Any future autonomous provider requires provider-specific acceptance before runtime enablement.
+
 Unify Standing Intents and real monitoring semantics without pretending that a reminder is observation.
 
 A Watch exists only when:

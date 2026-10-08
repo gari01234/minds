@@ -1,5 +1,7 @@
 # Build 86 — Watch / Prospective Memory v0.2
 
+Status: **closed and accepted — 2026-10-08 (no-provider baseline)**.
+
 ## Objective
 
 Make MINDS precise about the difference between remembering to surface something and actually observing the world for change.
@@ -57,7 +59,7 @@ Implementation note: Heartbeat now has the complete receipt → condition → At
 - Each Watch says what it observes, when it was last checked, and whether coverage is autonomous / via Gari / unavailable.
 - Cancellation is always explicit.
 
-### 86.5 — Acceptance
+### 86.5 — Acceptance **Accepted**
 - conversational Reminder fires deterministically, obeys cooldown/max count, and never claims monitoring;
 - unsupported external Watch is rejected as monitoring and can only become a Reminder by explicit user review;
 - an armed Watch cannot exist without a valid autonomous channel + freshness;
@@ -72,3 +74,11 @@ No inference-created Watches.
 No silent conversion of Expectations into Watches.
 No new authority from observing a condition.
 No background model deciding that a Watch no longer matters.
+
+## Acceptance note
+
+Build 86 is accepted for the production baseline in which no autonomous Watch provider is connected.
+
+That baseline is intentional, not a missing feature: production currently has no Watch channels and the runtime adapter registry is empty, so MINDS cannot accidentally claim autonomous monitoring. The acceptance suite verifies the full fail-closed contract, Reminder lifecycle, Watch gating, Attention Economy routing, stale/error behavior, deterministic expiry, explicit cancellation and auditability.
+
+The first real autonomous provider must pass a provider-specific extension of this acceptance before `runtime_supported=true` may be enabled. A future provider test must demonstrate an actual fresh observation, a matched and non-matched condition, stale/error handling, Attention Economy routing and deterministic cancellation/expiry. Build 86 itself does not require fabricating a provider merely to make the test green.
