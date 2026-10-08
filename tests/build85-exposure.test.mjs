@@ -93,3 +93,35 @@ test('Build 85.2 memory sync preserves scope and provenance',()=>{
   assert.ok(sync.includes('provenance_class:provenance'));
   assert.ok(sync.includes("exposure_scope_key:m.exposure_scope_key||'global'"));
 });
+
+
+test('Build 85.3 autobiographical writes require exact evidence from the current user message',()=>{
+  assert.ok(chat.includes('const AUTOBIOGRAPHICAL_WRITE_TOOLS=new Set'));
+  assert.ok(chat.includes('currentUserEvidenceGate'));
+  assert.ok(chat.includes('current_user_excerpt_required'));
+  assert.ok(chat.includes('excerpt_not_found_in_current_user_message'));
+  assert.ok(chat.includes('excerpt_too_weak_for_durable_memory'));
+  assert.ok(chat.includes('background_session_cannot_write_autobiographical_memory'));
+  assert.ok(chat.includes('source_tainted_turn_cannot_write_autobiographical_memory'));
+  assert.ok(chat.includes('required:["kind","content","user_excerpt"]'));
+  assert.ok(chat.includes('required:["claim_type","claim","status","user_excerpt"]'));
+  assert.ok(chat.includes('required:["claim_id","status","user_excerpt"]'));
+  assert.ok(chat.includes('required:["subject_type","subject_name","predicate","object_type","object_name","user_excerpt"]'));
+});
+
+test('Build 85.3 durable memory candidates preserve current-user evidence and cannot masquerade as accepted facts',()=>{
+  assert.ok(chat.includes('evidence_kind:"current_user_excerpt"'));
+  assert.ok(chat.includes('message_fingerprint:currentUserMessageFingerprint'));
+  assert.ok(chat.includes('recall_loop_safe:true'));
+  assert.ok(chat.includes('accepted_fact:false'));
+  assert.ok(chat.includes('provenance_class:"agent"'));
+  assert.ok(chat.includes('memory_provenance_policy:"current_user_evidence_v1"'));
+});
+
+test('Build 85.3 source taint is turn-local and blocks autobiographical promotion after external tools',()=>{
+  assert.ok(chat.includes('let sourceTainted=false'));
+  assert.ok(chat.includes('if((payload.output||[]).some((x:any)=>x.type==="web_search_call"))sourceTainted=true'));
+  assert.ok(chat.includes('if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name))sourceTainted=true'));
+  assert.ok(chat.includes('currentUserEvidenceGate(String(call.name||""),args,effectiveMessage,background,sourceTainted)'));
+  assert.ok(chat.includes('status:"blocked_by_memory_provenance"'));
+});
