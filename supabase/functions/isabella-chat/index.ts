@@ -1644,7 +1644,7 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
       .eq("id",ingestionId).maybeSingle();
     if(ingestionError||!ingestion||ingestion.status!=="completed")return {status:"ingestion_not_ready"};
 
-    const [{data:allClaims,error:claimError},{data:revision,error:revisionError}]=await Promise.all([
+    const [{data:allClaims,error:claimError},{data:revision,error:revisionQueryError}]=await Promise.all([
       sb.from("minds_work_claims")
         .select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,valid_from,valid_to,learned_at,confirmed_at,updated_at,metadata")
         .eq("project_id",ingestion.project_id)
@@ -1655,7 +1655,7 @@ async function compareProjectSource(req:Request,args:any,apiKey:string){
         .eq("project_id",ingestion.project_id).eq("status","current")
         .order("created_at",{ascending:false}).limit(1).maybeSingle()
     ]);
-    if(claimError||revisionError)return {status:"baseline_error",detail:claimError?.message||revisionError?.message||"baseline_query_failed"};
+    if(claimError||revisionQueryError)return {status:"baseline_error",detail:claimError?.message||revisionQueryError?.message||"baseline_query_failed"};
 
     const rows=allClaims||[];
     const sourceClaims=rows.filter((x:any)=>String(x?.metadata?.ingestion_id||"")===ingestionId).slice(0,120);
