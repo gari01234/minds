@@ -794,7 +794,7 @@ async function loadChatAttachments(req: Request, raw: any[]) {
     total+=bytes.length;
     const encoded=bytesToBase64(bytes);
     if(imageMimes.has(mime))out.push({type:"input_image",image_url:"data:"+mime+";base64,"+encoded,detail:"auto"});
-    else out.push({type:"input_file",file_data:encoded,filename});
+    else out.push({type:"input_file",file_data:"data:"+mime+";base64,"+encoded,filename});
   }
   return out;
 }

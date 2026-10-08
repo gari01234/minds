@@ -1384,7 +1384,7 @@ function confirmProposal(p){
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
-  $('#proposalConfirm').onclick=()=>{const b=$('#proposalConfirm');if(b.disabled)return;b.disabled=true;state.pendingIntent=null;save();proposalFeedback('accepted',p);Promise.resolve(applyProposal(p)).catch(e=>say('assistant','No pude aplicar el cambio: '+e.message)).finally(()=>{if(b.isConnected)b.disabled=false})};
+  $('#proposalConfirm').onclick=()=>{const b=$('#proposalConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();proposalFeedback('accepted',p);Promise.resolve().then(()=>applyProposal(p)).catch(e=>{say('assistant','No pude aplicar el cambio: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}}).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}})};
 }
 function confirmProposals(list){
   const items=(list||[]).filter(Boolean).map(p=>({...p,request_id:p.request_id||crypto.randomUUID()}));
@@ -1393,7 +1393,7 @@ function confirmProposals(list){
   modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}${proposalDetails(p)}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;state.pendingIntent=null;save();for(const p of items){proposalFeedback('accepted',p);await applyProposal(p)}closeModal()};
+  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){proposalFeedback('accepted',p);await Promise.resolve().then(()=>applyProposal(p))}closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
@@ -1959,7 +1959,7 @@ function bindCalendarItems(){
   initEventDrag();
 }
 function initTaskDesktopDrag(){
-  $('.task-item[data-date]:not(.task-done)').forEach(row=>{
+  $$('.task-item[data-date]:not(.task-done)').forEach(row=>{
     if(row.dataset.desktopDragBound)return;
     row.dataset.desktopDragBound='1';row.draggable=true;
     row.addEventListener('dragstart',e=>{
@@ -1969,7 +1969,7 @@ function initTaskDesktopDrag(){
     });
     row.addEventListener('dragover',e=>{
       if(!calendarDraggedTaskId||calendarDraggedTaskId===row.dataset.id)return;
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       const targetDate=row.dataset.date||null;
       if(state.view!=='week'&&targetDate!==calendarDraggedSourceDate)return;
       e.preventDefault();e.stopPropagation();if(e.dataTransfer)e.dataTransfer.dropEffect='move';
@@ -1981,7 +1981,7 @@ function initTaskDesktopDrag(){
     row.addEventListener('drop',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();e.stopPropagation();
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       const targetDate=row.dataset.date||calendarDraggedSourceDate;
       dragged.dataset.date=targetDate;
       commitTaskOrderFromContainer(row.parentNode,targetDate,calendarDraggedTaskId);
@@ -2001,7 +2001,7 @@ function initWeekDateDrag(){
     day.addEventListener('dragover',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target');
-      const dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
+      const dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);if(!dragged)return;
       if(!e.target.closest?.('.task-item')){
         day.querySelector('.week-free')?.remove();
         day.appendChild(dragged);dragged.dataset.date=day.dataset.weekDate||'';
@@ -2011,7 +2011,7 @@ function initWeekDateDrag(){
     day.addEventListener('drop',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();day.classList.remove('week-drop-target');
-      const date=day.dataset.weekDate,dragged=$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);
+      const date=day.dataset.weekDate,dragged=$$('.task-item[data-id]').find(x=>x.dataset.id===calendarDraggedTaskId);
       if(!date||!dragged)return;
       dragged.dataset.date=date;
       commitTaskOrderFromContainer(day,date,calendarDraggedTaskId);
