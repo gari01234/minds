@@ -1511,7 +1511,8 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .message-file strong{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .message.user:has(.message-attachments){width:min(82%,380px)}
 @media(min-width:900px){
-  .work-bucket{height:auto!important;max-height:100%;min-height:160px}
-  .work-bucket-scroll{flex:1 1 auto!important;min-height:120px!important;max-height:calc(100dvh - 255px);overflow-y:auto!important}
+  .work-board{overflow-x:auto!important;overflow-y:auto!important;align-items:flex-start!important}
+  .work-bucket{height:auto!important;max-height:none!important;min-height:160px}
+  .work-bucket-scroll{flex:none!important;min-height:0!important;max-height:none!important;overflow:visible!important}
   .work-task-list{min-height:1px}
 }
