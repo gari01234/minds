@@ -31,6 +31,108 @@ async function resolveAbsent(sb:any,userId:string,candidates:any[]){
   }
 }
 
+type WatchObservation={
+  observation_status:"ok"|"stale"|"error";
+  condition_state:"matched"|"not_matched"|"unknown";
+  observed_at?:string|null;
+  freshness_minutes?:number|null;
+  result_fingerprint?:string|null;
+  evidence?:Record<string,unknown>;
+  error?:string|null;
+};
+
+type WatchAdapter=(sb:any,userId:string,watch:any,channel:any)=>Promise<WatchObservation>;
+
+// Deliberately empty in 86.3. A provider must ship code + verification before a channel may set runtime_supported=true.
+const WATCH_ADAPTERS:Record<string,WatchAdapter>={};
+
+async function observeWatch(sb:any,userId:string,watch:any,channel:any):Promise<WatchObservation>{
+  const key=String(channel?.metadata?.runtime_adapter||"").trim();
+  const adapter=key?WATCH_ADAPTERS[key]:null;
+  if(!adapter)return {
+    observation_status:"error",condition_state:"unknown",
+    observed_at:null,freshness_minutes:null,result_fingerprint:null,evidence:{},
+    error:"watch_adapter_unavailable"
+  };
+  try{return await adapter(sb,userId,watch,channel)}
+  catch(e){return {
+    observation_status:"error",condition_state:"unknown",
+    observed_at:null,freshness_minutes:null,result_fingerprint:null,evidence:{},
+    error:e instanceof Error?e.message:String(e)
+  }}
+}
+
+async function runWatchChecks(sb:any,userId:string,timezone:string){
+  const now=new Date(),nowMs=now.getTime();
+  const [watchesQ,channelsQ]=await Promise.all([
+    sb.from("minds_standing_intents")
+      .select("id,trigger_text,reminder_text,status,mode,channel_ref,channel_kind,freshness_minutes,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,condition_json,return_rule,project_id,metadata")
+      .eq("user_id",userId).eq("mode","watch").eq("status","armed").order("created_at",{ascending:true}).limit(100),
+    sb.from("minds_watch_channels")
+      .select("id,channel_key,label,provider,adapter_kind,status,freshness_minutes,verification_status,last_verified_at,runtime_supported,condition_schema,metadata")
+      .eq("user_id",userId)
+  ]);
+  checked(watchesQ,"watch_list");checked(channelsQ,"watch_channels");
+  const channels=new Map((channelsQ.data||[]).map((x:any)=>[String(x.id),x]));
+  let checkedCount=0,fired=0,errors=0,stale=0,skipped=0;
+  const receipts:any[]=[];
+
+  for(const watch of watchesQ.data||[]){
+    if(watch.expires_at&&new Date(watch.expires_at).getTime()<=nowMs){
+      checked(await sb.from("minds_standing_intents").update({status:"expired",expired_at:now.toISOString(),updated_at:now.toISOString()}).eq("id",watch.id).eq("user_id",userId).eq("status","armed"),"watch_expire");
+      skipped++;continue;
+    }
+    if(watch.last_trigger_at&&nowMs-new Date(watch.last_trigger_at).getTime()<Number(watch.cooldown_minutes||0)*60000){
+      skipped++;continue;
+    }
+    const channel=channels.get(String(watch.channel_ref||""));
+    if(!channel||channel.status!=="enabled"||channel.verification_status!=="verified"||channel.runtime_supported!==true){
+      errors++;
+      receipts.push({watch_id:watch.id,status:"channel_unavailable"});
+      continue;
+    }
+
+    const observation=await observeWatch(sb,userId,watch,channel);
+    const record=checked(await sb.rpc("minds_record_watch_check",{
+      p_user:userId,p_watch:watch.id,p_channel:channel.id,p_result:observation
+    }),"watch_check_record");
+    checkedCount++;
+    if(record?.status==="error")errors++;
+    if(record?.status==="stale")stale++;
+    if(record?.fire_ready){
+      const fingerprint=String(observation.result_fingerprint||record.check_id||crypto.randomUUID());
+      const publication=await publishCandidate(sb,userId,{
+        event_type:"watch_fired",
+        fingerprint:`watch:${watch.id}:${fingerprint}`,
+        severity:"attention",
+        title:String(watch.reminder_text||watch.trigger_text||"Cambio detectado"),
+        body:String(watch.reminder_text||"La condición que pediste vigilar se ha cumplido."),
+        project_id:watch.project_id||null,
+        source:{
+          watch_id:watch.id,check_id:record.check_id,channel_id:channel.id,
+          channel_key:channel.channel_key,observed_at:observation.observed_at||now.toISOString(),
+          result_fingerprint:fingerprint
+        },
+        metadata:{
+          prospective_memory_mode:"watch",
+          observation_mode:"autonomous",
+          channel_key:channel.channel_key,
+          freshness_minutes:observation.freshness_minutes??null
+        },
+        timezone,ttl_hours:72
+      });
+      checked(await sb.rpc("minds_finalize_watch_fire",{
+        p_user:userId,p_watch:watch.id,p_check:record.check_id,p_publication:publication
+      }),"watch_fire_finalize");
+      fired++;
+      receipts.push({watch_id:watch.id,status:"fired",check_id:record.check_id,attention_route:publication?.attention_route||null});
+    }else{
+      receipts.push({watch_id:watch.id,status:record?.status||"unknown",condition_state:record?.condition_state||"unknown",check_id:record?.check_id||null});
+    }
+  }
+  return {checked:checkedCount,fired,errors,stale,skipped,receipts:receipts.slice(0,30)};
+}
+
 async function maintainConversationContext(sb:any,userId:string){
   const apiKey=Deno.env.get("OPENAI_API_KEY");if(!apiKey)return {status:"unavailable"};
   const rows=checked(await sb.from("conversations").select("id,metadata,app_scope").eq("user_id",userId).in("app_scope",["isabella","sofia"]).order("updated_at",{ascending:false}),"context_maintenance_list")||[];
@@ -115,9 +217,14 @@ Deno.serve(async(req:Request)=>{
       let created=0;
       for(const c of candidates){const x=await publishCandidate(sb,userId,{...c,timezone:routineTz});if(x.created)created++}
       await resolveAbsent(sb,userId,candidates);
+      const watchChecks=await runWatchChecks(sb,userId,routineTz);
       const contextMaintenance=await maintainConversationContext(sb,userId);
-      await finishRun(sb,run,contextMaintenance.status==="error"?"error":"success",{timezone:routineTz,candidates:candidates.length,new_events:created,context_maintenance:contextMaintenance},contextMaintenance.status==="error"?contextMaintenance.detail:undefined);
-      results.push({user_id:userId,status:"success",candidates:candidates.length,new_events:created});
+      const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0;
+      await finishRun(sb,run,heartbeatError?"error":"success",{
+        timezone:routineTz,candidates:candidates.length,new_events:created,
+        watch_checks:watchChecks,context_maintenance:contextMaintenance
+      },contextMaintenance.status==="error"?contextMaintenance.detail:(watchChecks.errors?String(watchChecks.errors)+" watch checks failed":undefined));
+      results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,watch_checks:watchChecks});
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);await finishRun(sb,run,"error",{},detail);results.push({user_id:userId,status:"error",error:detail});
     }
