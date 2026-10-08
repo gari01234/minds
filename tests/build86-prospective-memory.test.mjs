@@ -7,6 +7,8 @@ const read=p=>readFileSync(new URL(p,root),'utf8');
 
 const migration=read('supabase/migrations/20261008211500_prospective_memory_v02.sql');
 const channelsMigration=read('supabase/migrations/20261008213500_watch_channel_contracts_v01.sql');
+const heartbeatMigration=read('supabase/migrations/20261008215500_watch_heartbeat_v01.sql');
+const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
 const chat=read('supabase/functions/isabella-chat/index.ts');
 const app=read('apps/isabella/app.js');
 
@@ -86,4 +88,40 @@ test('Build 86.2 exposes monitoring capability before Isabella may promise a Wat
 
 test('Build 86.2 does not seed a fake autonomous provider',()=>{
   assert.equal(/insert\s+into\s+public\.minds_watch_channels/i.test(channelsMigration),false);
+});
+
+
+test('Build 86.3 every Watch observation leaves a receipt with freshness and condition state',()=>{
+  assert.ok(heartbeatMigration.includes('create table if not exists public.minds_watch_checks'));
+  assert.ok(heartbeatMigration.includes("observation_status in ('ok','stale','error')"));
+  assert.ok(heartbeatMigration.includes("condition_state in ('matched','not_matched','unknown')"));
+  assert.ok(heartbeatMigration.includes('result_fingerprint'));
+  assert.ok(heartbeatMigration.includes('evidence jsonb'));
+  assert.ok(heartbeatMigration.includes('function public.minds_record_watch_check'));
+});
+
+test('Build 86.3 stale or failed observation cannot fire a Watch',()=>{
+  assert.ok(heartbeatMigration.includes("if v_status<>'ok' then v_state:='unknown'"));
+  assert.ok(heartbeatMigration.includes("if v_status='ok' and v_fresh>w.freshness_minutes"));
+  assert.ok(heartbeatMigration.includes("'fire_ready',(v_status='ok' and v_state='matched')"));
+});
+
+test('Build 86.3 Watch firing goes through Heartbeat and Attention Economy before lifecycle finalization',()=>{
+  const publish=heartbeat.indexOf('const publication=await publishCandidate');
+  const finalize=heartbeat.indexOf('minds_finalize_watch_fire',publish);
+  assert.ok(publish>0);
+  assert.ok(finalize>publish);
+  assert.ok(heartbeat.includes('event_type:"watch_fired"'));
+  assert.ok(heartbeat.includes('observation_mode:"autonomous"'));
+});
+
+test('Build 86.3 runtime adapter support is explicit and no provider is silently enabled',()=>{
+  assert.ok(heartbeatMigration.includes('runtime_supported boolean not null default false'));
+  assert.ok(heartbeatMigration.includes('Watch channel runtime adapter unavailable'));
+  assert.ok(heartbeat.includes('const WATCH_ADAPTERS:Record<string,WatchAdapter>={}'));
+  assert.ok(heartbeat.includes('watch_adapter_unavailable'));
+});
+
+test('Build 86.3 Heartbeat includes users whose only live future state is an armed Watch',()=>{
+  assert.ok(heartbeatMigration.includes("union select user_id from public.minds_standing_intents where mode='watch' and status in ('armed','fired')"));
 });
