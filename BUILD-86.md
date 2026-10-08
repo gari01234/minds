@@ -44,11 +44,13 @@ A repeating Reminder may re-arm after a recorded firing until `max_triggers` is 
 
 Implementation note: 86.2 deliberately registers **no fake provider**. The channel registry and arming contract exist, and Isabella can inspect them through `check_watch_capability`; until an actual autonomous source is connected and service-verified, true Watch creation fails closed instead of pretending that conversational recall is monitoring.
 
-### 86.3 — Heartbeat observation + return routing
+### 86.3 — Heartbeat observation + return routing **Implemented as governed runner; no autonomous adapter enabled yet**
 - Heartbeat checks armed Watches only through their declared channel adapter.
 - Each check records checked_at, freshness, result fingerprint and evidence/provenance.
 - A condition firing publishes through Attention Economy; the watcher never decides interruption by itself.
 - Silence is qualified by coverage and last successful check.
+
+Implementation note: Heartbeat now has the complete receipt → condition → Attention Economy → lifecycle-finalization path. The runtime adapter registry is intentionally empty and Watch channels default to `runtime_supported=false`; therefore production cannot accidentally arm or execute a fake Watch. A future provider must ship both its adapter code and a service-verified channel contract before any Watch can run.
 
 ### 86.4 — Human Surface
 - “Memoria futura” distinguishes Reminder from Watch.
