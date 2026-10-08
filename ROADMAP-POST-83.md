@@ -111,7 +111,7 @@ with conservative cooldown, trigger and expiry bounds. Creation and cancellation
 
 ## Build 87 — Review Economy v0.1
 
-Status: active. 87.1 Review Debt Ledger, 87.2 compatible batching + deterministic proposal expiry, 87.3 consequence/reversibility routing, and 87.4 auditable proposal admission implemented; Human Surface + acceptance remain.
+Status: active. 87.1–87.4 implemented; 87.5 Human Surface implemented and final acceptance validation in progress.
 
 Treat human judgment as a scarce resource.
 
