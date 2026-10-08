@@ -135,13 +135,21 @@ async function askDirectStream(message,state,options={},replyContext=''){
   if(streamError){options.onTextReset?.();throw new Error(streamError)}
   return result;
 }
+function messageMentionsKnownProject(message,state){
+  const hay=String(message||'').toLowerCase();
+  return (state?.projects||[]).some(p=>{
+    const name=String(p?.name||'').trim().toLowerCase();
+    return name&&name.length>2&&hay.includes(name);
+  });
+}
+
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
   const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
-  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&fastCreateCandidate(message)){
+  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
     try{
       const fast=await askFastStream(message,state,options);
       if(fast)return fast;
