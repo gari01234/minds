@@ -18,8 +18,8 @@ function fastRuntime({execution={status:'confirm'},error=null,recordError=null}=
     createClient:(_url,key)=>key==='service'?service:user,
     fetch:async()=>new Response(openAI.map(x=>'data: '+JSON.stringify(x)+'\n\n').join(''))});
   vm.runInContext(stripTypeScriptTypes(read('supabase/functions/isabella-fast-stream/index.ts').replace(/^import .*;\r?\n/gm,'')),c);
-  return {c,calls,run:async(protocol='contextual_v1')=>{
-    const response=await c.handler(new Request('https://test.invalid',{method:'POST',headers:{Authorization:'Bearer test'},body:JSON.stringify({message:'Agrega Comprar papel en Casa',context:{},permission_protocol:protocol})}));
+  return {c,calls,run:async(protocol='contextual_v1',clientRequestId=null)=>{
+    const response=await c.handler(new Request('https://test.invalid',{method:'POST',headers:{Authorization:'Bearer test'},body:JSON.stringify({message:'Agrega Comprar papel en Casa',context:{},permission_protocol:protocol,client_request_id:clientRequestId})}));
     return (await response.text()).split('\n').filter(x=>x.startsWith('data: ')).map(x=>JSON.parse(x.slice(6)));
   }};
 }
@@ -56,24 +56,43 @@ test('Build 70 recorder and permission errors fail closed without a fallback or 
     if(opts.recordError)assert.equal(f.calls.length,1);
   }
 });
-test('Build 70 a lost fast response never retries through full Isabella',async()=>{
-  let requests=0,pulls=0;
-  const c=vm.createContext({console,Date,Intl,TextDecoder,URL,navigator:{language:'es'},window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'},
-    MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:()=>{throw Error('Must not retry')}}},
-    ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},fetch:async()=>{requests++;throw Error('lost response')}});
+test('Build 83 a lost fast response retries once idempotently and never falls through to full Isabella',async()=>{
+  let requests=0,pulls=0,invokes=0,ids=[];
+  const c=vm.createContext({console,Date,Intl,TextDecoder,URL,crypto:webcrypto,navigator:{language:'es'},window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'},
+    MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:()=>{invokes++;throw Error('Must not retry through full Isabella')}}},
+    ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},fetch:async(_url,opts)=>{requests++;ids.push(JSON.parse(opts.body).client_request_id);throw Error('lost response')}});
   vm.runInContext(read('apps/isabella/ai.js'),c);
-  await assert.rejects(c.window.ISABELLA_AI.ask('Agrega Comprar papel en Casa',{categories:[],projects:[],tasks:[],events:[],messages:[]}),/lost response/);
-  assert.equal(requests,1);assert.equal(pulls,1);
+  await assert.rejects(c.window.ISABELLA_AI.ask('Agrega Comprar papel en Casa',{categories:[],projects:[],tasks:[],events:[],messages:[]}),/Perdí la conexión/);
+  assert.equal(requests,2);assert.equal(new Set(ids).size,1);assert.equal(invokes,0);assert.equal(pulls,2);
 });
-test('Build 70 incomplete SSE fails closed, a verified gate refusal can fall back',async()=>{
+test('Build 83 incomplete SSE retries once, while a verified gate refusal can still fall back',async()=>{
   const source=read('apps/isabella/ai.js');
-  for(const [response,expectNull] of [[new Response('event: status\ndata: {"type":"status"}\n\n'),false],[new Response('',{status:409}),true]]){
-    const c=vm.createContext({Response,TextDecoder,sb:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'}},compact:()=>({}),fetch:async()=>response});
+  {
+    let requests=0,pulls=0;
+    const c=vm.createContext({Response,TextDecoder,crypto:webcrypto,sb:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},
+      window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'},ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},compact:()=>({}),
+      fetch:async()=>{requests++;return new Response('event: status\ndata: {"type":"status"}\n\n')}});
     vm.runInContext(source.slice(source.indexOf('function parseFastSse'),source.indexOf('async function askDirectStream')),c);
-    if(expectNull)assert.equal(await c.askFastStream('x',{}),null);
-    else await assert.rejects(c.askFastStream('x',{}),/sin confirmar/);
+    await assert.rejects(c.askFastStream('x',{}),/Perdí la conexión/);
+    assert.equal(requests,2);assert.equal(pulls,1);
+  }
+  {
+    let requests=0;
+    const c=vm.createContext({Response,TextDecoder,crypto:webcrypto,sb:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},
+      window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'}},compact:()=>({}),
+      fetch:async()=>{requests++;return new Response('',{status:409})}});
+    vm.runInContext(source.slice(source.indexOf('function parseFastSse'),source.indexOf('async function askDirectStream')),c);
+    assert.equal(await c.askFastStream('x',{}),null);assert.equal(requests,1);
   }
 });
+
+test('Build 83 fast server reuses the client request id for idempotent retries',async()=>{
+  const requestId='123e4567-e89b-42d3-a456-426614174000';
+  const f=fastRuntime();await f.run('contextual_v1',requestId);
+  const record=f.calls.find(x=>x.name==='minds_record_shadow_decision');
+  assert.equal(record.args.p_request_id,requestId);
+});
+
 test('Build 70 permission UI writes only after explicit review and renders sparse evidence honestly',async()=>{
   let nodes={},writes=0,html='';
   const c=vm.createContext({crypto:webcrypto,Date,console,Object,Number,window:{MINDS_SUPABASE:{rpc:async()=>{writes++;return {}}}},esc:s=>String(s??''),$:id=>nodes[id],
