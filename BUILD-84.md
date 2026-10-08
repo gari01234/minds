@@ -105,11 +105,19 @@ This slice implements the Source trigger. The schema already reserves the same r
 84.3 — Model comparison: aligned / contradicts / modifies / adds / unclear. **Implemented.**  
 84.4 — Triggered revision writer + Variants. **Implemented for Source-comparison triggers.**  
 84.5 — Work inspection surface: what Isabella thinks, why and coverage. **Implemented in Work / Conocimiento.**  
-84.6 — Bernried acceptance against the real 20-case corpus.
+84.6 — Bernried acceptance against the real 20-case corpus. **Deferred by explicit sequencing decision until after Build 90, when Gari will begin loading project attachments into Work / Desktop.**
 
-## Acceptance rules
+## Closure status
 
-Build 84 is not accepted until Bernried demonstrates:
+Build 84 implementation is closed through 84.5. The empirical Bernried acceptance is intentionally deferred and does not block Builds 85–90.
+
+This is not a waiver of the acceptance criteria. It is a sequencing decision: the Project Model substrate, source-first ingestion, comparison, triggered revisions, Variants and inspection surface remain implemented, while real project-source validation waits until Work / Desktop contains the project corpus Gari actually wants Isabella to use.
+
+No Chat-attachment → Work-Source bridge will be added as an interim workaround. Chat attachments remain conversation attachments unless explicitly promoted through a future governed path. Gari will begin uploading Bernried project documents to Work / Desktop after Build 90.
+
+## Deferred acceptance rules
+
+When post-90 Bernried acceptance begins, Build 84 must demonstrate:
 
 - old confirmed information cannot mask a later contradiction;
 - a Source can remain authoritative without becoming a finished design decision;
