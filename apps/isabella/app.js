@@ -2211,7 +2211,91 @@ function initEventDrag(){
   });
 }
 function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function reviewAgeCopy(hours){
+  const n=Math.max(0,Number(hours||0));
+  if(n<1)return 'ahora';
+  if(n<24)return 'hace '+Math.max(1,Math.round(n))+' h';
+  const d=Math.max(1,Math.floor(n/24));
+  return d===1?'hace 1 día':'hace '+d+' días';
+}
+function reviewExpiryCopy(value){
+  if(!value)return '';
+  const ms=new Date(value).getTime()-Date.now();
+  if(!Number.isFinite(ms))return '';
+  if(ms<=0)return 'caduca al próximo mantenimiento';
+  const h=Math.ceil(ms/3600000);
+  if(h<24)return 'caduca en '+h+' h';
+  const d=Math.ceil(h/24);return 'caduca en '+d+(d===1?' día':' días');
+}
+function reviewProposalFromItem(item){
+  const meta=item?.metadata&&typeof item.metadata==='object'?item.metadata:{};
+  const candidate=meta.candidate&&typeof meta.candidate==='object'?meta.candidate:null;
+  if(item?.item_kind!=='shadow_decision'||!candidate)return null;
+  return {...candidate,request_id:meta.request_id||candidate.request_id||null};
+}
+function reviewEconomyRow(item,buttonLabel='Revisar'){
+  const expiry=reviewExpiryCopy(item.review_expires_at);
+  const lane=item.review_lane==='authority_boundary'?'Decisión individual':item.review_lane==='bounded_change'?'Cambio acotado':'Reversible';
+  return `<div class="review-economy-row">
+    <div class="row-main"><b>${esc(item.title||'Revisión pendiente')}</b><div class="small">${esc(lane)} · ${esc(reviewAgeCopy(item.age_hours))}${expiry?' · '+esc(expiry):''}</div></div>
+    <button class="secondary" data-review-item-kind="${esc(item.item_kind)}" data-review-item-id="${esc(item.item_id)}">${esc(buttonLabel)}</button>
+  </div>`;
+}
+async function reviewEconomyPanel(){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb){modal('Revisiones','<div class="small">Conecta la memoria para ver las revisiones pendientes.</div>');return}
+  modal('Revisiones','<div class="surface-loading">Organizando lo que realmente necesita tu decisión…</div>');
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Sin sesión');
+    const [summaryQ,queueQ,batchesQ,admissionQ]=await Promise.all([
+      sb.rpc('minds_review_debt_summary'),
+      sb.from('minds_review_routing_v1').select('item_kind,item_id,title,review_class,consequence,reversibility,created_at,age_hours,metadata,batchable,batch_key,expiry_policy,review_expires_at,protected_from_expiry,review_lane,dependency_blocking,window_closing,routing_reason').order('created_at',{ascending:true}).limit(160),
+      sb.from('minds_review_batches_v1').select('batch_key,review_class,proposal_kind,item_count,oldest_created_at,next_expiry_at,items').order('oldest_created_at',{ascending:true}).limit(40),
+      sb.from('minds_review_admission_events').select('outcome,reason_code,created_at').order('created_at',{ascending:false}).limit(60)
+    ]);
+    if(summaryQ.error)throw summaryQ.error;if(queueQ.error)throw queueQ.error;if(batchesQ.error)throw batchesQ.error;
+    const summary=summaryQ.data||{},queue=queueQ.data||[],batches=batchesQ.data||[],admissions=admissionQ.data||[];
+    const batchedIds=new Set(batches.flatMap(b=>(Array.isArray(b.items)?b.items:[]).map(x=>String(x.item_id||''))).filter(Boolean));
+    const actionable=queue.filter(x=>x.item_kind==='shadow_decision'||x.item_kind==='operating_hypothesis');
+    const individual=actionable.filter(x=>!batchedIds.has(String(x.item_id))&&(x.review_lane!=='cheap_reversible'||x.dependency_blocking||x.window_closing));
+    const canWait=actionable.filter(x=>!batchedIds.has(String(x.item_id))&&x.review_lane==='cheap_reversible'&&!x.dependency_blocking&&!x.window_closing);
+    const hidden=Math.max(0,Number(summary.total||0)-actionable.length);
+    const avoided=admissions.filter(x=>['duplicate','suppressed'].includes(x.outcome)).length;
+    const batchHtml=batches.map((b,i)=>{
+      const count=Number(b.item_count||0),expiry=reviewExpiryCopy(b.next_expiry_at);
+      return `<div class="review-economy-batch"><div class="row-main"><b>${count} cambios compatibles</b><div class="small">Una sola revisión humana en lugar de ${count}${expiry?' · '+esc(expiry):''}</div></div><button class="primary" data-review-batch="${i}">Revisar juntas</button></div>`;
+    }).join('');
+    const individualHtml=individual.map(x=>reviewEconomyRow(x,x.item_kind==='operating_hypothesis'?'Revisar regla':'Revisar')).join('');
+    const waitHtml=canWait.map(x=>reviewEconomyRow(x,'Revisar ahora')).join('');
+    modal('Revisiones',`<div class="review-economy-panel">
+      <div class="continuity-intro"><p><b>${Number(summary.total||0)} revisiones pendientes</b></p><p>Agrupo únicamente cambios compatibles y reversibles. Nada se aprueba por estar agrupado, por llevar tiempo pendiente ni por parecer obvio.</p></div>
+      <div class="review-economy-summary"><span><b>${Number(summary.high||0)}</b> importantes</span><span><b>${Number(summary.compatible_batches||0)}</b> grupos</span><span><b>${avoided}</b> revisiones evitadas recientemente</span></div>
+      ${individualHtml?'<div class="small section-label">Necesitan decisión individual</div>'+individualHtml:''}
+      ${batchHtml?'<div class="small section-label">Puedes revisar juntas</div>'+batchHtml:''}
+      ${waitHtml?'<div class="small section-label">Puede esperar</div>'+waitHtml:''}
+      ${!individualHtml&&!batchHtml&&!waitHtml?'<div class="empty-panel">No hay ninguna revisión accionable que necesite tu atención ahora.</div>':''}
+      ${hidden?`<div class="small review-economy-context">${hidden} revisión${hidden===1?' permanece':' permanecen'} en su contexto original —por ejemplo Work o Habilidades— hasta que esa superficie permita resolverla correctamente.</div>`:''}
+      <details class="human-tech"><summary>Por qué esta lista es más corta</summary><p>Review Economy elimina duplicados dentro de una misma ejecución, no te pide confirmar estados que ya ocurrieron, agrupa solo cambios baratos y reversibles, y deja caducar propuestas operativas que perdieron utilidad. Las decisiones de autoridad, verdad de proyecto y reglas de comportamiento no caducan por edad.</p><div class="human-tech-grid"><span>Sin score oculto</span><b>${esc(summary.scoring||'none')}</b><span>Caducables</span><b>${Number(summary.expirable_items||0)}</b><span>Protegidas</span><b>${Number(summary.protected_items||0)}</b></div></details>
+    </div>`);
+
+    $('[data-review-batch]').forEach(btn=>btn.onclick=()=>{
+      const batch=batches[Number(btn.dataset.reviewBatch)],items=Array.isArray(batch?.items)?batch.items:[];
+      const proposals=items.map(reviewProposalFromItem).filter(Boolean);
+      if(proposals.length)confirmProposals(proposals);
+    });
+    $('[data-review-item-id]').forEach(btn=>btn.onclick=()=>{
+      const row=queue.find(x=>String(x.item_id)===String(btn.dataset.reviewItemId)&&x.item_kind===btn.dataset.reviewItemKind);
+      if(!row)return;
+      if(row.item_kind==='shadow_decision'){
+        const proposal=reviewProposalFromItem(row);if(proposal)confirmProposal(proposal);
+      }else if(row.item_kind==='operating_hypothesis')void memoryPanel();
+    });
+  }catch(e){
+    modal('Revisiones','<div class="small">No pude organizar las revisiones ahora mismo. No se ha aprobado ni descartado nada.</div>');
+  }
+}
+
 function commitmentStatusLabel(status){return humanSurface()?.commitment?.(status)?.headline||String(status||'')}
 async function continuityPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Continuidad','<div class="small">Conecta la memoria para ver qué mantiene vivo MINDS.</div>');return}
