@@ -106,7 +106,7 @@ async function loadPlanner(){
   let {data:b,error:be}=await sb.from('minds_work_buckets').select('id,name,sort_order,archived').eq('project_id',project.id).eq('archived',false).order('sort_order');if(be)throw be;
   if(!b?.length){const rows=DEFAULT_BUCKETS.map((name,i)=>({project_id:project.id,name,sort_order:i*10}));const ins=await sb.from('minds_work_buckets').insert(rows).select('id,name,sort_order,archived');if(ins.error)throw ins.error;b=ins.data||[]}
   buckets=b||[];
-  const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order').eq('project_id',project.id).is('archived_at',null).order('sort_order');if(te)throw te;tasks=t||[];
+  const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order');if(te)throw te;tasks=t||[];
 }
 function localIso(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function taskMeta(t){
@@ -139,8 +139,8 @@ async function renderPlanner(){
   body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><button data-work-add-bucket>＋ Bucket</button></div>
     <div class="work-board">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header><strong>${esc(b.name)}</strong>${b.virtual?'':`<button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button>`}</header>
-      <div class="work-bucket-scroll"><div class="work-task-list">${open.map(taskCard).join('')}</div>
-      ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list">${done.map(taskCard).join('')}</div></details>`:''}</div>
+      <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
+      ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
       ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
     </section>`}).join('')}</div>`;
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
@@ -152,10 +152,29 @@ async function renderPlanner(){
     card.ondragstart=e=>{draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
     card.ondragend=()=>{draggedWorkTaskId=null;card.classList.remove('is-dragging');$$('.work-bucket.is-drop-target').forEach(x=>x.classList.remove('is-drop-target'));setTimeout(()=>{card.dataset.justDragged='0'},120)};
   });
-  $$('[data-work-bucket-drop]').forEach(bucket=>{
-    bucket.ondragover=e=>{if(!draggedWorkTaskId)return;e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';bucket.classList.add('is-drop-target')};
+  $('[data-work-bucket-drop]').forEach(bucket=>{
+    bucket.ondragover=e=>{
+      if(!draggedWorkTaskId)return;
+      const task=tasks.find(x=>x.id===draggedWorkTaskId);if(!task)return;
+      const kind=task.completed_at?'done':'open';
+      const targetList=[...bucket.querySelectorAll('[data-work-task-list]')].find(x=>x.dataset.workTaskList===kind);
+      if(!targetList)return;
+      e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';bucket.classList.add('is-drop-target');
+      const dragged=$('[data-work-task]').find(x=>x.dataset.workTask===draggedWorkTaskId);if(!dragged)return;
+      const over=e.target.closest?.('[data-work-task]');
+      if(over&&over!==dragged&&over.parentNode===targetList){
+        const r=over.getBoundingClientRect();
+        targetList.insertBefore(dragged,e.clientY<r.top+r.height/2?over:over.nextSibling);
+      }else if(dragged.parentNode!==targetList)targetList.appendChild(dragged);
+    };
     bucket.ondragleave=e=>{if(!bucket.contains(e.relatedTarget))bucket.classList.remove('is-drop-target')};
-    bucket.ondrop=e=>{e.preventDefault();bucket.classList.remove('is-drop-target');const id=draggedWorkTaskId||e.dataTransfer?.getData('text/plain');void moveTaskToBucket(id,bucket.dataset.workBucketDrop||null)};
+    bucket.ondrop=e=>{
+      e.preventDefault();bucket.classList.remove('is-drop-target');
+      const id=draggedWorkTaskId||e.dataTransfer?.getData('text/plain'),task=tasks.find(x=>x.id===id);if(!task)return;
+      const kind=task.completed_at?'done':'open';
+      const targetList=[...bucket.querySelectorAll('[data-work-task-list]')].find(x=>x.dataset.workTaskList===kind);
+      if(targetList)void persistWorkTaskOrder(id,bucket.dataset.workBucketDrop||null,targetList);
+    };
   });
   $$('[data-work-toggle]').forEach(b=>b.onclick=e=>{e.stopPropagation();void toggleTask(b.dataset.workToggle)});
   void hydratePlannerImages(body);
@@ -165,12 +184,19 @@ async function toggleTask(id){
   const {error}=await sb.from('isabella_tasks').update({completed_at:done?new Date().toISOString():null,work_status:done?'completed':'not_started',updated_at:new Date().toISOString()}).eq('id',id);
   if(!error){await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0)}
 }
-async function moveTaskToBucket(id,bucketId){
-  const t=tasks.find(x=>x.id===id);if(!t)return;
-  const target=bucketId||null;if((t.work_bucket_id||null)===target)return;
-  const max=Math.max(0,...tasks.filter(x=>(x.work_bucket_id||null)===target).map(x=>Number(x.sort_order||0)));
-  const {error}=await sb.from('isabella_tasks').update({work_bucket_id:target,sort_order:max+10,updated_at:new Date().toISOString()}).eq('id',id);
-  if(!error){await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0)}
+async function persistWorkTaskOrder(id,bucketId,list){
+  const dragged=tasks.find(x=>x.id===id);if(!dragged||!list)return;
+  const target=bucketId||null,ids=[...list.querySelectorAll('[data-work-task]')].map(x=>x.dataset.workTask).filter(Boolean);
+  if(!ids.includes(id))ids.push(id);
+  const now=new Date().toISOString();
+  const writes=ids.map((taskId,i)=>sb.from('isabella_tasks').update({
+    ...(taskId===id?{work_bucket_id:target}:{}),
+    work_sort_order:(i+1)*10,
+    updated_at:now
+  }).eq('id',taskId));
+  const results=await Promise.all(writes),failed=results.find(x=>x.error);
+  if(failed){setStatus('No pude guardar el nuevo orden de las Aufgaben.');await renderPlanner();return}
+  setStatus('');await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
 async function addBucket(){const name=window.prompt('Nombre del Bucket');if(!name?.trim())return;const next=(buckets.at(-1)?.sort_order||0)+10;const {error}=await sb.from('minds_work_buckets').insert({project_id:project.id,name:name.trim(),sort_order:next});if(!error)await renderPlanner()}
 async function editBucket(id){const b=buckets.find(x=>x.id===id);if(!b)return;const name=window.prompt('Nombre del Bucket',b.name);if(!name?.trim()||name.trim()===b.name)return;const {error}=await sb.from('minds_work_buckets').update({name:name.trim(),updated_at:new Date().toISOString()}).eq('id',id);if(!error)await renderPlanner()}
@@ -216,9 +242,13 @@ async function deleteWorkTask(task){
   window.ISABELLA_APP?.closeModal?.();await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
 async function saveTask(existing){
-  const title=$('#workTaskTitle').value.trim();if(!title)return;const status=$('#workTaskStatus').value;
-  const checklist=$$('.work-check-row').map(r=>({id:r.dataset.checkId||Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
-  const row={title,project_id:project.id,work_bucket_id:$('#workTaskBucket').value||null,work_status:status,priority:$('#workTaskPriority').value,start_date:$('#workTaskStart').value||null,due_date:$('#workTaskDue').value||null,assignee:$('#workTaskAssignee').value.trim()||null,labels:$('#workTaskLabels').value.split(',').map(x=>x.trim()).filter(Boolean),notes:$('#workTaskNotes').value,checklist,completed_at:status==='completed'?(existing?.completed_at||new Date().toISOString()):null,updated_at:new Date().toISOString()};
+  const title=$('#workTaskTitle').value.trim();if(!title)return;const status=$('#workTaskStatus').value,targetBucket=$('#workTaskBucket').value||null;
+  const checklist=$('.work-check-row').map(r=>({id:r.dataset.checkId||Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
+  const sameBucket=!!existing&&(existing.work_bucket_id||null)===targetBucket;
+  const workOrder=sameBucket&&Number(existing.work_sort_order||0)>0
+    ?Number(existing.work_sort_order)
+    :Math.max(0,...tasks.filter(x=>x.id!==existing?.id&&(x.work_bucket_id||null)===targetBucket).map(x=>Number(x.work_sort_order||0)))+10;
+  const row={title,project_id:project.id,work_bucket_id:targetBucket,work_sort_order:workOrder,work_status:status,priority:$('#workTaskPriority').value,start_date:$('#workTaskStart').value||null,due_date:$('#workTaskDue').value||null,assignee:$('#workTaskAssignee').value.trim()||null,labels:$('#workTaskLabels').value.split(',').map(x=>x.trim()).filter(Boolean),notes:$('#workTaskNotes').value,checklist,completed_at:status==='completed'?(existing?.completed_at||new Date().toISOString()):null,updated_at:new Date().toISOString()};
   let savedId=existing?.id||null,error=null;
   if(existing)({error}=await sb.from('isabella_tasks').update(row).eq('id',existing.id));
   else{const res=await sb.from('isabella_tasks').insert({...row,sort_order:tasks.length*10}).select('id').single();error=res.error;savedId=res.data?.id||null}
