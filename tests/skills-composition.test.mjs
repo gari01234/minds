@@ -14,7 +14,9 @@ const app=read('apps/isabella/app.js');
 const skillsReadme=read('apps/isabella/skills/README.md');
 const build=read('apps/isabella/BUILD-81.md');
 const meetingSkill=read('apps/isabella/skills/preparar-reunion/SKILL.md');
+const organizeDaySkill=read('apps/isabella/skills/organizar-dia/SKILL.md');
 const skillMigration=read('supabase/migrations/20261005093000_skills_composition_v01.sql');
+const proactiveDayMigration=read('supabase/migrations/20261008083000_build83_proactive_day_skill_v2.sql');
 
 test('Build 81 formalizes Skill as procedure without authority',()=>{
   assert.ok(skillRegistry.includes('SKILL_RUNTIME_VERSION="minds-skills-v0.1"'));
@@ -105,4 +107,14 @@ test('Build 81 acceptance meeting Skill v2 composes Work without new authority',
   assert.ok(skillMigration.includes("'search_commitments'"));
   assert.equal((skillMigration.match(/where slug = 'preparar-reunion'/g)||[]).length,1);
   assert.ok(build.includes('Acceptance Skill — preparar-reunion v2'));
+});
+
+
+test('Build 83 day planning turns clear narrated commitments into canonical proposals without extra prompting',()=>{
+  assert.ok(organizeDaySkill.includes('no te limites a devolver un plan en texto'));
+  assert.ok(organizeDaySkill.includes('No esperes a que Gari diga “agrégalo”'));
+  assert.ok(organizeDaySkill.includes('proactividad no equivale a autoridad'));
+  assert.ok(proactiveDayMigration.includes("where slug = 'organizar-dia'"));
+  assert.ok(proactiveDayMigration.includes('version = 2'));
+  assert.ok(proactiveDayMigration.includes('prepara en el mismo turno las propuestas correspondientes'));
 });
