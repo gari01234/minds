@@ -165,6 +165,7 @@ Deno.serve(async(req:Request)=>{
       const routineTz=userRows.find((x:any)=>x.user_id===userId)?.timezone||"Europe/Berlin";
       const today=localDateISO(routineTz),now=new Date(),soon=new Date(now.getTime()+45*60000);
       const expirySweep=checked(await sb.rpc("minds_expire_prospective_memory",{p_user:userId,p_now:now.toISOString()}),"prospective_memory_expiry");
+      const reviewExpiry=checked(await sb.rpc("minds_expire_review_items",{p_user:userId,p_now:now.toISOString()}),"review_economy_expiry");
       const [tasks,routines,events,expectations]=await Promise.all([
         sb.from("isabella_tasks").select("id,title,due_date,project_id,priority,updated_at").eq("user_id",userId).is("archived_at",null).is("completed_at",null).lt("due_date",today).order("due_date",{ascending:true}).limit(20),
         sb.from("isabella_routines").select("id,title,last_error,last_run_at,updated_at,metadata").eq("user_id",userId).eq("enabled",true).not("last_error","is",null).limit(20),
@@ -223,9 +224,9 @@ Deno.serve(async(req:Request)=>{
       const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0;
       await finishRun(sb,run,heartbeatError?"error":"success",{
         timezone:routineTz,candidates:candidates.length,new_events:created,
-        prospective_memory_expiry:expirySweep,watch_checks:watchChecks,context_maintenance:contextMaintenance
+        prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,context_maintenance:contextMaintenance
       },contextMaintenance.status==="error"?contextMaintenance.detail:(watchChecks.errors?String(watchChecks.errors)+" watch checks failed":undefined));
-      results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,prospective_memory_expiry:expirySweep,watch_checks:watchChecks});
+      results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks});
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);await finishRun(sb,run,"error",{},detail);results.push({user_id:userId,status:"error",error:detail});
     }
