@@ -805,7 +805,7 @@ async function loadChatAttachments(req: Request, raw: any[]) {
   return out;
 }
 
-async function recentConversation(req: Request, currentMessage: string, conversationId:string|null=null) {
+async function recentConversation(req: Request, currentMessage: string, conversationId:string|null=null, scopeKey="global", strictScope=true) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return [];
@@ -822,18 +822,32 @@ async function recentConversation(req: Request, currentMessage: string, conversa
       cid=convs[0].id;
     }
 
-    const { data: messages, error: mErr } = await sb
-      .from("conversation_messages")
-      .select("role,content,created_at")
-      .eq("conversation_id", cid)
-      .order("created_at", { ascending: false })
-      .limit(14);
-    if (mErr) return [];
+    let messages:any[]=[];
+    if(strictScope){
+      const {data,error}=await sb.rpc("minds_recent_scoped_messages",{
+        p_conversation_id:cid,p_scope_key:String(scopeKey||"global"),p_limit:24
+      });
+      if(error)return [];
+      messages=data||[];
+    }else{
+      const { data, error } = await sb
+        .from("conversation_messages")
+        .select("id,role,content,created_at,metadata,provenance_class")
+        .eq("conversation_id", cid)
+        .order("created_at", { ascending: false })
+        .limit(24);
+      if(error)return [];
+      messages=data||[];
+    }
 
-    const chronological = (messages || []).reverse().map((m: any) => ({
+    const chronological = messages.reverse().map((m: any) => ({
+      id:m.id,
       role: m.role,
       content: m.content,
-      created_at: m.created_at
+      created_at: m.created_at,
+      metadata:m.metadata||{},
+      provenance_class:m.provenance_class||null,
+      exposure_scope_key:strictScope?String(m.exposure_scope_key||scopeKey):String(scopeKey)
     }));
 
     if (
