@@ -1185,7 +1185,7 @@ test('Build 65 uses a strict one-round create gate before full Isabella',()=>{
   assert.equal(fast('Agrega la tarea si no choca con el Kick-off'),false);
   assert.equal(fast('Mueve la tarea de Wagner al lunes'),false);
   assert.ok(ai.includes("/functions/v1/isabella-fast-stream"));
-  assert.ok(ai.includes("The full Isabella path remains the safety fallback"));
+  assert.ok(ai.includes("Never fall through"));
 });
 
 test('Build 70 fast transport uses SSE and delegates authorized writes to the guarded database RPC',()=>{
