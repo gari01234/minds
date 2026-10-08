@@ -1631,6 +1631,172 @@ async function searchWork(req:Request,args:any){
     };
   }catch(e){return {status:"error",detail:String(e)}}
 }
+
+async function compareProjectSource(req:Request,args:any,apiKey:string){
+  try{
+    const sb=supabaseClient(req),service=serviceClient();if(!sb||!service)return {status:"unavailable"};
+    const {data:{user},error:authError}=await sb.auth.getUser();if(authError||!user)return {status:"unauthorized"};
+    const ingestionId=String(args?.ingestion_id||"").trim();
+    if(!/^[0-9a-f-]{36}$/i.test(ingestionId))return {status:"invalid",detail:"ingestion_id_required"};
+
+    const {data:ingestion,error:ingestionError}=await sb.from("minds_project_source_ingestions")
+      .select("id,project_id,source_kind,source_ref,source_version,status,model,completed_at")
+      .eq("id",ingestionId).maybeSingle();
+    if(ingestionError||!ingestion||ingestion.status!=="completed")return {status:"ingestion_not_ready"};
+
+    const [{data:allClaims,error:claimError},{data:revision,error:revisionError}]=await Promise.all([
+      sb.from("minds_work_claims")
+        .select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,valid_from,valid_to,learned_at,confirmed_at,updated_at,metadata")
+        .eq("project_id",ingestion.project_id)
+        .in("status",["proposed","confirmed","disputed","resolved"])
+        .order("updated_at",{ascending:false}).limit(500),
+      sb.from("minds_project_model_revisions")
+        .select("id,status,created_at,published_at")
+        .eq("project_id",ingestion.project_id).eq("status","current")
+        .order("created_at",{ascending:false}).limit(1).maybeSingle()
+    ]);
+    if(claimError||revisionError)return {status:"baseline_error",detail:claimError?.message||revisionError?.message||"baseline_query_failed"};
+
+    const rows=allClaims||[];
+    const sourceClaims=rows.filter((x:any)=>String(x?.metadata?.ingestion_id||"")===ingestionId).slice(0,120);
+    if(!sourceClaims.length)return {status:"no_source_claims"};
+
+    const baselineAll=rows.filter((x:any)=>String(x?.metadata?.ingestion_id||"")!==ingestionId);
+    const sourceReferents=new Set(sourceClaims.map((x:any)=>String(x.referent_id||"")).filter(Boolean));
+    const tokenStop=new Set(["para","como","este","esta","estos","estas","that","with","from","this","have","eine","einer","einem","einen","und","der","die","das","den","dem","des","von","mit","für","auf","aus","bei","ist","sind"]);
+    const sourceTerms=new Set(sourceClaims.flatMap((x:any)=>normalizeText([x.statement,x.subject,x.topic,x.discipline].filter(Boolean).join(" ")).split(/[^a-z0-9äöüßáéíóúñ]+/)).filter((x:string)=>x.length>3&&!tokenStop.has(x)));
+    const score=(x:any)=>{
+      let n=0;
+      if(x.referent_id&&sourceReferents.has(String(x.referent_id)))n+=12;
+      if(["confirmed","disputed"].includes(String(x.status||"")))n+=4;
+      const hay=normalizeText([x.statement,x.subject,x.topic,x.discipline].filter(Boolean).join(" "));
+      for(const t of sourceTerms)if(hay.includes(t))n+=1;
+      if(x.valid_to==null)n+=1;
+      return n;
+    };
+    const baseline=[...baselineAll].sort((a:any,b:any)=>score(b)-score(a)||new Date(b.updated_at||0).getTime()-new Date(a.updated_at||0).getTime()).slice(0,180);
+
+    const fingerprintInput=baselineAll.map((x:any)=>({
+      id:x.id,status:x.status,statement:String(x.statement||"").slice(0,1800),
+      referent_id:x.referent_id||null,valid_from:x.valid_from||null,valid_to:x.valid_to||null,
+      confirmed_at:x.confirmed_at||null,updated_at:x.updated_at||null
+    })).sort((a:any,b:any)=>String(a.id).localeCompare(String(b.id)));
+    const baselineFingerprint=await sha256Hex(new TextEncoder().encode(JSON.stringify(fingerprintInput)));
+    const coverage={
+      baseline_total:baselineAll.length,
+      baseline_included:baseline.length,
+      truncated:baseline.length<baselineAll.length,
+      structurally_matched:baselineAll.filter((x:any)=>x.referent_id&&sourceReferents.has(String(x.referent_id))).length,
+      source_claims:sourceClaims.length
+    };
+
+    const {data:prior}=await sb.from("minds_project_source_comparisons")
+      .select("id,status,compared_claim_count,relation_count,baseline_fingerprint,metadata,created_at")
+      .eq("project_id",ingestion.project_id).eq("ingestion_id",ingestionId)
+      .eq("baseline_fingerprint",baselineFingerprint).maybeSingle();
+    if(prior?.status==="completed")return {
+      status:"already_compared",comparison_id:prior.id,baseline_fingerprint:baselineFingerprint,
+      compared_claim_count:prior.compared_claim_count,relation_count:prior.relation_count,
+      coverage:prior?.metadata?.coverage||coverage
+    };
+
+    const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
+    const prompt={
+      task:"compare_source_first_claims_against_project_baseline",
+      source_ingestion:{
+        id:ingestion.id,source_kind:ingestion.source_kind,source_ref:ingestion.source_ref,
+        source_version:ingestion.source_version
+      },
+      current_revision_id:revision?.id||null,
+      coverage,
+      source_claims:sourceClaims.map((x:any)=>({
+        id:x.id,claim_type:x.claim_type,statement:String(x.statement||"").slice(0,2400),
+        referent_id:x.referent_id||null,subject:x.subject||null,topic:x.topic||null,
+        discipline:x.discipline||null,confidence:Number(x.confidence??0.7)
+      })),
+      baseline_claims:baseline.map((x:any)=>({
+        id:x.id,claim_type:x.claim_type,statement:String(x.statement||"").slice(0,1800),
+        referent_id:x.referent_id||null,subject:x.subject||null,topic:x.topic||null,
+        discipline:x.discipline||null,status:x.status,author_kind:x.author_kind,
+        provenance_class:x.provenance_class,valid_from:x.valid_from||null,valid_to:x.valid_to||null,
+        learned_at:x.learned_at||null,confirmed_at:x.confirmed_at||null
+      })),
+      rules:[
+        "The source_claims were extracted in a blind Source-first pass. Do not reinterpret the Source here.",
+        "Compare propositions, not wording. Prefer shared Referent identity and compatible scope/time over lexical similarity.",
+        "aligned = the new sourced proposition is materially compatible with and already represented by the target Claim. This is not authority confirmation.",
+        "contradicts = both propositions cannot be true for the same relevant scope/time.",
+        "modifies = the new Source qualifies, narrows, updates or changes a prior proposition without proving supersession.",
+        "adds = no sufficiently related baseline Claim is present in the supplied baseline.",
+        "unclear = relation is plausible but identity, time, scope or coverage is insufficient.",
+        "Do not decide which Claim is true. Do not mark any Claim confirmed, disputed or superseded.",
+        "If coverage.truncated is true, absence of a match is not evidence that no prior Claim exists; use unclear instead of adds unless the supplied baseline is clearly sufficient.",
+        "Use at most one best target per source Claim. If none is sufficiently grounded, target_claim_id must be null.",
+        "Return JSON only."
+      ],
+      output_shape:{
+        items:[{
+          source_claim_id:"uuid",target_claim_id:"uuid|null",
+          verdict:"aligned|contradicts|modifies|adds|unclear",
+          confidence:0.0,rationale:"short string"
+        }]
+      }
+    };
+    const response=await fetch("https://api.openai.com/v1/responses",{
+      method:"POST",
+      headers:{"Authorization":"Bearer "+apiKey,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model,
+        instructions:"You are MINDS Project Comparator. Your output is an auditable inference, never authority. Compare only the supplied sourced Claims and project baseline. Return only the requested JSON.",
+        reasoning:{effort:"medium"},
+        max_output_tokens:5000,
+        input:[{role:"user",content:[{type:"input_text",text:JSON.stringify(prompt)}]}]
+      })
+    });
+    const payload=await response.json();
+    await recordUsage(req,"project_source_comparison",model,payload?.usage,{
+      ingestion_id:ingestionId,project_id:ingestion.project_id,baseline_fingerprint:baselineFingerprint,
+      baseline_total:coverage.baseline_total,baseline_included:coverage.baseline_included
+    });
+    if(!response.ok)return {status:"openai_error",detail:payload?.error?.message||"source_comparison_failed"};
+
+    const parsed=parseModelJson(String(extractText(payload)||""));
+    const sourceIds=new Set(sourceClaims.map((x:any)=>String(x.id)));
+    const baselineIds=new Set(baseline.map((x:any)=>String(x.id)));
+    const allowed=new Set(["aligned","contradicts","modifies","adds","unclear"]);
+    const items=(Array.isArray(parsed?.items)?parsed.items:[]).slice(0,160).map((x:any)=>{
+      const sourceId=String(x?.source_claim_id||"");
+      let targetId=x?.target_claim_id?String(x.target_claim_id):null;
+      let verdict=allowed.has(String(x?.verdict||""))?String(x.verdict):"unclear";
+      if(!sourceIds.has(sourceId))return null;
+      if(targetId&&!baselineIds.has(targetId))targetId=null;
+      if(!targetId&&["aligned","contradicts","modifies"].includes(verdict))verdict="unclear";
+      if(coverage.truncated&&!targetId&&verdict==="adds")verdict="unclear";
+      const confidence=Math.max(0,Math.min(1,Number.isFinite(Number(x?.confidence))?Number(x.confidence):0.7));
+      return {source_claim_id:sourceId,target_claim_id:targetId,verdict,confidence,rationale:String(x?.rationale||"").slice(0,1600)};
+    }).filter(Boolean);
+    const {data:committed,error:commitError}=await service.rpc("minds_commit_project_source_comparison",{
+      p_user_id:user.id,p_project_id:ingestion.project_id,p_ingestion_id:ingestionId,
+      p_baseline_revision_id:revision?.id||null,p_baseline_fingerprint:baselineFingerprint,
+      p_model:model,p_coverage:coverage,p_items:items
+    });
+    if(commitError)return {status:"commit_error",detail:commitError.message};
+    return {
+      ...committed,
+      ingestion_id:ingestionId,
+      current_revision_id:revision?.id||null,
+      coverage,
+      findings:items.slice(0,16),
+      provenance:{
+        class:"project_model_comparison",
+        comparison_is_inference:true,
+        changes_claim_authority:false,
+        baseline_fingerprint:baselineFingerprint
+      }
+    };
+  }catch(e){return {status:"error",detail:String(e)}}
+}
+
 async function analyzeProjectSource(req:Request,args:any,apiKey:string){
   try{
     const sb=supabaseClient(req),service=serviceClient();if(!sb||!service)return {status:"unavailable"};
@@ -1652,10 +1818,14 @@ async function analyzeProjectSource(req:Request,args:any,apiKey:string){
       .select("id,status,referent_count,claim_count,source_version,completed_at")
       .eq("project_id",file.project_id).eq("source_kind","work_file").eq("source_ref",file.id)
       .eq("source_version",sourceVersion).maybeSingle();
-    if(prior?.status==="completed")return {
-      status:"already_indexed",file:{id:file.id,name:file.name},source_version:sourceVersion,
-      ingestion_id:prior.id,referent_count:prior.referent_count,claim_count:prior.claim_count
-    };
+    if(prior?.status==="completed"){
+      const comparison=await compareProjectSource(req,{ingestion_id:prior.id},apiKey);
+      return {
+        status:"already_indexed",file:{id:file.id,name:file.name},source_version:sourceVersion,
+        ingestion_id:prior.id,referent_count:prior.referent_count,claim_count:prior.claim_count,
+        comparison
+      };
+    }
 
     const {data:knownRefs}=await sb.from("minds_project_referents")
       .select("id,kind,label,canonical_key,aliases")
@@ -1707,12 +1877,16 @@ async function analyzeProjectSource(req:Request,args:any,apiKey:string){
       p_model:model,p_referents:referents,p_claims:claims
     });
     if(commitError)return {status:"commit_error",detail:commitError.message};
+    const comparison=committed?.ingestion_id
+      ?await compareProjectSource(req,{ingestion_id:committed.ingestion_id},apiKey)
+      :{status:"not_started"};
     return {
       ...committed,
       file:{id:file.id,name:file.name},
       project:{id:file.project_id,name:project?.name||null,key:project?.client_key||null},
       source_version:sourceVersion,
       extracted_claims:claims.slice(0,12).map((x:any)=>({statement:String(x?.statement||""),claim_type:String(x?.claim_type||"fact"),confidence:Number(x?.confidence??0.7)})),
+      comparison,
       provenance:{class:"project_source",source_first:true,accepted_fact:false,model_interpretation:false}
     };
   }catch(e){return {status:"error",detail:String(e)}}
@@ -2714,6 +2888,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       strict:false,
       parameters:{type:"object",properties:{file_id:{type:"string",description:"Owned minds_work_files UUID."}},required:["file_id"]}
     },
+    {
+      type:"function",
+      name:"compare_project_source",
+      description:"Compare one completed source-first ingestion against the current project Claim baseline. This stores only inferential comparison receipts and proposed Claim relations; it never changes Claim authority or confirms project truth.",
+      strict:false,
+      parameters:{type:"object",properties:{ingestion_id:{type:"string",description:"Completed minds_project_source_ingestions UUID."}},required:["ingestion_id"]}
+    },
     ...calendarTools
   ];
   const toolProposals:any[]=[];
@@ -2774,7 +2955,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       usedTools.push(String(call.name||""));
       const mode=policyMode(String(call.name||""));
       if(sourceTainted&&["record_personal_model_claim","update_personal_model_claim","remember_relation","remember_information"].includes(call.name)){outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"review_required",reason:"Source-derived content must remain a sourced proposal; do not promote it to personal fact."})});continue;}
-      if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","consult_sofia"].includes(call.name))sourceTainted=true;
+      if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name))sourceTainted=true;
       if(mode==="deny"){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
         continue;
@@ -2915,6 +3096,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="analyze_project_source"){
         const result=await analyzeProjectSource(req,args,apiKey);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="compare_project_source"){
+        const result=await compareProjectSource(req,args,apiKey);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="record_personal_model_claim"){
         const result=await recordPersonalModelClaim(req,args);
