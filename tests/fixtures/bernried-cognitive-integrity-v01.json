@@ -153,7 +153,7 @@
         "anchors_return_in_time"
       ],
       "source": "Terminplan 01.10.2026",
-      "given": "The Bauherr review phase for Vorabzug 02 is scheduled 02.10–09.10; the plan then lists "Abstimmung Planstand Vorabzug 02 abgeschlossen" on 09.10.",
+      "given": "The Bauherr review phase for Vorabzug 02 is scheduled 02.10–09.10; the plan then lists \"Abstimmung Planstand Vorabzug 02 abgeschlossen\" on 09.10.",
       "expected": "MINDS distinguishes a due review from a received review and must not mark it complete merely because the date arrives."
     },
     {
