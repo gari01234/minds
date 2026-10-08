@@ -2279,12 +2279,12 @@ async function reviewEconomyPanel(){
       <details class="human-tech"><summary>Por qué esta lista es más corta</summary><p>Review Economy elimina duplicados dentro de una misma ejecución, no te pide confirmar estados que ya ocurrieron, agrupa solo cambios baratos y reversibles, y deja caducar propuestas operativas que perdieron utilidad. Las decisiones de autoridad, verdad de proyecto y reglas de comportamiento no caducan por edad.</p><div class="human-tech-grid"><span>Sin score oculto</span><b>${esc(summary.scoring||'none')}</b><span>Caducables</span><b>${Number(summary.expirable_items||0)}</b><span>Protegidas</span><b>${Number(summary.protected_items||0)}</b></div></details>
     </div>`);
 
-    $('[data-review-batch]').forEach(btn=>btn.onclick=()=>{
+    $$('[data-review-batch]').forEach(btn=>btn.onclick=()=>{
       const batch=batches[Number(btn.dataset.reviewBatch)],items=Array.isArray(batch?.items)?batch.items:[];
       const proposals=items.map(reviewProposalFromItem).filter(Boolean);
       if(proposals.length)confirmProposals(proposals);
     });
-    $('[data-review-item-id]').forEach(btn=>btn.onclick=()=>{
+    $$('[data-review-item-id]').forEach(btn=>btn.onclick=()=>{
       const row=queue.find(x=>String(x.item_id)===String(btn.dataset.reviewItemId)&&x.item_kind===btn.dataset.reviewItemKind);
       if(!row)return;
       if(row.item_kind==='shadow_decision'){
