@@ -1997,7 +1997,7 @@ function initTaskDesktopDrag(){
 }
 function initWeekDateDrag(){
   if(state.view!=='week')return;
-  $('.week .wday[data-week-date]').forEach(day=>{
+  $$('.week .wday[data-week-date]').forEach(day=>{
     day.addEventListener('dragover',e=>{
       if(!calendarDraggedTaskId)return;
       e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';day.classList.add('week-drop-target');
