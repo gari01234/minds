@@ -610,14 +610,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.08.83.0'));
+  assert.ok(shell.includes('Build 2026.10.08.83.1'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=58'));
   assert.ok(index.includes('shell.js?v=84'));
-  assert.ok(index.includes('app.js?v=91'));
+  assert.ok(index.includes('app.js?v=92'));
   assert.ok(index.includes('sync.js?v=pwa28'));
   assert.ok(index.includes('ai.js?v=48'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v97'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v98'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -726,7 +726,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=10'));
+  assert.ok(index.includes('work.js?v=11'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -783,7 +783,7 @@ test('Build 48 supports dragging week tasks to another day',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes('data-week-date='));
   assert.ok(app.includes('function initWeekDateDrag()'));
-  assert.ok(app.includes("mutation('task','move_date'"));
+  assert.ok(app.includes("'reorder':'move_date'"));
 });
 
 test('Build 48 keeps manual task edits from being dropped during sync',()=>{
@@ -796,7 +796,7 @@ test('Build 48 keeps manual task edits from being dropped during sync',()=>{
 test('Build 48 Planner supports drag between buckets and task deletion',()=>{
   const work=read('apps/isabella/work.js');
   assert.ok(work.includes('draggable="true"'));
-  assert.ok(work.includes('function moveTaskToBucket'));
+  assert.ok(work.includes('function persistWorkTaskOrder'));
   assert.ok(work.includes('function deleteWorkTask'));
   assert.ok(work.includes('workDeleteTask'));
   assert.ok(work.includes('work-bucket-scroll'));
@@ -1465,4 +1465,28 @@ test('Build 69 exposes attention policy, rationale and health without adding ano
   assert.ok(sync.includes("'attention_runtime'"));
   assert.ok(shell.includes('data-action="assistantprefs"'));
   assert.ok(!shell.includes('data-nav="attention"'));
+});
+
+
+test('Build 83.1 storage bucket accepts chat PDFs and common documents without becoming public',()=>{
+  const m=read('supabase/migrations/20261008093000_build83_chat_upload_mime_types.sql');
+  assert.ok(m.includes("where id = 'isabella-uploads'"));
+  assert.ok(m.includes("'application/pdf'"));
+  assert.ok(m.includes("'application/vnd.openxmlformats-officedocument.wordprocessingml.document'"));
+  assert.ok(m.includes('file_size_limit = 12582912'));
+  assert.ok(!m.includes('public = true'));
+});
+
+test('Build 83.1 Work and Calendar persist separate user ordering semantics',()=>{
+  const m=read('supabase/migrations/20261008094500_build83_independent_work_task_order.sql');
+  const work=read('apps/isabella/work.js');
+  const app=read('apps/isabella/app.js');
+  assert.ok(m.includes('add column if not exists work_sort_order integer'));
+  assert.ok(work.includes('work_sort_order'));
+  assert.ok(work.includes('persistWorkTaskOrder'));
+  assert.ok(work.includes("data-work-task-list"));
+  assert.ok(app.includes('commitTaskOrderFromContainer'));
+  assert.ok(app.includes('initTaskDesktopDrag'));
+  assert.ok(app.includes("mutation('task',t.date===before.date?'reorder':'move_date'"));
+  assert.ok(app.includes('sortOrder=nextOrder'));
 });
