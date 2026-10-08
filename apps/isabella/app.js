@@ -2873,6 +2873,7 @@ async function standingIntentsPanel(){
       const last=x.last_checked_at?new Date(x.last_checked_at).toLocaleString('es-ES'):'todavía no comprobado';
       const observed=x.last_observed_at?' · última observación '+new Date(x.last_observed_at).toLocaleString('es-ES'):'';
       return `<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Vigilar: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}Vigilancia autónoma · canal ${esc(x.channel_kind||'—')} · frescura ${Number(x.freshness_minutes||0)} min · ${esc(x.status)}</div><div class="small">Última comprobación: ${esc(last)}${esc(observed)}</div></div>${cancelButton(x)}</div>`;
+    };
     const reminderHtml=liveReminders.length?liveReminders.map(reminderCard).join(''):'<div class="small">No hay recordatorios contextuales activos.</div>';
     const reminderHistory=historyReminders.length?`<details class="human-tech"><summary>Historial de recordatorios (${historyReminders.length})</summary>${historyReminders.slice(0,40).map(reminderCard).join('')}</details>`:'';
     const watchHtml=liveWatches.length?liveWatches.map(watchCard).join(''):'<div class="small">No hay vigilancias activas.</div>';
