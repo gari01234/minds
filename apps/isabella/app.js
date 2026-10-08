@@ -1373,7 +1373,7 @@ function reviewedProposal(original,corrected){
 }
 function proposalDetails(p){
   if(p.kind==='expectation')return `<p>${esc(p.expected_event||'')}</p><div class="small">${esc(p.due_date||'')}${p.due_time?' · '+esc(p.due_time):' · sin hora exacta'} · Si vence sin evidencia, quedará pendiente de comprobar.</div>`;
-  if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
+  if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Recordatorio por conversación; no vigila fuentes externas · Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
   if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.persistent_work?'<div class="small" style="margin-top:7px">Al confirmar, Isabella empezará a trabajar en esto y podrá continuar aunque cierres MINDS. Te pedirá algo solo si realmente queda bloqueada.</div>':''}${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
   if(p.kind==='work_claim')return `<p class="small">Estado: ${esc(p.status||'proposed')} · Procedencia: ${esc(p.provenance_class||'inferred')}</p>${p.evidence_excerpt?`<blockquote>${esc(p.evidence_excerpt)}</blockquote>`:''}${p.supersedes_id?'<p class="small">Sustituirá una formulación anterior y conservará su historia.</p>':''}`;
   if(p.kind==='skill_proposal')return `<p>${esc(p.description||'')}</p><details open><summary>Instrucciones de la habilidad</summary><p style="white-space:pre-wrap;max-height:35vh;overflow:auto">${esc(p.instructions||'')}</p></details>`;
@@ -1382,7 +1382,7 @@ function proposalDetails(p){
 window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=>{if(q)confirmProposal(q);else closeModal()})};
 function confirmProposal(p){
   p={...p,request_id:p.request_id||crypto.randomUUID()};
-  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará por contexto, no por hora.':p.kind==='expectation'?'Esto seguirá un hecho futuro del mundo; una fecha vencida sin evidencia no se tratará como fallo.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
+  const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará cuando el contexto reaparezca en la conversación. No es vigilancia externa.':p.kind==='expectation'?'Esto seguirá un hecho futuro del mundo; una fecha vencida sin evidencia no se tratará como fallo.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
@@ -1440,15 +1440,27 @@ async function dbWorkProjectByName(name){
   return (data||[]).find(x=>String(x.client_key||'').toLowerCase()===key)||(data||[]).find(x=>String(x.name||'').toLowerCase()===key)||null;
 }
 async function createStandingIntentProposal(p){
-  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para guardar esta memoria futura.');return}
+  const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para guardar este recordatorio.');return}
   const {data:{session}}=await sb.auth.getSession();if(!session){closeModal();return}
   const proj=p.project?await dbWorkProjectByName(p.project):null;
-  if(p.project&&!proj){say('assistant','No pude identificar el proyecto. Corrige su nombre antes de guardar.');return}
-  if(!String(p.trigger_text||'').trim()||!String(p.reminder_text||'').trim()){say('assistant','Faltan la situación y el recordatorio.');return}
-  const expires=new Date(Date.now()+Math.max(1,Number(p.expires_days||90))*86400000).toISOString();
-  const {error}=await sb.from('minds_standing_intents').upsert({user_id:session.user.id,trigger_text:p.trigger_text,reminder_text:p.reminder_text,trigger_terms:p.trigger_terms||[],project_id:proj?.id||null,cooldown_minutes:Math.max(0,Number(p.cooldown_hours??24))*60,max_triggers:Math.max(1,Number(p.max_triggers||3)),expires_at:expires,request_id:p.request_id||crypto.randomUUID(),metadata:{source:'isabella_chat'}},{onConflict:'user_id,request_id',ignoreDuplicates:true});
+  if(p.project&&!proj){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude identificar el proyecto. Corrige su nombre antes de guardar.');return}
+  if(!String(p.trigger_text||'').trim()||!String(p.reminder_text||'').trim()){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','Faltan la situación y el recordatorio.');return}
+  const expires=new Date(Date.now()+Math.max(1,Math.min(365,Number(p.expires_days||90)))*86400000).toISOString();
+  const spec={
+    mode:'reminder',observation_mode:'via_user',channel_kind:'conversation',
+    trigger_text:String(p.trigger_text).trim(),reminder_text:String(p.reminder_text).trim(),
+    trigger_terms:Array.isArray(p.trigger_terms)?p.trigger_terms:[],
+    project_id:proj?.id||null,cooldown_minutes:Math.max(0,Number(p.cooldown_hours??24))*60,
+    max_triggers:Math.max(1,Math.min(12,Number(p.max_triggers||3))),expires_at:expires,
+    condition:{type:'conversation_terms',terms:Array.isArray(p.trigger_terms)?p.trigger_terms:[]},
+    return_rule:{route:'conversation'},metadata:{source:'isabella_chat'}
+  };
+  const {error}=await sb.rpc('minds_create_prospective_memory',{
+    p_spec:spec,p_request_id:p.request_id||crypto.randomUUID(),p_confirmed:true
+  });
+  if(error){const b=$('#proposalConfirm');if(b)b.disabled=false;say('assistant','No pude guardar ese recordatorio todavía: '+error.message);return}
   closeModal();
-  say('assistant',error?'No pude guardar esa memoria futura todavía: '+error.message:'Listo. Lo guardaré como memoria futura y te lo recordaré cuando vuelva a aparecer esa situación.');
+  say('assistant','Listo. Lo guardaré como recordatorio por situación. No estaré vigilando una fuente externa: te lo recordaré cuando ese contexto vuelva a aparecer en nuestra conversación.');
 }
 async function createExpectationProposal(p){
   const sb=window.MINDS_SUPABASE;if(!sb){closeModal();say('assistant','Necesito la memoria conectada para seguir esta expectativa.');return}
@@ -2829,7 +2841,7 @@ async function standingIntentsPanel(){
         .order('due_at',{ascending:true})
         .limit(100),
       sb.from('minds_standing_intents')
-        .select('id,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,project_id,isabella_projects(name)')
+        .select('id,mode,observation_mode,channel_kind,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,cancelled_at,expired_at,project_id,isabella_projects(name)')
         .order('created_at',{ascending:false})
     ]);
     if(expectQ.error)throw expectQ.error;if(intentQ.error)throw intentQ.error;
@@ -2848,14 +2860,21 @@ async function standingIntentsPanel(){
     const openHtml=open.length?open.map(expectationCard).join(''):'<div class="small">No hay expectativas abiertas.</div>';
     const historyHtml=closed.length?`<details class="human-tech"><summary>Historial de expectativas (${closed.length})</summary>${closed.slice(0,40).map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>${esc(x.title)}</b><div>${esc(x.expected_event)}</div><div class="small">${esc(expectationStateLabel(x.status))} · ${esc(expectationDueLabel(x))}</div></div></div>`).join('')}</details>`:'';
 
-    const intentHtml=intents.length?intents.map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}${x.trigger_count||0}/${x.max_triggers||3} activaciones · cooldown ${Math.round(Number(x.cooldown_minutes||0)/60)} h${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div></div><button data-intent-toggle="${x.id}" data-intent-status="${x.status}">${x.status==='active'?'Pausar':'Activar'}</button><button data-intent-delete="${x.id}" aria-label="Eliminar">×</button></div>`).join(''):'<div class="small">No hay recordatorios contextuales.</div>';
+    const liveIntents=intents.filter(x=>!['cancelled','done','expired'].includes(x.status));
+    const historyIntents=intents.filter(x=>['cancelled','done','expired'].includes(x.status));
+    const reminderCard=x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}Recordatorio · visto a través de ti · ${esc(x.status)} · ${x.trigger_count||0}/${x.max_triggers||3} activaciones${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div><div class="small">No es vigilancia: MINDS detecta la condición cuando reaparece en la conversación.</div></div>${['pending','armed','fired'].includes(x.status)?`<button data-intent-cancel="${x.id}">Cancelar</button>`:''}</div>`;
+    const intentHtml=liveIntents.length?liveIntents.map(reminderCard).join(''):'<div class="small">No hay recordatorios contextuales activos.</div>';
+    const intentHistoryHtml=historyIntents.length?`<details class="human-tech"><summary>Historial de recordatorios (${historyIntents.length})</summary>${historyIntents.slice(0,40).map(reminderCard).join('')}</details>`:'';
 
-    modal('Memoria futura',`<div class="small section-label">Expectativas con fecha</div><div class="small" style="margin-bottom:12px">Cosas del mundo que esperas que ocurran. Una fecha vencida sin evidencia queda pendiente de comprobar, no se considera un fallo.</div>${openHtml}${historyHtml}<div class="small section-label" style="margin-top:22px">Recordatorios por situación</div><div class="small" style="margin-bottom:12px">Se activan cuando reaparece una situación, no por una hora.</div>${intentHtml}`);
+    modal('Memoria futura',`<div class="small section-label">Expectativas con fecha</div><div class="small" style="margin-bottom:12px">Cosas del mundo que esperas que ocurran. Una fecha vencida sin evidencia queda pendiente de comprobar, no se considera un fallo.</div>${openHtml}${historyHtml}<div class="small section-label" style="margin-top:22px">Recordatorios por situación</div><div class="small" style="margin-bottom:12px">Se activan cuando reaparece una situación en la conversación. No significan que MINDS esté vigilando una fuente externa.</div>${intentHtml}${intentHistoryHtml}`);
 
     document.querySelectorAll('[data-expectation-review]').forEach(b=>b.onclick=()=>void reviewExpectation(b.dataset.expectationReview,b.dataset.expectationDecision));
     document.querySelectorAll('[data-expectation-reschedule]').forEach(b=>b.onclick=()=>{const row=expectations.find(x=>x.id===b.dataset.expectationReschedule);if(row)rescheduleExpectation(row)});
-    document.querySelectorAll('[data-intent-toggle]').forEach(b=>b.onclick=async()=>{const status=b.dataset.intentStatus==='active'?'snoozed':'active';await sb.from('minds_standing_intents').update({status,updated_at:new Date().toISOString()}).eq('id',b.dataset.intentToggle);standingIntentsPanel()});
-    document.querySelectorAll('[data-intent-delete]').forEach(b=>b.onclick=async()=>{await sb.from('minds_standing_intents').delete().eq('id',b.dataset.intentDelete);standingIntentsPanel()});
+    document.querySelectorAll('[data-intent-cancel]').forEach(b=>b.onclick=async()=>{
+      const {error}=await sb.rpc('minds_cancel_prospective_memory',{p_id:b.dataset.intentCancel,p_confirmed:true});
+      if(error)say('assistant','No pude cancelar ese recordatorio: '+error.message);
+      await standingIntentsPanel();
+    });
   }catch{modal('Memoria futura','<div class="small">No pude cargarla ahora mismo.</div>')}
 }
 function healthDot(status){return status==='ok'?'<span class="health-dot ok"></span>':status==='warn'?'<span class="health-dot warn"></span>':status==='idle'?'<span class="health-dot idle"></span>':'<span class="health-dot error"></span>'}
