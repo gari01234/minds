@@ -122,3 +122,47 @@ test('Build 84.2 extraction becomes structured project evidence without confirmi
   assert.ok(chat.includes('accepted_fact:false'));
   assert.ok(chat.includes('source_first:true'));
 });
+
+
+test('Build 84.3 comparison receipts are baseline-versioned and authority-neutral',()=>{
+  const m=read('supabase/migrations/20261008125500_project_source_comparison_v01.sql');
+  assert.ok(m.includes('create table if not exists public.minds_project_source_comparisons'));
+  assert.ok(m.includes('baseline_fingerprint text not null'));
+  assert.ok(m.includes('unique(user_id,project_id,ingestion_id,baseline_fingerprint)'));
+  assert.ok(m.includes("verdict in ('aligned','contradicts','modifies','adds','unclear')"));
+  assert.ok(m.includes("'changes_claim_authority',false"));
+  assert.ok(m.includes("'proposed'"));
+  assert.ok(!m.includes("set status='confirmed'"));
+  assert.ok(!m.includes("set status='disputed'"));
+  assert.ok(!m.includes("set superseded_by"));
+});
+
+test('Build 84.3 compares only after source-first extraction and does not reread Source bytes',()=>{
+  assert.ok(chat.includes('async function compareProjectSource'));
+  assert.ok(chat.includes('comparison=await compareProjectSource'));
+  assert.ok(chat.includes('compare_source_first_claims_against_project_baseline'));
+  assert.ok(chat.includes('aligned = the new sourced proposition is materially compatible'));
+  assert.ok(chat.includes('This is not authority confirmation.'));
+  const start=chat.indexOf('async function compareProjectSource');
+  const end=chat.indexOf('async function analyzeProjectSource',start);
+  const block=chat.slice(start,end);
+  assert.ok(block.includes('minds_project_source_ingestions'));
+  assert.ok(block.includes('minds_work_claims'));
+  assert.ok(block.includes('minds_commit_project_source_comparison'));
+  assert.ok(!block.includes('.storage.from("minds-work").download'));
+  assert.ok(!block.includes('minds_commit_project_source_extraction'));
+});
+
+test('Build 84.3 fails epistemically closed when baseline coverage is truncated',()=>{
+  assert.ok(chat.includes('coverage.truncated&&!targetId&&verdict==="adds"'));
+  assert.ok(chat.includes('verdict="unclear"'));
+  assert.ok(chat.includes('baselineFingerprint=await sha256Hex'));
+  assert.ok(chat.includes('comparison_is_inference:true'));
+  assert.ok(chat.includes('changes_claim_authority:false'));
+});
+
+test('Build 84.3 exposes deliberate re-comparison without new authority',()=>{
+  assert.ok(chat.includes('name:"compare_project_source"'));
+  assert.ok(chat.includes('call.name==="compare_project_source"'));
+  assert.ok(chat.includes('Compare one completed source-first ingestion against the current project Claim baseline.'));
+});
