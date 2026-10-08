@@ -11,14 +11,14 @@ const chat=read('supabase/functions/isabella-chat/index.ts');
 const migration=read('supabase/migrations/20261008115000_build83_operational_regressions.sql');
 
 test('Build 83.2 drag bindings use collection selectors, not querySelector results',()=>{
-  assert.ok(!app.includes("$('.task-item[data-date]:not(.task-done)').forEach"));
-  assert.ok(!app.includes("$('.task-item[data-id]').find("));
-  assert.ok(app.includes("$$('.task-item[data-date]:not(.task-done)').forEach"));
-  assert.ok(app.includes("$$('.task-item[data-id]').find("));
-  assert.ok(!work.includes("$('[data-work-bucket-drop]').forEach"));
-  assert.ok(!work.includes("$('[data-work-task]').find("));
-  assert.ok(work.includes("$$('[data-work-bucket-drop]').forEach"));
-  assert.ok(work.includes("$$('[data-work-task]').find("));
+  assert.equal(/(^|[^$])\$\('\.task-item\[data-date\]:not\(\.task-done\)'\)\.forEach/.test(app),false);
+  assert.equal(/(^|[^$])\$\('\.task-item\[data-id\]'\)\.find\(/.test(app),false);
+  assert.ok(app.includes("$('.task-item[data-date]:not(.task-done)').forEach"));
+  assert.ok(app.includes("$('.task-item[data-id]').find("));
+  assert.equal(/(^|[^$])\$\('\[data-work-bucket-drop\]'\)\.forEach/.test(work),false);
+  assert.equal(/(^|[^$])\$\('\[data-work-task\]'\)\.find\(/.test(work),false);
+  assert.ok(work.includes("$('[data-work-bucket-drop]').forEach"));
+  assert.ok(work.includes("$('[data-work-task]').find("));
 });
 
 test('Build 83.2 proposal confirmation catches synchronous render failures',()=>{
