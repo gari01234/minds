@@ -937,7 +937,7 @@ function say(role,text,meta={}){
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
     metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
     sources:Array.isArray(meta.sources)?meta.sources:[],
-    attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Foto')})).filter(x=>x.path):[],
+    attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Archivo'),size:Number(x?.size||0)})).filter(x=>x.path):[],
     artifacts:Array.isArray(meta.artifacts)?meta.artifacts.slice(0,8).map(x=>({id:String(x?.id||''),kind:String(x?.kind||''),title:String(x?.title||'Artefacto'),mime_type:String(x?.mime_type||''),storage_path:String(x?.storage_path||'')})).filter(x=>x.storage_path):[],
     quickReplies:Array.isArray(meta.quickReplies)?meta.quickReplies.slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value):[]
   });
@@ -991,7 +991,7 @@ function renderMessages(forceBottom=false){
     const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-images">${m.attachments.map(a=>{const path=String(a.path||'');return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(a.name||'Foto')}">`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
@@ -1675,14 +1675,32 @@ async function handle(text,attachments=[],replyTo=null){
 }
 let pendingChatFiles=[];
 const pendingChatUrls=new Map();
+const CHAT_UPLOAD_MAX_BYTES=12*1024*1024;
+const CHAT_UPLOAD_MAX_TOTAL_BYTES=24*1024*1024;
+const CHAT_UPLOAD_EXTENSIONS=new Set(['pdf','txt','md','csv','json','doc','docx','ppt','pptx','xls','xlsx','eml']);
+const CHAT_UPLOAD_MIME={
+  pdf:'application/pdf',txt:'text/plain',md:'text/markdown',csv:'text/csv',json:'application/json',
+  doc:'application/msword',docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ppt:'application/vnd.ms-powerpoint',pptx:'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  xls:'application/vnd.ms-excel',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  eml:'message/rfc822'
+};
+function chatUploadExt(file){const name=String(file?.name||''),part=name.includes('.')?name.split('.').pop():'';return String(part||'').toLowerCase()}
+function chatUploadIsImage(file){return String(file?.type||'').toLowerCase().startsWith('image/')}
+function chatUploadSupported(file){return chatUploadIsImage(file)||CHAT_UPLOAD_EXTENSIONS.has(chatUploadExt(file))}
+function formatUploadBytes(bytes){const n=Number(bytes||0);if(n<1024)return n+' B';if(n<1024*1024)return Math.round(n/1024)+' KB';return (n/1024/1024).toFixed(n<10*1024*1024?1:0)+' MB'}
 function renderPendingChatFiles(){
   const box=$('#chatAttachmentPreview');if(!box)return;
   if(!pendingChatFiles.length){box.innerHTML='';box.classList.add('hidden');return}
   box.classList.remove('hidden');
   box.innerHTML=pendingChatFiles.map((file,i)=>{
-    let url=pendingChatUrls.get(file);
-    if(!url){url=URL.createObjectURL(file);pendingChatUrls.set(file,url)}
-    return `<div class="pending-photo"><img src="${esc(url)}" alt=""><button data-remove-chat-file="${i}" aria-label="Quitar foto">×</button></div>`;
+    if(chatUploadIsImage(file)){
+      let url=pendingChatUrls.get(file);
+      if(!url){url=URL.createObjectURL(file);pendingChatUrls.set(file,url)}
+      return '<div class="pending-photo"><img src="'+esc(url)+'" alt="'+esc(file.name||'Imagen')+'"><button data-remove-chat-file="'+i+'" aria-label="Quitar archivo">×</button></div>';
+    }
+    const ext=chatUploadExt(file).toUpperCase()||'DOC';
+    return '<div class="pending-file"><span>'+esc(ext)+'</span><div><strong>'+esc(file.name||'Archivo')+'</strong><small>'+esc(formatUploadBytes(file.size))+'</small></div><button data-remove-chat-file="'+i+'" aria-label="Quitar archivo">×</button></div>';
   }).join('');
   document.querySelectorAll('[data-remove-chat-file]').forEach(b=>b.onclick=()=>{
     const i=Number(b.dataset.removeChatFile),file=pendingChatFiles[i],url=pendingChatUrls.get(file);
@@ -1691,7 +1709,7 @@ function renderPendingChatFiles(){
 }
 async function normalizeUploadImage(file){
   const supported=['image/jpeg','image/png','image/webp'];
-  if(supported.includes(String(file.type||'').toLowerCase())&&file.size<=8*1024*1024)return {blob:file,mime:file.type||'image/jpeg'};
+  if(supported.includes(String(file.type||'').toLowerCase())&&file.size<=8*1024*1024)return {blob:file,mime:file.type||'image/jpeg',ext:chatUploadExt(file)||'jpg'};
   return await new Promise((resolve,reject)=>{
     const url=URL.createObjectURL(file),img=new Image();
     img.onload=()=>{
@@ -1699,31 +1717,45 @@ async function normalizeUploadImage(file){
         const max=2200,scale=Math.min(1,max/Math.max(img.naturalWidth||1,img.naturalHeight||1));
         const canvas=document.createElement('canvas');canvas.width=Math.max(1,Math.round(img.naturalWidth*scale));canvas.height=Math.max(1,Math.round(img.naturalHeight*scale));
         const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0,canvas.width,canvas.height);
-        canvas.toBlob(blob=>{URL.revokeObjectURL(url);blob?resolve({blob,mime:'image/jpeg'}):reject(new Error('No pude preparar la foto.'))},'image/jpeg',.88);
+        canvas.toBlob(blob=>{URL.revokeObjectURL(url);blob?resolve({blob,mime:'image/jpeg',ext:'jpg'}):reject(new Error('No pude preparar la imagen.'))},'image/jpeg',.88);
       }catch(e){URL.revokeObjectURL(url);reject(e)}
     };
     img.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('No pude leer esta imagen.'))};
     img.src=url;
   });
 }
-async function uploadChatImages(files){
-  const sb=window.MINDS_SUPABASE;if(!sb)throw new Error('Necesito la memoria conectada para enviar fotos.');
-  const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria antes de enviar fotos.');
+async function normalizeChatUpload(file){
+  if(!chatUploadSupported(file))throw new Error('Formato no compatible: '+String(file?.name||'archivo'));
+  if(Number(file?.size||0)>CHAT_UPLOAD_MAX_BYTES)throw new Error('El archivo '+String(file?.name||'')+' supera 12 MB.');
+  if(chatUploadIsImage(file))return normalizeUploadImage(file);
+  const ext=chatUploadExt(file);
+  return {blob:file,mime:String(file.type||CHAT_UPLOAD_MIME[ext]||'application/octet-stream'),ext};
+}
+async function uploadChatFiles(files){
+  const list=(files||[]).slice(0,3);
+  if(list.reduce((n,f)=>n+Number(f?.size||0),0)>CHAT_UPLOAD_MAX_TOTAL_BYTES)throw new Error('Los adjuntos superan 24 MB en total.');
+  const sb=window.MINDS_SUPABASE;if(!sb)throw new Error('Necesito la memoria conectada para adjuntar archivos.');
+  const {data:{session}}=await sb.auth.getSession();if(!session)throw new Error('Conecta la memoria antes de adjuntar archivos.');
   const out=[];
-  for(const file of (files||[]).slice(0,3)){
-    const prepared=await normalizeUploadImage(file);
-    const ext=prepared.mime==='image/png'?'png':prepared.mime==='image/webp'?'webp':'jpg';
+  for(const file of list){
+    const prepared=await normalizeChatUpload(file);
     const id=globalThis.crypto?.randomUUID?.()||uid();
-    const path=`${session.user.id}/chat/${today()}/${id}.${ext}`;
+    const safeExt=String(prepared.ext||'bin').replace(/[^a-z0-9]/gi,'').toLowerCase()||'bin';
+    const path=session.user.id+'/chat/'+today()+'/'+id+'.'+safeExt;
     const {error}=await sb.storage.from('isabella-uploads').upload(path,prepared.blob,{contentType:prepared.mime,upsert:false});
-    if(error)throw error;
-    out.push({path,mime:prepared.mime,name:file.name||('Foto.'+ext)});
+    if(error)throw new Error('No pude subir '+String(file.name||'el archivo')+': '+error.message);
+    out.push({path,mime:prepared.mime,name:file.name||('Archivo.'+safeExt),size:Number(file.size||0)});
   }
   return out;
 }
 async function hydrateChatImages(){
   const imgs=[...document.querySelectorAll('img[data-chat-image-path]')].filter(x=>!x.dataset.loaded);
   for(const img of imgs)observeStorageImage(img,'isabella-uploads',img.dataset.chatImagePath||'');
+  const files=[...document.querySelectorAll('a[data-chat-file-path]')].filter(x=>!x.dataset.loaded);
+  for(const link of files){
+    const path=link.dataset.chatFilePath||'',url=await signedAssetUrl('isabella-uploads',path,900);
+    if(url&&link.isConnected){link.href=url;link.dataset.loaded='1'}
+  }
 }
 
 function bind(){
@@ -1735,13 +1767,13 @@ function bind(){
  i.addEventListener('focus',()=>syncOrbCompact(true));
  const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};
  attachButton.onclick=()=>imageInput.click();
- imageInput.onchange=()=>{const next=[...imageInput.files||[]].filter(f=>String(f.type||'').startsWith('image/'));pendingChatFiles=[...pendingChatFiles,...next].slice(0,3);imageInput.value='';renderPendingChatFiles()};
+ imageInput.onchange=()=>{const chosen=[...imageInput.files||[]],next=chosen.filter(chatUploadSupported);if(chosen.length&&!next.length)say('assistant','Ese formato todavía no es compatible. Puedes adjuntar PDF, documentos de Office, texto, CSV, JSON o imágenes.');pendingChatFiles=[...pendingChatFiles,...next].slice(0,3);imageInput.value='';renderPendingChatFiles()};
  const send=async()=>{
    const t=i.value.trim();if(!t&&!pendingChatFiles.length)return;
    const replyTo=pendingReplyTo?{...pendingReplyTo}:null;
    const files=[...pendingChatFiles];pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();$('#sendButton').disabled=true;attachButton.disabled=true;
-   try{const attachments=files.length?await uploadChatImages(files):[];await handle(t,attachments,replyTo)}
-   catch(e){say('assistant',e?.message||'No pude enviar la foto.')}
+   try{const attachments=files.length?await uploadChatFiles(files):[];await handle(t,attachments,replyTo)}
+   catch(e){say('assistant',e?.message||'No pude enviar el archivo.')}
    finally{$('#sendButton').disabled=false;attachButton.disabled=false}
  };
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
