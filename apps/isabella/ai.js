@@ -68,30 +68,42 @@ function parseFastSse(buffer,onEvent){
 async function askFastStream(message,state,options={}){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
   const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
-  const response=await fetch(cfg.url+'/functions/v1/isabella-fast-stream',{
-    method:'POST',
-    headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
-    body:JSON.stringify({message:String(message),context:compact(state),permission_protocol:'contextual_v1'})
-  });
-  if(response.status===409)return null;
-  if(!response.ok||!response.body)throw new Error('No pude verificar la petición. Revisa tus tareas antes de repetirla.');
-  const reader=response.body.getReader(),decoder=new TextDecoder();
-  let buffer='',result=null,fallback=false,streamError=null,streamedText='';
-  while(true){
-    const {done,value}=await reader.read();if(done)break;
-    buffer+=decoder.decode(value,{stream:true});
-    buffer=parseFastSse(buffer,event=>{
-      if(event?.type==='status')options.onProgress?.(event);
-      else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
-      else if(event?.type==='result')result={...event,streamed_text:streamedText};
-      else if(event?.type==='fallback')fallback=true;
-      else if(event?.type==='error')streamError=event.message||'fast_stream_error';
-    });
+  const clientRequestId=options.fastRequestId||globalThis.crypto?.randomUUID?.();
+  let lastError=null;
+  for(let attempt=0;attempt<2;attempt++){
+    try{
+      const response=await fetch(cfg.url+'/functions/v1/isabella-fast-stream',{
+        method:'POST',
+        headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
+        body:JSON.stringify({message:String(message),context:compact(state),permission_protocol:'contextual_v1',client_request_id:clientRequestId})
+      });
+      if(response.status===409)return null;
+      if(!response.ok||!response.body)throw new Error('fast_http_'+response.status);
+      const reader=response.body.getReader(),decoder=new TextDecoder();
+      let buffer='',result=null,fallback=false,streamError=null,streamedText='';
+      while(true){
+        const {done,value}=await reader.read();if(done)break;
+        buffer+=decoder.decode(value,{stream:true});
+        buffer=parseFastSse(buffer,event=>{
+          if(event?.type==='status')options.onProgress?.(event);
+          else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
+          else if(event?.type==='result')result={...event,streamed_text:streamedText};
+          else if(event?.type==='fallback')fallback=true;
+          else if(event?.type==='error')streamError=event.message||'fast_stream_error';
+        });
+      }
+      if(result)return result;
+      if(fallback){options.onTextReset?.();return null}
+      if(streamError)throw new Error(streamError);
+      throw new Error('fast_stream_incomplete');
+    }catch(e){
+      lastError=e;
+      options.onTextReset?.();
+      if(attempt===0){options.onProgress?.({type:'status',phase:'retry',label:'Reconectando…'});continue}
+    }
   }
-  if(result)return result;
-  if(streamError){options.onTextReset?.();throw new Error(streamError)}
-  if(fallback){options.onTextReset?.();return null}
-  throw new Error('La conexión terminó sin confirmar el resultado. Revisa tus tareas antes de repetir la petición.');
+  await window.ISABELLA_SYNC_PULL_NOW?.();
+  throw new Error('Perdí la conexión al guardar. Ya comprobé tu agenda; si no aparece la tarea, inténtalo de nuevo.');
 }
 async function askDirectStream(message,state,options={},replyContext=''){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
