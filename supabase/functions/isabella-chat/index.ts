@@ -2450,12 +2450,14 @@ Deno.serve(async (req: Request) => {
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
-  const route=await routeRequest(req,effectiveMessage,apiKey,background,context);
+  const exposureHint=currentWorkThread?null:await latestExposureHint(req);
+  const route=await routeRequest(req,effectiveMessage,apiKey,background,{...context,exposure_hint_project:exposureHint?.project||null});
   if(currentWorkThread){
     route.project=currentWorkThread.project.name;
     route.work=true;
     route.source=String(route.source||"router")+"+work_thread";
   }
+  const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
   const wantsStream=body?.stream===true;
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
@@ -2467,7 +2469,7 @@ Deno.serve(async (req: Request) => {
   const initialSemantic=!background&&!!route.deep_memory;
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
-    recentConversation(req, effectiveMessage,currentWorkThread?.conversation_id||null),
+    recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
     fastAgenda?Promise.resolve([]):longTermRecall(req, effectiveMessage,budget.lexical),
     fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
     initialSemantic&&!fastAgenda?semanticRecall(req, effectiveMessage, apiKey,budget.semantic,budget.indexBatch):Promise.resolve([]),
@@ -2485,7 +2487,8 @@ Deno.serve(async (req: Request) => {
   ]);
   const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
   const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
-  const recent = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
+  // Build 85: the browser's mixed local history is never injected into the scoped working context.
+  const recent = mergeRecentConversations(recentDb, [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -2678,6 +2681,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     taxonomy:context.taxonomy||{},
     cognitive_depth:budget.depth,
     route,
+    exposure_scope:exposureScope,
+    exposure_policy:{
+      version:"scoped_exposure_v1",
+      legacy_history_auto_injected:false,
+      cross_scope_default:false
+    },
     specialist_candidates:specialistCandidates(effectiveMessage,route),
     specialist_plan_hint:specialistPlanHint(effectiveMessage,route),
     reply_context:context.reply_context||null,
@@ -2702,13 +2711,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   });
 
 
-  const seed = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
+  const seed = recent;
   let conversationInfo:any={id:null,created:false};
   if(!background){
     try{
-      conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread);
+      conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread,exposureScope);
       if(persistPresence&&conversationInfo?.dbId){
-        await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId});
+        await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId,exposure_scope:exposureScope});
       }
     }catch(e){
       await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
@@ -2767,15 +2776,16 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           }
           if(!finalText.trim())throw new Error("empty_stream_response");
           if(persistPresence&&streamConversation?.dbId){
-            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true});
+            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true,exposure_scope:exposureScope});
           }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
             standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
             quick_replies:[],pending_intent:null,sources:[],artifacts:[],conversation_id:streamConversation.id||null,
+            exposure_scope:exposureScope,
             direct_stream:true,streamed_reply:true
           });
         }catch(e){
@@ -3207,12 +3217,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
       request_id:clientMessageId,
+      exposure_scope:exposureScope,
       sources:webSources,
       artifacts:artifactResults.map((a:any)=>({id:a.id,kind:a.kind,title:a.title}))
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,
@@ -3223,7 +3234,8 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     pending_intent:null,
     sources:webSources,
     artifacts:artifactResults,
-    conversation_id:conversationInfo.id||null
+    conversation_id:conversationInfo.id||null,
+    exposure_scope:exposureScope
   });
 
   }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
