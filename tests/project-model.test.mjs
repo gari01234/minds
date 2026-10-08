@@ -111,7 +111,7 @@ test('Build 84.2 extractor sees only minimal Referent identity before reading a 
   const end=chat.indexOf('async function readWorkFile',start);
   const block=chat.slice(start,end);
   assert.ok(!block.includes('minds_project_model_snapshot'));
-  assert.ok(!block.includes('minds_work_claims').toString?true:true);
+  assert.ok(!block.includes('minds_work_claims'));
 });
 
 test('Build 84.2 extraction becomes structured project evidence without confirming it',()=>{
