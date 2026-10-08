@@ -783,7 +783,7 @@ test('Build 48 supports dragging week tasks to another day',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes('data-week-date='));
   assert.ok(app.includes('function initWeekDateDrag()'));
-  assert.ok(app.includes("mutation('task','move_date'"));
+  assert.ok(app.includes("'reorder':'move_date'"));
 });
 
 test('Build 48 keeps manual task edits from being dropped during sync',()=>{
@@ -796,7 +796,7 @@ test('Build 48 keeps manual task edits from being dropped during sync',()=>{
 test('Build 48 Planner supports drag between buckets and task deletion',()=>{
   const work=read('apps/isabella/work.js');
   assert.ok(work.includes('draggable="true"'));
-  assert.ok(work.includes('function moveTaskToBucket'));
+  assert.ok(work.includes('function persistWorkTaskOrder'));
   assert.ok(work.includes('function deleteWorkTask'));
   assert.ok(work.includes('workDeleteTask'));
   assert.ok(work.includes('work-bucket-scroll'));
