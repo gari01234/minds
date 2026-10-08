@@ -1,5 +1,7 @@
 # Build 85 — Exposure & Memory Provenance v0.1
 
+Status: **closed and accepted — 2026-10-08**.
+
 ## Objective
 
 Make context exposure a governed subsystem instead of an accidental consequence of one long chat history.
@@ -49,15 +51,17 @@ The product behavior should resemble human contextual memory: Isabella may know 
 - Derived memories and semantic caches from forgotten lineage become inadmissible without deleting historical audit records.
 - A forgotten source cannot be silently re-ingested through recall.
 
-### 85.5 — Acceptance
-Acceptance includes:
+### 85.5 — Acceptance **Accepted**
+Acceptance covers:
 - Bernried → personal-topic switch without Bernried bleed;
-- return to Bernried with project continuity preserved;
-- explicit “¿qué hablamos de Bernried?” can cross the scope boundary with provenance;
-- a recalled autobiographical fact cannot generate a duplicate memory;
-- a web-derived statement cannot become a personal fact;
-- a background brief cannot create a Claim about Gari;
-- forgetting a source removes its descendants from recall while keeping the audit trail.
+- return to Bernried with the same project scope key;
+- explicit “¿qué hablamos de Bernried?” can cross the scope boundary while ordinary mentions cannot;
+- a recalled autobiographical fact cannot generate a duplicate memory without new current-user evidence;
+- a web/tool-tainted turn cannot become a personal fact;
+- a background session cannot create a Claim about Gari;
+- forgetting a source/session invalidates descendants and semantic caches while retaining audit rows.
+
+The acceptance is encoded in `tests/build85-acceptance.test.mjs` and complements the slice-level tests in `tests/build85-exposure.test.mjs`.
 
 ## Non-goals
 
