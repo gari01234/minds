@@ -73,7 +73,7 @@ async function runWatchChecks(sb:any,userId:string,timezone:string){
       .eq("user_id",userId)
   ]);
   checked(watchesQ,"watch_list");checked(channelsQ,"watch_channels");
-  const channels=new Map((channelsQ.data||[]).map((x:any)=>[String(x.id),x]));
+  const channels=new Map<string,any>((channelsQ.data||[]).map((x:any)=>[String(x.id),x] as [string,any]));
   let checkedCount=0,fired=0,errors=0,stale=0,skipped=0;
   const receipts:any[]=[];
 
