@@ -30,7 +30,7 @@ test('Build 87.1 classification is explicit consequence plus reversibility, not 
   assert.ok(migration.includes("'state_change'"));
   assert.ok(migration.includes("'high'::text"));
   assert.ok(migration.includes("'medium'::text"));
-  assert.ok(migration.includes("'low'::text"));
+  assert.ok(migration.includes("else 'low'"));
   assert.ok(migration.includes("'scoring','none'"));
   assert.ok(build.includes('Review debt is measured in transparent pending items and age, not a global opaque score.'));
 });
