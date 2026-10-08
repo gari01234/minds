@@ -1541,3 +1541,20 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .project-model-revision{margin-top:8px;white-space:normal}
   .project-model-grid{grid-template-columns:1fr}
 }
+
+
+/* Build 87.5 — Review Economy */
+.review-economy-panel{display:grid;gap:14px}
+.review-economy-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.review-economy-summary span{display:grid;gap:2px;padding:10px 12px;border:1px solid #ececef;border-radius:13px;font-size:10px;color:#777;background:#fafafb}
+.review-economy-summary b{font-size:16px;color:#171717}
+.review-economy-row,.review-economy-batch{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 0;border-bottom:1px solid #ededf0}
+.review-economy-row .row-main,.review-economy-batch .row-main{min-width:0}
+.review-economy-row b,.review-economy-batch b{display:block;font-size:12px;line-height:1.35}
+.review-economy-row button,.review-economy-batch button{flex:0 0 auto}
+.review-economy-batch{padding:13px;border:1px solid #e6e6e9;border-radius:14px;background:#fafafb}
+.review-economy-context{padding:10px 0;color:#888;line-height:1.45}
+@media(max-width:640px){
+  .review-economy-summary{grid-template-columns:1fr}
+  .review-economy-row,.review-economy-batch{align-items:flex-start}
+}

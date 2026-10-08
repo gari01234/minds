@@ -49,9 +49,23 @@ The goal is not to reduce review by accepting more things automatically. The goa
 - Suppression never applies to permission, Project Claim, Project Variant, operating-rule or other authority-boundary evidence merely because it looks weak.
 - Reissuing a request after the underlying state changes is allowed; suppression is not a permanent rejection.
 
-### 87.5 — Human Surface + acceptance
-- Surface grouped review only when Gari can actually act on it.
-- Acceptance measures reduced manual review burden without increased silent authority.
+### 87.5 — Human Surface + acceptance **Implemented and accepted**
+- “Revisiones” lives under Isabella → Más, not as another top-level product surface.
+- The surface shows actionable individual review, server-declared compatible batches, cheap reversible items that can wait, expiry context and transparent debt counts.
+- A compatible batch reuses the existing `confirmProposals` flow so one explicit human confirmation can apply several already-compatible reversible proposals; each canonical proposal still resolves through its existing reviewed mutation path.
+- Authority-boundary and behavior-rule reviews remain individual.
+- Loading the surface is read-only: it cannot accept, reject, expire or modify any review item.
+- Acceptance requires CI plus a production-baseline check that stale reversible debt can disappear while protected authority/behavior review remains pending.
+
+## Acceptance result
+
+Build 87 is **closed and accepted — 2026-10-08**.
+
+The automated suite passes the Review Economy invariants: compatibility batching reduces N compatible reversible proposals to one explicit human confirmation; authority-boundary review remains individual; admission suppression is narrow and auditable; routing never grants authority; no opaque review score exists.
+
+The production-baseline check used real pending review state rather than fabricated rows. Before the deterministic expiry sweep there were 5 pending review items: 2 stale reversible task proposals eligible for expiry and 3 protected behavior-rule hypotheses. The sweep expired exactly the 2 reversible task proposals with `authority_changed=false`; a subsequent independent query showed 0 stale-expirable items while all 3 protected reviews remained pending. No accepted/edited historical task decision was changed.
+
+Production had no naturally occurring compatible multi-item batch at acceptance time, so batch execution was validated structurally and through the same existing `confirmProposals` reviewed mutation path rather than by inserting synthetic user review debt.
 
 ## Non-goals
 
