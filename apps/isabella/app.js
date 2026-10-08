@@ -1771,9 +1771,12 @@ function bind(){
  const send=async()=>{
    const t=i.value.trim();if(!t&&!pendingChatFiles.length)return;
    const replyTo=pendingReplyTo?{...pendingReplyTo}:null;
-   const files=[...pendingChatFiles];pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();$('#sendButton').disabled=true;attachButton.disabled=true;
-   try{const attachments=files.length?await uploadChatFiles(files):[];await handle(t,attachments,replyTo)}
-   catch(e){say('assistant',e?.message||'No pude enviar el archivo.')}
+   const files=[...pendingChatFiles];$('#sendButton').disabled=true;attachButton.disabled=true;
+   try{
+     const attachments=files.length?await uploadChatFiles(files):[];
+     pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();
+     await handle(t,attachments,replyTo);
+   }catch(e){say('assistant',e?.message||'No pude enviar el archivo.')}
    finally{$('#sendButton').disabled=false;attachButton.disabled=false}
  };
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
