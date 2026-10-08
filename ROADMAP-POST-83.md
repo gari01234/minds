@@ -26,6 +26,8 @@ They must not overwrite each other.
 
 ## Build 84 — Project Model & Evidence Constitution v0.1
 
+Status: implementation closed through 84.5; real Bernried source acceptance deferred until after Build 90 by explicit sequencing decision.
+
 Project regains centrality as the main cognitive object for work. It is not a constitutional primitive and does not replace MINDS-wide entities, but it becomes the scope in which project understanding is maintained.
 
 Introduce a governed Project Model composed from structured elements rather than an opaque prose summary:
@@ -49,6 +51,10 @@ Core rules:
 9. Variants use the same element vocabulary and are compared as diffs; rejected variants remain historical evidence of a rejected path, not admissible current project context.
 
 Acceptance must use Bernried material and real project contradictions, not synthetic MINDS-on-MINDS examples.
+
+The acceptance is intentionally **not** run before Build 90. Gari will start loading the real Bernried corpus into Work / Desktop only after the Human Surface / Lenses redesign is complete. Builds 85–90 may proceed without treating this deferral as a Build 84 failure.
+
+Do not add a temporary Chat-attachment → Work-Source bridge merely to force early acceptance. Conversation attachments and Work Sources remain distinct until a later governed promotion path is deliberately designed.
 
 ### Deliberately not accepted yet
 
