@@ -68,11 +68,26 @@ The snapshot returns:
 
 The tool contract explicitly tells Isabella that her own Model is interpretation, not canonical project truth.
 
+### 84.3 comparison pass
+
+Only after a Source has completed the blind 84.2 extraction may Isabella compare its sourced Claims with the current project Claim baseline.
+
+The comparison pass:
+- fingerprints the whole visible baseline so a changed baseline produces a new comparison receipt;
+- selects a bounded comparison window, preferring shared Referents and relevant terms;
+- records coverage and whether that window was truncated;
+- classifies each sourced Claim as `aligned`, `contradicts`, `modifies`, `adds` or `unclear`;
+- creates only `proposed` Claim relations for aligned / contradiction / modification;
+- never changes Claim status, authority, supersession or the current Project Model revision;
+- uses `aligned` rather than “confirmed” deliberately: evidential agreement is not human confirmation.
+
+A repeated comparison against the same baseline fingerprint is idempotent. Re-comparison after the baseline changes creates a new receipt without rereading or rewriting the Source extraction.
+
 ## Build 84 sequence
 
 84.1 — Evidence schema + read-only Project Model snapshot. **Implemented.**  
 84.2 — Source-first document extraction and Referent resolution. **Implemented for Work files; creates only proposed sourced Claims and working Referents.**  
-84.3 — Model comparison: confirm / contradict / modify / unchanged.  
+84.3 — Model comparison: aligned / contradicts / modifies / adds / unclear. **Implemented.**  
 84.4 — Triggered revision writer + Variants.  
 84.5 — Work inspection surface: what Isabella thinks, why, coverage, change since last revision.  
 84.6 — Bernried acceptance against the real 20-case corpus.
