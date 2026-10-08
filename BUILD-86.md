@@ -30,7 +30,7 @@ A repeating Reminder may re-arm after a recorded firing until `max_triggers` is 
 
 ## Build 86 sequence
 
-### 86.1 — Prospective Memory constitution + deterministic Reminder lifecycle
+### 86.1 — Prospective Memory constitution + deterministic Reminder lifecycle **Implemented**
 - Generalize the existing standing-intent store without creating a second reminder database.
 - Existing conversational Standing Intents become `mode=reminder`, `observation_mode=via_user`, `channel_kind=conversation`.
 - Creation/cancellation become explicit reviewed RPC operations; direct authenticated writes are removed.
