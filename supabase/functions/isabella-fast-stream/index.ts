@@ -24,6 +24,7 @@ function serviceClient(){
   return createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
 }
 function normalize(v:any){return String(v||"").trim().replace(/\s+/g," ").toLowerCase()}
+function validRequestId(v:any){return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(v||"").trim())}
 function fastCreateCandidate(message:string){
   const t=normalize(message);
   if(!t||t.length>320||/[?¿]/.test(t))return false;
@@ -120,6 +121,7 @@ Deno.serve(async(req:Request)=>{
   let body:any={};
   try{body=await req.json()}catch{return new Response("invalid_json",{status:400,headers:cors})}
   const message=String(body?.message||"").trim(),ctx=body?.context||{};
+  const clientRequestId=validRequestId(body?.client_request_id)?String(body.client_request_id).trim():null;
   if(!fastCreateCandidate(message))return new Response(JSON.stringify({fallback:true}),{status:409,headers:{...cors,"Content-Type":"application/json"}});
 
   const started=Date.now();
@@ -196,6 +198,7 @@ REGLAS DE SEGURIDAD:
         }
         let args:any={};try{args=JSON.parse(call.arguments||"{}")}catch{}
         const proposal=proposalFromCall(call.name,args);
+        if(proposal&&clientRequestId)proposal.request_id=clientRequestId;
         if(!proposal?.title||(proposal.kind==="event"&&(!proposal.date||!proposal.time))){
           await finishRun(service,runId,"skipped",started,{transport:"sse",fast_path:true,one_round:true,outcome:"invalid_proposal"});
           send("fallback",{reason:"invalid_proposal"});controller.close();return;
@@ -207,9 +210,10 @@ REGLAS DE SEGURIDAD:
           p_context:permissionContext
         });
         if(recorded.error)throw new Error('No pude registrar la propuesta para revisión.');
-        const permission=await tryContextualTask(uc,proposal,permissionContext);
+        const canonicalProposal=recorded.data?.candidate&&recorded.data.candidate.title?recorded.data.candidate:proposal;
+        const permission=await tryContextualTask(uc,canonicalProposal,permissionContext);
         if(permission.status==='executed'){
-          const text=`Guardé “${proposal.title}”${proposal.date?` para ${proposal.date}`:' sin fecha'} en ${proposal.category}, con el permiso que autorizaste.`;
+          const text=`Guardé “${canonicalProposal.title}”${canonicalProposal.date?` para ${canonicalProposal.date}`:' sin fecha'}${canonicalProposal.category?` en ${canonicalProposal.category}`:''}, con el permiso que autorizaste.`;
           const reply=(ackSent?'Entendido. ':'')+text;
           send('text_delta',{delta:text});
           send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,autonomy_execution:permission.receipt});
@@ -218,10 +222,10 @@ REGLAS DE SEGURIDAD:
           controller.close();return;
         }
         await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:"proposal",tool:call.name});
-        const reply=(ackSent?"Entendido. ":"")+previewText(proposal);
-        send("text_delta",{delta:previewText(proposal)});
+        const reply=(ackSent?"Entendido. ":"")+previewText(canonicalProposal);
+        send("text_delta",{delta:previewText(canonicalProposal)});
         send("status",{phase:"ready",label:"Listo para revisar"});
-        send("result",{reply,proposal,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true});
+        send("result",{reply,proposal:canonicalProposal,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true});
         await finishRun(service,runId,"success",started,{transport:"sse",fast_path:true,one_round:true,tool:call.name,outcome:"proposal"});
         controller.close();
       }catch(e){
