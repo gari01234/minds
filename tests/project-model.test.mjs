@@ -87,3 +87,38 @@ test('Build 84 keeps the real Bernried cognitive-integrity corpus as acceptance 
   const covered=new Set(corpus.cases.flatMap(x=>x.invariants));
   for(const invariant of corpus.invariants)assert.ok(covered.has(invariant));
 });
+
+
+test('Build 84.2 source-first ingestion is idempotent and atomically commits only proposed sourced claims',()=>{
+  const m=read('supabase/migrations/20261008121500_project_source_ingestion_v01.sql');
+  assert.ok(m.includes('create table if not exists public.minds_project_source_ingestions'));
+  assert.ok(m.includes('unique(user_id,project_id,source_kind,source_ref,source_version)'));
+  assert.ok(m.includes('function public.minds_commit_project_source_extraction'));
+  assert.ok(m.includes("'already_indexed'"));
+  assert.ok(m.includes("'proposed',v_conf,'project_source'"));
+  assert.ok(m.includes("'external',null,now()"));
+  assert.ok(m.includes("'source_first',true"));
+  assert.ok(m.includes("'supports','reported'"));
+});
+
+test('Build 84.2 extractor sees only minimal Referent identity before reading a Source',()=>{
+  assert.ok(chat.includes('async function analyzeProjectSource'));
+  assert.ok(chat.includes('known_referents'));
+  assert.ok(chat.includes('Known referents are provided only to resolve identity. They are not claims'));
+  assert.ok(chat.includes('Read the Source before comparing it with any project interpretation.'));
+  assert.ok(chat.includes('Do not diagnose, prioritize, recommend, or infer project truth.'));
+  const start=chat.indexOf('async function analyzeProjectSource');
+  const end=chat.indexOf('async function readWorkFile',start);
+  const block=chat.slice(start,end);
+  assert.ok(!block.includes('minds_project_model_snapshot'));
+  assert.ok(!block.includes('minds_work_claims'));
+});
+
+test('Build 84.2 extraction becomes structured project evidence without confirming it',()=>{
+  assert.ok(chat.includes('name:"analyze_project_source"'));
+  assert.ok(chat.includes('This creates only proposed sourced Claims and working Referents with provenance'));
+  assert.ok(chat.includes('minds_commit_project_source_extraction'));
+  assert.ok(chat.includes('project_source_first_extraction'));
+  assert.ok(chat.includes('accepted_fact:false'));
+  assert.ok(chat.includes('source_first:true'));
+});
