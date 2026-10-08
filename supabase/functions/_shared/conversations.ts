@@ -57,38 +57,76 @@ export async function cleanLegacyConversation(sb:any,apiKey:string,row:any,token
   if(!saved?.length)throw new Error('conversation_lease_lost');
   return {id,changed:id!==old,removed_context_chars:removed,items:rows.length};
 }
-export async function openConversation(sb:any,apiKey:string,row:any,seed:any[]){
+export async function openConversation(sb:any,apiKey:string,row:any,seed:any[],options:any={}){
   const token=crypto.randomUUID();
   if(!checked(await sb.rpc('minds_lock_conversation',{p_id:row.id,p_token:token}),'conversation_lock'))throw new Error('Hay otra respuesta en curso. Espera a que termine e inténtalo de nuevo.');
   try{
     row=checked(await sb.from('conversations').select('id,metadata,app_scope').eq('id',row.id).single(),'conversation_read');
-    const countResult=await sb.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',row.id);
-    if(countResult.error)throw countResult.error;
-    const messageCount=Number(countResult.count||0);
-    const rotationBase=Number(row.metadata?.openai_rotation_message_count||0);
-    const oldId=row.metadata?.openai_conversation_id||null;
+    const scopeKey=String(options?.scopeKey||'global').trim().slice(0,180)||'global';
+    const strictScope=options?.strictScope!==false;
+    let countResult:any;
+    if(strictScope){
+      countResult=await sb.rpc('minds_scoped_message_count',{p_conversation_id:row.id,p_scope_key:scopeKey});
+      if(countResult.error)throw countResult.error;
+    }else{
+      countResult=await sb.from('conversation_messages').select('id',{count:'exact',head:true}).eq('conversation_id',row.id);
+      if(countResult.error)throw countResult.error;
+    }
+    const messageCount=Number(strictScope?countResult.data:(countResult.count||0));
+
+    const states={...(row.metadata?.openai_scope_conversations||{})};
+    const legacyGlobal=scopeKey==='global'&&row.metadata?.openai_conversation_id
+      ?{
+          id:row.metadata.openai_conversation_id,
+          rotation_message_count:Number(row.metadata?.openai_rotation_message_count||0),
+          rotation_at:row.metadata?.openai_rotation_at||null,
+          archive:Array.isArray(row.metadata?.openai_conversation_archive)?row.metadata.openai_conversation_archive:[]
+        }
+      :null;
+    const state=states[scopeKey]||legacyGlobal||{};
+    const rotationBase=Number(state?.rotation_message_count||0);
+    const oldId=state?.id||null;
     const rotate=!!oldId&&messageCount-rotationBase>=ROTATE_EVERY_MESSAGES;
     let id=oldId;
+
     if(!id||rotate){
-      const created=await api(apiKey,endpoint,{metadata:{app:String(row.app_scope),supabase_conversation_id:String(row.id),rotation:rotate?'rolling_window':'initial'}});id=created.id;
-      const items=(seed||[]).filter(m=>m.content&&['user','assistant'].includes(m.role)).slice(-24).map(m=>({type:'message',role:m.role,content:String(m.content)}));
+      const created=await api(apiKey,endpoint,{metadata:{
+        app:String(row.app_scope),
+        supabase_conversation_id:String(row.id),
+        exposure_scope_key:scopeKey,
+        rotation:rotate?'rolling_scope_window':'initial_scope'
+      }});id=created.id;
+      const items=(seed||[])
+        .filter(m=>m.content&&['user','assistant'].includes(m.role))
+        .slice(-24)
+        .map(m=>({type:'message',role:m.role,content:String(m.content)}));
       for(let i=0;i<items.length;i+=20)await api(apiKey,`${endpoint}/${id}/items`,{items:items.slice(i,i+20)});
       const archive=rotate&&oldId
-        ?[...(row.metadata?.openai_conversation_archive||[]),{id:oldId,reason:'rolling_context_window',at:new Date().toISOString(),db_message_count:messageCount}].slice(-20)
-        :(row.metadata?.openai_conversation_archive||[]);
+        ?[...(Array.isArray(state?.archive)?state.archive:[]),{id:oldId,reason:'rolling_scope_window',at:new Date().toISOString(),db_message_count:messageCount,scope_key:scopeKey}].slice(-20)
+        :(Array.isArray(state?.archive)?state.archive:[]);
+      states[scopeKey]={
+        id,
+        rotation_message_count:messageCount,
+        rotation_at:new Date().toISOString(),
+        archive
+      };
       const metadata={
         ...(row.metadata||{}),
-        openai_conversation_id:id,
-        openai_rotation_message_count:messageCount,
-        openai_rotation_at:new Date().toISOString(),
-        openai_conversation_archive:archive,
-        context_policy:'transient_v1'
+        openai_scope_conversations:states,
+        context_policy:'scoped_exposure_v1',
+        exposure_scope_version:1,
+        ...(scopeKey==='global'?{
+          openai_conversation_id:id,
+          openai_rotation_message_count:messageCount,
+          openai_rotation_at:new Date().toISOString(),
+          openai_conversation_archive:archive
+        }:{})
       };
       const saved=checked(await sb.from('conversations').update({metadata}).eq('id',row.id).eq('runtime_lease_token',token).select('id'),'conversation_create_save');
       if(!saved?.length)throw new Error('conversation_lease_lost');
     }
-    // Full history remains in Supabase; the OpenAI conversation is only a bounded working window.
-    return {id,dbId:row.id,dbConversationId:row.id,leaseToken:token,rotated:rotate,messageCount};
+    // Full visible history remains in Supabase. OpenAI persistence is isolated per exposure scope.
+    return {id,dbId:row.id,dbConversationId:row.id,leaseToken:token,rotated:rotate,messageCount,scopeKey};
   }catch(e){await closeConversation(sb,{dbId:row.id,leaseToken:token});throw e;}
 }
 export async function closeConversation(sb:any,conv:any){
