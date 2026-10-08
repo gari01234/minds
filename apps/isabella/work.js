@@ -152,7 +152,7 @@ async function renderPlanner(){
     card.ondragstart=e=>{draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
     card.ondragend=()=>{draggedWorkTaskId=null;card.classList.remove('is-dragging');$$('.work-bucket.is-drop-target').forEach(x=>x.classList.remove('is-drop-target'));setTimeout(()=>{card.dataset.justDragged='0'},120)};
   });
-  $('[data-work-bucket-drop]').forEach(bucket=>{
+  $$('[data-work-bucket-drop]').forEach(bucket=>{
     bucket.ondragover=e=>{
       if(!draggedWorkTaskId)return;
       const task=tasks.find(x=>x.id===draggedWorkTaskId);if(!task)return;
@@ -160,7 +160,7 @@ async function renderPlanner(){
       const targetList=[...bucket.querySelectorAll('[data-work-task-list]')].find(x=>x.dataset.workTaskList===kind);
       if(!targetList)return;
       e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';bucket.classList.add('is-drop-target');
-      const dragged=$('[data-work-task]').find(x=>x.dataset.workTask===draggedWorkTaskId);if(!dragged)return;
+      const dragged=$$('[data-work-task]').find(x=>x.dataset.workTask===draggedWorkTaskId);if(!dragged)return;
       const over=e.target.closest?.('[data-work-task]');
       if(over&&over!==dragged&&over.parentNode===targetList){
         const r=over.getBoundingClientRect();
