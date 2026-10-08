@@ -1466,3 +1466,27 @@ test('Build 69 exposes attention policy, rationale and health without adding ano
   assert.ok(shell.includes('data-action="assistantprefs"'));
   assert.ok(!shell.includes('data-nav="attention"'));
 });
+
+
+test('Build 83.1 storage bucket accepts chat PDFs and common documents without becoming public',()=>{
+  const m=read('supabase/migrations/20261008093000_build83_chat_upload_mime_types.sql');
+  assert.ok(m.includes("where id = 'isabella-uploads'"));
+  assert.ok(m.includes("'application/pdf'"));
+  assert.ok(m.includes("'application/vnd.openxmlformats-officedocument.wordprocessingml.document'"));
+  assert.ok(m.includes('file_size_limit = 12582912'));
+  assert.ok(!m.includes('public = true'));
+});
+
+test('Build 83.1 Work and Calendar persist separate user ordering semantics',()=>{
+  const m=read('supabase/migrations/20261008094500_build83_independent_work_task_order.sql');
+  const work=read('apps/isabella/work.js');
+  const app=read('apps/isabella/app.js');
+  assert.ok(m.includes('add column if not exists work_sort_order integer'));
+  assert.ok(work.includes('work_sort_order'));
+  assert.ok(work.includes('persistWorkTaskOrder'));
+  assert.ok(work.includes("data-work-task-list"));
+  assert.ok(app.includes('commitTaskOrderFromContainer'));
+  assert.ok(app.includes('initTaskDesktopDrag'));
+  assert.ok(app.includes("mutation('task',t.date===before.date?'reorder':'move_date'"));
+  assert.ok(app.includes('sortOrder=nextOrder'));
+});
