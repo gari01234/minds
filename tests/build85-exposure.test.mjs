@@ -51,3 +51,45 @@ test('Build 85.1 project task mutations do not bypass scoped Isabella via the fa
   assert.ok(ai.includes('function messageMentionsKnownProject'));
   assert.ok(ai.includes('!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)'));
 });
+
+
+test('Build 85.2 lexical recall admits only current scope plus global layer by default',()=>{
+  const m=read('supabase/migrations/20261008152500_scoped_recall_v01.sql');
+  assert.ok(m.includes('function public.isabella_recall_scoped'));
+  assert.ok(m.includes("m.exposure_scope_key='global'"));
+  assert.ok(m.includes('m.exposure_scope_key=q.scope_key'));
+  assert.ok(m.includes('cm.exposure_scope_version=1'));
+  assert.ok(m.includes('p_allow_cross_scope and cm.exposure_scope_version=0'));
+  assert.ok(m.includes('source_scope_key'));
+  assert.ok(m.includes('provenance_class'));
+});
+
+test('Build 85.2 legacy conversation embeddings are discarded rather than assigned guessed scope',()=>{
+  const m=read('supabase/migrations/20261008152500_scoped_recall_v01.sql');
+  assert.ok(m.includes("delete from public.isabella_embeddings where source_type='conversation'"));
+  assert.ok(m.includes('isabella_embeddings_scope_idx'));
+  assert.ok(m.includes('function public.isabella_semantic_recall_scoped'));
+});
+
+test('Build 85.2 every material lexical or semantic retrieval leaves an exposure receipt',()=>{
+  const m=read('supabase/migrations/20261008152500_scoped_recall_v01.sql');
+  assert.ok(m.includes('create table if not exists public.minds_exposure_receipts'));
+  assert.ok(m.includes("admitted_reason in ('current_scope','global_layer','explicit_cross_scope','system_layer')"));
+  assert.ok(chat.includes('async function recordExposureReceipts'));
+  assert.ok(chat.includes('"lexical",scopeKey'));
+  assert.ok(chat.includes('"semantic",scopeKey'));
+  assert.ok(chat.includes('query_fingerprint'));
+});
+
+test('Build 85.2 cross-scope recall requires a deterministic explicit memory request',()=>{
+  assert.ok(chat.includes('function explicitMemoryCrossScope'));
+  assert.ok(chat.includes('const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage)'));
+  assert.ok(chat.includes('allow_cross_scope:!!allowCrossScope'));
+  assert.ok(chat.includes('retrieved_is_not_new_memory:true'));
+});
+
+test('Build 85.2 memory sync preserves scope and provenance',()=>{
+  assert.ok(sync.includes("exposure_scope_key:obj?.exposure_scope_key||obj?.metadata?.exposure_scope?.key||'global'"));
+  assert.ok(sync.includes('provenance_class:provenance'));
+  assert.ok(sync.includes("exposure_scope_key:m.exposure_scope_key||'global'"));
+});
