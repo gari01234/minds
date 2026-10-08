@@ -59,6 +59,7 @@ declare
   v_trigger_key text;
   v_elements integer:=0;
   v_variants integer:=0;
+  v_rows integer:=0;
   v_perimeter jsonb:='[]'::jsonb;
 begin
   select * into v_comparison
@@ -146,7 +147,8 @@ begin
   from public.minds_project_referents r
   where r.user_id=p_user_id and r.project_id=v_comparison.project_id and r.status='active'
   on conflict do nothing;
-  get diagnostics v_elements=row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   -- Claim authority is projected, never changed: confirmed -> accepted; proposed/disputed -> inferred.
   insert into public.minds_project_model_elements(
@@ -165,7 +167,8 @@ begin
   where c.user_id=p_user_id and c.project_id=v_comparison.project_id
     and c.status in ('confirmed','proposed','disputed')
   on conflict do nothing;
-  get diagnostics v_elements=v_elements+row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   insert into public.minds_project_model_elements(
     user_id,project_id,revision_id,element_kind,element_ref,role,metadata
@@ -183,7 +186,8 @@ begin
   where r.user_id=p_user_id and r.project_id=v_comparison.project_id
     and r.status in ('proposed','confirmed')
   on conflict do nothing;
-  get diagnostics v_elements=v_elements+row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   -- Open canonical movements survive unrelated source updates because each revision re-projects them.
   insert into public.minds_project_model_elements(
@@ -204,7 +208,8 @@ begin
   where m.user_id=p_user_id and m.project_id=v_comparison.project_id
     and m.status not in ('completed','archived','cancelled','failed','occurred','not_occurred','resolved','rejected')
   on conflict do nothing;
-  get diagnostics v_elements=v_elements+row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   -- Unclear comparison findings and unobserved/illegible perimeter are explicit gaps, not silently resolved.
   insert into public.minds_project_model_elements(
@@ -224,7 +229,8 @@ begin
   where i.user_id=p_user_id and i.project_id=v_comparison.project_id
     and i.comparison_id=v_comparison.id and i.verdict='unclear'
   on conflict do nothing;
-  get diagnostics v_elements=v_elements+row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   insert into public.minds_project_model_elements(
     user_id,project_id,revision_id,element_kind,element_ref,role,metadata
@@ -247,7 +253,8 @@ begin
       or p.coverage in ('missing','unknown')
     )
   on conflict do nothing;
-  get diagnostics v_elements=v_elements+row_count;
+  get diagnostics v_rows=row_count;
+  v_elements:=v_elements+v_rows;
 
   -- Contradictions and modifications remain open alternatives; the writer does not choose a winner.
   insert into public.minds_project_model_variants(
