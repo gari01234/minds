@@ -64,6 +64,8 @@ Do not add a temporary Chat-attachment → Work-Source bridge merely to force ea
 
 ## Build 85 — Exposure & Memory Provenance v0.1
 
+Status: closed through Build 85.5.
+
 Solve context contamination structurally rather than with prompt wording.
 
 1. Conversation history becomes scope-aware by segment; one global chat channel must not make previous Bernried turns automatically condition unrelated personal reasoning.
