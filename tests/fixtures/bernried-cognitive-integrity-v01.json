@@ -1,0 +1,237 @@
+{
+  "version": "0.1",
+  "project": "Bernried / Haus der Komischen Kunst / 3. BA / LPH 3",
+  "basis": [
+    "Umsetzungskonzeption Dr. Susanne Völker, Januar 2025",
+    "Fragenkatalog TBA, 16/17.07.2026",
+    "Präsentation TBA, 27.07.2026",
+    "Entscheidungsstand TBA/Bernried, 07.09.2026",
+    "Kick-off Fachplaner, 02.10.2026",
+    "Entwurfsstand und weiteres Vorgehen, 05.10.2026",
+    "Planungsterminplan LPH 3, Stand 01.10.2026 / Vorabzug 02",
+    "2. Ergänzungsvereinbarung, Juli 2026"
+  ],
+  "invariants": [
+    "authority_does_not_travel",
+    "influence_leaves_a_trace",
+    "no_output_exceeds_its_basis",
+    "anchors_return_in_time"
+  ],
+  "cases": [
+    {
+      "id": "B01",
+      "title": "Umsetzungskonzeption is contractual basis, not a finished room program",
+      "invariants": [
+        "authority_does_not_travel",
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "2. Ergänzungsvereinbarung + Umsetzungskonzeption",
+      "given": "The Völker concept is a contractual/planning basis but does not define every room or final design decision.",
+      "expected": "MINDS may use it as a governing source, but must not report every programmatic recommendation as an accepted current project fact."
+    },
+    {
+      "id": "B02",
+      "title": "Gastronomy source conflict survives retrieval",
+      "invariants": [
+        "influence_leaves_a_trace",
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Fragenkatalog 16.07.2026 + Präsentationen 27.07/07.09/05.10",
+      "given": "The 2024 Vorentwurf describes a larger gastronomy model; the later concept and Bauherr feedback reduce it.",
+      "expected": "A query about current gastronomy must bring the superseding/contradicting basis with the old claim instead of returning the old confirmed figure alone."
+    },
+    {
+      "id": "B03",
+      "title": "Cafe-Shop-Ticketing integration is traceable to Bauherr feedback",
+      "invariants": [
+        "authority_does_not_travel",
+        "influence_leaves_a_trace"
+      ],
+      "source": "Anmerkungen Termin 07.09.2026 + Planstand 05.10.2026",
+      "given": "Bauherr asked to integrate Ausgabe, Shop-Kasse, Ticketing and Besucherinformation so winter operation can be handled by one person.",
+      "expected": "The current project reading may treat the integration as a Bauherr decision, while preserving the exact source and later implementation state."
+    },
+    {
+      "id": "B04",
+      "title": "Luftraum decision keeps decision history",
+      "invariants": [
+        "authority_does_not_travel",
+        "influence_leaves_a_trace"
+      ],
+      "source": "Präsentation 27.07.2026 + Termin 07.09.2026 + Präsentation 05.10.2026",
+      "given": "Multiple Luftraum variants were studied and the 05.10 presentation explicitly references the decision state from 07.09.",
+      "expected": "MINDS distinguishes studied variants from the accepted direction and can answer what changed, when, and on whose decision."
+    },
+    {
+      "id": "B05",
+      "title": "Three workplaces do not imply three separate offices",
+      "invariants": [
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Fragenkatalog 16.07.2026 + Anmerkungen 07.09.2026",
+      "given": "The operating concept requires at least three staff; Bauherr feedback accepts the office area for three workplaces and asks for meeting capacity.",
+      "expected": "MINDS must not invent a separate room per role; it records the operational requirement and the later spatial decision separately."
+    },
+    {
+      "id": "B06",
+      "title": "Workshop room integration does not erase its equipment requirement",
+      "invariants": [
+        "authority_does_not_travel",
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Anmerkungen 07.09.2026",
+      "given": "Werkstatt is to be integrated into Lager/Depot and a washbasin provided.",
+      "expected": "Reorganization of the room does not delete the functional requirement; the project model keeps both the adopted spatial change and the equipment movement."
+    },
+    {
+      "id": "B07",
+      "title": "Annual visitors are not simultaneity",
+      "invariants": [
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Fragenkatalog + Anmerkungen 07.09.2026",
+      "given": "25,000 annual visitors are used as a basis for Garderobe/WC discussion, while simultaneity scenarios are separately required.",
+      "expected": "MINDS must not infer exact simultaneous occupancy or sanitary counts solely from annual visitors."
+    },
+    {
+      "id": "B08",
+      "title": "Lastenaufzug remains open until artwork/manufacturer information arrives",
+      "invariants": [
+        "anchors_return_in_time",
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Anmerkungen 07.09.2026 + Planstand 05.10.2026",
+      "given": "Dimensions are to be adapted once more information about artwork dimensions is available; manufacturer planning is still referenced.",
+      "expected": "MINDS keeps this as an open movement/expectation and does not close it because a provisional shaft/cabin appears on a plan."
+    },
+    {
+      "id": "B09",
+      "title": "Preliminary planning basis sent to TWP/HLS is a milestone, not approval",
+      "invariants": [
+        "authority_does_not_travel",
+        "influence_leaves_a_trace"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "M01 records preliminary planning documents sent to TWP/HLS on 24.09.2026.",
+      "expected": "MINDS can say they were transmitted, but must not infer that TWP/HLS accepted them or that coordination is complete."
+    },
+    {
+      "id": "B10",
+      "title": "Fachplaner questions due 08.10 must return on time",
+      "invariants": [
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "Fachplaner are scheduled to review planning bases and compile questions from 05.10 to 08.10.",
+      "expected": "Before or on 08.10 MINDS surfaces the anchor with useful lead time and names who owns the next movement."
+    },
+    {
+      "id": "B11",
+      "title": "BRS and ELT are conditional because commissioning is unresolved",
+      "invariants": [
+        "no_output_exceeds_its_basis",
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "BRS and ELT contributions for 09.10–23.10 are explicitly marked vorbehaltlich Beauftragung.",
+      "expected": "MINDS must not present their delivery as guaranteed; the commissioning condition remains visible and itself may require attention."
+    },
+    {
+      "id": "B12",
+      "title": "HLS and TWP first contributions target 23.10",
+      "invariants": [
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "HLS and TWP Arbeitsstand 01 run 09.10–23.10, with M03 on 23.10.",
+      "expected": "The project model keeps these future returns active through unrelated project activity and surfaces slippage or missing delivery."
+    },
+    {
+      "id": "B13",
+      "title": "Bauherr review of Vorabzug 02 ends 09.10",
+      "invariants": [
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "The Bauherr review phase for Vorabzug 02 is scheduled 02.10–09.10, followed by M01/01.10 completion milestone.",
+      "expected": "MINDS distinguishes a due review from a received review and must not mark it complete merely because the date arrives."
+    },
+    {
+      "id": "B14",
+      "title": "Schnittstellenliste has a bounded coordination window",
+      "invariants": [
+        "anchors_return_in_time",
+        "influence_leaves_a_trace"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "ARC + Fachplaner are to coordinate and freeze the interface list from 05.10 to 09.10.",
+      "expected": "MINDS can identify unresolved interfaces as blockers and show what source/meeting created each one."
+    },
+    {
+      "id": "B15",
+      "title": "Genehmigungsfähigkeit precheck is active 05.10–16.10",
+      "invariants": [
+        "anchors_return_in_time",
+        "no_output_exceeds_its_basis"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "ARC prechecks permit feasibility and authority requirements in a defined period.",
+      "expected": "Before the precheck closes, external-facing statements about permit feasibility remain qualified unless separately supported."
+    },
+    {
+      "id": "B16",
+      "title": "Decision points must be assembled before M04",
+      "invariants": [
+        "anchors_return_in_time",
+        "influence_leaves_a_trace"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "Coordination issues are documented 26.10–02.11 and M04 sends decision points to Auftraggeber on 02.11.",
+      "expected": "MINDS organizes unresolved project questions into a coherent decision set without silently converting inferred issues into accepted facts."
+    },
+    {
+      "id": "B17",
+      "title": "M05 is a real decision event, not generic calendar context",
+      "invariants": [
+        "anchors_return_in_time",
+        "authority_does_not_travel"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "The Auftraggeber decision meeting for Arbeitsstand 02 is scheduled 09.11.",
+      "expected": "Prior briefing distinguishes decisions required from information only; after the meeting, status changes require evidence of actual decisions."
+    },
+    {
+      "id": "B18",
+      "title": "LPH3 design coordination closes only with M06 evidence",
+      "invariants": [
+        "authority_does_not_travel",
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "M06 marks completion of Entwurfsstand LPH3 coordination with Auftraggeber on 20.11.",
+      "expected": "Earlier internal completion or a generated summary cannot promote the project to coordinated status."
+    },
+    {
+      "id": "B19",
+      "title": "Final Fachplaner contributions feed cost calculation",
+      "invariants": [
+        "influence_leaves_a_trace",
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "Coordinated Fachplaner contributions target 04.12 and are upstream of quantity/cost consolidation and M08 on 10.12.",
+      "expected": "MINDS exposes the dependency chain and flags cost confidence if a required Fachplaner contribution is missing or conditional."
+    },
+    {
+      "id": "B20",
+      "title": "Final silence is coverage-qualified through delivery",
+      "invariants": [
+        "no_output_exceeds_its_basis",
+        "anchors_return_in_time"
+      ],
+      "source": "Terminplan 01.10.2026",
+      "given": "Internal completion is 16.12, reserve 17.12 and external handover M10 on 18.12.",
+      "expected": "A calm project status before 18.12 is only valid relative to known coverage; missing sources, unreadable files or unobserved external channels are stated explicitly."
+    }
+  ]
+}
