@@ -30,7 +30,9 @@ test('Build 86.5 unsupported Watch fails closed and cannot silently become a Rem
   assert.ok(channels.includes("raise exception 'Watch channel verification stale'"));
   assert.ok(channels.includes('Explicit prospective-memory confirmation required'));
   assert.ok(channels.includes("v_mode='watch'"));
-  assert.ok(channels.includes("v_mode='reminder'"));
+  assert.ok(channels.includes("v_mode not in ('reminder','watch')"));
+  assert.ok(channels.includes("v_observation:='via_user'"));
+  assert.ok(channels.includes("v_channel:='conversation'"));
   assert.equal(/v_mode\s*:=\s*'reminder'\s*;/.test(channels),false);
 });
 
