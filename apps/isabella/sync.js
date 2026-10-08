@@ -202,6 +202,14 @@ async function pushState(state,maps){
     const {error}=await sb.from('isabella_events').delete().eq('user_id',user.id).in('client_key',state.deletedEventIds);
     if(error)throw error;
   }
+  const forgottenMemoryKeys=(state.memory||[])
+    .filter(m=>typeof m==='object'&&m.status==='deleted')
+    .map((m,i)=>String(m.id||'memory-'+i))
+    .filter(Boolean);
+  for(const clientKey of forgottenMemoryKeys){
+    const {error}=await sb.rpc('minds_forget_memory',{p_client_key:clientKey});
+    if(error)throw error;
+  }
   const memories=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted').map((m,i)=>{
     const obj=typeof m==='object'?m:null,source=obj?(obj.source||'conversation'):'conversation';
     const provenance=obj?.provenance_class||(['ai_derived','assistant','agent'].includes(source)?'agent':['web','external','project_source'].includes(source)?'external':source==='system'?'system':'owner');
