@@ -17,8 +17,8 @@ document.body.innerHTML = `
         <div id="chatReplyPreview" class="chat-reply-preview hidden"></div>
         <div id="chatAttachmentPreview" class="chat-attachment-preview hidden"></div>
         <div class="composer">
-          <button id="attachButton" class="attach" aria-label="Adjuntar foto">＋</button>
-          <input id="chatImageInput" class="hidden" type="file" accept="image/*" multiple>
+          <button id="attachButton" class="attach" aria-label="Adjuntar archivo">＋</button>
+          <input id="chatImageInput" class="hidden" type="file" accept="image/*,.pdf,.txt,.md,.csv,.json,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.eml" multiple>
           <button id="micButton" class="mic" aria-label="Hablar">⌁</button>
           <textarea id="chatInput" rows="1" placeholder="Escríbele a Isabella..."></textarea>
           <button id="sendButton" class="send" aria-label="Enviar">↑</button>
