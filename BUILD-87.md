@@ -49,9 +49,13 @@ The goal is not to reduce review by accepting more things automatically. The goa
 - Suppression never applies to permission, Project Claim, Project Variant, operating-rule or other authority-boundary evidence merely because it looks weak.
 - Reissuing a request after the underlying state changes is allowed; suppression is not a permanent rejection.
 
-### 87.5 — Human Surface + acceptance
-- Surface grouped review only when Gari can actually act on it.
-- Acceptance measures reduced manual review burden without increased silent authority.
+### 87.5 — Human Surface + acceptance **Implemented; acceptance validation in progress**
+- “Revisiones” lives under Isabella → Más, not as another top-level product surface.
+- The surface shows actionable individual review, server-declared compatible batches, cheap reversible items that can wait, expiry context and transparent debt counts.
+- A compatible batch reuses the existing `confirmProposals` flow so one explicit human confirmation can apply several already-compatible reversible proposals; each canonical proposal still resolves through its existing reviewed mutation path.
+- Authority-boundary and behavior-rule reviews remain individual.
+- Loading the surface is read-only: it cannot accept, reject, expire or modify any review item.
+- Acceptance requires CI plus a production-baseline check that stale reversible debt can disappear while protected authority/behavior review remains pending.
 
 ## Non-goals
 
