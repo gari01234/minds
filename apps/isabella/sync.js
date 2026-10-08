@@ -243,7 +243,19 @@ async function conversationId(){
 async function pushConversation(messages){
   if(!messages.length)return;
   const cid=await conversationId(),now=new Date().toISOString();
-  const rows=messages.map((m,i)=>({user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],metadata:{...(m.metadata&&typeof m.metadata==='object'?m.metadata:{}),app:APP_SCOPE,reaction:m.reaction||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',text:String(m.replyTo.text||'')}:null,sources:Array.isArray(m.sources)?m.sources.slice(0,8):[],attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},created_at:m.at||now}));
+  const rows=messages.map((m,i)=>{
+    const scope=m?.metadata?.exposure_scope&&typeof m.metadata.exposure_scope==='object'?m.metadata.exposure_scope:null;
+    return {
+      user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),
+      role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],
+      exposure_scope_version:scope?.version===1?1:0,
+      exposure_scope_kind:scope?.kind||'global',
+      exposure_scope_ref:scope?.ref?String(scope.ref):null,
+      exposure_scope_key:scope?.key||'legacy',
+      metadata:{...(m.metadata&&typeof m.metadata==='object'?m.metadata:{}),app:APP_SCOPE,reaction:m.reaction||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',text:String(m.replyTo.text||'')}:null,sources:Array.isArray(m.sources)?m.sources.slice(0,8):[],attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},
+      created_at:m.at||now
+    };
+  });
   const {error}=await sb.from('conversation_messages').upsert(rows,{onConflict:'user_id,conversation_id,client_key'});
   if(error)throw error;
   await sb.from('conversations').update({updated_at:now}).eq('id',cid).eq('user_id',user.id).eq('app_scope',APP_SCOPE);
@@ -297,9 +309,12 @@ function mergeConversationMessages(remote=[],local=[]){
 async function pullConversation(){
   const {data,error}=await sb.from('conversations').select('id').eq('user_id',user.id).eq('app_scope',APP_SCOPE).order('updated_at',{ascending:false}).limit(1);
   if(error||!data?.length)return[];
-  const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,metadata,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
+  const {data:msgs,error:me}=await sb.from('conversation_messages').select('client_key,role,content,created_at,metadata,exposure_scope_version,exposure_scope_kind,exposure_scope_ref,exposure_scope_key,provenance_class,conversations!inner(app_scope)').eq('conversations.app_scope',APP_SCOPE).eq('user_id',user.id).eq('conversation_id',data[0].id).order('created_at',{ascending:true});
   if(me)throw me;
-  return (msgs||[]).map(m=>({id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null,replyTo:m.metadata?.reply_to?.id?{id:String(m.metadata.reply_to.id),role:m.metadata.reply_to.role==='assistant'?'assistant':'user',text:String(m.metadata.reply_to.text||'')}:null,metadata:m.metadata||{},sources:Array.isArray(m.metadata?.sources)?m.metadata.sources:[],attachments:Array.isArray(m.metadata?.attachments)?m.metadata.attachments:[],artifacts:Array.isArray(m.metadata?.artifacts)?m.metadata.artifacts:[]}));
+  return (msgs||[]).map(m=>{
+    const scope=m.exposure_scope_version===1?{version:1,kind:m.exposure_scope_kind||'global',ref:m.exposure_scope_ref||null,key:m.exposure_scope_key||'global'}:null;
+    return {id:m.client_key,role:m.role,text:m.content,at:m.created_at,reaction:m.metadata?.reaction||null,replyTo:m.metadata?.reply_to?.id?{id:String(m.metadata.reply_to.id),role:m.metadata.reply_to.role==='assistant'?'assistant':'user',text:String(m.metadata.reply_to.text||'')}:null,metadata:{...(m.metadata||{}),...(scope?{exposure_scope:scope}:{}),provenance_class:m.provenance_class||null},sources:Array.isArray(m.metadata?.sources)?m.metadata.sources:[],attachments:Array.isArray(m.metadata?.attachments)?m.metadata.attachments:[],artifacts:Array.isArray(m.metadata?.artifacts)?m.metadata.artifacts:[]};
+  });
 }
 async function recordProposalFeedback(detail){
   try{
