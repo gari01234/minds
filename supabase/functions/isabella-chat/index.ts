@@ -1002,29 +1002,37 @@ async function semanticRecall(req:Request,query:string,apiKey:string,limit=10,in
     if(!allowCrossScope)memoriesQ=memoriesQ.in("exposure_scope_key",allowedScopes);
 
     let messagesQ=sb.from("conversation_messages")
-      .select("id,content,created_at,role,exposure_scope_version,exposure_scope_key,provenance_class,conversations!inner(app_scope)")
+      .select("id,content,created_at,role,exposure_scope_version,exposure_scope_key,provenance_class,conversations!inner(id,app_scope)")
       .eq("conversations.app_scope","isabella")
       .in("role",["user","assistant"])
       .order("created_at",{ascending:false}).limit(260);
     if(!allowCrossScope)messagesQ=messagesQ.eq("exposure_scope_version",1).eq("exposure_scope_key",scopeKey);
 
-    const [{data:memories},{data:messages},{data:existing}]=await Promise.all([
+    const [{data:memories},{data:messages},{data:existing},{data:tombstones}]=await Promise.all([
       memoriesQ,messagesQ,
-      sb.from("isabella_embeddings").select("source_type,source_id,content,exposure_scope_key,provenance_class").limit(700)
+      sb.from("isabella_embeddings").select("source_type,source_id,content,exposure_scope_key,provenance_class").limit(700),
+      sb.from("minds_memory_forget_tombstones").select("source_kind,source_id").limit(1000)
     ]);
 
+    const forgottenMemories=new Set((tombstones||[]).filter((x:any)=>x.source_kind==="memory").map((x:any)=>String(x.source_id)));
+    const forgottenConversations=new Set((tombstones||[]).filter((x:any)=>x.source_kind==="conversation").map((x:any)=>String(x.source_id)));
     const existingMap=new Map((existing||[]).map((x:any)=>[
       `${x.source_type}:${x.source_id}`,
       `${x.content}\n@@${x.exposure_scope_key||"legacy"}@@${x.provenance_class||"unknown"}`
     ]));
     const docs:any[]=[];
-    for(const m of memories||[])docs.push({
-      source_type:"memory",source_id:String(m.id),content:String(m.content||"").trim(),
-      exposure_scope_key:String(m.exposure_scope_key||"global"),provenance_class:String(m.provenance_class||"owner")
-    });
+    for(const m of memories||[]){
+      if(forgottenMemories.has(String(m.id)))continue;
+      docs.push({
+        source_type:"memory",source_id:String(m.id),content:String(m.content||"").trim(),
+        exposure_scope_key:String(m.exposure_scope_key||"global"),provenance_class:String(m.provenance_class||"owner")
+      });
+    }
     for(const m of messages||[]){
       const legacy=Number(m.exposure_scope_version||0)!==1;
       if(!allowCrossScope&&legacy)continue;
+      const conv:any=Array.isArray(m.conversations)?m.conversations[0]:m.conversations;
+      if(conv?.id&&forgottenConversations.has(String(conv.id)))continue;
       docs.push({
         source_type:"conversation",source_id:String(m.id),content:String(m.content||"").trim(),
         exposure_scope_key:legacy?"legacy":String(m.exposure_scope_key||"global"),
@@ -1149,6 +1157,7 @@ async function recordPersonalModelClaim(req: Request, args: any, provenance:any=
       message_fingerprint:provenance?.message_fingerprint||null,
       exposure_scope_key:provenance?.scope_key||"global",
       run_id:provenance?.run_id||null,
+      conversation_id:provenance?.conversation_id||null,
       at:new Date().toISOString()
     };
     if (existing?.[0]?.id) {
@@ -1200,6 +1209,7 @@ async function updatePersonalModelClaim(req: Request, args: any, provenance:any=
       message_fingerprint:provenance?.message_fingerprint||null,
       exposure_scope_key:provenance?.scope_key||"global",
       run_id:provenance?.run_id||null,
+      conversation_id:provenance?.conversation_id||null,
       at:new Date().toISOString()
     };
     const patch:any = {
@@ -1280,11 +1290,32 @@ async function storeEntityRelation(req: Request, args: any, provenance:any={}) {
 
   const upsertEntity = async (entity_type: string, name: string) => {
     const normalized_name = normalizeEntityName(name);
-    const { data, error } = await sb.from("isabella_entities")
-      .upsert({ user_id:userId, entity_type, name, normalized_name, updated_at:new Date().toISOString() }, { onConflict:"user_id,entity_type,normalized_name" })
-      .select("id,name,entity_type")
-      .single();
-    if (error) throw error;
+    const provenanceMeta={
+      run_id:provenance?.run_id||null,
+      conversation_id:provenance?.conversation_id||null,
+      exposure_scope_key:provenance?.scope_key||"global",
+      user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
+      message_fingerprint:provenance?.message_fingerprint||null
+    };
+    const {data:existing,error:readError}=await sb.from("isabella_entities")
+      .select("id,name,entity_type,metadata")
+      .eq("user_id",userId).eq("entity_type",entity_type).eq("normalized_name",normalized_name)
+      .maybeSingle();
+    if(readError)throw readError;
+    if(existing?.id){
+      const metadata={...(existing.metadata||{}),...provenanceMeta};
+      delete metadata.forgotten_at;delete metadata.forgotten_reason;
+      const {data,error}=await sb.from("isabella_entities")
+        .update({name,metadata,updated_at:new Date().toISOString()})
+        .eq("id",existing.id).eq("user_id",userId)
+        .select("id,name,entity_type").single();
+      if(error)throw error;
+      return data;
+    }
+    const {data,error}=await sb.from("isabella_entities")
+      .insert({user_id:userId,entity_type,name,normalized_name,metadata:provenanceMeta,updated_at:new Date().toISOString()})
+      .select("id,name,entity_type").single();
+    if(error)throw error;
     return data;
   };
 
@@ -1310,7 +1341,8 @@ async function storeEntityRelation(req: Request, args: any, provenance:any={}) {
         user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
         message_fingerprint:provenance?.message_fingerprint||null,
         exposure_scope_key:provenance?.scope_key||"global",
-        run_id:provenance?.run_id||null
+        run_id:provenance?.run_id||null,
+        conversation_id:provenance?.conversation_id||null
       },
       updated_at:new Date().toISOString()
     }).eq("id",existing[0].id).eq("user_id",userId);
@@ -2911,7 +2943,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
             standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
@@ -3317,11 +3349,11 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await compareProjectSource(req,args,apiKey);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="record_personal_model_claim"){
-        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
         const result=await recordPersonalModelClaim(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="update_personal_model_claim"){
-        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
         const result=await updatePersonalModelClaim(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_memory"){
@@ -3331,7 +3363,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await searchCalendar(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
-        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
         const result=await storeEntityRelation(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_information"){
@@ -3341,7 +3373,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           provenance_class:"agent",
           metadata:{
             derived:true,accepted_fact:false,source:"conversation_tool",
-            run_id:run?.id||null,exposure_scope:exposureScope,
+            run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,
             evidence_kind:"current_user_excerpt",
             user_excerpt:memoryGate.user_excerpt,
             message_fingerprint:currentUserMessageFingerprint,

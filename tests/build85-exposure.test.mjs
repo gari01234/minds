@@ -125,3 +125,42 @@ test('Build 85.3 source taint is turn-local and blocks autobiographical promotio
   assert.ok(chat.includes('currentUserEvidenceGate(String(call.name||""),args,effectiveMessage,background,sourceTainted)'));
   assert.ok(chat.includes('status:"blocked_by_memory_provenance"'));
 });
+
+
+test('Build 85.4 records lineage and forget tombstones without deleting audit rows',()=>{
+  const migration=read('supabase/migrations/20261008174000_memory_lineage_forgetting_v01.sql');
+  assert.ok(migration.includes('create table if not exists public.minds_memory_lineage'));
+  assert.ok(migration.includes('create table if not exists public.minds_memory_forget_tombstones'));
+  assert.ok(migration.includes('minds_capture_memory_lineage_trigger'));
+  assert.ok(migration.includes('minds_capture_model_claim_lineage_trigger'));
+  assert.ok(migration.includes('minds_capture_entity_lineage_trigger'));
+  assert.ok(migration.includes('minds_capture_entity_link_lineage_trigger'));
+  assert.ok(migration.includes("set status='archived'"));
+  assert.ok(migration.includes("set status='stale'"));
+  assert.ok(migration.includes("'forgotten_at'"));
+});
+
+test('Build 85.4 forgetting a conversation invalidates descendants and removes recalled embeddings',()=>{
+  const migration=read('supabase/migrations/20261008174000_memory_lineage_forgetting_v01.sql');
+  assert.ok(migration.includes('with recursive affected(kind,id) as'));
+  assert.ok(migration.includes("source_kind='conversation'"));
+  assert.ok(migration.includes('delete from public.isabella_embeddings'));
+  assert.ok(migration.includes('create or replace function public.minds_forget_conversation'));
+  assert.ok(migration.includes('create or replace function public.isabella_recall_scoped'));
+  assert.ok(migration.includes('create or replace function public.isabella_semantic_recall_scoped'));
+});
+
+test('Build 85.4 explicit memory deletion uses the lineage-aware server RPC',()=>{
+  const sync=read('apps/isabella/sync.js');
+  assert.ok(sync.includes("m.status==='deleted'"));
+  assert.ok(sync.includes("sb.rpc('minds_forget_memory'"));
+  assert.ok(sync.includes('p_client_key:clientKey'));
+});
+
+test('Build 85.4 new autobiographical objects carry conversation lineage as well as run lineage',()=>{
+  assert.ok(chat.includes('conversation_id:provenance?.conversation_id||null'));
+  assert.ok(chat.includes('conversation_id:conversationInfo?.dbId||null'));
+  assert.ok(chat.includes('minds_memory_forget_tombstones'));
+  assert.ok(chat.includes('forgottenConversations'));
+  assert.ok(chat.includes('forgottenMemories'));
+});

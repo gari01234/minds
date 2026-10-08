@@ -43,7 +43,7 @@ The product behavior should resemble human contextual memory: Isabella may know 
 - Background sessions cannot create/update personal-model Claims, relations or autobiographical memory.
 - External/network taint remains turn-local and blocks autobiographical promotion.
 
-### 85.4 — Lineage-aware forgetting
+### 85.4 — Lineage-aware forgetting **Implemented**
 - Memory lineage records which source produced which derived memory object.
 - Forgotten sources/sessions are tombstoned.
 - Derived memories and semantic caches from forgotten lineage become inadmissible without deleting historical audit records.
