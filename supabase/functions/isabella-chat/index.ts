@@ -148,9 +148,15 @@ async function persistPresenceTurn(req:Request,conversationId:string,clientKey:s
   const sb=supabaseClient(req);if(!sb)throw new Error("supabase_unavailable");
   const {data:{user},error:authError}=await sb.auth.getUser();if(authError||!user)throw new Error("unauthorized");
   const text=String(content||"").trim();if(!conversationId||!clientKey||!text)throw new Error("presence_turn_invalid");
+  const scope=metadata?.exposure_scope||{version:1,kind:"global",ref:null,key:"global"};
   const row={
     user_id:user.id,conversation_id:conversationId,client_key:clientKey,role,content:text,
-    provisional:false,citations:[],metadata:{app:"isabella",source:"presence",surface:"presence",...metadata}
+    provisional:false,citations:[],
+    exposure_scope_version:Number(scope.version||1),
+    exposure_scope_kind:String(scope.kind||"global"),
+    exposure_scope_ref:scope.ref?String(scope.ref):null,
+    exposure_scope_key:String(scope.key||"global"),
+    metadata:{app:"isabella",source:"presence",surface:"presence",...metadata,exposure_scope:scope}
   };
   const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key"});
   if(error)throw error;
@@ -1252,7 +1258,40 @@ async function touchWorkThread(req:Request,threadId:string){
   }catch{}
 }
 
-async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed: any[], workThread:any=null) {
+async function latestExposureHint(req:Request){
+  try{
+    const sb=supabaseClient(req);if(!sb)return null;
+    const {data:rows,error}=await sb.from("conversation_messages")
+      .select("exposure_scope_kind,exposure_scope_ref,exposure_scope_key,created_at,conversations!inner(app_scope)")
+      .eq("exposure_scope_version",1)
+      .eq("conversations.app_scope","isabella")
+      .in("role",["user","assistant"])
+      .order("created_at",{ascending:false}).limit(1);
+    if(error||!rows?.[0])return null;
+    const row:any=rows[0];
+    if(row.exposure_scope_kind!=="project"||!row.exposure_scope_ref)return {scope_key:row.exposure_scope_key||"global",project:null};
+    const {data:project}=await sb.from("isabella_projects")
+      .select("id,name,client_key").eq("id",row.exposure_scope_ref).eq("archived",false).maybeSingle();
+    return {scope_key:row.exposure_scope_key||("project:"+row.exposure_scope_ref),project:project?.name||null,project_id:project?.id||null};
+  }catch{return null}
+}
+
+async function exposureScopeForTurn(req:Request,route:any,workThread:any=null){
+  if(workThread?.id)return {
+    version:1,kind:"work_thread",ref:String(workThread.id),key:"work_thread:"+String(workThread.id),
+    basis:"explicit_work_thread",project_id:String(workThread.project_id||""),project:workThread.project?.name||null
+  };
+  if(route?.project){
+    const project=await resolveWorkProject(req,String(route.project));
+    if(project?.id)return {
+      version:1,kind:"project",ref:String(project.id),key:"project:"+String(project.id),
+      basis:String(route?.source||"router"),project_id:String(project.id),project:project.name
+    };
+  }
+  return {version:1,kind:"global",ref:null,key:"global",basis:"default_global",project_id:null,project:null};
+}
+
+async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed: any[], workThread:any=null, exposureScope:any=null) {
   const sb = supabaseClient(req);
   if (!sb) throw new Error("supabase_unavailable");
   const { data: authData, error: authError } = await sb.auth.getUser();
@@ -1263,7 +1302,8 @@ async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed:
     const row=checked(await sb.from("conversations")
       .select("id,metadata,app_scope")
       .eq("id",workThread.conversation_id).eq("user_id",userId).eq("app_scope","work_thread").single(),"work_thread_conversation");
-    return {...await openConversation(sb,apiKey,row,seed),workThread};
+    const scopeKey=String(exposureScope?.key||("work_thread:"+String(workThread.id)));
+    return {...await openConversation(sb,apiKey,row,seed,{scopeKey,strictScope:false}),workThread,exposureScope};
   }
 
   let { data: rows } = await sb
@@ -1289,7 +1329,8 @@ async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed:
     row = created;
   }
 
-  return await openConversation(sb,apiKey,row,seed);
+  const scopeKey=String(exposureScope?.key||"global");
+  return {...await openConversation(sb,apiKey,row,seed,{scopeKey,strictScope:true}),exposureScope};
 }
 
 async function resolveWorkProject(req:Request, value:string){
@@ -2072,10 +2113,11 @@ function deterministicRoute(message:string,background:boolean,context:any={}){
   let project=/\bbernried\b/i.test(t)?"Bernried":/\bschwarz\b/i.test(t)?"Schwarz":null;
   const followup=/\b(esto|eso|aquello|lo anterior|el tema|ese proyecto|como antes|continua|acordamos|recuerd\w*)\b/i.test(t);
   if(!project&&followup){
+    const serverHint=String(context?.exposure_hint_project||"").trim();
     const prior=(context.recent_local_conversation||[]).filter((m:any)=>m.role==="user"&&normalizeText(m.content)!==t).slice(-3).reverse();
     const named=prior.map((m:any)=>/\bbernried\b/i.test(m.content)?"Bernried":/\bschwarz\b/i.test(m.content)?"Schwarz":null).find(Boolean);
     const visible=context.work_context?.active?context.work_context.name:null;
-    project=named||(["Bernried","Schwarz"].includes(visible)?visible:null);
+    project=serverHint||named||(["Bernried","Schwarz"].includes(visible)?visible:null);
   }
   const work=!!project||/\b(fachplaner|bauherr|tga|hls|twp|tragwerk|planner|unterlagen|protokoll|planstand|lph|archicad|dwg|grundriss|work-minds)\b/i.test(t);
   const sofia=/\b(sof[ií]a|reading|readings|lectura|autor|autores|highlight|subrayado|teor[ií]a|theory|ensayo|silvestrin|pawson|reinhardt|morris|agnes martin)\b/i.test(t);
