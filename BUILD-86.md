@@ -52,7 +52,7 @@ Implementation note: 86.2 deliberately registers **no fake provider**. The chann
 
 Implementation note: Heartbeat now has the complete receipt → condition → Attention Economy → lifecycle-finalization path. The runtime adapter registry is intentionally empty and Watch channels default to `runtime_supported=false`; therefore production cannot accidentally arm or execute a fake Watch. A future provider must ship both its adapter code and a service-verified channel contract before any Watch can run.
 
-### 86.4 — Human Surface
+### 86.4 — Human Surface **Implemented**
 - “Memoria futura” distinguishes Reminder from Watch.
 - Each Watch says what it observes, when it was last checked, and whether coverage is autonomous / via Gari / unavailable.
 - Cancellation is always explicit.

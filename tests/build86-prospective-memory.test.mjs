@@ -125,3 +125,14 @@ test('Build 86.3 runtime adapter support is explicit and no provider is silently
 test('Build 86.3 Heartbeat includes users whose only live future state is an armed Watch',()=>{
   assert.ok(heartbeatMigration.includes("union select user_id from public.minds_standing_intents where mode='watch' and status in ('armed','fired')"));
 });
+
+
+test('Build 86.4 Future Memory presents Reminder and Watch as different capabilities',()=>{
+  assert.ok(app.includes('Recordatorios por situación'));
+  assert.ok(app.includes('Vigilancias'));
+  assert.ok(app.includes('Recordatorio · visto a través de ti'));
+  assert.ok(app.includes('Vigilancia autónoma'));
+  assert.ok(app.includes("sb.rpc('minds_watch_capabilities')"));
+  assert.ok(app.includes('No hay canales autónomos de observación conectados.'));
+  assert.ok(app.includes('Última comprobación:'));
+});
