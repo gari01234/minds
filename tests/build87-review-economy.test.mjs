@@ -5,6 +5,8 @@ import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 const migration=read('supabase/migrations/20261008224500_review_debt_v01.sql');
+const batching=read('supabase/migrations/20261008232000_review_batching_expiry_v01.sql');
+const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
 const build=read('BUILD-87.md');
 
 test('Build 87.1 review debt is a projection over existing canonical stores',()=>{
@@ -51,4 +53,59 @@ test('Build 87.1 cannot accept reject expire or otherwise mutate review authorit
   assert.equal(/\bdelete\s+from\s+public\./.test(lower),false);
   assert.ok(migration.includes("'authority_changed',false"));
   assert.ok(build.includes('Do not move, accept, reject or expire anything in this slice.'));
+});
+
+
+test('Build 87.2 batching is deterministic and limited to cheap reversible create proposals',()=>{
+  assert.ok(batching.includes('create or replace view public.minds_review_queue_v2'));
+  assert.ok(batching.includes("d.metadata->>'proposal_kind' in ('task','event')"));
+  assert.ok(batching.includes("d.metadata->>'action' in ('create_task','create_event')"));
+  assert.ok(batching.includes("d.consequence='low'"));
+  assert.ok(batching.includes("d.reversibility='high'"));
+  assert.ok(batching.includes("'batch_v1'"));
+  assert.ok(batching.includes("case when coalesce((d.metadata->'context'->>'direct_request')::boolean,false) then 'direct' else 'inferred' end"));
+  assert.ok(batching.includes('create or replace view public.minds_review_batches_v1'));
+  assert.ok(batching.includes('having count(*)>=2'));
+});
+
+test('Build 87.2 batching excludes tainted and recurring proposals',()=>{
+  assert.ok(batching.includes("source_tainted"));
+  assert.ok(batching.includes("recurrence"));
+  assert.ok(build.includes('source-tainted or recurring proposals never batch'));
+});
+
+test('Build 87.2 expires only stale reversible task/event shadow decisions',()=>{
+  assert.ok(batching.includes('function public.minds_expire_review_items'));
+  assert.ok(batching.includes("q.item_kind='shadow_decision'"));
+  assert.ok(batching.includes("q.expiry_policy='stale_reversible_shadow_v1'"));
+  assert.ok(batching.includes("s.status='pending'"));
+  assert.ok(batching.includes("status='expired'"));
+  assert.ok(batching.includes("d.created_at + interval '24 hours'"));
+  assert.ok(batching.includes("d.created_at + interval '7 days'"));
+  assert.ok(batching.includes("((d.metadata->'candidate'->>'date')::date + interval '1 day')"));
+  assert.ok(batching.includes("'authority_changed',false"));
+});
+
+test('Build 87.2 age never expires authority, accepted-rule, project-truth or contradiction reviews',()=>{
+  assert.ok(batching.includes("d.item_kind in ('operating_hypothesis','project_claim','project_variant')"));
+  assert.ok(batching.includes("('permission','permission_change','commitment','work_claim','claim')"));
+  const fn=batching.slice(batching.indexOf('create or replace function public.minds_expire_review_items'));
+  assert.ok(!fn.includes('minds_operating_model_hypotheses'));
+  assert.ok(!fn.includes('minds_work_claims'));
+  assert.ok(!fn.includes('minds_project_model_variants'));
+});
+
+test('Build 87.2 expiry is deterministic heartbeat maintenance, not model authority',()=>{
+  assert.ok(heartbeat.includes('minds_expire_review_items'));
+  assert.ok(heartbeat.includes('review_economy_expiry'));
+  assert.ok(batching.includes("grant execute on function public.minds_expire_review_items(uuid,timestamptz)"));
+  assert.ok(batching.includes('to service_role'));
+});
+
+test('Build 87.2 summary exposes batching and expiry without an opaque score',()=>{
+  assert.ok(batching.includes("'batchable_items'"));
+  assert.ok(batching.includes("'compatible_batches'"));
+  assert.ok(batching.includes("'expirable_items'"));
+  assert.ok(batching.includes("'protected_items'"));
+  assert.ok(batching.includes("'scoring','none'"));
 });
