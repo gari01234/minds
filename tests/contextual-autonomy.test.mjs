@@ -39,9 +39,9 @@ test('Build 70 legacy clients always retain proposals, even with a granted permi
   assert.equal(f.calls.some(c=>c.name==='minds_try_contextual_task'),false);
   assert.equal(f.calls[0].args.p_context.direct_request,false);
 });
-test('Build 70 records evidence first and a confirm result cannot execute or claim success',async()=>{
+test('Build 70 records review admission first and a confirm result cannot execute or claim success',async()=>{
   const f=fastRuntime();const events=await f.run();
-  assert.deepEqual(f.calls.map(x=>x.name),['minds_record_shadow_decision','minds_try_contextual_task']);
+  assert.deepEqual(f.calls.map(x=>x.name),['minds_admit_shadow_decision','minds_try_contextual_task']);
   const r=events.find(e=>e.type==='result');assert.equal(r.proposal.kind,'task');assert.equal(r.autonomy_execution,undefined);assert.match(r.reply,/para que lo revises/);
 });
 test('Build 70 only a database execution receipt removes the review proposal',async()=>{
@@ -89,7 +89,7 @@ test('Build 83 incomplete SSE retries once, while a verified gate refusal can st
 test('Build 83 fast server reuses the client request id for idempotent retries',async()=>{
   const requestId='123e4567-e89b-42d3-a456-426614174000';
   const f=fastRuntime();await f.run('contextual_v1',requestId);
-  const record=f.calls.find(x=>x.name==='minds_record_shadow_decision');
+  const record=f.calls.find(x=>x.name==='minds_admit_shadow_decision');
   assert.equal(record.args.p_request_id,requestId);
 });
 
