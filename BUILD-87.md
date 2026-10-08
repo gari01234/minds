@@ -34,10 +34,12 @@ The goal is not to reduce review by accepting more things automatically. The goa
 - Expiry is executed by the deterministic Heartbeat and leaves an audit receipt in the original shadow decision context.
 - Operating-rule hypotheses, Project Claims, Project Model Variants, permissions, permission changes, commitments and claim-authority proposals are protected from age-based expiry.
 
-### 87.3 — Consequence / reversibility review routing
-- Separate cheap correction from authority-boundary review.
-- Route review through Attention Economy based on consequence, window and dependency.
-- Interruption remains exceptional.
+### 87.3 — Consequence / reversibility review routing **Implemented**
+- Review items are split deterministically into `authority_boundary`, `bounded_change` and `cheap_reversible` lanes.
+- Dependency-blocking review is the only review condition that becomes a hard interruption by itself.
+- Authority-boundary review routes to briefing by default; time-window-closing review routes ambient; cheap reversible review stays silent until a review surface is opened.
+- Review Economy supplies consequence/reversibility/window/dependency facts; the existing Attention Economy still decides the final route.
+- Routing is read-only and cannot accept, reject, edit or expire a review item.
 
 ### 87.4 — Proposal admission / low-value suppression
 - Prevent weak or duplicative proposals from entering review debt in the first place.
