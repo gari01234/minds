@@ -31,7 +31,7 @@ The product behavior should resemble human contextual memory: Isabella may know 
 - OpenAI persistent Conversations are keyed by exposure scope, so a Bernried turn cannot remain latent inside the model context of an unrelated personal turn.
 - New scoped working context never falls back to old mixed local-history injection.
 
-### 85.2 — Scoped lexical + semantic recall and exposure receipts
+### 85.2 — Scoped lexical + semantic recall and exposure receipts **Implemented**
 - Lexical and semantic recall admit current scope plus global durable memory.
 - Cross-scope retrieval requires an explicit memory question or an explicit tool request whose server-side policy permits it.
 - Every retrieved item carries source type, provenance class, scope and verification state.
