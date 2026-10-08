@@ -932,6 +932,16 @@ async function recordExposureReceipts(req:Request,runId:string|null,channel:stri
   }catch{/* Exposure tracing must not break the answer path. */}
 }
 
+function skillLearningSignals(feedback:any[]){
+  const groups=new Map<string,any[]>();
+  for(const x of feedback||[]){
+    const review=x.proposal?._review;if(x.outcome!=="accepted"||!review?.changed_fields?.length)continue;
+    const key=x.proposal.kind+":"+[...review.changed_fields].sort().join(",");
+    const rows=groups.get(key)||[];rows.push({at:x.created_at,kind:x.proposal.kind,changed_fields:review.changed_fields,original:review.original,corrected:x.proposal});groups.set(key,rows);
+  }
+  return [...groups.values()].filter(x=>x.length>=2).map(x=>({occurrences:x.length,evidence:x.slice(-4),instruction:"Repeated reviewed correction: consider proposing a reusable skill only if a general procedure is supported. Never activate it automatically."}));
+}
+
 async function longTermRecall(req:Request,query:string,limit=12,scopeKey="global",allowCrossScope=false,runId:string|null=null){
   try{
     const sb=supabaseClient(req);if(!sb)return [];
