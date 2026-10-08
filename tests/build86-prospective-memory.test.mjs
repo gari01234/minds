@@ -6,6 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 
 const migration=read('supabase/migrations/20261008211500_prospective_memory_v02.sql');
+const channelsMigration=read('supabase/migrations/20261008213500_watch_channel_contracts_v01.sql');
 const chat=read('supabase/functions/isabella-chat/index.ts');
 const app=read('apps/isabella/app.js');
 
@@ -55,4 +56,34 @@ test('Build 86.1 Human Surface exposes coverage instead of implying silent obser
   assert.ok(app.includes('Recordatorio · visto a través de ti'));
   assert.ok(app.includes('No es vigilancia: MINDS detecta la condición cuando reaparece en la conversación.'));
   assert.ok(app.includes('No significan que MINDS esté vigilando una fuente externa.'));
+});
+
+
+test('Build 86.2 true Watch capability is a verified user-scoped channel contract',()=>{
+  assert.ok(channelsMigration.includes('create table if not exists public.minds_watch_channels'));
+  assert.ok(channelsMigration.includes("adapter_kind in ('connector','http','database','internal')"));
+  assert.ok(channelsMigration.includes("observation_mode text not null default 'autonomous'"));
+  assert.ok(channelsMigration.includes("verification_status in ('verified','never','stale','failed')"));
+  assert.ok(channelsMigration.includes('freshness_minutes integer not null'));
+  assert.ok(channelsMigration.includes('unique(user_id,channel_key)'));
+});
+
+test('Build 86.2 cannot arm a Watch from an absent, disabled, unverified or stale channel',()=>{
+  assert.ok(channelsMigration.includes("raise exception 'Watch channel unavailable'"));
+  assert.ok(channelsMigration.includes("raise exception 'Watch channel disabled'"));
+  assert.ok(channelsMigration.includes("raise exception 'Watch channel not verified'"));
+  assert.ok(channelsMigration.includes("raise exception 'Watch channel verification stale'"));
+  assert.ok(channelsMigration.includes("raise exception 'Requested Watch freshness exceeds channel contract'"));
+});
+
+test('Build 86.2 exposes monitoring capability before Isabella may promise a Watch',()=>{
+  assert.ok(channelsMigration.includes('function public.minds_watch_capabilities()'));
+  assert.ok(chat.includes('name:"check_watch_capability"'));
+  assert.ok(chat.includes('no_verified_autonomous_channel'));
+  assert.ok(chat.includes('check_watch_capability ANTES de prometer vigilancia'));
+  assert.ok(chat.includes('watch_unavailable'));
+});
+
+test('Build 86.2 does not seed a fake autonomous provider',()=>{
+  assert.equal(/insert\s+into\s+public\.minds_watch_channels/i.test(channelsMigration),false);
 });

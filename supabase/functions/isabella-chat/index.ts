@@ -594,6 +594,15 @@ const calendarTools = [
   },
   {
     type:"function",
+    name:"check_watch_capability",
+    description:"Check whether MINDS currently has a verified autonomous observation channel capable of supporting a true Watch. Call this before promising to monitor an external condition. If no available channel is returned, do not claim monitoring; offer a contextual Reminder, a dated Expectation, or a Task depending on the user's intent.",
+    strict:false,
+    parameters:{type:"object",properties:{
+      requested_condition:{type:"string",description:"Human-readable condition the user wants MINDS to observe."}
+    },required:["requested_condition"]}
+  },
+  {
+    type:"function",
     name:"create_standing_intent",
     description:"Propose a contextual Reminder for a future conversational situation, rather than a clock time. This is NOT monitoring: MINDS only sees the condition when Gari brings the situation back into conversation. Examples: 'cuando vuelva a hablar de Dachentwässerung, recuérdame X'. Persistent and requires user confirmation.",
     strict:false,
@@ -2258,7 +2267,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   web_search:"allow",read_contextual_autonomy:"allow",
-  search_memory:"allow",search_calendar:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
@@ -2751,6 +2760,7 @@ Para editar, corregir, convertir o transformar un archivo existente, usa search_
 No conviertas automáticamente estas tareas en Ideas. Ideas queda reservado a trabajos persistentes de mayor magnitud.
 Si el usuario pide que Isabella haga algo automáticamente cada día o cada semana, especialmente a una hora concreta, usa create_routine en lugar de convertirlo en tarea o evento. Si dice "recuérdame por aquí", "por el chat" o pide que Isabella le escriba una sola vez en una fecha/hora, usa create_chat_reminder. Ese mensaje puede generarse en el servidor aunque la web esté cerrada. Las notificaciones del sistema operativo solo son necesarias si el usuario quiere además un banner/aviso fuera de la app; no afirmes que son necesarias para que el mensaje aparezca en el chat.
 Si la condición es situacional en vez de temporal —por ejemplo "cuando vuelva a hablar de X, recuérdame Y"— usa create_standing_intent. No inventes una fecha. Esto es un Recordatorio contextual, NO vigilancia: MINDS solo detecta la situación cuando vuelve a aparecer en la conversación. No digas "lo vigilaré" ni "te avisaré si cambia" para esta capacidad.
+Si Gari pide explícitamente "vigila", "monitoriza", "avísame si cambia", "dime cuando ocurra" o equivalente sobre una fuente o condición externa, usa check_watch_capability ANTES de prometer vigilancia. Un Watch requiere un canal autónomo verificado y frescura conocida. Si la herramienta devuelve watch_unavailable, dilo de forma humana y ofrece la alternativa correcta; no conviertas esa falta de canal en una promesa ficticia.
 
 EXPECTATIONS:
 Usa propose_expectation únicamente cuando el usuario quiera que MINDS mantenga pendiente un hecho futuro del mundo con una fecha esperada: otra persona responde, envía un documento, toma una decisión o entrega algo. No es una Task: una Task representa algo que Gari debe hacer. No es un Standing Intent: ese se activa cuando reaparece una situación. No es un Commitment: ese mantiene vivo un objetivo. Si el usuario solo menciona una posibilidad sin pedir seguimiento, no persistas nada.
@@ -3361,6 +3371,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_calendar"){
         const result=await searchCalendar(req,args);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="check_watch_capability"){
+        const sb=supabaseClient(req);
+        const q=sb?await sb.rpc("minds_watch_capabilities"):{data:null,error:{message:"unavailable"}};
+        const channels=Array.isArray(q.data)?q.data:[];
+        const available=channels.filter((x:any)=>x?.available===true);
+        const result=q.error
+          ?{status:"unavailable",monitoring:false,reason:"capability_query_failed"}
+          :available.length
+            ?{status:"available",monitoring:true,requested_condition:String(args?.requested_condition||""),channels:available}
+            :{status:"watch_unavailable",monitoring:false,requested_condition:String(args?.requested_condition||""),channels,reason:"no_verified_autonomous_channel"};
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
         const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
