@@ -873,124 +873,165 @@ async function recallProvenance(sb:any,rows:any[]){
   const memories=rows.filter(x=>x.source_type==="memory"&&x.source_id).map(x=>x.source_id);
   const messages=rows.filter(x=>x.source_type==="conversation"&&x.source_id).map(x=>x.source_id);
   const [mq,cq]=await Promise.all([
-    memories.length?sb.from("isabella_memories").select("id,source,status,metadata").in("id",memories):Promise.resolve({data:[]}),
-    messages.length?sb.from("conversation_messages").select("id,role,metadata").in("id",messages):Promise.resolve({data:[]})
+    memories.length?sb.from("isabella_memories").select("id,source,status,metadata,exposure_scope_key,provenance_class").in("id",memories):Promise.resolve({data:[]}),
+    messages.length?sb.from("conversation_messages").select("id,role,metadata,exposure_scope_version,exposure_scope_key,provenance_class").in("id",messages):Promise.resolve({data:[]})
   ]);
-  // Failed provenance reads remain unknown, never silently upgrade a source.
   const map=new Map([...(mq.data||[]),...(cq.data||[])].map((x:any)=>[String(x.id),x]));
   return rows.map(x=>{
     const source:any=map.get(String(x.source_id));
-    return {...x,provenance:{source_id:x.source_id,source_type:x.source_type,role:source?.role||null,origin:source?.source||null,status:source?.status||null,derived:source?.metadata?.derived===true||source?.role==="assistant",accepted_fact:source?.metadata?.accepted_fact===true,metadata:source?.metadata||{},verification:source?"source_loaded":"unknown"}};
+    const sourceScope=String(x.source_scope_key||source?.exposure_scope_key||(source?.exposure_scope_version===0?"legacy":"global"));
+    const provenanceClass=String(x.provenance_class||source?.provenance_class||(
+      source?.role==="assistant"?"agent":source?.role==="user"?"owner":"unknown"
+    ));
+    return {
+      ...x,
+      source_scope_key:sourceScope,
+      provenance_class:provenanceClass,
+      retrieved:true,
+      provenance:{
+        source_id:x.source_id,source_type:x.source_type,role:source?.role||null,
+        origin:source?.source||null,status:source?.status||null,
+        provenance_class:provenanceClass,source_scope_key:sourceScope,
+        derived:source?.metadata?.derived===true||source?.role==="assistant",
+        accepted_fact:source?.metadata?.accepted_fact===true,
+        metadata:source?.metadata||{},
+        verification:source||["preference","person"].includes(String(x.source_type))?"source_loaded":"unknown"
+      }
+    };
   });
 }
-function skillLearningSignals(feedback:any[]){
-  const groups=new Map<string,any[]>();
-  for(const x of feedback||[]){
-    const review=x.proposal?._review;if(x.outcome!=="accepted"||!review?.changed_fields?.length)continue;
-    const key=x.proposal.kind+":"+[...review.changed_fields].sort().join(",");
-    const rows=groups.get(key)||[];rows.push({at:x.created_at,kind:x.proposal.kind,changed_fields:review.changed_fields,original:review.original,corrected:x.proposal});groups.set(key,rows);
-  }
-  return [...groups.values()].filter(x=>x.length>=2).map(x=>({occurrences:x.length,evidence:x.slice(-4),instruction:"Repeated reviewed correction: consider proposing a reusable skill only if a general procedure is supported. Never activate it automatically."}));
+
+function explicitMemoryCrossScope(message:string){
+  const t=normalizeText(message);
+  return /\b(recuerd|te acuerdas|acu[eé]rdate|recordamos|hablamos|dije|te cont[eé]|mencion[eé]|historial|la vez pasada|anteriormente|qu[eé] hablamos|qu[eé] te dije|what did i tell|do you remember)\w*\b/i.test(t);
 }
-async function longTermRecall(req: Request, query: string, limit=12) {
-  try {
-    const sb = supabaseClient(req);
-    if (!sb) return [];
-    const { data, error } = await sb.rpc("isabella_recall", {
-      p_query: query,
-      p_limit: limit
+
+async function recordExposureReceipts(req:Request,runId:string|null,channel:string,activeScopeKey:string,query:string,rows:any[]){
+  try{
+    if(!rows?.length)return;
+    const service=serviceClient(),sb=supabaseClient(req);if(!service||!sb)return;
+    const {data:{user}}=await sb.auth.getUser();if(!user)return;
+    const queryFingerprint=await sha256Hex(new TextEncoder().encode(normalizeText(query))).catch(()=>null);
+    const payload=rows.slice(0,40).map((x:any)=>{
+      const sourceScope=String(x.source_scope_key||"global");
+      const reason=sourceScope===activeScopeKey?"current_scope":sourceScope==="global"?"global_layer":"explicit_cross_scope";
+      return {
+        user_id:user.id,run_id:runId||null,channel,
+        active_scope_key:activeScopeKey,
+        source_type:String(x.source_type||"unknown"),
+        source_id:String(x.source_id||""),
+        source_scope_key:sourceScope,
+        provenance_class:["owner","agent","external","system"].includes(String(x.provenance_class||""))
+          ?String(x.provenance_class):"unknown",
+        admitted_reason:reason,
+        query_fingerprint:queryFingerprint,
+        metadata:{score:Number(x.score||0),retrieved:true}
+      };
+    }).filter((x:any)=>x.source_id);
+    if(payload.length)await service.from("minds_exposure_receipts").upsert(payload,{onConflict:"user_id,run_id,channel,source_type,source_id",ignoreDuplicates:true});
+  }catch{/* Exposure tracing must not break the answer path. */}
+}
+
+async function longTermRecall(req:Request,query:string,limit=12,scopeKey="global",allowCrossScope=false,runId:string|null=null){
+  try{
+    const sb=supabaseClient(req);if(!sb)return [];
+    const {data,error}=await sb.rpc("isabella_recall_scoped",{
+      p_query:query,p_scope_key:scopeKey,p_allow_cross_scope:!!allowCrossScope,p_limit:limit
     });
-    if (error) return [];
-    return await recallProvenance(sb,(data || []).map((x: any) => ({
-      source_id:x.source_id,
-      source_type: x.source_type,
-      content: x.content,
-      occurred_at: x.occurred_at,
-      score: x.score
+    if(error)return [];
+    const rows=await recallProvenance(sb,(data||[]).map((x:any)=>({
+      source_id:x.source_id,source_type:x.source_type,content:x.content,occurred_at:x.occurred_at,
+      score:x.score,source_scope_key:x.source_scope_key,provenance_class:x.provenance_class
     })));
-  } catch {
-    return [];
-  }
+    await recordExposureReceipts(req,runId,"lexical",scopeKey,query,rows);
+    return rows;
+  }catch{return []}
 }
 
+async function semanticRecall(req:Request,query:string,apiKey:string,limit=10,indexBatch=32,scopeKey="global",allowCrossScope=false,runId:string|null=null){
+  try{
+    const sb=supabaseClient(req);if(!sb)return [];
+    const {data:authData,error:authError}=await sb.auth.getUser();
+    if(authError||!authData?.user?.id)return [];
+    const userId=authData.user.id;
+    const allowedScopes=[...new Set(["global",scopeKey])];
 
+    let memoriesQ=sb.from("isabella_memories")
+      .select("id,content,updated_at,exposure_scope_key,provenance_class")
+      .eq("status","active").order("updated_at",{ascending:false}).limit(160);
+    if(!allowCrossScope)memoriesQ=memoriesQ.in("exposure_scope_key",allowedScopes);
 
-async function semanticRecall(req: Request, query: string, apiKey: string, limit=10, indexBatch=32) {
-  try {
-    const sb = supabaseClient(req);
-    if (!sb) return [];
-    const { data: authData, error: authError } = await sb.auth.getUser();
-    if (authError || !authData?.user?.id) return [];
-    const userId = authData.user.id;
+    let messagesQ=sb.from("conversation_messages")
+      .select("id,content,created_at,role,exposure_scope_version,exposure_scope_key,provenance_class,conversations!inner(app_scope)")
+      .eq("conversations.app_scope","isabella")
+      .in("role",["user","assistant"])
+      .order("created_at",{ascending:false}).limit(260);
+    if(!allowCrossScope)messagesQ=messagesQ.eq("exposure_scope_version",1).eq("exposure_scope_key",scopeKey);
 
-    const [{ data: memories }, { data: messages }, { data: existing }] = await Promise.all([
-      sb.from("isabella_memories")
-        .select("id,content,updated_at")
-        .eq("status","active")
-        .order("updated_at",{ascending:false})
-        .limit(120),
-      sb.from("conversation_messages")
-        .select("id,content,created_at,conversations!inner(app_scope)")
-        .eq("conversations.app_scope","isabella")
-        .order("created_at",{ascending:false})
-        .limit(220),
-      sb.from("isabella_embeddings")
-        .select("source_type,source_id,content")
-        .limit(500)
+    const [{data:memories},{data:messages},{data:existing}]=await Promise.all([
+      memoriesQ,messagesQ,
+      sb.from("isabella_embeddings").select("source_type,source_id,content,exposure_scope_key,provenance_class").limit(700)
     ]);
 
-    const existingMap = new Map((existing || []).map((x:any)=>[`${x.source_type}:${x.source_id}`, x.content]));
-    const docs:any[] = [];
-    for (const m of memories || []) docs.push({ source_type:"memory", source_id:String(m.id), content:String(m.content || "").trim() });
-    for (const m of messages || []) docs.push({ source_type:"conversation", source_id:String(m.id), content:String(m.content || "").trim() });
-
-    const missing = docs.filter(d => d.content && existingMap.get(`${d.source_type}:${d.source_id}`) !== d.content).slice(0,indexBatch);
-    const inputs = [query, ...missing.map(x=>x.content)];
-
-    const er = await fetch("https://api.openai.com/v1/embeddings",{
-      method:"POST",
-      headers:{
-        "Authorization":`Bearer ${apiKey}`,
-        "Content-Type":"application/json"
-      },
-      body:JSON.stringify({
-        model:"text-embedding-3-small",
-        input:inputs
-      })
+    const existingMap=new Map((existing||[]).map((x:any)=>[
+      `${x.source_type}:${x.source_id}`,
+      `${x.content}\n@@${x.exposure_scope_key||"legacy"}@@${x.provenance_class||"unknown"}`
+    ]));
+    const docs:any[]=[];
+    for(const m of memories||[])docs.push({
+      source_type:"memory",source_id:String(m.id),content:String(m.content||"").trim(),
+      exposure_scope_key:String(m.exposure_scope_key||"global"),provenance_class:String(m.provenance_class||"owner")
     });
-    if (!er.ok) return [];
-    const ep = await er.json();
-    await recordUsage(req,"isabella_embedding","text-embedding-3-small",ep?.usage,{indexed:missing.length});
-    const vectors = (ep?.data || []).sort((a:any,b:any)=>a.index-b.index).map((x:any)=>x.embedding);
-    const queryVector = vectors[0];
-    if (!Array.isArray(queryVector)) return [];
-
-    if (missing.length) {
-      const rows = missing.map((d,i)=>({
-        user_id:userId,
-        source_type:d.source_type,
-        source_id:d.source_id,
-        content:d.content,
-        embedding:vectors[i+1],
-        updated_at:new Date().toISOString()
-      })).filter(x=>Array.isArray(x.embedding));
-      if (rows.length) await sb.from("isabella_embeddings").upsert(rows,{onConflict:"user_id,source_type,source_id"});
+    for(const m of messages||[]){
+      const legacy=Number(m.exposure_scope_version||0)!==1;
+      if(!allowCrossScope&&legacy)continue;
+      docs.push({
+        source_type:"conversation",source_id:String(m.id),content:String(m.content||"").trim(),
+        exposure_scope_key:legacy?"legacy":String(m.exposure_scope_key||"global"),
+        provenance_class:String(m.provenance_class||(m.role==="assistant"?"agent":"owner"))
+      });
     }
 
-    const { data, error } = await sb.rpc("isabella_semantic_recall", {
-      p_embedding: queryVector,
-      p_limit: limit
+    const missing=docs.filter(d=>{
+      if(!d.content)return false;
+      const signature=`${d.content}\n@@${d.exposure_scope_key}@@${d.provenance_class}`;
+      return existingMap.get(`${d.source_type}:${d.source_id}`)!==signature;
+    }).slice(0,indexBatch);
+    const inputs=[query,...missing.map(x=>x.content)];
+
+    const er=await fetch("https://api.openai.com/v1/embeddings",{
+      method:"POST",
+      headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
+      body:JSON.stringify({model:"text-embedding-3-small",input:inputs})
     });
-    if (error) return [];
-    return await recallProvenance(sb,(data || []).filter((x:any)=>Number(x.score) > 0.20).map((x:any)=>({
-      source_id:x.source_id,
-      source_type:x.source_type,
-      content:x.content,
-      score:x.score
+    if(!er.ok)return [];
+    const ep=await er.json();
+    await recordUsage(req,"isabella_embedding","text-embedding-3-small",ep?.usage,{
+      indexed:missing.length,scope_key:scopeKey,allow_cross_scope:!!allowCrossScope
+    });
+    const vectors=(ep?.data||[]).sort((a:any,b:any)=>a.index-b.index).map((x:any)=>x.embedding);
+    const queryVector=vectors[0];if(!Array.isArray(queryVector))return [];
+
+    if(missing.length){
+      const rows=missing.map((d,i)=>({
+        user_id:userId,source_type:d.source_type,source_id:d.source_id,content:d.content,
+        exposure_scope_key:d.exposure_scope_key,provenance_class:d.provenance_class,
+        embedding:vectors[i+1],updated_at:new Date().toISOString()
+      })).filter(x=>Array.isArray(x.embedding));
+      if(rows.length)await sb.from("isabella_embeddings").upsert(rows,{onConflict:"user_id,source_type,source_id"});
+    }
+
+    const {data,error}=await sb.rpc("isabella_semantic_recall_scoped",{
+      p_embedding:queryVector,p_scope_key:scopeKey,p_allow_cross_scope:!!allowCrossScope,p_limit:limit
+    });
+    if(error)return [];
+    const rows=await recallProvenance(sb,(data||[]).filter((x:any)=>Number(x.score)>0.20).map((x:any)=>({
+      source_id:x.source_id,source_type:x.source_type,content:x.content,score:x.score,
+      source_scope_key:x.source_scope_key,provenance_class:x.provenance_class
     })));
-  } catch {
-    return [];
-  }
+    await recordExposureReceipts(req,runId,"semantic",scopeKey,query,rows);
+    return rows;
+  }catch{return []}
 }
 
 
