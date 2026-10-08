@@ -69,8 +69,7 @@ create table if not exists public.minds_exposure_receipts (
 );
 
 create unique index if not exists minds_exposure_receipts_run_source_uidx
-  on public.minds_exposure_receipts(user_id,run_id,channel,source_type,source_id)
-  where run_id is not null;
+  on public.minds_exposure_receipts(user_id,run_id,channel,source_type,source_id);
 
 create index if not exists minds_exposure_receipts_user_idx
   on public.minds_exposure_receipts(user_id,created_at desc);
