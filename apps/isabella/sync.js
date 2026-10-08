@@ -202,7 +202,11 @@ async function pushState(state,maps){
     const {error}=await sb.from('isabella_events').delete().eq('user_id',user.id).in('client_key',state.deletedEventIds);
     if(error)throw error;
   }
-  const memories=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted').map((m,i)=>({user_id:user.id,client_key:typeof m==='object'?(m.id||'memory-'+i):'memory-'+i,kind:typeof m==='object'?normalizeMemoryKind(m.kind):'context',subject:typeof m==='object'?(m.subject||null):null,content:typeof m==='object'?(m.content||''):String(m),status:typeof m==='object'&&['active','corrected','rejected','archived'].includes(String(m.status||''))?m.status:'active',confidence:Math.max(0,Math.min(1,Number(typeof m==='object'?(m.confidence??1):1))),source:typeof m==='object'?(m.source||'conversation'):'conversation',metadata:typeof m==='object'?(m.metadata||{}):{}})).filter(x=>x.content);
+  const memories=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted').map((m,i)=>{
+    const obj=typeof m==='object'?m:null,source=obj?(obj.source||'conversation'):'conversation';
+    const provenance=obj?.provenance_class||(['ai_derived','assistant','agent'].includes(source)?'agent':['web','external','project_source'].includes(source)?'external':source==='system'?'system':'owner');
+    return {user_id:user.id,client_key:obj?(obj.id||'memory-'+i):'memory-'+i,kind:obj?normalizeMemoryKind(obj.kind):'context',subject:obj?(obj.subject||null):null,content:obj?(obj.content||''):String(m),status:obj&&['active','corrected','rejected','archived'].includes(String(obj.status||''))?obj.status:'active',confidence:Math.max(0,Math.min(1,Number(obj?(obj.confidence??1):1))),source,exposure_scope_key:obj?.exposure_scope_key||obj?.metadata?.exposure_scope?.key||'global',provenance_class:provenance,metadata:obj?(obj.metadata||{}):{}};
+  }).filter(x=>x.content);
   if(memories.length){
     const {error}=await sb.from('isabella_memories').upsert(memories,{onConflict:'user_id,client_key'});
     if(error)throw error;
@@ -274,7 +278,7 @@ async function pullState(local,maps){
   const deletedEventIds=new Set(local.deletedEventIds||[]);
   const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>({id:t.client_key||t.id,title:t.title,date:t.due_date||null,done:!!t.completed_at,completedAt:t.completed_at||null,archivedAt:t.archived_at||null,sortOrder:Number(t.sort_order||0),reminderTime:t.due_date&&t.reminder_time?String(t.reminder_time).slice(0,5):null,categoryId:catKey.get(t.category_id)||'personal',projectId:projKey.get(t.project_id)||null,priority:t.priority||'normal',recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},updatedAt:t.updated_at||null}));
   const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updatedAt:e.updated_at||null}});
-  const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,metadata:m.metadata||{}}));
+  const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,exposure_scope_key:m.exposure_scope_key||'global',provenance_class:m.provenance_class||'owner',metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
   const mergedMessages=mergeConversationMessages(remoteMessages,local.messages||[]);
   const freshest=mergePulledEntityState(remoteTasks,remoteEvents,app.getState(),local);
