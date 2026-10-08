@@ -1516,3 +1516,28 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
   .work-bucket-scroll{flex:none!important;min-height:0!important;max-height:none!important;overflow:visible!important}
   .work-task-list{min-height:1px}
 }
+
+
+/* Build 84.5 — Project Model inspection inside Work / Conocimiento */
+.project-model-panel{
+  margin:0 0 18px;padding:18px;border:1px solid #e8e8eb;border-radius:18px;background:#fafafb
+}
+.project-model-head{display:flex;justify-content:space-between;gap:18px;align-items:flex-start;margin-bottom:14px}
+.project-model-head b{font-size:15px}
+.project-model-head p{margin:4px 0 0}
+.project-model-revision{font-size:10px;color:#8b8b90;white-space:nowrap}
+.project-model-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.project-model-grid article{background:#fff;border:1px solid #ececef;border-radius:14px;padding:12px;min-width:0}
+.project-model-grid article>strong{display:block;font-size:11px;margin-bottom:8px}
+.project-model-grid article p{font-size:11px;line-height:1.35;margin:7px 0;overflow-wrap:anywhere}
+.model-badge{display:inline-block;font-size:8px;letter-spacing:.02em;text-transform:uppercase;border:1px solid #e2e2e5;border-radius:999px;padding:2px 5px;color:#777}
+.model-badge.attention{border-color:#cfcfd4;color:#333}
+.project-model-inspect{margin-top:12px;border-top:1px solid #e7e7ea;padding-top:10px}
+.project-model-inspect summary{cursor:pointer;font-size:10px;font-weight:650}
+.project-model-perimeter{margin-top:8px;display:grid;gap:4px}
+.project-model-perimeter p{margin:0;font-size:9px;color:#777;line-height:1.35}
+@media(max-width:800px){
+  .project-model-head{display:block}
+  .project-model-revision{margin-top:8px;white-space:normal}
+  .project-model-grid{grid-template-columns:1fr}
+}
