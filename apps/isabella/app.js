@@ -2835,17 +2835,17 @@ async function standingIntentsPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Memoria futura','<div class="small">Conecta la memoria para verla.</div>');return}
   modal('Memoria futura','<div class="small">Cargando…</div>');
   try{
-    const [expectQ,intentQ]=await Promise.all([
+    const [expectQ,intentQ,channelQ]=await Promise.all([
       sb.from('minds_expectations')
         .select('id,title,expected_event,expectation_type,due_at,due_precision,timezone,status,fulfilled_at,not_occurred_at,cancelled_at,project_id,created_at,isabella_projects(name)')
-        .order('due_at',{ascending:true})
-        .limit(100),
+        .order('due_at',{ascending:true}).limit(100),
       sb.from('minds_standing_intents')
-        .select('id,mode,observation_mode,channel_kind,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,cancelled_at,expired_at,project_id,isabella_projects(name)')
-        .order('created_at',{ascending:false})
+        .select('id,mode,observation_mode,channel_kind,channel_ref,freshness_minutes,last_checked_at,last_observed_at,trigger_text,reminder_text,status,cooldown_minutes,max_triggers,trigger_count,last_trigger_at,expires_at,cancelled_at,expired_at,project_id,isabella_projects(name)')
+        .order('created_at',{ascending:false}),
+      sb.rpc('minds_watch_capabilities')
     ]);
     if(expectQ.error)throw expectQ.error;if(intentQ.error)throw intentQ.error;
-    const expectations=expectQ.data||[],intents=intentQ.data||[];
+    const expectations=expectQ.data||[],intents=intentQ.data||[],channels=channelQ.error?[]:(channelQ.data||[]);
     const open=expectations.filter(x=>['active','due_unconfirmed'].includes(x.status));
     const closed=expectations.filter(x=>!['active','due_unconfirmed'].includes(x.status)).sort((a,b)=>new Date(b.due_at)-new Date(a.due_at));
 
@@ -2860,19 +2860,34 @@ async function standingIntentsPanel(){
     const openHtml=open.length?open.map(expectationCard).join(''):'<div class="small">No hay expectativas abiertas.</div>';
     const historyHtml=closed.length?`<details class="human-tech"><summary>Historial de expectativas (${closed.length})</summary>${closed.slice(0,40).map(x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>${esc(x.title)}</b><div>${esc(x.expected_event)}</div><div class="small">${esc(expectationStateLabel(x.status))} · ${esc(expectationDueLabel(x))}</div></div></div>`).join('')}</details>`:'';
 
-    const liveIntents=intents.filter(x=>!['cancelled','done','expired'].includes(x.status));
-    const historyIntents=intents.filter(x=>['cancelled','done','expired'].includes(x.status));
-    const reminderCard=x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}Recordatorio · visto a través de ti · ${esc(x.status)} · ${x.trigger_count||0}/${x.max_triggers||3} activaciones${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div><div class="small">No es vigilancia: MINDS detecta la condición cuando reaparece en la conversación.</div></div>${['pending','armed','fired'].includes(x.status)?`<button data-intent-cancel="${x.id}">Cancelar</button>`:''}</div>`;
-    const intentHtml=liveIntents.length?liveIntents.map(reminderCard).join(''):'<div class="small">No hay recordatorios contextuales activos.</div>';
-    const intentHistoryHtml=historyIntents.length?`<details class="human-tech"><summary>Historial de recordatorios (${historyIntents.length})</summary>${historyIntents.slice(0,40).map(reminderCard).join('')}</details>`:'';
+    const reminders=intents.filter(x=>(x.mode||'reminder')==='reminder');
+    const watches=intents.filter(x=>x.mode==='watch');
+    const liveReminders=reminders.filter(x=>!['cancelled','done','expired'].includes(x.status));
+    const historyReminders=reminders.filter(x=>['cancelled','done','expired'].includes(x.status));
+    const liveWatches=watches.filter(x=>!['cancelled','done','expired'].includes(x.status));
+    const historyWatches=watches.filter(x=>['cancelled','done','expired'].includes(x.status));
 
-    modal('Memoria futura',`<div class="small section-label">Expectativas con fecha</div><div class="small" style="margin-bottom:12px">Cosas del mundo que esperas que ocurran. Una fecha vencida sin evidencia queda pendiente de comprobar, no se considera un fallo.</div>${openHtml}${historyHtml}<div class="small section-label" style="margin-top:22px">Recordatorios por situación</div><div class="small" style="margin-bottom:12px">Se activan cuando reaparece una situación en la conversación. No significan que MINDS esté vigilando una fuente externa.</div>${intentHtml}${intentHistoryHtml}`);
+    const cancelButton=x=>['pending','armed','fired'].includes(x.status)?`<button data-intent-cancel="${x.id}">Cancelar</button>`:'';
+    const reminderCard=x=>`<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Cuando: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}Recordatorio · visto a través de ti · ${esc(x.status)} · ${x.trigger_count||0}/${x.max_triggers||3} activaciones${x.expires_at?' · caduca '+new Date(x.expires_at).toLocaleDateString('es-ES'):''}</div><div class="small">No es vigilancia: MINDS detecta la condición cuando reaparece en la conversación.</div></div>${cancelButton(x)}</div>`;
+    const watchCard=x=>{
+      const last=x.last_checked_at?new Date(x.last_checked_at).toLocaleString('es-ES'):'todavía no comprobado';
+      const observed=x.last_observed_at?' · última observación '+new Date(x.last_observed_at).toLocaleString('es-ES'):'';
+      return `<div class="intent-row ${esc(x.status)}"><div class="row-main"><b>Vigilar: ${esc(x.trigger_text)}</b><div>${esc(x.reminder_text)}</div><div class="small">${x.isabella_projects?.name?esc(x.isabella_projects.name)+' · ':''}Vigilancia autónoma · canal ${esc(x.channel_kind||'—')} · frescura ${Number(x.freshness_minutes||0)} min · ${esc(x.status)}</div><div class="small">Última comprobación: ${esc(last)}${esc(observed)}</div></div>${cancelButton(x)}</div>`;
+    const reminderHtml=liveReminders.length?liveReminders.map(reminderCard).join(''):'<div class="small">No hay recordatorios contextuales activos.</div>';
+    const reminderHistory=historyReminders.length?`<details class="human-tech"><summary>Historial de recordatorios (${historyReminders.length})</summary>${historyReminders.slice(0,40).map(reminderCard).join('')}</details>`:'';
+    const watchHtml=liveWatches.length?liveWatches.map(watchCard).join(''):'<div class="small">No hay vigilancias activas.</div>';
+    const watchHistory=historyWatches.length?`<details class="human-tech"><summary>Historial de vigilancias (${historyWatches.length})</summary>${historyWatches.slice(0,40).map(watchCard).join('')}</details>`:'';
+    const channelHtml=channels.length
+      ?`<details class="human-tech"><summary>Canales de observación (${channels.length})</summary>${channels.map(x=>`<div class="small"><b>${esc(x.label||x.channel_key)}</b> · ${x.available?'disponible':'no disponible'} · frescura ${Number(x.freshness_minutes||0)} min · ${esc(x.reason||'')}</div>`).join('')}</details>`
+      :'<div class="small">No hay canales autónomos de observación conectados. Isabella no afirmará que está vigilando fuentes externas hasta que exista uno.</div>';
+
+    modal('Memoria futura',`<div class="small section-label">Expectativas con fecha</div><div class="small" style="margin-bottom:12px">Cosas del mundo que esperas que ocurran. Una fecha vencida sin evidencia queda pendiente de comprobar, no se considera un fallo.</div>${openHtml}${historyHtml}<div class="small section-label" style="margin-top:22px">Recordatorios por situación</div><div class="small" style="margin-bottom:12px">Se activan cuando reaparece una situación en la conversación. No significan que MINDS esté vigilando una fuente externa.</div>${reminderHtml}${reminderHistory}<div class="small section-label" style="margin-top:22px">Vigilancias</div><div class="small" style="margin-bottom:12px">Solo existen cuando MINDS tiene un canal autónomo verificado, con frescura conocida y una condición concreta.</div>${watchHtml}${watchHistory}${channelHtml}`);
 
     document.querySelectorAll('[data-expectation-review]').forEach(b=>b.onclick=()=>void reviewExpectation(b.dataset.expectationReview,b.dataset.expectationDecision));
     document.querySelectorAll('[data-expectation-reschedule]').forEach(b=>b.onclick=()=>{const row=expectations.find(x=>x.id===b.dataset.expectationReschedule);if(row)rescheduleExpectation(row)});
     document.querySelectorAll('[data-intent-cancel]').forEach(b=>b.onclick=async()=>{
       const {error}=await sb.rpc('minds_cancel_prospective_memory',{p_id:b.dataset.intentCancel,p_confirmed:true});
-      if(error)say('assistant','No pude cancelar ese recordatorio: '+error.message);
+      if(error)say('assistant','No pude cancelar ese elemento de memoria futura: '+error.message);
       await standingIntentsPanel();
     });
   }catch{modal('Memoria futura','<div class="small">No pude cargarla ahora mismo.</div>')}
