@@ -37,7 +37,7 @@ The product behavior should resemble human contextual memory: Isabella may know 
 - Every retrieved item carries source type, provenance class, scope and verification state.
 - Every material retrieval can be reconstructed through an exposure receipt tied to the agent run.
 
-### 85.3 — Recall-loop prevention + session gates
+### 85.3 — Recall-loop prevention + session gates **Implemented**
 - `remember_information` can only create a durable candidate when it cites an exact excerpt from the **current user message**.
 - Retrieved memory cannot be re-extracted merely because the model saw it again.
 - Background sessions cannot create/update personal-model Claims, relations or autobiographical memory.
