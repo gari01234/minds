@@ -29,7 +29,7 @@ create table if not exists public.minds_project_source_comparison_items (
   comparison_id uuid not null references public.minds_project_source_comparisons(id) on delete cascade,
   source_claim_id uuid not null references public.minds_work_claims(id) on delete cascade,
   target_claim_id uuid null references public.minds_work_claims(id) on delete set null,
-  verdict text not null check (verdict in ('confirms','contradicts','modifies','adds','unclear')),
+  verdict text not null check (verdict in ('aligned','contradicts','modifies','adds','unclear')),
   confidence numeric not null default 0.7 check (confidence>=0 and confidence<=1),
   rationale text null check (rationale is null or length(rationale)<=1600),
   relation_id uuid null references public.minds_work_claim_relations(id) on delete set null,
@@ -159,10 +159,10 @@ begin
     ) then v_target:=null; end if;
 
     v_verdict:=lower(trim(coalesce(v_item->>'verdict','unclear')));
-    if v_verdict not in ('confirms','contradicts','modifies','adds','unclear') then
+    if v_verdict not in ('aligned','contradicts','modifies','adds','unclear') then
       v_verdict:='unclear';
     end if;
-    if v_target is null and v_verdict in ('confirms','contradicts','modifies') then
+    if v_target is null and v_verdict in ('aligned','contradicts','modifies') then
       v_verdict:='unclear';
     end if;
 
@@ -171,7 +171,7 @@ begin
     v_rationale:=nullif(left(trim(coalesce(v_item->>'rationale','')),1600),'');
 
     v_relation:=case v_verdict
-      when 'confirms' then 'supports'
+      when 'aligned' then 'supports'
       when 'contradicts' then 'contradicts'
       when 'modifies' then 'qualifies'
       else null
