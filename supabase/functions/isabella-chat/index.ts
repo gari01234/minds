@@ -148,9 +148,15 @@ async function persistPresenceTurn(req:Request,conversationId:string,clientKey:s
   const sb=supabaseClient(req);if(!sb)throw new Error("supabase_unavailable");
   const {data:{user},error:authError}=await sb.auth.getUser();if(authError||!user)throw new Error("unauthorized");
   const text=String(content||"").trim();if(!conversationId||!clientKey||!text)throw new Error("presence_turn_invalid");
+  const scope=metadata?.exposure_scope||{version:1,kind:"global",ref:null,key:"global"};
   const row={
     user_id:user.id,conversation_id:conversationId,client_key:clientKey,role,content:text,
-    provisional:false,citations:[],metadata:{app:"isabella",source:"presence",surface:"presence",...metadata}
+    provisional:false,citations:[],
+    exposure_scope_version:Number(scope.version||1),
+    exposure_scope_kind:String(scope.kind||"global"),
+    exposure_scope_ref:scope.ref?String(scope.ref):null,
+    exposure_scope_key:String(scope.key||"global"),
+    metadata:{app:"isabella",source:"presence",surface:"presence",...metadata,exposure_scope:scope}
   };
   const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key"});
   if(error)throw error;
@@ -805,7 +811,7 @@ async function loadChatAttachments(req: Request, raw: any[]) {
   return out;
 }
 
-async function recentConversation(req: Request, currentMessage: string, conversationId:string|null=null) {
+async function recentConversation(req: Request, currentMessage: string, conversationId:string|null=null, scopeKey="global", strictScope=true) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return [];
@@ -822,18 +828,32 @@ async function recentConversation(req: Request, currentMessage: string, conversa
       cid=convs[0].id;
     }
 
-    const { data: messages, error: mErr } = await sb
-      .from("conversation_messages")
-      .select("role,content,created_at")
-      .eq("conversation_id", cid)
-      .order("created_at", { ascending: false })
-      .limit(14);
-    if (mErr) return [];
+    let messages:any[]=[];
+    if(strictScope){
+      const {data,error}=await sb.rpc("minds_recent_scoped_messages",{
+        p_conversation_id:cid,p_scope_key:String(scopeKey||"global"),p_limit:24
+      });
+      if(error)return [];
+      messages=data||[];
+    }else{
+      const { data, error } = await sb
+        .from("conversation_messages")
+        .select("id,role,content,created_at,metadata,provenance_class")
+        .eq("conversation_id", cid)
+        .order("created_at", { ascending: false })
+        .limit(24);
+      if(error)return [];
+      messages=data||[];
+    }
 
-    const chronological = (messages || []).reverse().map((m: any) => ({
+    const chronological = messages.reverse().map((m: any) => ({
+      id:m.id,
       role: m.role,
       content: m.content,
-      created_at: m.created_at
+      created_at: m.created_at,
+      metadata:m.metadata||{},
+      provenance_class:m.provenance_class||null,
+      exposure_scope_key:strictScope?String(m.exposure_scope_key||scopeKey):String(scopeKey)
     }));
 
     if (
@@ -1238,7 +1258,40 @@ async function touchWorkThread(req:Request,threadId:string){
   }catch{}
 }
 
-async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed: any[], workThread:any=null) {
+async function latestExposureHint(req:Request){
+  try{
+    const sb=supabaseClient(req);if(!sb)return null;
+    const {data:rows,error}=await sb.from("conversation_messages")
+      .select("exposure_scope_kind,exposure_scope_ref,exposure_scope_key,created_at,conversations!inner(app_scope)")
+      .eq("exposure_scope_version",1)
+      .eq("conversations.app_scope","isabella")
+      .in("role",["user","assistant"])
+      .order("created_at",{ascending:false}).limit(1);
+    if(error||!rows?.[0])return null;
+    const row:any=rows[0];
+    if(row.exposure_scope_kind!=="project"||!row.exposure_scope_ref)return {scope_key:row.exposure_scope_key||"global",project:null};
+    const {data:project}=await sb.from("isabella_projects")
+      .select("id,name,client_key").eq("id",row.exposure_scope_ref).eq("archived",false).maybeSingle();
+    return {scope_key:row.exposure_scope_key||("project:"+row.exposure_scope_ref),project:project?.name||null,project_id:project?.id||null};
+  }catch{return null}
+}
+
+async function exposureScopeForTurn(req:Request,route:any,workThread:any=null){
+  if(workThread?.id)return {
+    version:1,kind:"work_thread",ref:String(workThread.id),key:"work_thread:"+String(workThread.id),
+    basis:"explicit_work_thread",project_id:String(workThread.project_id||""),project:workThread.project?.name||null
+  };
+  if(route?.project){
+    const project=await resolveWorkProject(req,String(route.project));
+    if(project?.id)return {
+      version:1,kind:"project",ref:String(project.id),key:"project:"+String(project.id),
+      basis:String(route?.source||"router"),project_id:String(project.id),project:project.name
+    };
+  }
+  return {version:1,kind:"global",ref:null,key:"global",basis:"default_global",project_id:null,project:null};
+}
+
+async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed: any[], workThread:any=null, exposureScope:any=null) {
   const sb = supabaseClient(req);
   if (!sb) throw new Error("supabase_unavailable");
   const { data: authData, error: authError } = await sb.auth.getUser();
@@ -1249,7 +1302,8 @@ async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed:
     const row=checked(await sb.from("conversations")
       .select("id,metadata,app_scope")
       .eq("id",workThread.conversation_id).eq("user_id",userId).eq("app_scope","work_thread").single(),"work_thread_conversation");
-    return {...await openConversation(sb,apiKey,row,seed),workThread};
+    const scopeKey=String(exposureScope?.key||("work_thread:"+String(workThread.id)));
+    return {...await openConversation(sb,apiKey,row,seed,{scopeKey,strictScope:false}),workThread,exposureScope};
   }
 
   let { data: rows } = await sb
@@ -1275,7 +1329,8 @@ async function getOrCreateOpenAIConversation(req: Request, apiKey: string, seed:
     row = created;
   }
 
-  return await openConversation(sb,apiKey,row,seed);
+  const scopeKey=String(exposureScope?.key||"global");
+  return {...await openConversation(sb,apiKey,row,seed,{scopeKey,strictScope:true}),exposureScope};
 }
 
 async function resolveWorkProject(req:Request, value:string){
@@ -2058,10 +2113,11 @@ function deterministicRoute(message:string,background:boolean,context:any={}){
   let project=/\bbernried\b/i.test(t)?"Bernried":/\bschwarz\b/i.test(t)?"Schwarz":null;
   const followup=/\b(esto|eso|aquello|lo anterior|el tema|ese proyecto|como antes|continua|acordamos|recuerd\w*)\b/i.test(t);
   if(!project&&followup){
+    const serverHint=String(context?.exposure_hint_project||"").trim();
     const prior=(context.recent_local_conversation||[]).filter((m:any)=>m.role==="user"&&normalizeText(m.content)!==t).slice(-3).reverse();
     const named=prior.map((m:any)=>/\bbernried\b/i.test(m.content)?"Bernried":/\bschwarz\b/i.test(m.content)?"Schwarz":null).find(Boolean);
     const visible=context.work_context?.active?context.work_context.name:null;
-    project=named||(["Bernried","Schwarz"].includes(visible)?visible:null);
+    project=serverHint||named||(["Bernried","Schwarz"].includes(visible)?visible:null);
   }
   const work=!!project||/\b(fachplaner|bauherr|tga|hls|twp|tragwerk|planner|unterlagen|protokoll|planstand|lph|archicad|dwg|grundriss|work-minds)\b/i.test(t);
   const sofia=/\b(sof[ií]a|reading|readings|lectura|autor|autores|highlight|subrayado|teor[ií]a|theory|ensayo|silvestrin|pawson|reinhardt|morris|agnes martin)\b/i.test(t);
@@ -2394,12 +2450,14 @@ Deno.serve(async (req: Request) => {
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
-  const route=await routeRequest(req,effectiveMessage,apiKey,background,context);
+  const exposureHint=currentWorkThread?null:await latestExposureHint(req);
+  const route=await routeRequest(req,effectiveMessage,apiKey,background,{...context,exposure_hint_project:exposureHint?.project||null});
   if(currentWorkThread){
     route.project=currentWorkThread.project.name;
     route.work=true;
     route.source=String(route.source||"router")+"+work_thread";
   }
+  const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
   const wantsStream=body?.stream===true;
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
@@ -2411,7 +2469,7 @@ Deno.serve(async (req: Request) => {
   const initialSemantic=!background&&!!route.deep_memory;
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
-    recentConversation(req, effectiveMessage,currentWorkThread?.conversation_id||null),
+    recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
     fastAgenda?Promise.resolve([]):longTermRecall(req, effectiveMessage,budget.lexical),
     fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
     initialSemantic&&!fastAgenda?semanticRecall(req, effectiveMessage, apiKey,budget.semantic,budget.indexBatch):Promise.resolve([]),
@@ -2429,7 +2487,8 @@ Deno.serve(async (req: Request) => {
   ]);
   const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
   const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
-  const recent = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
+  // Build 85: the browser's mixed local history is never injected into the scoped working context.
+  const recent = mergeRecentConversations(recentDb, [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -2622,6 +2681,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     taxonomy:context.taxonomy||{},
     cognitive_depth:budget.depth,
     route,
+    exposure_scope:exposureScope,
+    exposure_policy:{
+      version:"scoped_exposure_v1",
+      legacy_history_auto_injected:false,
+      cross_scope_default:false
+    },
     specialist_candidates:specialistCandidates(effectiveMessage,route),
     specialist_plan_hint:specialistPlanHint(effectiveMessage,route),
     reply_context:context.reply_context||null,
@@ -2646,13 +2711,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   });
 
 
-  const seed = mergeRecentConversations(recentDb, currentWorkThread?[]:(context.recent_local_conversation || []), effectiveMessage);
+  const seed = recent;
   let conversationInfo:any={id:null,created:false};
   if(!background){
     try{
-      conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread);
+      conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread,exposureScope);
       if(persistPresence&&conversationInfo?.dbId){
-        await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId});
+        await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId,exposure_scope:exposureScope});
       }
     }catch(e){
       await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
@@ -2711,15 +2776,16 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           }
           if(!finalText.trim())throw new Error("empty_stream_response");
           if(persistPresence&&streamConversation?.dbId){
-            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true});
+            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true,exposure_scope:exposureScope});
           }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
             standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
             quick_replies:[],pending_intent:null,sources:[],artifacts:[],conversation_id:streamConversation.id||null,
+            exposure_scope:exposureScope,
             direct_stream:true,streamed_reply:true
           });
         }catch(e){
@@ -3151,12 +3217,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
       request_id:clientMessageId,
+      exposure_scope:exposureScope,
       sources:webSources,
       artifacts:artifactResults.map((a:any)=>({id:a.id,kind:a.kind,title:a.title}))
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"rolling_transient_v2",standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,
@@ -3167,7 +3234,8 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     pending_intent:null,
     sources:webSources,
     artifacts:artifactResults,
-    conversation_id:conversationInfo.id||null
+    conversation_id:conversationInfo.id||null,
+    exposure_scope:exposureScope
   });
 
   }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
