@@ -205,12 +205,23 @@ REGLAS DE SEGURIDAD:
         }
         const permissionContext={...contextualFastContext(message,proposal,ctx),run_id:runId};
         if(body?.permission_protocol!=='contextual_v1')permissionContext.direct_request=false;
-        const recorded=await service.rpc("minds_record_shadow_decision",{
+        const recorded=await service.rpc("minds_admit_shadow_decision",{
           p_user:user.id,p_request_id:proposal.request_id,p_action:call.name,p_candidate:proposal,
           p_context:permissionContext
         });
         if(recorded.error)throw new Error('No pude registrar la propuesta para revisión.');
-        const canonicalProposal=recorded.data?.candidate&&recorded.data.candidate.title?recorded.data.candidate:proposal;
+        if(recorded.data?.status==="suppressed"){
+          const text='Eso ya está en el estado que pediste; no hace falta otra confirmación.';
+          const reply=(ackSent?'Entendido. ':'')+text;
+          send('text_delta',{delta:text});
+          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,review_admission:recorded.data});
+          await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:'review_suppressed',reason:recorded.data?.reason||null});
+          await finishRun(service,runId,'success',started,{transport:'sse',fast_path:true,one_round:true,tool:call.name,outcome:'review_suppressed'});
+          controller.close();return;
+        }
+        const canonicalProposal=recorded.data?.decision?.candidate&&recorded.data.decision.candidate.title
+          ?{...recorded.data.decision.candidate,request_id:recorded.data.decision.request_id||recorded.data.decision.candidate.request_id}
+          :proposal;
         const permission=await tryContextualTask(uc,canonicalProposal,permissionContext);
         if(permission.status==='executed'){
           const text=`Guardé “${canonicalProposal.title}”${canonicalProposal.date?` para ${canonicalProposal.date}`:' sin fecha'}${canonicalProposal.category?` en ${canonicalProposal.category}`:''}, con el permiso que autorizaste.`;

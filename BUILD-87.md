@@ -41,9 +41,13 @@ The goal is not to reduce review by accepting more things automatically. The goa
 - Review Economy supplies consequence/reversibility/window/dependency facts; the existing Attention Economy still decides the final route.
 - Routing is read-only and cannot accept, reject, edit or expire a review item.
 
-### 87.4 — Proposal admission / low-value suppression
-- Prevent weak or duplicative proposals from entering review debt in the first place.
-- Suppression must be inspectable and reversible; it cannot become silent rejection of important evidence.
+### 87.4 — Proposal admission / low-value suppression **Implemented**
+- Shadow-decision proposals now pass an auditable admission gate before entering review debt.
+- Same-run semantic duplicates reuse the existing pending review instead of creating another review item; later turns remain new user acts and are never silently swallowed.
+- Safe no-op actions — currently completing an already completed task or archiving an already archived task — are suppressed before review because no state change remains to authorize.
+- Every admitted, duplicate or suppressed attempt leaves a Review Admission receipt with reason, fingerprint and minimal context.
+- Suppression never applies to permission, Project Claim, Project Variant, operating-rule or other authority-boundary evidence merely because it looks weak.
+- Reissuing a request after the underlying state changes is allowed; suppression is not a permanent rejection.
 
 ### 87.5 — Human Surface + acceptance
 - Surface grouped review only when Gari can actually act on it.

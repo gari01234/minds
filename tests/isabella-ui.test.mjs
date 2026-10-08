@@ -994,7 +994,7 @@ test('Build 60 persists explicit task and event mutations without stale bulk ove
 test('Build 60 resolves Shadow Agency observations from reviewed proposals',()=>{
   const sync=read('apps/isabella/sync.js'),app=read('apps/isabella/app.js'),chat=read('supabase/functions/isabella-chat/index.ts');
   assert.ok(sync.includes("minds_resolve_shadow_decision"));
-  assert.ok(chat.includes("minds_record_shadow_decision"));
+  assert.ok(chat.includes("minds_admit_shadow_decision"));
   assert.ok(chat.includes("request_id:proposal.request_id||crypto.randomUUID()"));
   assert.ok(app.includes("card('Shadow Agency'"));
   assert.ok(app.includes("from('minds_shadow_decisions')"));
@@ -1198,7 +1198,7 @@ test('Build 70 fast transport uses SSE and delegates authorized writes to the gu
   assert.ok(fast.includes('response.output_item.done'));
   assert.ok(fast.includes('parallel_tool_calls:false'));
   assert.ok(fast.includes('tool_choice:"required"'));
-  assert.ok(fast.includes('minds_record_shadow_decision'));
+  assert.ok(fast.includes('minds_admit_shadow_decision'));
   assert.ok(fast.includes('pending_user_confirmation')===false);
   assert.ok(!fast.includes('from("isabella_tasks").insert'));
   assert.ok(!fast.includes("from('isabella_tasks').insert"));

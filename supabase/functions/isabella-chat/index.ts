@@ -733,14 +733,17 @@ async function recordUsage(req:Request,feature:string,model:string,usage:any,met
 }
 async function recordShadowDecision(req:Request,action:string,candidate:any,context:any={}){
   try{
-    if(!candidate?.request_id)return;
-    const userSb=supabaseClient(req),service=serviceClient();if(!userSb||!service)return;
-    const {data:{user}}=await userSb.auth.getUser();if(!user)return;
-    await service.rpc("minds_record_shadow_decision",{
+    if(!candidate?.request_id)return {status:"invalid",reason:"request_id_required"};
+    const userSb=supabaseClient(req),service=serviceClient();
+    if(!userSb||!service)return {status:"unavailable"};
+    const {data:{user}}=await userSb.auth.getUser();if(!user)return {status:"unauthorized"};
+    const result=await service.rpc("minds_admit_shadow_decision",{
       p_user:user.id,p_request_id:candidate.request_id,p_action:action,
       p_candidate:candidate,p_context:context&&typeof context==="object"?context:{}
     });
-  }catch{}
+    if(result.error)return {status:"error",detail:result.error.message};
+    return result.data||{status:"error",detail:"empty_admission_result"};
+  }catch(e){return {status:"error",detail:e instanceof Error?e.message:String(e)}}
 }
 async function createArtifact(req:Request,args:any){
   try{
@@ -3225,12 +3228,33 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       }
       if(proposal){
         const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace),mission_request_id:crypto.randomUUID()}:{}),request_id:proposal.request_id||crypto.randomUUID()};
-        toolProposals.push(reviewedProposal);
-        if(mode==="confirm")await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
-          run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-          source_tainted:sourceTainted,round,background:!!background
-        });
-        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"pending_user_confirmation"})});
+        let proposalForReview=reviewedProposal;
+        if(mode==="confirm"){
+          const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
+            run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
+            source_tainted:sourceTainted,round,background:!!background
+          });
+          if(admission?.status==="suppressed"){
+            outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
+              status:"no_review_needed",reason:admission.reason,authority_changed:false
+            })});
+            continue;
+          }
+          if(["error","unavailable","unauthorized","invalid"].includes(String(admission?.status||""))){
+            outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
+              status:"review_registration_failed",reason:admission?.detail||admission?.reason||admission?.status||"unknown"
+            })});
+            continue;
+          }
+          if(admission?.decision?.candidate&&typeof admission.decision.candidate==="object"){
+            proposalForReview={...admission.decision.candidate,request_id:admission.decision.request_id||admission.decision.candidate.request_id};
+          }
+        }
+        toolProposals.push(proposalForReview);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
+          status:mode==="confirm"?"pending_user_confirmation":"proposal_prepared",
+          request_id:proposalForReview.request_id||null
+        })});
       }else if(call.name==="read_contextual_autonomy"){
         const sb=supabaseClient(req);
         const result=sb?await sb.rpc('minds_get_contextual_autonomy'):{error:{message:'unavailable'}};
