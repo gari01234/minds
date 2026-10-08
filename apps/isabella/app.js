@@ -951,7 +951,7 @@ function clearAssistantStream(){
   liveAssistantStream?.remove();liveAssistantStream=null;
 }
 function say(role,text,meta={}){
-  state.messages.push({
+  const message={
     id:uid(),role,text,at:new Date().toISOString(),reaction:null,
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
     metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
@@ -959,9 +959,11 @@ function say(role,text,meta={}){
     attachments:Array.isArray(meta.attachments)?meta.attachments.slice(0,3).map(x=>({path:String(x?.path||''),mime:String(x?.mime||''),name:String(x?.name||'Archivo'),size:Number(x?.size||0)})).filter(x=>x.path):[],
     artifacts:Array.isArray(meta.artifacts)?meta.artifacts.slice(0,8).map(x=>({id:String(x?.id||''),kind:String(x?.kind||''),title:String(x?.title||'Artefacto'),mime_type:String(x?.mime_type||''),storage_path:String(x?.storage_path||'')})).filter(x=>x.storage_path):[],
     quickReplies:Array.isArray(meta.quickReplies)?meta.quickReplies.slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value):[]
-  });
+  };
+  state.messages.push(message);
   if(state.messages.length>800)state.messages=state.messages.slice(-800);
   save();renderMessages();
+  return message;
 }
 function syncOrbCompact(force=null){
   const scroller=$('.assistant-scroll'),orb=$('#orbButton'),home=$('#orbHome'),dock=$('#orbDock');if(!scroller||!orb||!home||!dock)return;
@@ -1674,15 +1676,20 @@ async function acknowledgeIntentDelivery(delivery){
 }
 async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
-  clearAssistantStream();say('user',text||'📷 Foto',{attachments:copy,replyTo});clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
+  clearAssistantStream();
+  const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo});
+  clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
       const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,onProgress:event=>{if(event?.label)orb('thinking',event.label)},onTextDelta:(delta,full)=>streamAssistantDelta(delta,full),onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
-      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
+        ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
+      userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
+      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{metadata:{exposure_scope:exposure},sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.reply&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
-      if(result?.question&&result.question!==result.reply)say('assistant',result.question,{quickReplies:result?.reply?[]:(result.quick_replies||[])});
+      if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(result?.autonomy_execution)await window.ISABELLA_SYNC_PULL_NOW?.();
       if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
