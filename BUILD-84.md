@@ -104,7 +104,7 @@ This slice implements the Source trigger. The schema already reserves the same r
 84.2 — Source-first document extraction and Referent resolution. **Implemented for Work files; creates only proposed sourced Claims and working Referents.**  
 84.3 — Model comparison: aligned / contradicts / modifies / adds / unclear. **Implemented.**  
 84.4 — Triggered revision writer + Variants. **Implemented for Source-comparison triggers.**  
-84.5 — Work inspection surface: what Isabella thinks, why, coverage, change since last revision.  
+84.5 — Work inspection surface: what Isabella thinks, why and coverage. **Implemented in Work / Conocimiento.**  
 84.6 — Bernried acceptance against the real 20-case corpus.
 
 ## Acceptance rules

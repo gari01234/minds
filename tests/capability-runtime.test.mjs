@@ -116,14 +116,14 @@ test('Build 79 PWA assets are aligned',()=>{
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.08.83.2'));
-  assert.ok(index.includes('app.css?v=58'));
+  assert.ok(shell.includes('Build 2026.10.08.84.5'));
+  assert.ok(index.includes('app.css?v=59'));
   assert.ok(index.includes('shell.js?v=84'));
   assert.ok(index.includes('app.js?v=93'));
-  assert.ok(index.includes('work.js?v=12'));
+  assert.ok(index.includes('work.js?v=13'));
   assert.ok(index.includes('ambient.js?v=2'));
   assert.ok(index.includes('../shared/human-surface.js?v=2'));
-  assert.ok(sw.includes("isabella-shell-v99"));
+  assert.ok(sw.includes("isabella-shell-v100"));
   assert.ok(sw.includes("'./ambient.js?v=2'"));
 });
 

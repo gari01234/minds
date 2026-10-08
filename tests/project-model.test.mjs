@@ -215,3 +215,18 @@ test('Build 84.4 snapshot exposes current revision elements and Variants',()=>{
   assert.ok(m.includes("'variants'"));
   assert.ok(m.includes('from public.minds_project_model_variants'));
 });
+
+
+test('Build 84.5 Work exposes the Project Model as an inspectable interpretation, not a second truth store',()=>{
+  const work=read('apps/isabella/work.js');
+  const css=read('apps/isabella/app.css');
+  assert.ok(work.includes("sb.rpc('minds_project_model_snapshot'"));
+  assert.ok(work.includes('function projectModelPanel'));
+  assert.ok(work.includes('Lectura de Isabella'));
+  assert.ok(work.includes('Interpretación versionada del proyecto; no sustituye decisiones ni hechos confirmados.'));
+  assert.ok(work.includes('Tensiones / Variantes'));
+  assert.ok(work.includes('Qué no sabe'));
+  assert.ok(work.includes('Inspeccionar fundamento y cobertura'));
+  assert.ok(css.includes('.project-model-panel'));
+  assert.ok(css.includes('.project-model-grid'));
+});

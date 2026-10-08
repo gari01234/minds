@@ -35,7 +35,7 @@ async function render(){
     if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
   }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
 }
-let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='';
+let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnapshot=null;
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
 const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
 function knowledgeFlags(c){
@@ -43,10 +43,36 @@ function knowledgeFlags(c){
   return {contradiction:c.status==='disputed'||evidence.some(e=>e.stance==='contradicts'),expired:!!c.valid_to&&new Date(c.valid_to)<new Date(),unreviewed:c.status==='proposed',noEvidence:!evidence.length};
 }
 async function renderKnowledge(){
-  const q=await sb.from('minds_work_claims').select('*,minds_work_evidence(*)').eq('project_id',project.id).order('updated_at',{ascending:false});
+  const [q,fq,mq]=await Promise.all([
+    sb.from('minds_work_claims').select('*,minds_work_evidence(*)').eq('project_id',project.id).order('updated_at',{ascending:false}),
+    sb.from('minds_work_files').select('id,name,storage_path').eq('project_id',project.id),
+    sb.rpc('minds_project_model_snapshot',{p_project_id:project.id})
+  ]);
   if(q.error)throw q.error;knowledgeRows=q.data||[];
-  const fq=await sb.from('minds_work_files').select('id,name,storage_path').eq('project_id',project.id);if(fq.error)throw fq.error;files=fq.data||[];
+  if(fq.error)throw fq.error;files=fq.data||[];
+  projectModelSnapshot=mq.error?null:(mq.data||null);
   paintKnowledge();
+}
+function projectModelPanel(){
+  const m=projectModelSnapshot;if(!m)return '<section class="project-model-panel"><div><b>Lectura de Isabella</b><p class="small">El Project Model no está disponible ahora mismo. El conocimiento canónico sigue debajo.</p></div></section>';
+  const revision=m.current_revision||null,claims=Array.isArray(m.claims)?m.claims:[],variants=Array.isArray(m.variants)?m.variants:[],elements=Array.isArray(m.revision_elements)?m.revision_elements:[],perimeter=Array.isArray(m.perimeter)?m.perimeter:[];
+  const claimById=new Map(claims.map(x=>[String(x.id),x]));
+  const inferred=claims.filter(x=>x.status==='proposed'||x.status==='disputed'||x.author_kind==='isabella'||x.model_kind).slice(0,6);
+  const gaps=elements.filter(x=>x.element_kind==='gap').slice(0,6);
+  const weakPerimeter=perimeter.filter(x=>x.observation_mode==='unobserved'||['missing','unknown'].includes(x.coverage)||['unreadable','unknown'].includes(x.readability)).slice(0,6);
+  const revWhen=revision?.published_at||revision?.created_at;
+  return `<section class="project-model-panel">
+    <div class="project-model-head"><div><b>Lectura de Isabella</b><p class="small">Interpretación versionada del proyecto; no sustituye decisiones ni hechos confirmados.</p></div><div class="project-model-revision">${revision?`Rev. ${esc(String(revision.id||'').slice(0,8))}${revWhen?' · '+esc(new Date(revWhen).toLocaleString('es-ES')):''}`:'Sin revisión publicada'}</div></div>
+    <div class="project-model-grid">
+      <article><strong>Qué interpreta ahora</strong>${inferred.map(x=>`<p><span class="model-badge">${esc(x.status==='disputed'?'En disputa':'Inferencia')}</span> ${esc(x.statement)}</p>`).join('')||'<p class="small">Todavía no hay inferencias estructuradas.</p>'}</article>
+      <article><strong>Tensiones / Variantes</strong>${variants.filter(x=>x.status==='open').slice(0,6).map(v=>{const a=claimById.get(String(v.source_claim_id)),b=claimById.get(String(v.target_claim_id));return `<p><span class="model-badge attention">${esc(v.variant_kind)}</span> ${esc(a?.statement||'Nueva formulación')}${b?.statement?' ↔ '+esc(b.statement):''}</p>`}).join('')||'<p class="small">No hay variantes abiertas en la revisión actual.</p>'}</article>
+      <article><strong>Qué no sabe</strong>${gaps.map(g=>`<p>${esc(g.metadata?.source_class||g.metadata?.verdict||g.element_ref)}</p>`).join('')||weakPerimeter.map(p=>`<p>${esc(p.source_class)} · ${esc(p.coverage)} · ${esc(p.observation_mode)}</p>`).join('')||'<p class="small">No hay lagunas estructuradas visibles.</p>'}</article>
+    </div>
+    <details class="project-model-inspect"><summary>Inspeccionar fundamento y cobertura</summary>
+      <div class="small">Trigger: ${esc(revision?.trigger_kind||'—')}${revision?.parent_revision_id?' · deriva de '+esc(String(revision.parent_revision_id).slice(0,8)):''}</div>
+      <div class="project-model-perimeter">${perimeter.map(p=>`<p><b>${esc(p.source_class)}</b> · ${esc(p.observation_mode)} · ${esc(p.coverage)} · ${esc(p.readability)}${p.last_checked_at?' · comprobado '+esc(new Date(p.last_checked_at).toLocaleString('es-ES')):''}</p>`).join('')||'<p class="small">Perimeter todavía sin declarar.</p>'}</div>
+    </details>
+  </section>`;
 }
 function paintKnowledge(){
   const filtered=knowledgeRows.filter(c=>{
@@ -54,6 +80,7 @@ function paintKnowledge(){
     return (!q||[c.statement,c.subject,c.topic,c.discipline].join(' ').toLocaleLowerCase().includes(q))&&(knowledgeFilter==='all'||knowledgeFilter==='review'&&(f.unreviewed||f.contradiction||f.expired)||knowledgeFilter==='active'&&!['superseded','rejected','resolved'].includes(c.status));
   });
   $('#workBody').innerHTML=`<div class="work-knowledge"><div class="work-desktop-toolbar"><div><strong>Conocimiento de ${esc(project.name)}</strong><p class="small">Afirmaciones, decisiones y preguntas con su evidencia e historia. Confirmar una revisión no convierte una fuente en certeza.</p></div><button data-knowledge-new>＋ Añadir</button></div>
+    ${projectModelPanel()}
     <div class="knowledge-filters"><input id="knowledgeSearch" aria-label="Buscar conocimiento" placeholder="Buscar tema, disciplina o decisión…" value="${esc(knowledgeQuery)}"><select id="knowledgeFilter" aria-label="Estado del conocimiento">${[['active','Activo'],['review','Por revisar'],['all','Todo e historial']].map(([v,l])=>`<option value="${v}" ${knowledgeFilter===v?'selected':''}>${l}</option>`).join('')}</select></div>
     ${filtered.map(c=>{const f=knowledgeFlags(c);return `<article class="knowledge-card"><div class="knowledge-meta"><b>${esc(knowledgeStates[c.status]||c.status)}</b><span>${esc(c.claim_type)} · ${esc(provenanceNames[c.provenance_class]||c.provenance_class)}</span>${f.contradiction?'<span class="knowledge-attention">Contradicción por revisar</span>':''}${f.expired?'<span class="knowledge-attention">Vigencia vencida</span>':''}</div><p>${esc(c.statement)}</p><div class="small">${esc([c.discipline,c.topic,c.subject].filter(Boolean).join(' · '))}</div>
       <details><summary>${(c.minds_work_evidence||[]).length} evidencias · Historia</summary>${(c.minds_work_evidence||[]).map(e=>`<blockquote><b>${esc(e.stance==='contradicts'?'Contradice':e.stance==='context'?'Contexto':'Apoya')}</b><p>${esc(e.excerpt||'Sin extracto')}</p><small>${esc(e.trust_level)} · ${esc(JSON.stringify(e.locator||{}))}</small>${e.source_file_id?`<button data-evidence-file="${esc(e.source_file_id)}">Abrir ${esc(files.find(x=>x.id===e.source_file_id)?.name||'fuente')}</button>`:''}</blockquote>`).join('')||'<p class="small">Sin evidencia vinculada.</p>'}
