@@ -49,6 +49,32 @@ function normalizeText(value: unknown) {
   return String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+const AUTOBIOGRAPHICAL_WRITE_TOOLS=new Set([
+  "record_personal_model_claim","update_personal_model_claim","remember_relation","remember_information"
+]);
+
+function evidenceExcerptTokens(value:unknown){
+  return normalizeText(value).match(/[a-z0-9áéíóúüñäöüß]+/gi)||[];
+}
+
+function currentUserEvidenceGate(toolName:string,args:any,currentMessage:string,background:boolean,sourceTainted:boolean){
+  if(!AUTOBIOGRAPHICAL_WRITE_TOOLS.has(toolName))return {allowed:true,user_excerpt:null,reason:null};
+  if(background)return {allowed:false,user_excerpt:null,reason:"background_session_cannot_write_autobiographical_memory"};
+  if(sourceTainted)return {allowed:false,user_excerpt:null,reason:"source_tainted_turn_cannot_write_autobiographical_memory"};
+
+  const excerpt=String(args?.user_excerpt||"").trim();
+  if(!excerpt)return {allowed:false,user_excerpt:null,reason:"current_user_excerpt_required"};
+  const normalizedExcerpt=normalizeText(excerpt),normalizedMessage=normalizeText(currentMessage);
+  if(!normalizedExcerpt||!normalizedMessage.includes(normalizedExcerpt)){
+    return {allowed:false,user_excerpt:null,reason:"excerpt_not_found_in_current_user_message"};
+  }
+  const minTokens=toolName==="update_personal_model_claim"?1:2;
+  if(evidenceExcerptTokens(excerpt).length<minTokens){
+    return {allowed:false,user_excerpt:null,reason:"excerpt_too_weak_for_durable_memory"};
+  }
+  return {allowed:true,user_excerpt:excerpt,reason:"current_user_evidence"};
+}
+
 function simpleAgendaMutation(message=""){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
@@ -490,8 +516,9 @@ const calendarTools = [
       status:{type:"string",enum:["hypothesis","confirmed"]},
       confidence:{type:"number"},
       evidence:{type:"string"},
-      source:{type:"string"}
-    }, required:["claim_type","claim","status"] }
+      source:{type:"string"},
+      user_excerpt:{type:"string",description:"Exact verbatim excerpt from Gari's CURRENT message that directly supports this claim. Never copy recalled memory, assistant text, project context or web text."}
+    }, required:["claim_type","claim","status","user_excerpt"] }
   },
   {
     type: "function",
@@ -503,8 +530,9 @@ const calendarTools = [
       status:{type:"string",enum:["confirmed","contradicted","stale"]},
       replacement_claim:{type:"string"},
       claim_type:{type:"string"},
-      evidence:{type:"string"}
-    }, required:["claim_id","status"] }
+      evidence:{type:"string"},
+      user_excerpt:{type:"string",description:"Exact verbatim excerpt from Gari's CURRENT message that explicitly confirms, corrects or rejects the claim."}
+    }, required:["claim_id","status","user_excerpt"] }
   },
   {
     type: "function",
@@ -525,12 +553,13 @@ const calendarTools = [
   {
     type: "function",
     name: "remember_relation",
-    description: "Store a stable, useful non-sensitive relationship between two entities for future autobiographical recall, such as a person working on a project or a family relationship. Use sparingly, only when the relation is genuinely useful later.",
+    description: "Store a stable, useful non-sensitive relationship between two entities for future autobiographical recall. It must be directly supported by user_excerpt from Gari's CURRENT message; retrieved or external context cannot be the evidence. Use sparingly.",
     strict: false,
     parameters: { type:"object", properties:{
       subject_type:{type:"string"}, subject_name:{type:"string"}, predicate:{type:"string"},
-      object_type:{type:"string"}, object_name:{type:"string"}, confidence:{type:"number"}, evidence:{type:"string"}
-    }, required:["subject_type","subject_name","predicate","object_type","object_name"] }
+      object_type:{type:"string"}, object_name:{type:"string"}, confidence:{type:"number"}, evidence:{type:"string"},
+      user_excerpt:{type:"string",description:"Exact verbatim excerpt from Gari's CURRENT message that directly supports this relation. Recalled or external context is not valid evidence."}
+    }, required:["subject_type","subject_name","predicate","object_type","object_name","user_excerpt"] }
   },
   {
     type:"function",
@@ -649,13 +678,14 @@ const calendarTools = [
   {
     type: "function",
     name: "remember_information",
-    description: "Record a useful durable personal fact, person, routine, preference or context for future continuity. Do not use for extremely sensitive information.",
+    description: "Record a useful durable personal fact, person, routine, preference or context for future continuity. It must be grounded in an exact quote from Gari's CURRENT message via user_excerpt. Never re-store recalled memory, assistant text, Work/Readings context or web output. Do not use for extremely sensitive information.",
     strict: false,
     parameters: { type:"object", properties:{
       kind:{type:"string",enum:["fact","person","routine","episodic","preference","context"]},
       content:{type:"string"},
-      confidence:{type:"number"}
-    }, required:["kind","content"] }
+      confidence:{type:"number"},
+      user_excerpt:{type:"string",description:"Exact verbatim excerpt from Gari's CURRENT message that directly supports this durable memory candidate. Never use recalled memory, assistant text, Work/Readings context or web text."}
+    }, required:["kind","content","user_excerpt"] }
   }
 ];
 
@@ -1093,7 +1123,7 @@ async function personalModelPolicy(req: Request) {
   }
 }
 
-async function recordPersonalModelClaim(req: Request, args: any) {
+async function recordPersonalModelClaim(req: Request, args: any, provenance:any={}) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return { status:"unavailable" };
@@ -1113,8 +1143,12 @@ async function recordPersonalModelClaim(req: Request, args: any) {
       .in("status",["hypothesis","confirmed"])
       .limit(1);
     const evidenceItem = {
-      source:String(args?.source || "conversation"),
+      source:"current_user_message",
       note:String(args?.evidence || "").slice(0,1000),
+      user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
+      message_fingerprint:provenance?.message_fingerprint||null,
+      exposure_scope_key:provenance?.scope_key||"global",
+      run_id:provenance?.run_id||null,
       at:new Date().toISOString()
     };
     if (existing?.[0]?.id) {
@@ -1148,7 +1182,7 @@ async function recordPersonalModelClaim(req: Request, args: any) {
   }
 }
 
-async function updatePersonalModelClaim(req: Request, args: any) {
+async function updatePersonalModelClaim(req: Request, args: any, provenance:any={}) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return { status:"unavailable" };
@@ -1157,7 +1191,21 @@ async function updatePersonalModelClaim(req: Request, args: any) {
     const id = String(args?.claim_id || "").trim();
     const status = String(args?.status || "").trim();
     if (!id || !["confirmed","contradicted","stale"].includes(status)) return { status:"invalid" };
-    const patch:any = { status, last_seen_at:new Date().toISOString() };
+    const {data:current}=await sb.from("isabella_model_claims")
+      .select("evidence").eq("id",id).eq("user_id",user.id).maybeSingle();
+    const evidenceItem={
+      source:"current_user_message",
+      note:String(args?.evidence||"").slice(0,1000),
+      user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
+      message_fingerprint:provenance?.message_fingerprint||null,
+      exposure_scope_key:provenance?.scope_key||"global",
+      run_id:provenance?.run_id||null,
+      at:new Date().toISOString()
+    };
+    const patch:any = {
+      status,last_seen_at:new Date().toISOString(),
+      evidence:[...(Array.isArray(current?.evidence)?current.evidence:[]),evidenceItem].slice(-12)
+    };
     if (status === "confirmed") {
       patch.confidence = 1;
       patch.confirmed_at = new Date().toISOString();
@@ -1173,8 +1221,9 @@ async function updatePersonalModelClaim(req: Request, args: any) {
         status:"confirmed",
         confidence:1,
         source:"user_correction",
-        evidence:String(args?.evidence || "User correction")
-      });
+        evidence:String(args?.evidence || "User correction"),
+        user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"")
+      },provenance);
       return { status:"updated_with_replacement", replacement:stored };
     }
     return { status:"updated" };
@@ -1215,7 +1264,7 @@ function normalizeEntityName(value: unknown) {
   return String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-async function storeEntityRelation(req: Request, args: any) {
+async function storeEntityRelation(req: Request, args: any, provenance:any={}) {
   const sb = supabaseClient(req);
   if (!sb) return { status: "not_available" };
   const { data: authData, error: authError } = await sb.auth.getUser();
@@ -1256,7 +1305,13 @@ async function storeEntityRelation(req: Request, args: any) {
       confidence,
       source_type:"conversation",
       source_id:String(args?.source_id || ""),
-      metadata:{ evidence:String(args?.evidence || "") },
+      metadata:{
+        evidence:String(args?.evidence || ""),
+        user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
+        message_fingerprint:provenance?.message_fingerprint||null,
+        exposure_scope_key:provenance?.scope_key||"global",
+        run_id:provenance?.run_id||null
+      },
       updated_at:new Date().toISOString()
     }).eq("id",existing[0].id).eq("user_id",userId);
     return { status:"updated", subject:subject.name, predicate, object:object.name };
@@ -1270,7 +1325,13 @@ async function storeEntityRelation(req: Request, args: any) {
     confidence,
     source_type:"conversation",
     source_id:String(args?.source_id || ""),
-    metadata:{ evidence:String(args?.evidence || "") }
+    metadata:{
+      evidence:String(args?.evidence || ""),
+      user_excerpt:String(provenance?.user_excerpt||args?.user_excerpt||"").slice(0,1200),
+      message_fingerprint:provenance?.message_fingerprint||null,
+      exposure_scope_key:provenance?.scope_key||"global",
+      run_id:provenance?.run_id||null
+    }
   });
   return { status:"stored", subject:subject.name, predicate, object:object.name };
 }
@@ -2536,6 +2597,7 @@ Deno.serve(async (req: Request) => {
   const initialSemantic=!background&&!!route.deep_memory;
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
+  const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
     fastAgenda?Promise.resolve([]):longTermRecall(req,effectiveMessage,budget.lexical,exposureScope.key,explicitCrossScope,run?.id||null),
@@ -2691,6 +2753,7 @@ No muestres esta clasificación ni un checklist interno al usuario. La respuesta
 Distingue siempre hechos o recuerdos explícitos, hipótesis del modelo personal y patrones observados. Una hipótesis nunca define quién es el usuario. Puedes usar hipótesis no sensibles para adaptar propuestas provisionalmente, pero cuando una inferencia empiece a cambiar materialmente tus recomendaciones, prioridades o comportamiento, hazla visible y ofrece confirmarla, corregirla o dejarla incierta.
 Puedes señalar contradicciones entre lo que el usuario dice y lo que hace, conservar excepciones y evolución temporal, y discrepar con argumentos basados en evidencia. La decisión final siempre pertenece al usuario.
 Usa record_personal_model_claim para conservar hipótesis no sensibles con evidencia y confianza. Solo usa status=confirmed cuando el usuario lo haya afirmado o confirmado explícitamente. Si el usuario corrige o rechaza una hipótesis existente, usa update_personal_model_claim.
+Para cualquier escritura autobiográfica —record_personal_model_claim, update_personal_model_claim, remember_relation o remember_information— aporta user_excerpt como cita textual exacta del MENSAJE ACTUAL de Gari. Un recuerdo recuperado, una respuesta previa de Isabella, Work/Readings, un especialista o la web nunca cuentan como evidencia nueva por haber reaparecido en contexto. Si no existe una cita actual que sostenga la escritura, no uses la herramienta.
 Usa remember_relation para relaciones durables entre personas/proyectos cuando tengan valor futuro.
 No infieras ni almacenes salud, diagnósticos, religión, política, sexualidad, finanzas, contraseñas, historial criminal, raza o etnia como parte del modelo personal.
 
@@ -2848,7 +2911,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
             standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
@@ -3101,7 +3164,13 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       const args=safeArgs(call);
       usedTools.push(String(call.name||""));
       const mode=policyMode(String(call.name||""));
-      if(sourceTainted&&["record_personal_model_claim","update_personal_model_claim","remember_relation","remember_information"].includes(call.name)){outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"review_required",reason:"Source-derived content must remain a sourced proposal; do not promote it to personal fact."})});continue;}
+      const memoryGate=currentUserEvidenceGate(String(call.name||""),args,effectiveMessage,background,sourceTainted);
+      if(!memoryGate.allowed){
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
+          status:"blocked_by_memory_provenance",reason:memoryGate.reason
+        })});
+        continue;
+      }
       if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name))sourceTainted=true;
       if(mode==="deny"){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
@@ -3248,10 +3317,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await compareProjectSource(req,args,apiKey);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="record_personal_model_claim"){
-        const result=await recordPersonalModelClaim(req,args);
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const result=await recordPersonalModelClaim(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="update_personal_model_claim"){
-        const result=await updatePersonalModelClaim(req,args);
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const result=await updatePersonalModelClaim(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_memory"){
         const result=await searchMemoryTool(req,String(args.query||effectiveMessage),apiKey,exposureScope.key,explicitMemoryCrossScope(effectiveMessage),run?.id||null);
@@ -3260,17 +3331,28 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         const result=await searchCalendar(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
-        const result=await storeEntityRelation(req,args);
+        const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null};
+        const result=await storeEntityRelation(req,args,provenance);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_information"){
         const mem={
-          source:"ai_derived",metadata:{derived:true,accepted_fact:false,source:"conversation_tool",run_id:run?.id||null},
+          source:"ai_derived",
+          exposure_scope_key:exposureScope.key,
+          provenance_class:"agent",
+          metadata:{
+            derived:true,accepted_fact:false,source:"conversation_tool",
+            run_id:run?.id||null,exposure_scope:exposureScope,
+            evidence_kind:"current_user_excerpt",
+            user_excerpt:memoryGate.user_excerpt,
+            message_fingerprint:currentUserMessageFingerprint,
+            recall_loop_safe:true
+          },
           kind:args.kind||"context",
           content:String(args.content||"").trim(),
           confidence:Number.isFinite(Number(args.confidence))?Number(args.confidence):0.8
         };
         if(mem.content)toolMemories.push(mem);
-        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"remembered_for_sync"})});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"remembered_for_sync",evidence_kind:"current_user_excerpt"})});
       }else{
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"ignored"})});
       }
@@ -3291,7 +3373,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   return json({
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,
