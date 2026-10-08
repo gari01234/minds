@@ -978,7 +978,7 @@ async function personalModel(req: Request, limit=32) {
     if (!sb) return [];
     const { data, error } = await sb.from("isabella_model_claims")
       .select("id,claim_type,claim,status,confidence,source_type,evidence,first_seen_at,last_seen_at,confirmed_at,metadata")
-      .in("status", ["hypothesis","confirmed"])
+      .eq("status", "confirmed")
       .order("confidence", { ascending:false })
       .order("last_seen_at", { ascending:false })
       .limit(limit);
