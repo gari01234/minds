@@ -155,10 +155,11 @@ function projectCards(runs,missions,events){
   const urgencyRank={critical:4,high:3,normal:2,info:1};
   const decisions=cards.filter(x=>x.needsUser).sort((a,b)=>{
     const ad=a.deadlineAt||Number.MAX_SAFE_INTEGER,bd=b.deadlineAt||Number.MAX_SAFE_INTEGER;
-    return ad-bd
-      -(Number(urgencyRank[a.urgency]||0)-Number(urgencyRank[b.urgency]||0))
-      +(a.createdAt-b.createdAt)
-      ||String(a.id).localeCompare(String(b.id));
+    if(ad!==bd)return ad-bd;
+    const au=Number(urgencyRank[a.urgency]||0),bu=Number(urgencyRank[b.urgency]||0);
+    if(au!==bu)return bu-au;
+    if(a.createdAt!==b.createdAt)return a.createdAt-b.createdAt;
+    return String(a.id).localeCompare(String(b.id));
   });
   const others=cards.filter(x=>!x.needsUser).sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt||String(a.id).localeCompare(String(b.id)));
   return [...decisions,...others].slice(0,6);
