@@ -127,7 +127,8 @@ function attentionCard(event){
   const metadata=event?.metadata&&typeof event.metadata==='object'?event.metadata:{};
   return {id:'attention:'+event.id,source:'attention',sourceId:event.id,kind:needsUser?'question':'ambient',
     label:needsUser?'Necesito tu decisión':'Para tener en cuenta',title:String(event.title||'Actualización').trim(),body:String(event.body||'').trim(),
-    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser,
+    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),createdAt:parseTime(event.created_at),deadlineAt:parseTime(event.deadline_at),
+    urgency:String(event.urgency||'info'),priority:needsUser?100:40,cancellable:false,needsUser,
     replyContext:needsUser?{
       attention_id:String(event.id||''),request_revision:Number(event.request_revision||1),
       source_type:String(event.source_type||''),source_id:String(event.source_id||''),
@@ -151,7 +152,16 @@ function projectCards(runs,missions,events){
     if(['queued','running','waiting'].includes(String(mission.status||'')))cards.push(missionCard(mission));
   }
   for(const event of events||[])if(event.route==='ambient'||(event.route==='interrupt'&&event.requires_user===true))cards.push(attentionCard(event));
-  return cards.sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt).slice(0,6);
+  const urgencyRank={critical:4,high:3,normal:2,info:1};
+  const decisions=cards.filter(x=>x.needsUser).sort((a,b)=>{
+    const ad=a.deadlineAt||Number.MAX_SAFE_INTEGER,bd=b.deadlineAt||Number.MAX_SAFE_INTEGER;
+    return ad-bd
+      -(Number(urgencyRank[a.urgency]||0)-Number(urgencyRank[b.urgency]||0))
+      +(a.createdAt-b.createdAt)
+      ||String(a.id).localeCompare(String(b.id));
+  });
+  const others=cards.filter(x=>!x.needsUser).sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt||String(a.id).localeCompare(String(b.id)));
+  return [...decisions,...others].slice(0,6);
 }
 function autoCandidate(cards){
   for(const card of cards){
@@ -507,7 +517,7 @@ async function queryPresence(){
   const [runQ,missionQ,attentionQ]=await Promise.all([
     sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
     sb.from('minds_mission_runs').select('id,status,phase,instruction,result_summary,blocker_question,wait_kind,wake_at,metadata,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
+    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,deadline_at,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
   if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
   const missions=missionQ.data||[],missionById=new Map(missions.map(x=>[String(x.id),x]));
@@ -578,7 +588,10 @@ async function sendChatText(raw){
     const reviewId=String(proposals.find(x=>/^[0-9a-f-]{36}$/i.test(String(x?.request_id||'')))?.request_id||'');
     if(reviewId)setPendingReviewRequestId(reviewId);else await syncPendingReview({discover:true});
     lastQuickReplies=(Array.isArray(data?.quick_replies)?data.quick_replies:[]).slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value);
-    if(replyContext)clearReplyContext();
+    if(replyContext){
+      clearReplyContext();
+      await refresh({force:true});
+    }
     chatBusy=false;
     await loadConversationHistory({render:false});
   }catch(e){
