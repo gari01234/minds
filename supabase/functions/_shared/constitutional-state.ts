@@ -107,7 +107,7 @@ export function applyConstitutionalEnvelope(modelSuggestion:any,envelope:Constit
 }
 
 export function constitutionalDeviation(modelSuggestion:any,envelope:ConstitutionalEnvelope){
-  const fields:keyof ConstitutionalEnvelope[]=[
+  const fields:(keyof ConstitutionalEnvelope)[]=[
     "epistemic_status","authority_action","scope_action","relationship_action","uncertainty_visible"
   ];
   return fields.filter(field=>modelSuggestion?.[field]!==envelope[field]).map(field=>({
