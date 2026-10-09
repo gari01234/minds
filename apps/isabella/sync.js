@@ -5,6 +5,7 @@ const app=window.ISABELLA_APP;
 const $=s=>document.querySelector(s);
 const authButton=$('#authButton'),status=$('#syncStatus');
 let user=null,syncing=false,timer=null,hydrating=false,queuedSync=null,realtimeChannel=null,realtimeTimer=null;
+let queuedSyncWaiters=[];
 const pendingEntityMutations=new Set();
 const setStatus=t=>{if(status)status.textContent=t};
 const localDateTime=(date,time)=>new Date(date+'T'+(time||'09:00')+':00');
@@ -356,9 +357,12 @@ async function recordActivity(detail){
   }
 }
 async function syncNow(opts={}){
-  if(!user)return;
-  if(syncing){queuedSync={...(queuedSync||{}),...opts};return}
-  syncing=true;setStatus('Sincronizando…');
+  if(!user)return false;
+  if(syncing){
+    queuedSync={...(queuedSync||{}),...opts};
+    return new Promise(resolve=>queuedSyncWaiters.push(resolve));
+  }
+  syncing=true;let succeeded=false;setStatus('Sincronizando…');
   try{
     const {data:deleted,error:de}=await sb.from('isabella_deleted_items').select('entity_type,client_key').eq('user_id',user.id);
     if(de)throw de;
@@ -393,13 +397,21 @@ async function syncNow(opts={}){
         hydrating=true;app.replaceState(next);hydrating=false;
       }
     }
+    succeeded=true;
     setStatus('Memoria sincronizada · Supabase');
     try{window.dispatchEvent(new CustomEvent('isabella:synced',{detail:{initial:!!opts.initial}}))}catch{}
   }catch(e){setStatus('Error de sincronización: '+apiError(e))}
   finally{
     syncing=false;
-    if(queuedSync){const next=queuedSync;queuedSync=null;setTimeout(()=>syncNow(next),0)}
+    if(queuedSync){
+      const next=queuedSync,waiters=queuedSyncWaiters.splice(0);
+      queuedSync=null;
+      setTimeout(()=>{
+        void syncNow(next).then(ok=>waiters.forEach(resolve=>resolve(ok)),()=>waiters.forEach(resolve=>resolve(false)));
+      },0);
+    }
   }
+  return succeeded;
 }
 window.ISABELLA_SYNC_NOW=(opts={})=>syncNow(opts);
 window.ISABELLA_SYNC_PULL_NOW=()=>syncNow({pullOnly:true});

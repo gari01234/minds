@@ -39,7 +39,7 @@ test('90.4 Ahora resolves database UUID to client_key and edits the existing tas
           }}}
         }
       },
-      ISABELLA_SYNC_PULL_NOW:async()=>{seen.push(['pull',true])}
+      ISABELLA_SYNC_PULL_NOW:async()=>{seen.push(['pull',true]);return true}
     },
     itemBy:(kind,id)=>{seen.push(['lookup',id]);return id==='task-client-key'&&seen.some(x=>x[0]==='pull')?{id}:null},
     editItem:(kind,id)=>seen.push(['edit',kind,id]),
