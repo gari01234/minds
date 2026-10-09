@@ -75,6 +75,12 @@ function currentUserEvidenceGate(toolName:string,args:any,currentMessage:string,
   return {allowed:true,user_excerpt:excerpt,reason:"current_user_evidence"};
 }
 
+function calendarAssessmentIntent(message:string){
+  const t=normalizeText(message);
+  const period=/(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t);
+  const question=/(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
+  return period&&question;
+}
 function simpleAgendaMutation(message=""){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
@@ -92,7 +98,7 @@ function likelyMaterialDeliverable(message=""){
   return explicit||physical||(action&&object);
 }
 function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
-  if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message))return false;
+  if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||calendarAssessmentIntent(message))return false;
   if(String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
   const normalized=normalizeText(message);
@@ -2660,6 +2666,8 @@ Deno.serve(async (req: Request) => {
   if(fastAgenda)budget={...budget,depth:"light",lexical:4,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
+  const scheduleAssessment=calendarAssessmentIntent(effectiveMessage);
+  if(scheduleAssessment)budget={...budget,depth:"standard",rounds:Math.max(budget.rounds,5),reasoning:"medium",maxOutput:Math.max(budget.maxOutput,3600)};
   const initialSemantic=!background&&!!route.deep_memory;
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
@@ -2959,14 +2967,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
               if(event?.type==="response.output_text.delta"){
                 const delta=String(event.delta||"");if(!delta)return;
                 finalText+=delta;send("text_delta",{delta});
-              }else if(event?.type==="response.completed"){
+              }else if(event?.type==="response.completed"||event?.type==="response.incomplete"){
                 completed=event.response;
-              }else if(event?.type==="error"){
+              }else if(event?.type==="response.failed"||event?.type==="error"){
                 throw new Error(event?.message||"OpenAI stream error");
               }
             });
           }
-          for(const intent of standingIntents||[]){
+          const streamCompleted=completed?.status==="completed";
+          const incompleteReason=streamCompleted?null:String(completed?.incomplete_details?.reason||completed?.status||"missing_completion_event").slice(0,160);
+          if(!streamCompleted)send("status",{phase:"incomplete",label:"La respuesta se interrumpió. Conservaré el texto recibido."});
+          if(streamCompleted)for(const intent of standingIntents||[]){
             if(!normalizeText(finalText).includes(normalizeText(intent.reminder_text))){
               const suffix="\n\nMe pediste que te recordara: "+intent.reminder_text;
               finalText+=suffix;send("text_delta",{delta:suffix});
@@ -2974,17 +2985,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           }
           if(!finalText.trim())throw new Error("empty_stream_response");
           if(persistPresence&&streamConversation?.dbId){
-            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true,exposure_scope:exposureScope});
+            await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true,exposure_scope:exposureScope,incomplete_response:!streamCompleted,incomplete_reason:incompleteReason});
           }
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,"success",{rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt});
+          await finishAgentRun(req,run,streamCompleted?"success":"error",{incomplete_response:!streamCompleted,incomplete_reason:incompleteReason,partial_chars:streamCompleted?0:finalText.length,rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt},incompleteReason||undefined);
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
-            standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
+            standing_intent_delivery:streamCompleted&&standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
             quick_replies:[],pending_intent:null,sources:[],artifacts:[],conversation_id:streamConversation.id||null,
             exposure_scope:exposureScope,
-            direct_stream:true,streamed_reply:true
+            direct_stream:true,streamed_reply:true,incomplete:!streamCompleted,incomplete_reason:incompleteReason
           });
         }catch(e){
           const detail=e instanceof Error?e.message:String(e);
@@ -3204,17 +3215,25 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       body:JSON.stringify({
         model,
         ...(conversationInfo.id?{conversation:conversationInfo.id}:{}),
-        instructions:transientInstructions(system,JSON.parse(dynamicContext)),
+        instructions:transientInstructions(system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),JSON.parse(dynamicContext)),
         reasoning:{effort:reasoningEffort},
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
         ...(conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
-        ...(tools.length?{tools,...(round===budget.rounds?{tool_choice:"none"}:{})}:{}),
+        ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
     });
     payload=await response.json();
     await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated});
+    if(response.ok&&payload?.status!=="completed"){
+      const partial=String(extractText(payload)||"").trim();
+      const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
+      await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length},"openai_incomplete:"+reason);
+      if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
+      return json({error:"incomplete_response",message:"La respuesta se interrumpió antes de completarse.",incomplete:true},502);
+    }
+
     if(!response.ok){
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed"},502);

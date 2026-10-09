@@ -105,6 +105,11 @@ async function askFastStream(message,state,options={}){
   await window.ISABELLA_SYNC_PULL_NOW?.();
   throw new Error('Perdí la conexión al guardar. Ya comprobé tu agenda; si no aparece la tarea, inténtalo de nuevo.');
 }
+function needsCalendarAssessment(message=''){
+  const t=String(message||'').toLocaleLowerCase('es');
+  return /(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t)
+    && /(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
+}
 async function askDirectStream(message,state,options={},replyContext=''){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
   const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
@@ -121,19 +126,27 @@ async function askDirectStream(message,state,options={},replyContext=''){
   if(response.status===409){options.onTextReset?.();return null}
   if(!response.ok||!response.body)throw new Error('No pude iniciar la respuesta en streaming.');
   const reader=response.body.getReader(),decoder=new TextDecoder();
-  let buffer='',result=null,streamError=null,streamedText='';
-  while(true){
-    const {done,value}=await reader.read();if(done)break;
-    buffer+=decoder.decode(value,{stream:true});
-    buffer=parseFastSse(buffer,event=>{
-      if(event?.type==='status')options.onProgress?.(event);
-      else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
-      else if(event?.type==='result')result={...event,streamed_text:streamedText};
-      else if(event?.type==='error')streamError=event.message||'stream_error';
-    });
+  let buffer='',result=null,streamError=null,streamedText='',transportError=null;
+  try{
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      buffer+=decoder.decode(value,{stream:true});
+      buffer=parseFastSse(buffer,event=>{
+        if(event?.type==='status')options.onProgress?.(event);
+        else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
+        else if(event?.type==='result')result={...event,streamed_text:streamedText};
+        else if(event?.type==='error')streamError=event.message||'stream_error';
+      });
+    }
+  }catch(e){transportError=e}
+  if(result)return result;
+  // No terminal result: do not retry the request implicitly.
+  if(streamedText.trim()){
+    options.onProgress?.({type:'status',phase:'incomplete',label:'La respuesta se interrumpió; el texto recibido quedará marcado como parcial.'});
+    return {reply:streamedText.trim(),streamed_text:streamedText,incomplete:true,incomplete_reason:streamError||String(transportError?.message||'missing_result_event')};
   }
-  if(streamError){options.onTextReset?.();throw new Error(streamError)}
-  return result;
+  options.onTextReset?.();
+  throw new Error(String(streamError||transportError?.message||'missing_result_event'));
 }
 function messageMentionsKnownProject(message,state){
   const hay=String(message||'').toLowerCase();
@@ -161,7 +174,7 @@ async function ask(message,state,options={}){
       options.onTextReset?.();throw e;
     }
   }
-  if(!options.workThread&&!options.background&&!attachments.length){
+  if(!options.workThread&&!options.background&&!attachments.length&&!needsCalendarAssessment(message)){
     const streamed=await askDirectStream(message,state,options,replyContext);
     if(streamed)return streamed;
   }

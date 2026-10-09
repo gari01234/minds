@@ -612,12 +612,12 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const sw=read('apps/isabella/sw.js');
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=66'));
+  assert.ok(index.includes('app.css?v=67'));
   assert.ok(index.includes('shell.js?v=95'));
-  assert.ok(index.includes('app.js?v=102'));
+  assert.ok(index.includes('app.js?v=103'));
   assert.ok(index.includes('sync.js?v=pwa31'));
-  assert.ok(index.includes('ai.js?v=49'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v116'"));
+  assert.ok(index.includes('ai.js?v=50'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v117'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -726,7 +726,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=17'));
+  assert.ok(index.includes('work.js?v=18'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -1243,7 +1243,7 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message))return false'));
+  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||calendarAssessmentIntent(message))return false'));
   assert.ok(chat.includes('if(String(route?.complexity||"light")!=="light")return false'));
   assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
@@ -1264,7 +1264,7 @@ test('Build 66 client tries text streaming before buffered Isabella and preserve
   assert.ok(stream>0&&buffered>stream);
 });
 
-test('Build 66 never persists partial streamed text and final result remains canonical',()=>{
+test('Build 66 retains streamed preview while Build 90.5 marks incomplete final results',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes("el.className='message assistant message-streaming'"));

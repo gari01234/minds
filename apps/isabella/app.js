@@ -46,6 +46,7 @@ function messageRenderKey(messages){
     (m.attachments||[]).map(a=>[a.path,a.name]),
     (m.artifacts||[]).map(a=>[a.id,a.storage_path,a.kind,a.title]),
     (m.sources||[]).map(s=>[s.url,s.title]),
+    !!m.metadata?.incomplete_response,
     (m.quickReplies||[]).map(q=>[q.label,q.value])
   ]));
 }
@@ -1039,11 +1040,18 @@ function renderMessages(forceBottom=false){
     const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
+  document.querySelectorAll('[data-continue-incomplete]').forEach(b=>b.onclick=()=>{
+    const index=state.messages.findIndex(m=>m.id===b.dataset.continueIncomplete);
+    if(index<0)return;
+    const m=state.messages[index],preceding=state.messages.slice(0,index).reverse().find(x=>x.role==='user');
+    const previousQuestion=String(preceding?.text||'').trim().slice(0,900);
+    void handle('Continúa la respuesta anterior desde el punto donde se interrumpió, sin repetir lo ya escrito. Pregunta original: '+previousQuestion,[],{id:String(m.id),role:'assistant',text:String(m.text||'')});
+  });
   document.querySelectorAll('[data-quick-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.quickMessage),q=m?.quickReplies?.[Number(b.dataset.quickIndex)];
     if(!m||!q)return;
@@ -1734,8 +1742,8 @@ async function handle(text,attachments=[],replyTo=null){
       const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
         ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
       userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
-      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{metadata:{exposure_scope:exposure},sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
-      if(result?.reply&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
+      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null},sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(result?.autonomy_execution)await window.ISABELLA_SYNC_PULL_NOW?.();

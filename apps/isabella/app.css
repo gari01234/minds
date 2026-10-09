@@ -1705,3 +1705,9 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .work-overview-task:hover{background:#f7f7f8}
 .work-overview-task:focus-visible{outline:2px solid #444;outline-offset:2px}
 .work-thread-source-boundary{font-size:11px;color:#8b8b93;margin-top:10px;line-height:1.45}
+
+/* Build 90.5 — a partial model reply is a visible state, never a normal completion. */
+.message-incomplete{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:10px 0 2px;padding-top:9px;border-top:1px solid #e6e6e8;color:#8a5b20;font-size:12px;line-height:1.4}
+.message-incomplete button{font:inherit;font-weight:600;color:inherit;background:transparent;border:1px solid #d8c5a5;border-radius:15px;padding:5px 10px;cursor:pointer}
+.message-incomplete button:hover{background:#fff8eb}
+.message-incomplete button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
