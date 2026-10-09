@@ -94,8 +94,11 @@ test('Presence positions only its own window near the active monitor edge',()=>{
 });
 
 test('Presence transport remains replaceable polling rather than assumed Realtime',()=>{
-  assert.ok(ui.includes('const POLL_MS=15000'));
-  assert.ok(ui.includes('setInterval(()=>refresh(),POLL_MS)'));
+  assert.ok(ui.includes('const POLL_MS=15000,IDLE_DISCOVERY_MS=120000'));
+  assert.ok(ui.includes('function scheduleNextPoll'));
+  assert.ok(ui.includes('timer=setTimeout(()=>void refresh(),wait)'));
+  assert.ok(ui.includes('needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS'));
+  assert.ok(!ui.includes('setInterval(()=>refresh(),POLL_MS)'));
   assert.ok(!ui.includes('.channel('));
   assert.ok(protocolV1.includes('no están publicados actualmente en `supabase_realtime`'));
 });
