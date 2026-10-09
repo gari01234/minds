@@ -160,3 +160,24 @@ test('Build 89.R2 keeps v0.1 executors and actions intact for auditability',()=>
   assert.ok(runner.includes('exact_contract_v01'));
   assert.ok(runner.includes('cold_structure_exact_v01'));
 });
+
+
+test('Build 89.R3 canonicalizes symmetric contradiction representation before hard evaluation',()=>{
+  assert.ok(runner.includes('const COLD_FIXTURE_VERSION_V3="cold-reconstruction-v0.3"'));
+  assert.ok(runner.includes('function canonicalizeColdSymmetricRelations'));
+  assert.ok(runner.includes('if(String(x?.type||"")!=="contradicts")return x'));
+  assert.ok(runner.includes('symmetric_relation_canonicalizer_applied:true'));
+  assert.ok(runner.includes('action==="acceptance_cold_reconstruction_v3"'));
+});
+
+test('Build 89.R3 keeps directional relation types directional',()=>{
+  assert.ok(runner.includes('supports, supersedes, depends_on and qualifies remain directional'));
+  assert.ok(runner.includes('contradicts is semantically symmetric'));
+});
+
+test('Build 89.R3 preserves v0.1 and v0.2 runs rather than rewriting failed evidence',()=>{
+  assert.ok(runner.includes('v01_results_preserved:true'));
+  assert.ok(runner.includes('v02_results_preserved:true'));
+  assert.ok(runner.includes('cold_hard_boundaries_v02'));
+  assert.ok(runner.includes('cold_hard_boundaries_v03'));
+});
