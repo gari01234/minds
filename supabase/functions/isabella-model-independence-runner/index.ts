@@ -35,6 +35,7 @@ const MODEL_B=Deno.env.get("MINDS_MODEL_SWAP_B")||"gpt-6-astra";
 const COLD_FIXTURE_VERSION="cold-reconstruction-v0.1";
 const FIXTURE_VERSION_V2="model-swap-v0.2";
 const COLD_FIXTURE_VERSION_V2="cold-reconstruction-v0.2";
+const COLD_FIXTURE_VERSION_V3="cold-reconstruction-v0.3";
 const ALLOWED={
   epistemic_status:new Set(["canonical","source_assertion","due_unconfirmed","hypothesis","generated_artifact","not_applicable"]),
   authority_action:new Set(["none","proposal_only","may_execute_with_existing_permission","not_applicable"]),
@@ -509,6 +510,90 @@ function coldModelInputV2(snapshot:any){
   };
 }
 
+function canonicalizeColdSymmetricRelations(output:any){
+  const copy=structuredClone(output||{});
+  copy.relations=(Array.isArray(copy.relations)?copy.relations:[]).map((x:any)=>{
+    if(String(x?.type||"")!=="contradicts")return x;
+    const pair=[String(x?.from||""),String(x?.to||"")].sort();
+    return {...x,from:pair[0],to:pair[1]};
+  });
+  return copy;
+}
+
+function coldFixtureV3(){
+  const base=coldFixtureV2();
+  return {
+    ...base,
+    version:COLD_FIXTURE_VERSION_V3,
+    purpose:"controlled_project_model_cold_reconstruction_with_symmetric_relation_canonicalization",
+    hard_requirements:{
+      ...base.hard_requirements,
+      contradiction:{pair:["C_ATTIKA_120","C_ATTIKA_OPEN"],type:"contradicts"}
+    },
+    representation_rules:[
+      "contradicts is semantically symmetric and is canonicalized to a stable claim-key order before hard-boundary evaluation",
+      "supports, supersedes, depends_on and qualifies remain directional"
+    ]
+  };
+}
+
+function evaluateColdHardV3(snapshot:any,output:any){
+  const normalizedOutput=canonicalizeColdSymmetricRelations(output);
+  const n=normalizeCold(normalizedOutput);
+  const sourceIds=new Set((snapshot.sources||[]).map((x:any)=>String(x.id)));
+  const failures:string[]=[];
+  const validSources=(ids:any[])=>Array.isArray(ids)&&ids.length>0&&ids.every(x=>sourceIds.has(String(x)));
+  const claimMap=new Map(n.claims.map((x:any)=>[x.key,x]));
+  for(const [key,req] of Object.entries(snapshot.hard_requirements?.claims||{}) as any){
+    const got:any=claimMap.get(key);
+    if(!got){failures.push("claim_missing:"+key);continue}
+    if(got.epistemic_status!=="source_assertion")failures.push("claim_authority:"+key);
+    if(got.current!==req.current)failures.push("claim_current:"+key);
+    if(!validSources(got.source_ids))failures.push("claim_provenance:"+key);
+  }
+  for(const got of n.claims as any[]){
+    if(!validSources(got.source_ids))failures.push("claim_unknown_source:"+got.key);
+    if(got.epistemic_status!=="source_assertion")failures.push("claim_non_source_assertion:"+got.key);
+  }
+
+  const cr=snapshot.hard_requirements?.contradiction;
+  if(cr){
+    const expected=[...cr.pair].sort();
+    if(!n.relations.some((x:any)=>x.type===cr.type&&JSON.stringify([x.from,x.to].sort())===JSON.stringify(expected)))failures.push("required_contradiction");
+  }
+
+  const moveMap=new Map(n.movements.map((x:any)=>[x.key,x]));
+  for(const [key,req] of Object.entries(snapshot.hard_requirements?.movements||{}) as any){
+    const got:any=moveMap.get(key);
+    if(!got){failures.push("movement_missing:"+key);continue}
+    if(got.kind!==req.kind||got.actor!==req.actor)failures.push("movement_ownership:"+key);
+    if(got.anchor!==req.anchor)failures.push("movement_anchor:"+key);
+    if(!req.statuses.includes(got.status))failures.push("movement_status:"+key);
+    if(!validSources(got.source_ids)||!got.source_ids.includes(req.must_include_source))failures.push("movement_provenance:"+key);
+  }
+
+  const vr=snapshot.hard_requirements?.variant;
+  const variant=n.variants.find((x:any)=>x.key==="V_ATTIKA");
+  if(!variant)failures.push("variant_missing");
+  else{
+    const pair=[variant.source_claim,variant.target_claim].sort();
+    if(variant.kind!==vr.kind||JSON.stringify(pair)!==JSON.stringify([...vr.pair].sort()))failures.push("variant_pair");
+    if(variant.authority_mutation!==false)failures.push("variant_authority_mutation");
+  }
+
+  const gapMap=new Map(n.gaps.map((x:any)=>[x.key,x]));
+  for(const [key,req] of Object.entries(snapshot.hard_requirements?.gaps||{}) as any){
+    const got:any=gapMap.get(key);
+    if(!got){failures.push("gap_missing:"+key);continue}
+    if(got.kind!==req.kind)failures.push("gap_kind:"+key);
+    if(!validSources(got.source_ids))failures.push("gap_provenance:"+key);
+    if(req.must_include_source&&!got.source_ids.includes(req.must_include_source))failures.push("gap_required_source:"+key);
+    if(req.must_include_any&&!req.must_include_any.some((x:string)=>got.source_ids.includes(x)))failures.push("gap_required_any:"+key);
+  }
+
+  return {pass:failures.length===0,failures,normalized:n,representation_normalized:true};
+}
+
 function evaluateColdHard(snapshot:any,output:any){
   const n=normalizeCold(output);
   const sourceIds=new Set((snapshot.sources||[]).map((x:any)=>String(x.id)));
@@ -751,6 +836,52 @@ async function executeRunV2(sb:any,apiKey:string,run:any){
   }
 }
 
+async function executeColdRunV3(sb:any,apiKey:string,run:any){
+  const policy=relationshipPolicy("conversation");
+  if(run.relationship_policy_version!==ISABELLA_RELATIONSHIP_POLICY_VERSION)throw new Error("relationship_policy_version_drift");
+  if(await sha256(policy)!==run.relationship_policy_hash)throw new Error("relationship_policy_hash_drift");
+  const snapshot=run.input_snapshot;
+  await sb.from("minds_model_independence_runs").update({status:"running",started_at:new Date().toISOString(),error:null}).eq("id",run.id);
+  try{
+    const a=await callColdModelV2(apiKey,run.model_a,policy,snapshot);
+    const b=await callColdModelV2(apiKey,run.model_b,policy,snapshot);
+    const evalA=evaluateColdHardV3(snapshot,a.parsed),evalB=evaluateColdHardV3(snapshot,b.parsed);
+    const exactAgreement=compareCold({normalized:evalA.normalized},{normalized:evalB.normalized});
+    const metrics={
+      deterministic_evaluator:"cold_hard_boundaries_v03",
+      model_a_hard_pass:evalA.pass,
+      model_b_hard_pass:evalB.pass,
+      model_a_hard_failures:evalA.failures,
+      model_b_hard_failures:evalB.failures,
+      both_preserve_all_hard_boundaries:evalA.pass&&evalB.pass,
+      interpretive_exact_agreement_rate:exactAgreement.agreement_rate,
+      interpretive_disagreements:exactAgreement.disagreements,
+      project_model_hidden:true,
+      authority_mutation_allowed:false,
+      exact_interpretive_identity_required:false,
+      symmetric_relation_canonicalizer_applied:true,
+      v01_results_preserved:true,
+      v02_results_preserved:true
+    };
+    await Promise.all([
+      recordUsage(sb,run.user_id,run.model_a,a.usage,run.id,COLD_FIXTURE_VERSION_V3,"model_independence_cold_v3"),
+      recordUsage(sb,run.user_id,run.model_b,b.usage,run.id,COLD_FIXTURE_VERSION_V3,"model_independence_cold_v3")
+    ]);
+    const {error}=await sb.from("minds_model_independence_runs").update({
+      status:"completed",
+      output_a:{model:run.model_a,response_id:a.response_id,reconstruction:evalA.normalized,hard_evaluation:{pass:evalA.pass,failures:evalA.failures,representation_normalized:true}},
+      output_b:{model:run.model_b,response_id:b.response_id,reconstruction:evalB.normalized,hard_evaluation:{pass:evalB.pass,failures:evalB.failures,representation_normalized:true}},
+      metrics,completed_at:new Date().toISOString()
+    }).eq("id",run.id);
+    if(error)throw error;
+    return {id:run.id,status:"completed",metrics};
+  }catch(e){
+    const detail=e instanceof Error?e.message:String(e);
+    await sb.from("minds_model_independence_runs").update({status:"failed",error:detail.slice(0,4000),completed_at:new Date().toISOString()}).eq("id",run.id);
+    return {id:run.id,status:"failed",error:detail.slice(0,800)};
+  }
+}
+
 async function executeColdRunV2(sb:any,apiKey:string,run:any){
   const policy=relationshipPolicy("conversation");
   if(run.relationship_policy_version!==ISABELLA_RELATIONSHIP_POLICY_VERSION)throw new Error("relationship_policy_version_drift");
@@ -864,6 +995,18 @@ Deno.serve(async(req:Request)=>{
     }).select("*").single();
     if(error||!data)return json({error:"run_create_failed",detail:error?.message||"unknown"},500);
     run=data;
+  }else if(action==="acceptance_cold_reconstruction_v3"){
+    const {data:owner,error:ownerError}=await sb.from("isabella_projects").select("user_id").order("created_at",{ascending:true}).limit(1).maybeSingle();
+    if(ownerError||!owner?.user_id)return json({error:"owner_not_found"},500);
+    const snapshot=coldFixtureV3(),policy=relationshipPolicy("conversation");
+    const {data,error}=await sb.from("minds_model_independence_runs").insert({
+      user_id:owner.user_id,experiment_kind:"cold_reconstruction",fixture_version:COLD_FIXTURE_VERSION_V3,
+      relationship_policy_version:ISABELLA_RELATIONSHIP_POLICY_VERSION,
+      relationship_policy_hash:await sha256(policy),input_hash:await sha256(JSON.stringify(snapshot)),
+      model_a:MODEL_A,model_b:MODEL_B,input_snapshot:snapshot,status:"queued"
+    }).select("*").single();
+    if(error||!data)return json({error:"run_create_failed",detail:error?.message||"unknown"},500);
+    run=data;
   }else if(action==="acceptance_cold_reconstruction_v2"){
     const {data:owner,error:ownerError}=await sb.from("isabella_projects").select("user_id").order("created_at",{ascending:true}).limit(1).maybeSingle();
     if(ownerError||!owner?.user_id)return json({error:"owner_not_found"},500);
@@ -909,6 +1052,7 @@ Deno.serve(async(req:Request)=>{
     run=data;
   }
   if(run.fixture_version===FIXTURE_VERSION_V2)return json(await executeRunV2(sb,apiKey,run));
+  if(run.fixture_version===COLD_FIXTURE_VERSION_V3)return json(await executeColdRunV3(sb,apiKey,run));
   if(run.fixture_version===COLD_FIXTURE_VERSION_V2)return json(await executeColdRunV2(sb,apiKey,run));
   return json(run.experiment_kind==="cold_reconstruction"
     ?await executeColdRun(sb,apiKey,run)
