@@ -1674,3 +1674,7 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .situation-item.situation-editable{display:block;width:100%;text-align:left;background:transparent;font:inherit;cursor:pointer}
 .situation-item.situation-editable:hover{background:#f7f7f8}
 .situation-item.situation-editable:focus-visible{outline:2px solid #444;outline-offset:2px}
+
+.calendar-create-row{display:flex;justify-content:flex-end;padding:7px 16px}
+.calendar-create-row button{font:inherit;font-size:12px;border:1px solid #e4e4e7;background:#fff;border-radius:16px;padding:8px 12px;cursor:pointer}
+.calendar-create-row button:hover{background:#f6f6f7}
