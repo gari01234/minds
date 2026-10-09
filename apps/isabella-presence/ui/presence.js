@@ -129,7 +129,8 @@ function attentionCard(event){
     label:needsUser?'Necesito tu decisión':'Para tener en cuenta',title:String(event.title||'Actualización').trim(),body:String(event.body||'').trim(),
     status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser,
     replyContext:needsUser?{
-      attention_id:String(event.id||''),source_type:String(event.source_type||''),source_id:String(event.source_id||''),
+      attention_id:String(event.id||''),request_revision:Number(event.request_revision||1),
+      source_type:String(event.source_type||''),source_id:String(event.source_id||''),
       mission_run_id:String(metadata.mission_run_id||event.source_id||''),title:String(event.title||'').trim(),
       question:String(event.body||'').trim()
     }:null};
@@ -506,7 +507,7 @@ async function queryPresence(){
   const [runQ,missionQ,attentionQ]=await Promise.all([
     sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
     sb.from('minds_mission_runs').select('id,status,phase,instruction,result_summary,blocker_question,wait_kind,wake_at,metadata,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
+    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
   if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
   const missions=missionQ.data||[],missionById=new Map(missions.map(x=>[String(x.id),x]));
@@ -580,7 +581,17 @@ async function sendChatText(raw){
     if(replyContext)clearReplyContext();
     chatBusy=false;
     await loadConversationHistory({render:false});
-  }catch(e){chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true})}
+  }catch(e){
+    let stale=false;
+    if(replyContext&&e?.context?.json){
+      try{const payload=await e.context.json();stale=payload?.error==='stale_decision'}catch{}
+    }
+    if(stale){
+      clearReplyContext();
+      chatTurns.push({role:'assistant',text:'Esa decisión cambió mientras respondías. Actualicé el estado para que no contestes una versión anterior.',error:true});
+      await refresh({force:true});
+    }else chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true});
+  }
   finally{chatBusy=false;await renderPresence(lastCards,{auto:false})}
 }
 async function submitChat(event){event.preventDefault();await sendChatText($('#chatInput').value)}
