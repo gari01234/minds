@@ -541,10 +541,10 @@ test('Build 36 sanitizes legacy memory kinds before Supabase sync',()=>{
 });
 
 
-test('Build 37 opens calendar on today and keeps today visually marked after another selection',()=>{
+test('Build 90.5 preserves selected calendar date between lenses and keeps today marked',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes("if(name==='calendar'&&previous!=='calendar')state.date=today()"));
+  assert.ok(!app.includes("if(name==='calendar'&&previous!=='calendar')state.date=today()"));
   assert.ok(app.includes('month-weekdays'));
   assert.ok(css.includes('.mc.today:not(.selected) .mn{color:#e84d62'));
   assert.ok(css.includes('.mc.selected .mn{background:#111;color:#fff}'));
