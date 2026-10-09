@@ -775,13 +775,14 @@ function renderFeedItems(items){
   const ongoing=all.filter(x=>allowed(x)&&(!generation||String(x?.metadata?.generation_id||'')!==generation)&&(String(x.lifecycle_state||'')==='seen'||String(x.user_feedback||'')==='liked')&&!now.some(n=>overlaps(x,n))).slice(0,2);
   feedItems=dedupeFeedItems([...(weather?[weather]:[]),...now,...ongoing]);
   const weatherHtml=weather?surfaceCard(weather,'feed'):`<div class="feed-weather-placeholder"><div><span>CLIMA</span><strong>Sin localidad configurada</strong></div><button data-weather-settings>Ajustar</button></div>`;
-  const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">Ahora mismo no hay nada que merezca interrumpirte.</div>';
+  const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">No hay sugerencias nuevas. Esto no significa que no tengas pendientes.</div>';
   const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">Retomar</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
-  box.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section><section class="feed-section"><h2 class="feed-section-title">Ahora</h2>${nowHtml}</section>${ongoingHtml}`;
+  box.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section><section class="feed-section"><h2 class="feed-section-title">Sugerencias de Isabella</h2>${nowHtml}</section>${ongoingHtml}`;
   bindSurfaceActions();
   document.querySelector('[data-weather-settings]')?.addEventListener('click',feedPreferencesPanel);
 }
 async function renderFeed(force=false){
+  void window.MINDS_SITUATION?.render?.();
   const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
   let visible=[...feedItems];if(force&&refresh){refresh.disabled=true;setWorking(refresh,true)}
   try{
