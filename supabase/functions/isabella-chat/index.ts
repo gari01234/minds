@@ -3473,19 +3473,22 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
   await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
-  return json({
+  const responsePayload:any={
     reply,
     proposal:toolProposals.length===1?toolProposals[0]:null,
     proposals:toolProposals.length>1?toolProposals:[],
-    memory_candidates:toolMemories,
     standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
     quick_replies:quickReplies,
     pending_intent:null,
-    sources:webSources,
-    artifacts:artifactResults,
     conversation_id:conversationInfo.id||null,
     exposure_scope:exposureScope
-  });
+  };
+  if(surface!=="presence"){
+    responsePayload.memory_candidates=toolMemories;
+    responsePayload.sources=webSources;
+    responsePayload.artifacts=artifactResults;
+  }
+  return json(responsePayload);
 
   }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
   finally{await closeConversation(supabaseClient(req),activeConversation)}
