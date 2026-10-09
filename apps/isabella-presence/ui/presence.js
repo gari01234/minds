@@ -515,9 +515,9 @@ async function cancelRun(id){
 async function queryPresence(){
   const sinceRuns=new Date(now()-20*60*1000).toISOString(),sinceAttention=new Date(now()-48*60*60*1000).toISOString();
   const [runQ,missionQ,attentionQ]=await Promise.all([
-    sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_mission_runs').select('id,status,phase,instruction,result_summary,blocker_question,wait_kind,wake_at,metadata,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,deadline_at,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
+    sb.from('minds_capability_runs').select('id,title,status,summary,error,metadata,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
+    sb.from('minds_mission_runs').select('id,status,instruction,result_summary,wait_kind,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
+    sb.from('minds_attention_events').select('id,title,body,urgency,requires_user,deadline_at,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
   if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
   const missions=missionQ.data||[],missionById=new Map(missions.map(x=>[String(x.id),x]));
@@ -571,7 +571,7 @@ async function refresh({force=false}={}){
   try{
     await syncPendingReview({discover:!pendingReviewRequestId});
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
-    const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
+    const historyChanged=expanded&&panelView==='chat'&&!chatBusy?await loadConversationHistory({render:false}):false;
     if(panelView==='tasks'&&expanded)await loadAgenda({force});
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
     else if(historyChanged)renderConversation();
@@ -622,9 +622,8 @@ async function connect(){
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'minds-isabella-presence-auth-v01'}});
   const {data,error}=await sb.auth.getSession();if(error)return renderAuth('No pude leer la sesión de MINDS.');
   user=data.session?.user||null;
-  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void loadConversationHistory({render:false}).then(()=>refresh({force:true}));startPolling()}else{if(timer){clearTimeout(timer);timer=null}void renderAuth('')}});
+  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void refresh({force:true});startPolling()}else{if(timer){clearTimeout(timer);timer=null}void renderAuth('')}});
   if(!user)return renderAuth('');
-  await loadConversationHistory({render:false});
   await refresh({force:true});startPolling();
 }
 async function sendOtp(event){
@@ -637,7 +636,7 @@ async function verifyOtp(event){
   if(!email||!/^\d{6,10}$/.test(token)){ $('#authMessage').textContent='Introduce el código completo.';return }
   $('#authMessage').textContent='Verificando…';const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
   if(error){$('#authMessage').textContent=error.message;return}
-  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
+  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await refresh({force:true});startPolling();
 }
 async function setPanelView(next){
   const target=['status','tasks','chat'].includes(next)?next:'status';
