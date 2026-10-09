@@ -18,7 +18,7 @@ Presence is a projection, not another runtime. Closing or crashing it must never
 
 ## Build 88 sequence
 
-### 88.1 — Exact decision binding
+### 88.1 — Exact decision binding **Implemented**
 - Add a monotonic revision to decision-bearing Attention events.
 - Presence carries attention_id + request_revision in reply_context.
 - isabella-chat validates the binding server-side before model reasoning.
