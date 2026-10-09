@@ -32,7 +32,7 @@ The first label is deliberately **Situación**, not yet **Ahora**: the existing 
 
 Derive current attention from canonical Attention Economy and Review Economy, explicitly distinguish no pending items from withheld/suppressed items and unknown coverage, and provide exact contextual actions. Preserve Feed items as a secondary, labeled contextual section. Never store a second attention status machine.
 
-### 90.3 — Work as a project understanding lens — implemented; CI and integration pending
+### 90.3 — Work as a project understanding lens — accepted and merged 2026-10-09
 
 Keep Desktop, Planner, Conocimiento, Threads and their canonical identities. Make the Project Model revision, Variants, open Movements, Perimeter and gaps intelligible in a coherent overview without turning inferred Claims into accepted truth. Preserve existing task ordering and file interactions.
 
@@ -57,3 +57,7 @@ No global navigation rewrite that destroys existing features. No new model infer
 90.1 introduced the desktop navigation rail without removing mobile destinations or changing canonical state. 90.2 introduced a source-backed situational radar; its coverage remains explicitly limited to dated tasks, selected Expectations, unconsumed user-required Attention Events, and pending action proposals. Generated Feed suggestions are not treated as authoritative attention.
 
 90.3 introduces the read-only Work Panorama over canonical project tasks, proposed/disputed Claims, the existing Project Model snapshot and the file count. It does **not** claim to understand the real Bernried source corpus yet: the empirical 84.6 acceptance remains deferred until Work/Desktop uploads after Build 90. A model without listed gaps does not imply complete perimeter coverage. The existing Desktop, Planner, Conocimiento and Threads stay intact and navigable.
+
+### Build 90.4 — field-reported parity regressions
+
+2026-10-09: screenshots expose Panorama exception, Threads unable to open, literal backslash-n at lower left, missing contextual editing from Ahora, and oversize chat composition. This repair slice corrects Work navigation and the database thread-conversation RLS identity mismatch, and exposes direct task editing from Ahora. Full calendar/Work/Presence parity acceptance remains open; do not mark Build 90.4 closed without real interaction, persistence and cross-surface tests.
