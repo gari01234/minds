@@ -59,3 +59,8 @@ entrypoint = "./functions/isabella-capability-runtime/index.ts"
 [functions.isabella-capability-runner]
 verify_jwt = false
 entrypoint = "./functions/isabella-capability-runner/index.ts"
+
+
+[functions.isabella-model-independence-runner]
+verify_jwt = false
+entrypoint = "./functions/isabella-model-independence-runner/index.ts"
