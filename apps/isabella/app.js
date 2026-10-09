@@ -207,11 +207,32 @@ function dayColors(date){
   return [...new Set(items.map(itemColor).filter(Boolean))].slice(0,4);
 }
 function formatMessageText(text){
-  let html=esc(text);
-  html=html.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)]+)\)/g,'<a class="message-link" href="$2" target="_blank" rel="noopener">$1</a>');
-  html=html.replace(/\*\*([^*\n][\s\S]*?)\*\*/g,'<strong>$1</strong>');
-  html=html.replace(/__([^_\n][\s\S]*?)__/g,'<strong>$1</strong>');
-  return html;
+  // Shared, escaped presentation for Isabella and Work Threads.
+  // A display transform only; it cannot promote a claim or evidence.
+  const inline=raw=>{
+    let h=esc(raw);
+    h=h.replace(/`([^`\n]+)`/g,'<code>$1</code>');
+    h=h.replace(/\[([^\]\n]+)\]\((https?:\/\/[^\s)"'<>]+)\)/g,'<a class="message-link" href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    h=h.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+    h=h.replace(/__(.+?)__/g,'<strong>$1</strong>');
+    h=h.replace(/(^|[^\*])\*([^\*\n]+)\*(?!\*)/g,'$1<em>$2</em>');
+    return h;
+  };
+  const lines=String(text||'').replace(/\r\n/g,'\n').split('\n');
+  const out=[];let inList=false;
+  for(const line of lines){
+    const bullet=line.match(/^\s*[-*]\s+(.+)$/);
+    if(bullet){
+      if(!inList){out.push('<ul class="message-markdown-list">');inList=true}
+      out.push('<li>'+inline(bullet[1])+'</li>');continue;
+    }
+    if(inList){out.push('</ul>');inList=false}
+    const heading=line.match(/^\s*(#{1,3})\s+(.+)$/);
+    if(heading){out.push('<span class="message-markdown-heading level-'+heading[1].length+'">'+inline(heading[2])+'</span>');continue}
+    out.push(line.trim()?'<span class="message-markdown-line">'+inline(line)+'</span>':'<span class="message-markdown-space"></span>');
+  }
+  if(inList)out.push('</ul>');
+  return out.join('');
 }
 function cleanGeneratedDeliverableText(text,artifacts=[]){
   let out=String(text||'');
@@ -383,7 +404,7 @@ function show(name){
   const allowed=['assistant','feed','ideas','work','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
   const previous=state.screen;
-  if(name==='calendar'&&previous!=='calendar')state.date=today();
+  // Preserve the selected date when changing lenses; Hoy is an explicit action.
   if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
     $('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-close'},location.origin);
     $('#readingsScreen')?.classList.remove('sofia-chat-active');
@@ -1692,14 +1713,22 @@ async function acknowledgeIntentDelivery(delivery){
   const {error}=await sb.rpc('minds_ack_standing_intents',{p_ids:delivery.ids,p_run_key:delivery.run_key});
   if(error)console.warn('No se pudo confirmar la entrega del recordatorio:',error.message);
 }
+function setChatActivity(label=''){
+  const box=$('#messages');if(!box)return;
+  let node=box.querySelector('#isabellaChatActivity');
+  if(!label){node?.remove();return}
+  if(!node){node=document.createElement('div');node.id='isabellaChatActivity';node.className='chat-activity';node.setAttribute('role','status');node.setAttribute('aria-live','polite');box.appendChild(node)}
+  node.textContent=label;
+}
 async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
   const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo});
-  clearReplyTarget();orb('thinking','Pensando…');setWorking($('#sendButton'),true);
+  clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,onProgress:event=>{if(event?.label)orb('thinking',event.label)},onTextDelta:(delta,full)=>streamAssistantDelta(delta,full),onTextReset:()=>clearAssistantStream()});
+      setChatActivity('Isabella está preparando la respuesta…');
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
       const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
@@ -1715,7 +1744,7 @@ async function handle(text,attachments=[],replyTo=null){
       else save();
     }else say('assistant',localFallback(text));
   }catch(e){clearAssistantStream();say('assistant',e?.message||localFallback(text))}
-  finally{clearAssistantStream();orb();setWorking($('#sendButton'),false)}
+  finally{clearAssistantStream();setChatActivity('');orb();setWorking($('#sendButton'),false)}
 }
 let pendingChatFiles=[];
 const pendingChatUrls=new Map();
@@ -2052,6 +2081,25 @@ function initWeekDateDrag(){
   });
 }
 function itemBy(kind,id){return (kind==='task'?state.tasks:state.events).find(x=>x.id===id)}
+async function openCanonicalTaskById(rowId){
+  // "Ahora" reads database UUIDs, while the existing editor addresses client_key.
+  // Resolve identity server-side and reuse the canonical editor, never fork a task.
+  const sb=window.MINDS_SUPABASE;
+  if(!sb){modal('Editar tarea','<div class="small">No hay conexión con la memoria de MINDS.</div>');return}
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)throw new Error('Sesión no disponible.');
+    const {data,error}=await sb.from('isabella_tasks').select('id,client_key').eq('id',String(rowId)).eq('user_id',session.user.id).maybeSingle();
+    if(error)throw error;
+    if(!data)throw new Error('Esta tarea ya no está disponible.');
+    const key=data.client_key||data.id;
+    if(!itemBy('task',key))await window.ISABELLA_SYNC_PULL_NOW?.();
+    if(!itemBy('task',key))throw new Error('No pude actualizar esta tarea desde MINDS. Comprueba la sincronización e inténtalo de nuevo.');
+    editItem('task',key);
+  }catch(e){
+    modal('No pude abrir la tarea','<div class="small">'+esc(e?.message||'Error de sincronización')+'</div>');
+  }
+}
 function itemActions(kind,id){
   const item=itemBy(kind,id);if(!item)return;
   const archive=kind==='task'?'<button id="quickArchive" class="sheet-action">Archivar</button>':'';
@@ -3240,6 +3288,8 @@ window.ISABELLA_APP={
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},
   editTaskById:(id)=>editItem('task',id),
+  openCanonicalTaskById,
+  formatMessageText,
   openNewItem:(date)=>newPanel(date),
   openModal:modal,
   closeModal,

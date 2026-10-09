@@ -541,10 +541,10 @@ test('Build 36 sanitizes legacy memory kinds before Supabase sync',()=>{
 });
 
 
-test('Build 37 opens calendar on today and keeps today visually marked after another selection',()=>{
+test('Build 90.5 preserves selected calendar date between lenses and keeps today marked',()=>{
   const app=read('apps/isabella/app.js');
   const css=read('apps/isabella/app.css');
-  assert.ok(app.includes("if(name==='calendar'&&previous!=='calendar')state.date=today()"));
+  assert.ok(!app.includes("if(name==='calendar'&&previous!=='calendar')state.date=today()"));
   assert.ok(app.includes('month-weekdays'));
   assert.ok(css.includes('.mc.today:not(.selected) .mn{color:#e84d62'));
   assert.ok(css.includes('.mc.selected .mn{background:#111;color:#fff}'));
@@ -612,12 +612,12 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const sw=read('apps/isabella/sw.js');
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=64'));
+  assert.ok(index.includes('app.css?v=65'));
   assert.ok(index.includes('shell.js?v=95'));
-  assert.ok(index.includes('app.js?v=101'));
+  assert.ok(index.includes('app.js?v=102'));
   assert.ok(index.includes('sync.js?v=pwa31'));
   assert.ok(index.includes('ai.js?v=49'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v114'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v115'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -726,7 +726,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=15'));
+  assert.ok(index.includes('work.js?v=16'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));

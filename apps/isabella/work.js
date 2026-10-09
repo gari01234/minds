@@ -86,7 +86,7 @@ function knowledgeFlags(c){
 async function renderKnowledge(){
   const [q,fq,mq]=await Promise.all([
     sb.from('minds_work_claims').select('*,minds_work_evidence(*)').eq('project_id',project.id).order('updated_at',{ascending:false}),
-    sb.from('minds_work_files').select('id,name,storage_path').eq('project_id',project.id),
+    sb.from('minds_work_files').select('id,name,storage_path,index_status').eq('project_id',project.id),
     sb.rpc('minds_project_model_snapshot',{p_project_id:project.id})
   ]);
   if(q.error)throw q.error;knowledgeRows=q.data||[];
@@ -120,13 +120,14 @@ function paintKnowledge(){
     const f=knowledgeFlags(c),q=knowledgeQuery.toLocaleLowerCase();
     return (!q||[c.statement,c.subject,c.topic,c.discipline].join(' ').toLocaleLowerCase().includes(q))&&(knowledgeFilter==='all'||knowledgeFilter==='review'&&(f.unreviewed||f.contradiction||f.expired)||knowledgeFilter==='active'&&!['superseded','rejected','resolved'].includes(c.status));
   });
+  const knowledgeEmpty='<div class="work-empty">'+esc(knowledgeRows.length?'No hay conocimiento que coincida con este filtro.':'Todavía no hay Claims registrados para este proyecto. Desktop contiene '+files.length+' archivo(s) registrado(s); '+files.filter(f=>f.index_status==='indexed').length+' constan como indexados. Registrar un archivo no lo convierte automáticamente en conocimiento validado.')+'</div>';
   $('#workBody').innerHTML=`<div class="work-knowledge"><div class="work-desktop-toolbar"><div><strong>Conocimiento de ${esc(project.name)}</strong><p class="small">Afirmaciones, decisiones y preguntas con su evidencia e historia. Confirmar una revisión no convierte una fuente en certeza.</p></div><button data-knowledge-new>＋ Añadir</button></div>
     ${projectModelPanel()}
     <div class="knowledge-filters"><input id="knowledgeSearch" aria-label="Buscar conocimiento" placeholder="Buscar tema, disciplina o decisión…" value="${esc(knowledgeQuery)}"><select id="knowledgeFilter" aria-label="Estado del conocimiento">${[['active','Activo'],['review','Por revisar'],['all','Todo e historial']].map(([v,l])=>`<option value="${v}" ${knowledgeFilter===v?'selected':''}>${l}</option>`).join('')}</select></div>
     ${filtered.map(c=>{const f=knowledgeFlags(c);return `<article class="knowledge-card"><div class="knowledge-meta"><b>${esc(knowledgeStates[c.status]||c.status)}</b><span>${esc(c.claim_type)} · ${esc(provenanceNames[c.provenance_class]||c.provenance_class)}</span>${f.contradiction?'<span class="knowledge-attention">Contradicción por revisar</span>':''}${f.expired?'<span class="knowledge-attention">Vigencia vencida</span>':''}</div><p>${esc(c.statement)}</p><div class="small">${esc([c.discipline,c.topic,c.subject].filter(Boolean).join(' · '))}</div>
       <details><summary>${(c.minds_work_evidence||[]).length} evidencias · Historia</summary>${(c.minds_work_evidence||[]).map(e=>`<blockquote><b>${esc(e.stance==='contradicts'?'Contradice':e.stance==='context'?'Contexto':'Apoya')}</b><p>${esc(e.excerpt||'Sin extracto')}</p><small>${esc(e.trust_level)} · ${esc(JSON.stringify(e.locator||{}))}</small>${e.source_file_id?`<button data-evidence-file="${esc(e.source_file_id)}">Abrir ${esc(files.find(x=>x.id===e.source_file_id)?.name||'fuente')}</button>`:''}</blockquote>`).join('')||'<p class="small">Sin evidencia vinculada.</p>'}
       <p class="small">Revisado: ${c.confirmed_at?new Date(c.confirmed_at).toLocaleString('es-ES'):'Pendiente'}${c.valid_to?' · Válido hasta '+new Date(c.valid_to).toLocaleDateString('es-ES'):''}</p>${c.supersedes_id?'<p class="small">Sustituye una formulación anterior.</p>':''}${c.superseded_by?'<p class="small">Hay una formulación posterior.</p>':''}${(c.metadata?.previous_versions||[]).slice().reverse().map(v=>`<p class="small">${esc(knowledgeStates[v.status]||v.status)} · ${esc(v.statement)}</p>`).join('')}</details>
-      <div class="knowledge-actions"><button data-knowledge-edit="${c.id}">Revisar</button><button data-knowledge-replace="${c.id}">Proponer sustitución</button></div></article>`}).join('')||'<div class="work-empty">No hay conocimiento que coincida con este filtro. Puedes añadirlo aquí o pedirle a Isabella que prepare una propuesta a partir de un documento.</div>'}</div>`;
+      <div class="knowledge-actions"><button data-knowledge-edit="${c.id}">Revisar</button><button data-knowledge-replace="${c.id}">Proponer sustitución</button></div></article>`}).join('')||knowledgeEmpty}</div>`;
   $('#knowledgeSearch').onchange=e=>{knowledgeQuery=e.target.value;paintKnowledge()};
   $('#knowledgeFilter').onchange=e=>{knowledgeFilter=e.target.value;paintKnowledge()};
   $('[data-knowledge-new]').onclick=()=>window.MINDS_PROPOSALS?.edit({kind:'work_claim',project:project.name,status:'proposed',claim_type:'fact',provenance_class:'user'});
@@ -478,7 +479,7 @@ function threadMessageMarkup(m){
   const groups=threadArtifactGroups(artifacts),copy=cleanThreadDeliverableText(m.content,artifacts);
   const previews=groups.previews.length?`<div class="work-thread-previews">${groups.previews.slice(0,2).map(a=>`<button type="button" data-thread-artifact-preview="${esc(a.storage_path)}" aria-label="Abrir vista previa"><img data-thread-artifact-image="${esc(a.storage_path)}" alt="Vista previa del documento"></button>`).join('')}</div>`:'';
   const deliverables=groups.deliverables.length?`<div class="work-thread-artifacts">${groups.deliverables.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:'';
-  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
 }
 async function hydrateThreadArtifacts(root=document){
   const files=[...root.querySelectorAll?.('[data-thread-artifact]')||[]],images=[...root.querySelectorAll?.('[data-thread-artifact-image]')||[]];
@@ -494,6 +495,20 @@ async function hydrateThreadArtifacts(root=document){
     }catch{}
   }));
 }
+// Ephemeral transport/presentation state, never a persisted epistemic fact.
+const threadInFlight=new Set();
+let threadProgress={id:null,phase:'',label:''};
+function setThreadProgress(id,phase,label){
+  threadProgress={id,phase,label};
+  const node=$('#workThreadProgress');
+  if(node&&activeThreadId===id){
+    node.textContent=label;
+    node.hidden=!label;
+    node.dataset.phase=phase;
+  }
+  const form=$('#workThreadForm');
+  if(form&&activeThreadId===id)form.classList.toggle('is-busy',threadInFlight.has(id));
+}
 async function renderThreadConversation(id){
   const thread=threads.find(x=>x.id===id);if(!thread){activeThreadId=null;await renderThreads();return}
   const body=$('#workBody');body.innerHTML='<div class="surface-loading">Abriendo Thread…</div>';
@@ -502,11 +517,14 @@ async function renderThreadConversation(id){
     body.innerHTML=`<section class="work-thread-conversation">
       <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div><button data-thread-actions class="work-thread-head-more" aria-label="Opciones del Thread">•••</button></header>
       <div class="work-thread-log" id="workThreadLog">${messages.map(threadMessageMarkup).join('')||'<div class="work-thread-empty">Este Thread está vacío. Empieza con la primera pregunta o tarea.</div>'}</div>
-      <form class="work-thread-composer" id="workThreadForm"><textarea id="workThreadInput" rows="1" placeholder="Preguntar en ${esc(thread.title)}…"></textarea><button class="send" aria-label="Enviar">↑</button></form>
+      <div class="work-thread-compose-region"><div id="workThreadProgress" class="chat-activity work-thread-progress" role="status" aria-live="polite" data-phase="${esc(threadProgress.phase)}" ${threadProgress.id===thread.id&&threadProgress.label?'':'hidden'}>${threadProgress.id===thread.id?esc(threadProgress.label):''}</div><form class="work-thread-composer ${threadInFlight.has(thread.id)?'is-busy':''}" id="workThreadForm"><textarea id="workThreadInput" rows="1" placeholder="Preguntar en ${esc(thread.title)}…"></textarea><button class="send" aria-label="Enviar">↑</button></form></div>
     </section>`;
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
     $('[data-thread-actions]').onclick=()=>openThreadActions(thread);
     $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
+    $('#workThreadInput')?.addEventListener('keydown',e=>{
+      if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('#workThreadForm')?.requestSubmit()}
+    });
     void hydrateThreadArtifacts(body);
     requestAnimationFrame(()=>{const log=$('#workThreadLog');if(log)log.scrollTop=log.scrollHeight});
   }catch(e){console.error(e);body.innerHTML='<div class="work-empty">No pude abrir este Thread.</div>'}
@@ -523,25 +541,40 @@ async function persistThreadMessage(conversationId,role,content,metadata={}){
   return key;
 }
 async function sendThreadMessage(thread){
+  if(threadInFlight.has(thread.id))return;
   const input=$('#workThreadInput'),message=String(input?.value||'').trim();if(!message)return;
-  const form=$('#workThreadForm');if(form)form.classList.add('is-busy');if(input){input.value='';input.disabled=true}
+  threadInFlight.add(thread.id);
+  if(input){input.disabled=true;input.value=''}
+  setThreadProgress(thread.id,'sending','Enviando mensaje a MINDS…');
   try{
     const cid=await ensureThreadConversation(thread);
     await persistThreadMessage(cid,'user',message);
-    await renderThreadConversation(thread.id);
-    const currentInput=$('#workThreadInput');if(currentInput)currentInput.disabled=true;
-    setStatus('Isabella está revisando el contexto del proyecto…');
+    setThreadProgress(thread.id,'saved','Mensaje guardado en MINDS.');
+    if(activeThreadId===thread.id&&view==='threads')await renderThreadConversation(thread.id);
+    setThreadProgress(thread.id,'thinking','Isabella está revisando el contexto del proyecto…');
     const state=window.ISABELLA_APP?.getState?.()||{};
-    const result=await window.ISABELLA_AI.ask(message,state,{workThread:{id:thread.id,project:project.name}});
+    const result=await window.ISABELLA_AI.ask(message,state,{
+      workThread:{id:thread.id,project:project.name},
+      onProgress:event=>{if(event?.label)setThreadProgress(thread.id,'thinking',String(event.label))},
+      onTextDelta:()=>setThreadProgress(thread.id,'thinking','Isabella está escribiendo…')
+    });
     const reply=String(result?.reply||result?.streamed_text||'').trim();
+    setThreadProgress(thread.id,'saving','Guardando la respuesta…');
     if(reply)await persistThreadMessage(cid,'assistant',reply,{sources:Array.isArray(result?.sources)?result.sources.slice(0,8):[],artifacts:Array.isArray(result?.artifacts)?result.artifacts.slice(0,8):[]});
     const proposal=result?.proposal||(Array.isArray(result?.proposals)?result.proposals[0]:null);
     await sb.from('minds_work_threads').update({last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',thread.id);
-    setStatus('');await renderThreads();
+    setThreadProgress(thread.id,'received',reply?'Respuesta recibida.':'Solicitud procesada; no hubo respuesta textual.');
+    setStatus('');
+    if(activeThreadId===thread.id&&view==='threads')await renderThreads();
     if(proposal)window.MINDS_PROPOSALS?.edit?.(proposal);
   }catch(e){
-    console.error(e);setStatus('No pude completar el mensaje del Thread.');
-    await renderThreads();
+    console.error(e);
+    setThreadProgress(thread.id,'error','No se completó la respuesta. Comprueba el historial antes de reenviar: el mensaje podría estar guardado.');
+    if(activeThreadId===thread.id&&view==='threads')await renderThreads();
+  }finally{
+    threadInFlight.delete(thread.id);
+    $('#workThreadForm')?.classList.remove('is-busy');
+    const field=$('#workThreadInput');if(field)field.disabled=false;
   }
 }
 

@@ -1678,3 +1678,24 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .calendar-create-row{display:flex;justify-content:flex-end;padding:7px 16px}
 .calendar-create-row button{font:inherit;font-size:12px;border:1px solid #e4e4e7;background:#fff;border-radius:16px;padding:8px 12px;cursor:pointer}
 .calendar-create-row button:hover{background:#f6f6f7}
+
+/* Build 90.4–90.5: unified legible chat states and Markdown, scoped to conversation. */
+.situation-item.situation-editable{display:flex;flex-direction:column;gap:4px;border:1px solid #ededf0;background:#fff;padding:9px 10px}
+.situation-item.situation-editable strong,.situation-item.situation-editable small{display:block;width:100%}
+.work-thread-compose-region{display:flex;flex-direction:column;min-width:0}
+.work-thread-progress{padding:5px 18px 2px;margin:0;min-height:20px}
+.work-thread-progress[hidden]{display:none}
+.chat-activity{color:#767680;font-size:12px;line-height:1.5}
+#isabellaChatActivity{margin:8px 0 0;align-self:flex-start}
+.work-thread-progress[data-phase="error"]{color:#a83c3c}
+.message-markdown-line{display:block;white-space:pre-wrap}
+.message-markdown-space{display:block;height:0.8em}
+.message-markdown-heading{display:block;font-weight:650;margin:12px 0 5px;line-height:1.4}
+.message-markdown-heading.level-1{font-size:1.2em}
+.message-markdown-heading.level-2{font-size:1.12em}
+.message-markdown-heading.level-3{font-size:1.04em}
+.message-markdown-list{margin:6px 0 9px;padding-left:21px;white-space:normal}
+.message-markdown-list li{margin:3px 0;line-height:1.5}
+.work-thread-message-copy .message-markdown-list{padding-left:22px}
+.work-thread-message-copy .message-markdown-heading{margin-top:13px}
+@media(max-width:620px){.work-thread-progress{padding-left:14px;padding-right:14px}}

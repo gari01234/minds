@@ -16,7 +16,8 @@ test('Build 78 adds Threads as a fourth Work surface',()=>{
   assert.ok(work.includes("if(view==='threads')await renderThreads()"));
   assert.ok(work.includes("from('minds_work_threads')"));
   assert.ok(work.includes("minds_ensure_work_thread_conversation"));
-  assert.ok(work.includes('window.ISABELLA_AI.ask(message,state,{workThread:'));
+  assert.ok(work.includes('const result=await window.ISABELLA_AI.ask(message,state,{'));
+  assert.ok(work.includes('workThread:{id:thread.id,project:project.name}'));
 });
 
 test('Build 78 keeps one Isabella while giving each Work Thread its own conversation',()=>{
@@ -79,11 +80,11 @@ test('Build 78 current PWA assets are aligned',()=>{
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
-  assert.ok(index.includes('app.css?v=64'));
+  assert.ok(index.includes('app.css?v=65'));
   assert.ok(index.includes('shell.js?v=95'));
-  assert.ok(index.includes('work.js?v=15'));
+  assert.ok(index.includes('work.js?v=16'));
   assert.ok(index.includes('ai.js?v=49'));
-  assert.ok(sw.includes("isabella-shell-v114"));
+  assert.ok(sw.includes("isabella-shell-v115"));
 });
 
 test('Build 78 Work client remains valid JavaScript',()=>{

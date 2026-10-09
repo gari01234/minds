@@ -61,3 +61,13 @@ No global navigation rewrite that destroys existing features. No new model infer
 ### Build 90.4 — field-reported parity regressions
 
 2026-10-09: screenshots expose Panorama exception, Threads unable to open, literal backslash-n at lower left, missing contextual editing from Ahora, and oversize chat composition. This repair slice corrects Work navigation and the database thread-conversation RLS identity mismatch, and exposes direct task editing from Ahora. Full calendar/Work/Presence parity acceptance remains open; do not mark Build 90.4 closed without real interaction, persistence and cross-surface tests.
+
+### Build 90.4 / 90.5 — field acceptance continuation, 2026-10-09
+
+After PR #77, live user testing confirmed that Bernried's HLS & TWP Thread can open and receive a reply. Further screenshots revealed missing in-conversation transmission/progress feedback, unrendered Markdown, an inert task editor in Ahora and cramped task labels. The task editor defect is a mismatch between isabella_tasks.id (database UUID returned by the Ahora query) and the app editor's client_key. Resolve the canonical UUID under the authenticated owner, refresh the existing canonical client state, and edit that client_key. Never invent a second task or perform direct uncontrolled writes.
+
+Thread and Isabella Chat should use one escaped Markdown formatter and surface honest execution phases. A persisted Work Thread message is confirmed as saved only after Supabase insert succeeds. Do not claim the message was 'read' without a read receipt. In-flight rendering state is ephemeral and must not become memory or a project Claim.
+
+Supabase observation (2026-10-09): 28 Work files registered, 0 with index_status='indexed'; minds_work_claims and minds_project_model_revisions each contain 0 records. An empty Conocimiento view is thus not evidence of missing files, nor proof of ingestion or project comprehension. State that boundary in the interface and preserve Build 84.6 real Bernried acceptance for after Build 90.
+
+90.5 first transition slice preserves the selected calendar date across lens switches while retaining the current Thread identity and source-bound reading surface. Remaining 90.4/90.5 acceptance: cross-surface create/edit/recurrence/drag persistence, live authenticated task round-trip, mobile Safari/PWA, multi-context navigation, Readings text/highlights/annotations and evidence scope. Do not mark either build closed or make 84.6 claims from CI-only results.
