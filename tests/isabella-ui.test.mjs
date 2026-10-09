@@ -617,7 +617,7 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(index.includes('app.js?v=104'));
   assert.ok(index.includes('sync.js?v=pwa32'));
   assert.ok(index.includes('ai.js?v=50'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v118'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v119'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
