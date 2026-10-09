@@ -480,7 +480,7 @@ function threadMessageMarkup(m){
   const groups=threadArtifactGroups(artifacts),copy=cleanThreadDeliverableText(m.content,artifacts);
   const previews=groups.previews.length?`<div class="work-thread-previews">${groups.previews.slice(0,2).map(a=>`<button type="button" data-thread-artifact-preview="${esc(a.storage_path)}" aria-label="Abrir vista previa"><img data-thread-artifact-image="${esc(a.storage_path)}" alt="Vista previa del documento"></button>`).join('')}</div>`:'';
   const deliverables=groups.deliverables.length?`<div class="work-thread-artifacts">${groups.deliverables.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:'';
-  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}${role==='assistant'&&!sources.length?'<div class="work-thread-source-boundary">Esta respuesta no incluye fuentes citadas verificables.</div>':''}</article>`;
+  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}${role==='assistant'&&!sources.length?'<div class="work-thread-source-boundary">Esta respuesta no incluye fuentes citadas verificables.</div>':''}${role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-thread-continue="${esc(m.client_key||m.id||'')}">Continuar respuesta</button></div>`:''}</article>`;
 }
 async function hydrateThreadArtifacts(root=document){
   const files=[...root.querySelectorAll?.('[data-thread-artifact]')||[]],images=[...root.querySelectorAll?.('[data-thread-artifact-image]')||[]];
@@ -523,6 +523,13 @@ async function renderThreadConversation(id){
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
     $('[data-thread-actions]').onclick=()=>openThreadActions(thread);
     $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
+    $('[data-thread-continue]').forEach(button=>button.onclick=()=>{
+      const i=messages.findIndex(m=>(m.client_key||m.id)===button.dataset.threadContinue);
+      if(i<0)return;
+      const preceding=messages.slice(0,i).reverse().find(m=>m.role==='user');
+      const original=String(preceding?.content||'').slice(0,900);
+      void sendThreadMessage(thread,'Continúa desde el punto donde se interrumpió tu respuesta anterior, sin repetir la parte ya escrita. Pregunta original: '+original);
+    });
     $('#workThreadInput')?.addEventListener('keydown',e=>{
       if(e.key==='Enter'&&!e.shiftKey&&!e.isComposing){e.preventDefault();$('#workThreadForm')?.requestSubmit()}
     });
@@ -541,11 +548,11 @@ async function persistThreadMessage(conversationId,role,content,metadata={}){
   await sb.from('conversations').update({updated_at:new Date().toISOString()}).eq('id',conversationId);
   return key;
 }
-async function sendThreadMessage(thread){
+async function sendThreadMessage(thread,overrideMessage=null){
   if(threadInFlight.has(thread.id))return;
-  const input=$('#workThreadInput'),message=String(input?.value||'').trim();if(!message)return;
+  const input=$('#workThreadInput'),message=String(overrideMessage??input?.value??'').trim();if(!message)return;
   threadInFlight.add(thread.id);
-  if(input){input.disabled=true;input.value=''}
+  if(input){input.disabled=true;if(overrideMessage===null)input.value=''}
   setThreadProgress(thread.id,'sending','Enviando mensaje a MINDS…');
   try{
     const cid=await ensureThreadConversation(thread);
@@ -561,13 +568,13 @@ async function sendThreadMessage(thread){
     });
     const reply=String(result?.reply||result?.streamed_text||'').trim();
     setThreadProgress(thread.id,'saving','Guardando la respuesta…');
-    if(reply)await persistThreadMessage(cid,'assistant',reply,{sources:Array.isArray(result?.sources)?result.sources.slice(0,8):[],artifacts:Array.isArray(result?.artifacts)?result.artifacts.slice(0,8):[]});
+    if(reply)await persistThreadMessage(cid,'assistant',reply,{sources:Array.isArray(result?.sources)?result.sources.slice(0,8):[],artifacts:Array.isArray(result?.artifacts)?result.artifacts.slice(0,8):[],incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null});
     const proposal=result?.proposal||(Array.isArray(result?.proposals)?result.proposals[0]:null);
     await sb.from('minds_work_threads').update({last_activity_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq('id',thread.id);
-    setThreadProgress(thread.id,'received',reply?'Respuesta recibida.':'Solicitud procesada; no hubo respuesta textual.');
+    setThreadProgress(thread.id,'received',result?.incomplete?'Respuesta parcial recibida. Puedes continuarla.':reply?'Respuesta recibida.':'Solicitud procesada; no hubo respuesta textual.');
     setStatus('');
     if(activeThreadId===thread.id&&view==='threads')await renderThreads();
-    if(proposal)window.MINDS_PROPOSALS?.edit?.(proposal);
+    if(proposal&&!result?.incomplete)window.MINDS_PROPOSALS?.edit?.(proposal);
   }catch(e){
     console.error(e);
     setThreadProgress(thread.id,'error','No se completó la respuesta. Comprueba el historial antes de reenviar: el mensaje podría estar guardado.');

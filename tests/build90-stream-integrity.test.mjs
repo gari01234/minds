@@ -34,8 +34,9 @@ test('90.5: absence of terminal result cannot quietly start another generation',
   assert.ok(start>0&&end>start);
   const client=ai.slice(start,end);
   assert.match(client,/missing_result_event|stream_interrupted|missing_completion|final_result_required/);
-  assert.ok(!/if\(streamed\)return streamed;[\s\S]{0,60}const \{data,error\}=await sb\.functions\.invoke/.test(ai),
-    'Client must not repeat a possibly ambiguous failed generation automatically');
+  assert.match(client,/throw new Error\(String\(streamError\|\|transportError/,'A missing terminal event must fail instead of returning null');
+  assert.match(client,/if\(streamedText\.trim\(\)\)/,'Keep any received partial response');
+  assert.match(client,/if\(result\)return result/,'Only explicit terminal results count as full streaming receipts');
 });
 
 test('90.5: partial responses must be visible and never silently represented as complete',()=>{
@@ -43,4 +44,12 @@ test('90.5: partial responses must be visible and never silently represented as 
     'Message UI must expose an explicit incomplete state');
   assert.match(edge,/incomplete_reason|incomplete_response/,
     'Server must provide an explicit incomplete receipt');
+});
+
+test('90.5: Threads and Chat both persist partial status and require explicit continuation',()=>{
+  const work=file('apps/isabella/work.js');
+  assert.match(work,/incomplete_response:!!result\?\.incomplete/);
+  assert.match(work,/data-thread-continue/);
+  assert.match(app,/data-continue-incomplete/);
+  assert.match(app,/Continuar respuesta/);
 });
