@@ -3,7 +3,7 @@
 const SUPABASE_URL='https://lodexwyyynlarkqgkyhy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X';
 const MINDS_URL='https://gari01234.github.io/minds/isabella/';
-const POLL_MS=15000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
+const POLL_MS=15000,IDLE_DISCOVERY_MS=120000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
 const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01',LOCAL_TASK_DATE_KEY='minds-presence-task-date-v01';
 const $=s=>document.querySelector(s);
@@ -557,6 +557,15 @@ async function syncPendingReview({discover=false}={}){
     if(next!==pendingReviewRequestId)setPendingReviewRequestId(next);
   }catch{}
 }
+function needsActivePolling(){
+  return chatBusy||expanded||manualOpen||lastCards.some(x=>x.needsUser||['working','preparing','waiting'].includes(String(x.kind||'')));
+}
+function scheduleNextPoll(delay=null){
+  if(timer){clearTimeout(timer);timer=null}
+  if(!sb||!user)return;
+  const wait=Number.isFinite(Number(delay))?Math.max(1000,Number(delay)):(needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS);
+  timer=setTimeout(()=>void refresh(),wait);
+}
 async function refresh({force=false}={}){
   if(!sb||!user||polling)return;polling=true;
   try{
@@ -567,9 +576,9 @@ async function refresh({force=false}={}){
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
     else if(historyChanged)renderConversation();
   }catch(e){if(String(e?.message||'').toLowerCase().includes('jwt'))await renderAuth('La sesión de MINDS necesita renovarse.')}
-  finally{polling=false}
+  finally{polling=false;scheduleNextPoll()}
 }
-function startPolling(){if(timer)clearInterval(timer);timer=setInterval(()=>refresh(),POLL_MS)}
+function startPolling(){scheduleNextPoll(needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS)}
 async function sendChatText(raw){
   const message=String(raw||'').trim();if(!message||chatBusy||!sb||!user)return;
   const replyContext=pendingReplyContext?{...pendingReplyContext}:null;
@@ -613,7 +622,7 @@ async function connect(){
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'minds-isabella-presence-auth-v01'}});
   const {data,error}=await sb.auth.getSession();if(error)return renderAuth('No pude leer la sesión de MINDS.');
   user=data.session?.user||null;
-  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void loadConversationHistory({render:false}).then(()=>refresh({force:true}));startPolling()}else void renderAuth('')});
+  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void loadConversationHistory({render:false}).then(()=>refresh({force:true}));startPolling()}else{if(timer){clearTimeout(timer);timer=null}void renderAuth('')}});
   if(!user)return renderAuth('');
   await loadConversationHistory({render:false});
   await refresh({force:true});startPolling();
