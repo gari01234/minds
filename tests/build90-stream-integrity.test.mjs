@@ -53,3 +53,24 @@ test('90.5: Threads and Chat both persist partial status and require explicit co
   assert.match(app,/data-continue-incomplete/);
   assert.match(app,/Continuar respuesta/);
 });
+
+test('90.5: exact reported weekly question requires calendar access on both sides',()=>{
+  const clientStart=ai.indexOf('function needsCalendarAssessment(');
+  const clientEnd=ai.indexOf('async function askDirectStream(',clientStart);
+  assert.ok(clientStart>=0&&clientEnd>clientStart);
+  const client=new Function(ai.slice(clientStart,clientEnd)+';return needsCalendarAssessment;')();
+  const serverStart=edge.indexOf('function calendarAssessmentIntent(');
+  const serverEnd=edge.indexOf('function simpleAgendaMutation(',serverStart);
+  assert.ok(serverStart>=0&&serverEnd>serverStart);
+  const source=edge.slice(serverStart,serverEnd).replace('message:string','message');
+  const server=new Function('normalizeText',source+';return calendarAssessmentIntent;')(s=>String(s||'').trim().toLowerCase());
+  for(const question of ['que tal pinta la siguiente semana?','¿Cómo pinta la próxima semana?','Qué tengo el lunes?']){
+    assert.equal(client(question),true,'Client must recognize: '+question);
+    assert.equal(server(question),true,'Server must recognize: '+question);
+  }
+  for(const smallTalk of ['Qué tal?', 'Cuéntame algo bonito']){
+    assert.equal(client(smallTalk),false);
+    assert.equal(server(smallTalk),false);
+  }
+  assert.match(edge,/scheduleAssessment&&round===0\?\{tool_choice:\{type:"function",name:"search_calendar"\}\}/,'Schedule must force a canonical calendar lookup before evaluating the week');
+});
