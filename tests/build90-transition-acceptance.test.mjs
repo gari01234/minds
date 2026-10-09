@@ -105,7 +105,7 @@ test('90.5 Sofía iframe queues opening until loaded and preserves iframe on sub
   const elements={'#readingsFrame':frame,'#readingsScreen':{classList:readingClass}};
   const c={window:{addEventListener:(name,handler)=>events['window-'+name]=handler},
     location:{pathname:'/minds/isabella/',origin:'https://example.com'},
-    document,$:s=>elements[s],show:name=>{document.body.dataset.section=name},queuedSofiaRequest:null};
+    document,$:s=>elements[s],show:name=>{document.body.dataset.section=name;c.testBridge?.ensureReadings()},queuedSofiaRequest:null};
   const source=part(app,'let queuedSofiaRequest=null;','let pendingReplyTo=null;');
   vm.runInNewContext(source+';globalThis.testBridge={openSofia,ensureReadings};',c);
   c.testBridge.openSofia('Explica esta lectura');
@@ -130,6 +130,6 @@ test('90.6 retained destinations, document transfer, reduced motion and source s
   assert.match(css,/prefers-reduced-motion/);
   assert.match(css,/@media\(min-width:1100px\)/);
   assert.match(app,/e\.origin!==location\.origin\|\|e\.source!==frame\?\.contentWindow/);
-  assert.match(app,/data-nav="calendar"/);
+  assert.match(shell,/data-nav="calendar"/);
   assert.match(app,/window\.MINDS_WORK\?\.render/);
 });
