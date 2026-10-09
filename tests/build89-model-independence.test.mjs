@@ -7,6 +7,7 @@ const read=p=>readFileSync(new URL(p,root),'utf8');
 
 const migration=read('supabase/migrations/20261009072000_model_independence_ledger_v01.sql');
 const runner=read('supabase/functions/isabella-model-independence-runner/index.ts');
+const adapter=read('supabase/functions/_shared/constitutional-state.ts');
 const config=read('supabase/config.toml');
 const build=read('BUILD-89.md');
 const report=read('BUILD-89-REPORT.md');
@@ -121,4 +122,41 @@ test('Build 89 remediation is additive: v0.1 stays failed and v0.2 must be prede
   assert.ok(build.includes('89.R2 — Predeclared v0.2 rerun'));
   assert.ok(report.includes('v0.1 experiments remain immutable evidence'));
   assert.ok(report.includes('hard-vs-interpretive'));
+});
+
+
+test('Build 89.R2 v0.2 freezes structured constitutional state before model execution',()=>{
+  assert.ok(runner.includes('const FIXTURE_VERSION_V2="model-swap-v0.2"'));
+  assert.ok(runner.includes('hard_vs_interpretive_frozen_before_run:true'));
+  assert.ok(runner.includes('constitutional_envelope:constitutionalEnvelope(x.state)'));
+  assert.ok(runner.includes('action==="acceptance_model_swap_v2"'));
+  assert.ok(adapter.includes('export function constitutionalEnvelope'));
+  assert.ok(adapter.includes('export function applyConstitutionalEnvelope'));
+});
+
+test('Build 89.R2 measures raw model drift separately from enforced system invariants',()=>{
+  assert.ok(runner.includes('model_a_raw_compliant_cases'));
+  assert.ok(runner.includes('model_b_raw_compliant_cases'));
+  assert.ok(runner.includes('both_system_preserve_all_hard_invariants'));
+  assert.ok(runner.includes('raw_model_agreement_rate'));
+  assert.ok(runner.includes('constitutional_adapter_applied:true'));
+  assert.ok(runner.includes('v01_results_preserved:true'));
+});
+
+test('Build 89.R2 cold v0.2 predeclares hard boundaries without requiring interpretive identity',()=>{
+  assert.ok(runner.includes('const COLD_FIXTURE_VERSION_V2="cold-reconstruction-v0.2"'));
+  assert.ok(runner.includes('function evaluateColdHard'));
+  assert.ok(runner.includes('both_preserve_all_hard_boundaries'));
+  assert.ok(runner.includes('exact_interpretive_identity_required:false'));
+  assert.ok(runner.includes('movement_ownership:'));
+  assert.ok(runner.includes('variant_authority_mutation'));
+  assert.ok(runner.includes('gap_required_source:'));
+  assert.ok(runner.includes('action==="acceptance_cold_reconstruction_v2"'));
+});
+
+test('Build 89.R2 keeps v0.1 executors and actions intact for auditability',()=>{
+  assert.ok(runner.includes('action==="acceptance_model_swap"'));
+  assert.ok(runner.includes('action==="acceptance_cold_reconstruction"'));
+  assert.ok(runner.includes('exact_contract_v01'));
+  assert.ok(runner.includes('cold_structure_exact_v01'));
 });
