@@ -57,3 +57,20 @@ test('Build 88 remains a thin Presence with no authority expansion',()=>{
   assert.ok(!migration.includes('update public.minds_mission_runs set'));
   assert.ok(!migration.includes('insert into public.minds_permissions'));
 });
+
+
+test('Build 88.2 orders live decision alerts deterministically and renders only one focal card',()=>{
+  assert.ok(presence.includes("const decisions=cards.filter(x=>x.needsUser).sort"));
+  assert.ok(presence.includes("deadlineAt:parseTime(event.deadline_at)"));
+  assert.ok(presence.includes("createdAt:parseTime(event.created_at)"));
+  assert.ok(presence.includes("return [...decisions,...others].slice(0,6)"));
+  assert.ok(presence.includes("const focal=cards[0]||null"));
+  assert.ok(presence.includes("$('#cards').innerHTML=focal?cardHtml(focal):''"));
+  assert.ok(presence.includes("cards.length-1"));
+});
+
+test('Build 88.2 advances the queue from canonical state after a reply',()=>{
+  assert.ok(presence.includes("if(replyContext){"));
+  assert.ok(presence.includes("await refresh({force:true})"));
+  assert.ok(presence.includes(".in('status',['pending','delivered'])"));
+});
