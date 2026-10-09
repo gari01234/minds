@@ -63,6 +63,12 @@ Move already-canonical MINDS state out of free prose classification and expose i
 The adapter derives epistemic status, authority ceiling, scope action, relationship boundary and required uncertainty from structured MINDS state. A replaceable model may still suggest different labels or prose, but the constitutional fields can be overwritten deterministically and deviations remain observable. Detection of the structured input signal itself may still be model-dependent when no canonical state exists; this slice does not pretend otherwise.
 
 ### 89.R2 — Predeclared v0.2 rerun **Implemented; production reruns pending**
+
+### 89.R3 — Symmetric relation canonicalization **Implemented; production v0.3 cold rerun pending**
+The v0.2 cold probe preserved all hard boundaries except Luna reversed the direction of the `contradicts` relation. Because contradiction is semantically symmetric, Build 89 does not treat model-chosen orientation as authority. A deterministic representation layer now canonicalizes only symmetric `contradicts` pairs to stable key order before hard-boundary evaluation. Directional relations such as `supports`, `supersedes`, `depends_on` and `qualifies` are not normalized.
+
+The failed v0.2 run remains unchanged in the ledger. v0.3 is a new fixture version testing the new representation layer.
+
 Freeze hard-vs-interpretive dimensions before execution, rerun Luna/Astra against the strengthened architecture, preserve v0.1 unchanged, and only then reconsider 89.5.
 
 The v0.2 model-swap fixture contains structured MINDS state rather than prose-only implied state. The Constitutional State Adapter derives the hard envelope before either model runs; raw model deviations remain measured, while final constitutional fields are server-enforced. The cold-reconstruction v0.2 probe separately gates provenance, uncertainty, ownership, anchors and authority while leaving optional evidence bundles and non-authoritative packaging as interpretive differences.
