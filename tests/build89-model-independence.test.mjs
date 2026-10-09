@@ -64,3 +64,43 @@ test('Build 89 experiment output cannot mutate MINDS authority or memory',()=>{
   assert.ok(!runner.includes('minds_work_claims'));
   assert.ok(!runner.includes('minds_permissions'));
 });
+
+
+test('Build 89.3 cold reconstruction hides the current Project Model and freezes exact Sources',()=>{
+  assert.ok(runner.includes('const COLD_FIXTURE_VERSION="cold-reconstruction-v0.1"'));
+  assert.ok(runner.includes('project_model_hidden:true'));
+  for(const id of ['SRC1','SRC2','SRC3','SRC4','SRC5','SRC6'])assert.ok(runner.includes(id));
+  assert.ok(runner.includes('The current Project Model is hidden'));
+  assert.ok(runner.includes('Use only the supplied Sources.'));
+});
+
+test('Build 89.3 reconstructs Claims relations Movements Variants and gaps with deterministic expectations',()=>{
+  assert.ok(runner.includes('function coldFixture'));
+  assert.ok(runner.includes('function evaluateCold'));
+  assert.ok(runner.includes('cold_structure_exact_v01'));
+  assert.ok(runner.includes('C_ATTIKA_OPEN'));
+  assert.ok(runner.includes('C_ATTIKA_120'));
+  assert.ok(runner.includes('M_TWP_REVIEW'));
+  assert.ok(runner.includes('M_CLARIFY_ATTIKA'));
+  assert.ok(runner.includes('V_ATTIKA'));
+  assert.ok(runner.includes('G_FACHPLANER_ACCEPTANCE'));
+  assert.ok(runner.includes('G_ATTIKA_FINAL_VALUE'));
+});
+
+test('Build 89.3 preserves uncertainty and authority boundaries under cold reconstruction',()=>{
+  assert.ok(runner.includes('authority_mutation:false'));
+  assert.ok(runner.includes('absence of acceptance evidence is a gap'));
+  assert.ok(runner.includes('later contradictory Source does not silently delete the earlier Claim'));
+  assert.ok(runner.includes('A requested external review is an expectation of the world'));
+  assert.ok(runner.includes('Gari\'s explicit preparation item is a task owned by Gari'));
+  assert.ok(!runner.includes('minds_publish_project_model_revision_from_comparison'));
+});
+
+test('Build 89.3 runs both model families against one frozen cold fixture',()=>{
+  assert.ok(runner.includes('action==="acceptance_cold_reconstruction"'));
+  assert.ok(runner.includes('experiment_kind:"cold_reconstruction"'));
+  assert.ok(runner.includes('const a=await callColdModel'));
+  assert.ok(runner.includes('const b=await callColdModel'));
+  assert.ok(runner.includes('both_preserve_all_structural_invariants'));
+  assert.ok(runner.includes('agreement_structures'));
+});
