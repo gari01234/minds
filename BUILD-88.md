@@ -29,9 +29,9 @@ Presence is a projection, not another runtime. Closing or crashing it must never
 - Presence displays one decision card at a time and keeps the rest as a count/queue.
 - Resolving or invalidating the head advances to the next live request.
 
-### 88.3 — Fail-open lifecycle + idle polling
+### 88.3 — Fail-open lifecycle + idle polling **Implemented**
 - Presence process/window is never on the critical execution path.
-- Pollers back off or stop when there is no live run, pending attention, open chat panel or active task surface.
+- The 15-second active poll loop stops when there is no live run, pending attention, open chat panel or active task surface. Because desktop Presence has no Realtime/push wake channel yet, an idle 120-second discovery probe remains so new server state is not missed.
 - Reopening Presence resynchronizes from canonical state rather than trusting local cache.
 
 ### 88.4 — Minimum-exposure transport
