@@ -165,6 +165,7 @@
   const sheetK=sheet.querySelector('.v09-sheet-kicker'),sheetTitle=sheet.querySelector('h2'),sheetBody=sheet.querySelector('.v09-sheet-body');
   sheet.querySelector('.v09-sheet-close').onclick=()=>{
     const wasChat=sheet.dataset.kind==='chat';
+    if(wasChat)captureSofiaDraft();
     closeSofiaReactionPicker();
     sheet.classList.remove('open');
     sheet.dataset.kind='default';
@@ -172,6 +173,7 @@
     if(wasChat&&new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);
   };
   function openSheet(kicker,title,html,kind='default'){
+    captureSofiaDraft();
     sheetK.textContent=kicker;
     sheetTitle.textContent=title;
     sheetBody.innerHTML=html;
@@ -181,6 +183,24 @@
 
   // ---------- conversation UI ----------
   let openConvId=null;
+  // Unsent drafts stay local to Readings and never enter conversation history.
+  const sofiaDraftKey=convKey+':sofia-drafts-v1';
+  const loadedSofiaDrafts=safeJSON(sofiaDraftKey,{});
+  const sofiaDrafts=loadedSofiaDrafts&&typeof loadedSofiaDrafts==='object'&&!Array.isArray(loadedSofiaDrafts)?loadedSofiaDrafts:{};
+  function setSofiaDraft(conversationId,text){
+    const id=String(conversationId||'');
+    if(!id)return;
+    const next=String(text??'');
+    if(String(sofiaDrafts[id]||'')===next)return;
+    if(next)sofiaDrafts[id]=next;
+    else delete sofiaDrafts[id];
+    saveJSON(sofiaDraftKey,sofiaDrafts);
+  }
+  function captureSofiaDraft(){
+    if(sheet.dataset.kind!=='chat'||!openConvId)return;
+    const textarea=sheetBody.querySelector('.v09-chat-form textarea');
+    if(textarea)setSofiaDraft(openConvId,textarea.value);
+  }
   function conversationHeader(c){
     const typeLabel=c.origin?.type==='mind'?'MINDS':c.origin?.type==='reading'?'LECTURA':'GLOBAL';
     return `${typeLabel} · ${c.origin?.label||'Conversación'}`;
@@ -235,7 +255,7 @@
     const R=window.SpeechRecognition||window.webkitSpeechRecognition;
     let recorder=null,stream=null,chunks=[],fallback=null,recording=false;
     const reset=()=>{recording=false;mic.classList.remove('recording','working');mic.textContent='⌁';mic.setAttribute('aria-label','Hablar');try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null};
-    const fill=text=>{if(!text)return;ta.value=text;autosize();ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch{}};
+    const fill=text=>{if(!text)return;ta.value=text;ta.dispatchEvent(new Event('input',{bubbles:true}));autosize();ta.focus();try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch{}};
     const useBrowser=()=>{
       if(!R){reset();return}
       try{
@@ -310,23 +330,28 @@
     });
   }
   function openConversation(cOrId){
-    const c=typeof cOrId==='string'?conversations.find(x=>x.id===cOrId):cOrId;if(!c)return;openConvId=c.id;
+    const c=typeof cOrId==='string'?conversations.find(x=>x.id===cOrId):cOrId;if(!c)return;
     let idsChanged=false;c.messages.forEach(m=>{if(!m.id){m.id=uid();idsChanged=true}});if(idsChanged)saveConversations();
     const context=c.origin?.quote?`<div class="v09-conv-context"><b>Fragmento de origen</b><div>“${esc(c.origin.quote)}”</div>${c.origin?.type==='reading'&&c.origin?.readingId?'<button data-open-origin-reading>Abrir lectura</button>':''}</div>`:'';
     const msgs=c.messages.length
       ?c.messages.map(m=>`<div class="v09-msg ${m.role}" data-sofia-msg="${esc(m.id)}"><span class="v09-msg-label">${m.role==='user'?'TÚ':m.pending?'SOFÍA · PENSANDO':m.provisional?'SOFÍA · PROVISIONAL':'SOFÍA'}</span><span class="v09-msg-text">${formatSofiaText(m.text)}</span>${m.reaction?`<button class="v09-reaction-chip">${esc(m.reaction)}</button>`:''}</div>`).join('')
       :'<div class="v09-msg assistant sofia-empty"><span class="v09-msg-label">SOFÍA</span><span class="v09-msg-text">Hola. Soy Sofía. Podemos hablar de una lectura aunque todavía no hayas subrayado nada. Pregúntame por su argumento, compárala con otra lectura o empieza a marcar pasajes y trabajaré sobre aquello que vaya quedando vivo.</span></div>';
     openSheet('MINDS · SOFÍA','',`${context}<button type="button" class="sofia-orb-button" aria-label="Hablar con Sofía"><span class="sofia-orb-haze sofia-orb-haze-a"></span><span class="sofia-orb-haze sofia-orb-haze-b"></span><span class="sofia-orb-core"></span></button><div class="v09-chat-log">${msgs}</div><form class="v09-chat-form"><button type="button" class="v09-chat-mic" aria-label="Hablar">⌁</button><textarea rows="1" placeholder="Escríbele a Sofía..."></textarea><button class="v09-chat-send" aria-label="Enviar">↑</button></form>`,'chat');
+    openConvId=c.id;
     document.documentElement.classList.add('sofia-chat-open');
     if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:true},location.origin);
     sheetBody.querySelector('[data-open-origin-reading]')?.addEventListener('click',()=>{sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');if(new URLSearchParams(location.search).get('embedded')==='1')parent.postMessage({type:'minds:sofia-state',open:false},location.origin);openReading?.(c.origin.readingId);setTimeout(enhanceReaderV09,80);});
     bindSofiaReactions(c);
     const form=sheetBody.querySelector('.v09-chat-form'),ta=form.querySelector('textarea');
-    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};ta.addEventListener('input',autosize);autosize();bindSofiaVoice(form,ta,autosize);sheetBody.querySelector('.sofia-orb-button')?.addEventListener('click',()=>form.querySelector('.v09-chat-mic')?.click());
+    const autosize=()=>{ta.style.height='auto';ta.style.height=Math.min(ta.scrollHeight,156)+'px'};
+    ta.value=String(sofiaDrafts[c.id]||'');
+    ta.addEventListener('input',()=>{autosize();setSofiaDraft(c.id,ta.value)});
+    autosize();bindSofiaVoice(form,ta,autosize);sheetBody.querySelector('.sofia-orb-button')?.addEventListener('click',()=>form.querySelector('.v09-chat-mic')?.click());
     ta.addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();form.requestSubmit()}});
     form.onsubmit=async e=>{
       e.preventDefault();
       const q=ta.value.trim();if(!q)return;
+      setSofiaDraft(c.id,'');ta.value='';
       c.messages.push({id:uid(),role:'user',text:q,at:now(),quote:c.origin?.quote||''});
       if(c.title==='Nueva conversación')c.title=short(q,72);
       const pending={id:uid(),role:'assistant',text:'Pensando…',at:now(),pending:true};
@@ -359,14 +384,14 @@
       }
       return;
     }
-    if(type==='minds:sofia-close'){closeSofiaReactionPicker();sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');return}
+    if(type==='minds:sofia-close'){captureSofiaDraft();closeSofiaReactionPicker();sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');return}
     if(type!=='minds:sofia-open'&&type!=='minds:sofia-prompt')return;
     const conv=newConversation({type:'global',id:'sofia',label:'Sofía'},'memory',true);
     openConversation(conv);
     setTimeout(()=>{
       const ta=sheetBody.querySelector('.v09-chat-form textarea');
       if(!ta)return;
-      if(type==='minds:sofia-prompt'&&e.data?.prompt)ta.value=String(e.data.prompt);
+      if(type==='minds:sofia-prompt'&&e.data?.prompt){ta.value=String(e.data.prompt);setSofiaDraft(openConvId,ta.value);ta.dispatchEvent(new Event('input',{bubbles:true}))}
       ta.focus();
       try{ta.setSelectionRange(ta.value.length,ta.value.length)}catch{}
     },100);

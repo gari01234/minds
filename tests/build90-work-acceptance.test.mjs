@@ -11,47 +11,15 @@ function slice(start,end){
   assert.ok(a>=0&&b>a,'Expected Work function boundary: '+start);
   return work.slice(a,b).trim();
 }
-function makeCards(ids){
-  const list={dataset:{workListBucket:'bucket-bernried'},cards:[]};
-  list.insertBefore=(card,before)=>{
-    const old=list.cards.indexOf(card);if(old>=0)list.cards.splice(old,1);
-    const index=list.cards.indexOf(before);
-    list.cards.splice(index<0?list.cards.length:index,0,card);
-  };
-  for(const id of ids){
-    const card={dataset:{workTask:id},matches:selector=>selector==='[data-work-task]',
-      closest:selector=>selector==='[data-work-task-list]'?list:null};
-    Object.defineProperties(card,{
-      previousElementSibling:{get(){return list.cards[list.cards.indexOf(this)-1]||null}},
-      nextElementSibling:{get(){return list.cards[list.cards.indexOf(this)+1]||null}}
-    });
-    list.cards.push(card);
-  }
-  const button=(id,direction)=>({
-    dataset:{workMove:direction},
-    closest:selector=>selector==='[data-work-task]'?list.cards.find(c=>c.dataset.workTask===id):null
-  });
-  return {list,button,ids:()=>list.cards.map(c=>c.dataset.workTask)};
-}
-test('90.6 explicit keyboard/touch order moves canonical Work list, not calendar order',async()=>{
-  const events=[];
-  const fn=vm.runInNewContext('('+slice('async function moveWorkTaskByButton(button){','async function persistWorkTaskOrder(')+')',{
-    persistWorkTaskOrder:async(id,bucket,list)=>events.push({id,bucket,ids:list.cards.map(c=>c.dataset.workTask)})
-  });
-  const {list,button,ids}=makeCards(['a','b','c']);
-  assert.equal(await fn(button('b','up')),true);
-  assert.deepEqual(ids(),['b','a','c']);
-  assert.equal(await fn(button('b','down')),true);
-  assert.deepEqual(ids(),['a','b','c']);
-  assert.equal(await fn(button('c','down')),false);
-  assert.equal(events.length,2);
-  assert.deepEqual(events[0],{id:'b',bucket:'bucket-bernried',ids:['b','a','c']});
+test('90.6 Work retains uncluttered drag interaction and canonical Work ordering',()=>{
+  const card=slice('function taskCard(t){','async function hydratePlannerImages(');
+  assert.match(card,/draggable="true"/);
+  assert.match(work,/card\.ondragstart=/);
+  assert.match(work,/bucket\.ondrop=/);
   assert.match(work,/work_sort_order:\(i\+1\)\*10/);
-  assert.doesNotMatch(slice('async function moveWorkTaskByButton(button){','async function addBucket('),/\bsort_order\s*:/);
-  assert.match(work,/data-work-move="up"/);
-  assert.match(work,/data-work-move="down"/);
-  assert.match(work,/\$\$\('\[data-work-move\]'\)\.forEach/);
-  assert.match(css,/work-task-move-controls/);
+  assert.doesNotMatch(card,/data-work-move|work-task-move-controls/);
+  assert.doesNotMatch(work,/data-work-move|moveWorkTaskByButton/);
+  assert.doesNotMatch(css,/work-task-move-controls/);
 });
 test('90.6 Desktop file uploads disclose a mixed result instead of hiding errors',async()=>{
   const statuses=[],removed=[],registered=[],uploads=[];
