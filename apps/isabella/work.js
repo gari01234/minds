@@ -162,14 +162,27 @@ async function renderDesktop(){
 }
 async function newFolder(){const name=window.prompt('Nombre del Ordner');if(!name?.trim())return;setStatus('Creando Ordner…');const {error}=await sb.from('minds_work_folders').insert({project_id:project.id,parent_id:folderId,name:name.trim()});setStatus(error?'No pude crear el Ordner.':'');if(!error)await renderDesktop()}
 async function uploadFiles(list){
-  const session=await getSession();if(!session||!project)return;setStatus(`Subiendo ${list.length} archivo${list.length===1?'':'s'}…`);
-  for(const file of list){
+  const session=await getSession();if(!session||!project)return;
+  const attempted=[...(list||[])],failed=[];let succeeded=0;
+  setStatus(`Subiendo ${attempted.length} archivo${attempted.length===1?'':'s'}…`);
+  for(const file of attempted){
     const path=`${session.user.id}/${project.client_key}/${folderId||'root'}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safeName(file.name)}`;
-    const {error:ue}=await sb.storage.from('minds-work').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});if(ue){setStatus('Falló la subida de '+file.name);continue}
-    const {error:ie}=await sb.from('minds_work_files').insert({project_id:project.id,folder_id:folderId,name:file.name,mime_type:file.type||'application/octet-stream',size_bytes:file.size,storage_path:path,source_kind:sourceKind(file),metadata:{last_modified:file.lastModified||null}});
-    if(ie){await sb.storage.from('minds-work').remove([path]);setStatus('No pude registrar '+file.name)}
+    let stored=false;
+    try{
+      const {error:ue}=await sb.storage.from('minds-work').upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
+      if(ue)throw ue;
+      stored=true;
+      const {error:ie}=await sb.from('minds_work_files').insert({project_id:project.id,folder_id:folderId,name:file.name,mime_type:file.type||'application/octet-stream',size_bytes:file.size,storage_path:path,source_kind:sourceKind(file),metadata:{last_modified:file.lastModified||null}});
+      if(ie)throw ie;
+      succeeded++;
+    }catch(e){
+      failed.push(file.name);
+      if(stored)try{await sb.storage.from('minds-work').remove([path])}catch{}
+    }
   }
-  setStatus('');await renderDesktop();
+  try{await renderDesktop()}catch(e){setStatus('La subida terminó, pero no pude actualizar Desktop. Recarga para comprobar el resultado.');return}
+  if(failed.length)setStatus(`${succeeded} archivo${succeeded===1?'':'s'} registrado${succeeded===1?'':'s'}; ${failed.length} sin guardar: ${failed.join(', ')}. Vuelve a intentarlo con los fallidos.`);
+  else setStatus(`${succeeded} archivo${succeeded===1?'':'s'} guardado${succeeded===1?'':'s'} en Desktop.`);
 }
 async function openFile(id){const f=files.find(x=>x.id===id);if(!f)return;const {data,error}=await sb.storage.from('minds-work').createSignedUrl(f.storage_path,900);if(error||!data?.signedUrl){setStatus('No pude abrir el archivo.');return}window.open(data.signedUrl,'_blank','noopener')}
 async function loadPlanner(){
@@ -192,7 +205,7 @@ function taskCard(t){
   const overdue=!!(t.due_date&&t.due_date<localIso()&&!t.completed_at);
   return `<article class="work-task-card ${t.completed_at?'is-done':''}" draggable="true" data-work-task="${t.id}" tabindex="0">
     ${firstImage?`<img class="work-task-cover" ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-work-task-image="${esc(firstImage.path)}" alt="${esc(firstImage.name||t.title)}">`:''}
-    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong></div>
+    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong><span class="work-task-move-controls"><button type="button" data-work-move="up" aria-label="Subir ${esc(t.title)} en su columna">↑</button><button type="button" data-work-move="down" aria-label="Bajar ${esc(t.title)} en su columna">↓</button></span></div>
     ${checks.length?`<div class="work-card-checks">${checks.slice(0,5).map(x=>`<div class="${x.done?'done':''}"><span>${x.done?'●':'○'}</span><span>${esc(x.text||'')}</span></div>`).join('')}${checks.length>5?`<div class="work-check-more">+${checks.length-5} weitere</div>`:''}</div>`:''}
     <footer>
       <div class="work-task-chips">${due?`<span class="work-due ${overdue?'is-overdue':''}">▣ ${esc(due)}</span>`:''}${checks.length?`<span>☑ ${done}/${checks.length}</span>`:''}${attachments.length?`<span>⌕ ${attachments.length}</span>`:''}</div>
@@ -217,8 +230,8 @@ async function renderPlanner(){
   $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
   $$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));
   $$('[data-work-task]').forEach(card=>{
-    card.onclick=e=>{if(card.dataset.justDragged==='1'){card.dataset.justDragged='0';return}if(e.target.closest('[data-work-toggle]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};
-    card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}};
+    card.onclick=e=>{if(card.dataset.justDragged==='1'){card.dataset.justDragged='0';return}if(e.target.closest('[data-work-toggle],[data-work-move]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};
+    card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle],[data-work-move]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}};
     card.ondragstart=e=>{draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
     card.ondragend=()=>{draggedWorkTaskId=null;card.classList.remove('is-dragging');$$('.work-bucket.is-drop-target').forEach(x=>x.classList.remove('is-drop-target'));setTimeout(()=>{card.dataset.justDragged='0'},120)};
   });
@@ -246,6 +259,7 @@ async function renderPlanner(){
       if(targetList)void persistWorkTaskOrder(id,bucket.dataset.workBucketDrop||null,targetList);
     };
   });
+  $$('[data-work-move]').forEach(button=>button.onclick=e=>{e.stopPropagation();void moveWorkTaskByButton(button)});
   $$('[data-work-toggle]').forEach(b=>b.onclick=e=>{e.stopPropagation();void toggleTask(b.dataset.workToggle)});
   void hydratePlannerImages(body);
 }
@@ -253,6 +267,16 @@ async function toggleTask(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;const done=!t.completed_at;
   const {error}=await sb.from('isabella_tasks').update({completed_at:done?new Date().toISOString():null,work_status:done?'completed':'not_started',updated_at:new Date().toISOString()}).eq('id',id);
   if(!error){await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0)}
+}
+async function moveWorkTaskByButton(button){
+  const card=button?.closest('[data-work-task]'),list=card?.closest('[data-work-task-list]');
+  if(!card||!list)return false;
+  const adjacent=button.dataset.workMove==='up'?card.previousElementSibling:card.nextElementSibling;
+  if(!adjacent?.matches('[data-work-task]'))return false;
+  if(button.dataset.workMove==='up')list.insertBefore(card,adjacent);
+  else list.insertBefore(adjacent,card);
+  await persistWorkTaskOrder(card.dataset.workTask,list.dataset.workListBucket||null,list);
+  return true;
 }
 async function persistWorkTaskOrder(id,bucketId,list){
   const dragged=tasks.find(x=>x.id===id);if(!dragged||!list)return;

@@ -1711,3 +1711,12 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .message-incomplete button{font:inherit;font-weight:600;color:inherit;background:transparent;border:1px solid #d8c5a5;border-radius:15px;padding:5px 10px;cursor:pointer}
 .message-incomplete button:hover{background:#fff8eb}
 .message-incomplete button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+
+/* Build 90.6 — explicit keyboard/touch task ordering, preserving Work-only order. */
+.work-task-title-row{grid-template-columns:22px minmax(0,1fr) auto}
+.work-task-title-row strong{min-width:0;overflow-wrap:anywhere}
+.work-task-move-controls{display:inline-flex;gap:2px;align-items:center}
+.work-task-move-controls button{display:inline-flex;align-items:center;justify-content:center;min-width:30px;min-height:30px;border:1px solid #e6e6e8;border-radius:9px;background:#fff;color:#606068;font:inherit;font-size:15px;cursor:pointer;touch-action:manipulation}
+.work-task-move-controls button:hover{background:#f4f4f5}
+.work-task-move-controls button:focus-visible{outline:2px solid #111;outline-offset:2px}
+@media(hover:none),(pointer:coarse){.work-task-move-controls button{min-width:38px;min-height:38px}}
