@@ -1970,6 +1970,12 @@ function day(){
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function bindCalendarItems(){
+  const calendarBody=$('#calendarContent');
+  if(calendarBody&&!calendarBody.querySelector('[data-calendar-create]')){
+    calendarBody.insertAdjacentHTML('afterbegin','<div class="calendar-create-row"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>');
+    calendarBody.querySelector('[data-calendar-create]').onclick=()=>newPanel(state.date);
+  }
+
   document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTaskDone(b.dataset.taskToggle)});
   document.querySelectorAll('.calendar-entry,.agenda-item[data-kind]').forEach(el=>{
     if(el.dataset.bound)return;el.dataset.bound='1';
@@ -2476,11 +2482,11 @@ function taskGroupPanel(group){
   document.querySelectorAll('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
   document.querySelectorAll('[data-list-task-toggle]').forEach(x=>x.onclick=e=>{e.stopPropagation();const id=x.dataset.listTaskToggle;const t=state.tasks.find(y=>y.id===id);if(!t)return;const before=clone(t);t.done=!t.done;t.completedAt=t.done?new Date().toISOString():null;mutation('task',t.done?'complete':'reopen',before,t,'manual');save();taskGroupPanel(group)});
 }
-function newPanel(){
+function newPanel(presetDate=null){
   modal('Agregar manualmente',`<div class="form">
     <select id="newType"><option value="task">Tarea</option><option value="event">Evento</option></select>
     <input id="newTitle" placeholder="Nombre">
-    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date"></label>
+    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date" value="${esc(presetDate||state.date||today())}"></label>
     <select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
     <input id="newTime" type="time" value="09:00">
     <button id="newSave" class="primary">Guardar</button>
@@ -3233,6 +3239,8 @@ window.ISABELLA_APP={
   addAssistantMessage:(text)=>say('assistant',text),
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},
+  editTaskById:(id)=>editItem('task',id),
+  openNewItem:(date)=>newPanel(date),
   openModal:modal,
   closeModal,
   show,
