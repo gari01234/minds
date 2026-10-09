@@ -24,8 +24,8 @@ test('90.5: a stream needs explicit successful terminal state before success',()
   assert.match(stream,/response\.completed/,'Handle completed event explicitly');
   assert.match(stream,/completed\?\.status\s*===\s*["\x27]completed/,'Successful completion must require provider status');
   assert.match(stream,/incomplete_response|incomplete_reason/,'Incomplete outputs must be marked');
-  assert.ok(!/if\(!finalText\.trim\(\)\)throw new Error\("empty_stream_response"\);\s*if\(persistPresence/.test(stream),
-    'Non-empty text alone is not a completion criterion');
+  assert.match(stream,/streamCompleted\?"success":"error"/,'Only provider completion can produce a successful run');
+  assert.match(stream,/incomplete_response:!streamCompleted/,'Persist an explicit incomplete receipt');
 });
 
 test('90.5: absence of terminal result cannot quietly start another generation',()=>{

@@ -75,6 +75,12 @@ function currentUserEvidenceGate(toolName:string,args:any,currentMessage:string,
   return {allowed:true,user_excerpt:excerpt,reason:"current_user_evidence"};
 }
 
+function calendarAssessmentIntent(message:string){
+  const t=normalizeText(message);
+  const period=/(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t);
+  const question=/(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
+  return period&&question;
+}
 function simpleAgendaMutation(message=""){
   const t=normalizeText(message);
   if(!t||t.length>320)return false;
@@ -90,12 +96,6 @@ function likelyMaterialDeliverable(message=""){
   const action=/\b(prepar\w*|crea\w*|crear|haz|hacer|genera\w*|generar|diseñ\w*|elabora\w*|arma\w*|edit\w*|modific\w*|corrig\w*|transform\w*|conviert\w*|convert\w*|actualiz\w*|erstelle\w*|bearbeit\w*|änder\w*|aender\w*|umwandel\w*|mach\w*)\b/i.test(t);
   const object=/\b(lista|listado|tabla|tabelle|teilnehmerliste|formulario|formular|documento|dokument|plantilla|vorlage|informe|bericht|minuta|acta|protokoll|presentaci[oó]n|präsentation|spreadsheet|hoja)\b/i.test(t);
   return explicit||physical||(action&&object);
-}
-function calendarAssessmentIntent(message:string){
-  const t=normalizeText(message);
-  const period=/(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t);
-  const question=/(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
-  return period&&question;
 }
 function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
   if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||calendarAssessmentIntent(message))return false;
