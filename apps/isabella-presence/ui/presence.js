@@ -3,7 +3,7 @@
 const SUPABASE_URL='https://lodexwyyynlarkqgkyhy.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X';
 const MINDS_URL='https://gari01234.github.io/minds/isabella/';
-const POLL_MS=15000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
+const POLL_MS=15000,IDLE_DISCOVERY_MS=120000,AGENDA_REFRESH_MS=30000,COMPLETION_HOLD_MS=90000,FAILURE_AUTO_WINDOW_MS=10*60*1000;
 const LOCAL_SEEN_KEY='minds-presence-seen-v02',LOCAL_SUPPRESS_KEY='minds-presence-suppressed-v02';
 const LOCAL_REVIEW_KEY='minds-presence-review-v01',LOCAL_PANEL_SIZE_KEY='minds-presence-panel-size-v01',LOCAL_TASK_DATE_KEY='minds-presence-task-date-v01';
 const $=s=>document.querySelector(s);
@@ -127,9 +127,11 @@ function attentionCard(event){
   const metadata=event?.metadata&&typeof event.metadata==='object'?event.metadata:{};
   return {id:'attention:'+event.id,source:'attention',sourceId:event.id,kind:needsUser?'question':'ambient',
     label:needsUser?'Necesito tu decisión':'Para tener en cuenta',title:String(event.title||'Actualización').trim(),body:String(event.body||'').trim(),
-    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),priority:needsUser?100:40,cancellable:false,needsUser,
+    status:event.status,updatedAt:parseTime(event.updated_at||event.created_at),createdAt:parseTime(event.created_at),deadlineAt:parseTime(event.deadline_at),
+    urgency:String(event.urgency||'info'),priority:needsUser?100:40,cancellable:false,needsUser,
     replyContext:needsUser?{
-      attention_id:String(event.id||''),source_type:String(event.source_type||''),source_id:String(event.source_id||''),
+      attention_id:String(event.id||''),request_revision:Number(event.request_revision||1),
+      source_type:String(event.source_type||''),source_id:String(event.source_id||''),
       mission_run_id:String(metadata.mission_run_id||event.source_id||''),title:String(event.title||'').trim(),
       question:String(event.body||'').trim()
     }:null};
@@ -150,7 +152,17 @@ function projectCards(runs,missions,events){
     if(['queued','running','waiting'].includes(String(mission.status||'')))cards.push(missionCard(mission));
   }
   for(const event of events||[])if(event.route==='ambient'||(event.route==='interrupt'&&event.requires_user===true))cards.push(attentionCard(event));
-  return cards.sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt).slice(0,6);
+  const urgencyRank={critical:4,high:3,normal:2,info:1};
+  const decisions=cards.filter(x=>x.needsUser).sort((a,b)=>{
+    const ad=a.deadlineAt||Number.MAX_SAFE_INTEGER,bd=b.deadlineAt||Number.MAX_SAFE_INTEGER;
+    if(ad!==bd)return ad-bd;
+    const au=Number(urgencyRank[a.urgency]||0),bu=Number(urgencyRank[b.urgency]||0);
+    if(au!==bu)return bu-au;
+    if(a.createdAt!==b.createdAt)return a.createdAt-b.createdAt;
+    return String(a.id).localeCompare(String(b.id));
+  });
+  const others=cards.filter(x=>!x.needsUser).sort((a,b)=>b.priority-a.priority||b.updatedAt-a.updatedAt||String(a.id).localeCompare(String(b.id)));
+  return [...decisions,...others].slice(0,6);
 }
 function autoCandidate(cards){
   for(const card of cards){
@@ -504,9 +516,9 @@ async function cancelRun(id){
 async function queryPresence(){
   const sinceRuns=new Date(now()-20*60*1000).toISOString(),sinceAttention=new Date(now()-48*60*60*1000).toISOString();
   const [runQ,missionQ,attentionQ]=await Promise.all([
-    sb.from('minds_capability_runs').select('id,title,status,artifact_ids,summary,error,origin_kind,project_id,work_thread_id,metadata,started_at,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_mission_runs').select('id,status,phase,instruction,result_summary,blocker_question,wait_kind,wake_at,metadata,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
-    sb.from('minds_attention_events').select('id,event_key,event_type,title,body,urgency,requires_user,route,status,source_type,source_id,metadata,created_at,updated_at,delivered_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
+    sb.from('minds_capability_runs').select('id,title,status,summary,error,metadata,completed_at,updated_at').gte('updated_at',sinceRuns).order('updated_at',{ascending:false}).limit(12),
+    sb.from('minds_mission_runs').select('id,status,instruction,result_summary,wait_kind,updated_at').in('status',['queued','running','waiting','waiting_for_user']).order('updated_at',{ascending:false}).limit(12),
+    sb.from('minds_attention_events').select('id,title,body,urgency,requires_user,deadline_at,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at').in('route',['ambient','interrupt']).in('status',['pending','delivered']).gte('created_at',sinceAttention).order('updated_at',{ascending:false}).limit(20)
   ]);
   if(runQ.error)throw runQ.error;if(missionQ.error)throw missionQ.error;if(attentionQ.error)throw attentionQ.error;
   const missions=missionQ.data||[],missionById=new Map(missions.map(x=>[String(x.id),x]));
@@ -546,19 +558,28 @@ async function syncPendingReview({discover=false}={}){
     if(next!==pendingReviewRequestId)setPendingReviewRequestId(next);
   }catch{}
 }
+function needsActivePolling(){
+  return chatBusy||expanded||manualOpen||lastCards.some(x=>x.needsUser||['working','preparing','waiting'].includes(String(x.kind||'')));
+}
+function scheduleNextPoll(delay=null){
+  if(timer){clearTimeout(timer);timer=null}
+  if(!sb||!user)return;
+  const wait=Number.isFinite(Number(delay))?Math.max(1000,Number(delay)):(needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS);
+  timer=setTimeout(()=>void refresh(),wait);
+}
 async function refresh({force=false}={}){
   if(!sb||!user||polling)return;polling=true;
   try{
     await syncPendingReview({discover:!pendingReviewRequestId});
     const cards=await queryPresence(),snapshot=JSON.stringify(cards.map(x=>[x.id,x.kind,x.status,x.updatedAt,x.body]));
-    const historyChanged=(expanded||manualOpen)&&!chatBusy?await loadConversationHistory({render:false}):false;
+    const historyChanged=expanded&&panelView==='chat'&&!chatBusy?await loadConversationHistory({render:false}):false;
     if(panelView==='tasks'&&expanded)await loadAgenda({force});
     if(force||snapshot!==lastSnapshot){lastSnapshot=snapshot;await renderPresence(cards)}
     else if(historyChanged)renderConversation();
   }catch(e){if(String(e?.message||'').toLowerCase().includes('jwt'))await renderAuth('La sesión de MINDS necesita renovarse.')}
-  finally{polling=false}
+  finally{polling=false;scheduleNextPoll()}
 }
-function startPolling(){if(timer)clearInterval(timer);timer=setInterval(()=>refresh(),POLL_MS)}
+function startPolling(){scheduleNextPoll(needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS)}
 async function sendChatText(raw){
   const message=String(raw||'').trim();if(!message||chatBusy||!sb||!user)return;
   const replyContext=pendingReplyContext?{...pendingReplyContext}:null;
@@ -577,10 +598,23 @@ async function sendChatText(raw){
     const reviewId=String(proposals.find(x=>/^[0-9a-f-]{36}$/i.test(String(x?.request_id||'')))?.request_id||'');
     if(reviewId)setPendingReviewRequestId(reviewId);else await syncPendingReview({discover:true});
     lastQuickReplies=(Array.isArray(data?.quick_replies)?data.quick_replies:[]).slice(0,4).map(x=>({label:String(x?.label||'').trim(),value:String(x?.value||x?.label||'').trim()})).filter(x=>x.label&&x.value);
-    if(replyContext)clearReplyContext();
+    if(replyContext){
+      clearReplyContext();
+      await refresh({force:true});
+    }
     chatBusy=false;
     await loadConversationHistory({render:false});
-  }catch(e){chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true})}
+  }catch(e){
+    let stale=false;
+    if(replyContext&&e?.context?.json){
+      try{const payload=await e.context.json();stale=payload?.error==='stale_decision'}catch{}
+    }
+    if(stale){
+      clearReplyContext();
+      chatTurns.push({role:'assistant',text:'Esa decisión cambió mientras respondías. Actualicé el estado para que no contestes una versión anterior.',error:true});
+      await refresh({force:true});
+    }else chatTurns.push({role:'assistant',text:'No pude completar ese turno. Puedes abrir MINDS para continuar.',error:true});
+  }
   finally{chatBusy=false;await renderPresence(lastCards,{auto:false})}
 }
 async function submitChat(event){event.preventDefault();await sendChatText($('#chatInput').value)}
@@ -589,9 +623,8 @@ async function connect(){
   sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:true,autoRefreshToken:true,detectSessionInUrl:false,storageKey:'minds-isabella-presence-auth-v01'}});
   const {data,error}=await sb.auth.getSession();if(error)return renderAuth('No pude leer la sesión de MINDS.');
   user=data.session?.user||null;
-  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void loadConversationHistory({render:false}).then(()=>refresh({force:true}));startPolling()}else void renderAuth('')});
+  sb.auth.onAuthStateChange((_event,session)=>{user=session?.user||null;if(user){void refresh({force:true});startPolling()}else{if(timer){clearTimeout(timer);timer=null}void renderAuth('')}});
   if(!user)return renderAuth('');
-  await loadConversationHistory({render:false});
   await refresh({force:true});startPolling();
 }
 async function sendOtp(event){
@@ -604,7 +637,7 @@ async function verifyOtp(event){
   if(!email||!/^\d{6,10}$/.test(token)){ $('#authMessage').textContent='Introduce el código completo.';return }
   $('#authMessage').textContent='Verificando…';const {data,error}=await sb.auth.verifyOtp({email,token,type:'email'});
   if(error){$('#authMessage').textContent=error.message;return}
-  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await loadConversationHistory({render:false});await refresh({force:true});startPolling();
+  user=data.user||data.session?.user||null;manualOpen=true;expanded=false;await refresh({force:true});startPolling();
 }
 async function setPanelView(next){
   const target=['status','tasks','chat'].includes(next)?next:'status';
