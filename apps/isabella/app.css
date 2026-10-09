@@ -1639,3 +1639,32 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
 .situation-loading,.situation-unavailable{color:#777;font-size:13px;line-height:1.5;padding:16px 0}
 @media(min-width:1100px){body[data-section="feed"] .surface-list{max-width:780px;width:100%}body[data-section="feed"] .surface-scroll{padding:25px 38px 52px}}
 @media(max-width:520px){.situation-heading h2{font-size:36px}.situation-ledger{margin-bottom:20px}.situation-heading button{font-size:11px;padding:8px 11px}}
+
+/* Build 90.3 — Work Panorama is a lens, not a second project database */
+.work-body.work-overview-host{overflow-y:auto!important;overflow-x:hidden!important;display:block!important;-webkit-overflow-scrolling:touch}
+.work-overview{width:100%;max-width:1140px;margin:0 auto;padding:16px 12px 48px}
+.work-overview-intro{margin-bottom:21px}
+.work-overview-intro h2{font:normal 36px/1.15 "Iowan Old Style",Georgia,serif;letter-spacing:-.035em;margin:7px 0 9px}
+.work-overview-intro p{font-size:13px;color:#777;line-height:1.5;max-width:720px;margin:0}
+.work-overview-coverage{border-top:1px solid #e8e8eb;border-bottom:1px solid #e8e8eb;padding:13px 0;font-size:12px;color:#777;line-height:1.5;margin-bottom:20px}
+.work-overview-coverage p{font-size:12px;color:#a05835}
+.work-overview-columns{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:26px;align-items:start}
+.work-overview-section{min-width:0}
+.work-overview-section-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px}
+.work-overview-section h3{font-size:17px;margin:0;font-weight:650;line-height:1.2}
+.work-overview-section-head button,.work-overview-footer button{border:0;border-radius:999px;background:#f2f2f4;padding:9px 12px;font-size:11px;cursor:pointer;white-space:nowrap}
+.work-overview-section-head button:hover,.work-overview-footer button:hover{background:#e9e9ec}
+.work-overview-item{padding:12px 0;border-top:1px solid #eeeeef;display:flex;flex-direction:column;gap:5px}
+.work-overview-item strong{font-size:13px;font-weight:650;line-height:1.4}
+.work-overview-item p{font-size:13px;line-height:1.45;margin:0}
+.work-overview-item small{color:#8d8d93;font-size:11px;line-height:1.4}
+.work-overview-item .model-badge{align-self:flex-start}
+.work-overview-model{margin-top:24px}
+.work-overview-footer{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:18px 0;margin-top:17px;border-top:1px solid #eee}
+.work-overview-footer p{flex-basis:100%;font-size:11px;color:#999;line-height:1.5;margin:6px 0 0}
+@media(max-width:760px){
+ .work-overview{padding:11px 3px 40px}
+ .work-overview-intro h2{font-size:29px}
+ .work-overview-columns{grid-template-columns:1fr;gap:23px}
+ .work-overview-section-head h3{font-size:16px}
+}
