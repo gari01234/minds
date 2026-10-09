@@ -16,7 +16,7 @@ test('Build 78 adds Threads as a fourth Work surface',()=>{
   assert.ok(work.includes("if(view==='threads')await renderThreads()"));
   assert.ok(work.includes("from('minds_work_threads')"));
   assert.ok(work.includes("minds_ensure_work_thread_conversation"));
-  assert.ok(work.includes('window.ISABELLA_AI.ask(message,state,{workThread:'));
+  assert.ok(work.includes('const result=await window.ISABELLA_AI.ask(message,state,{'));\n  assert.ok(work.includes('workThread:{id:thread.id,project:project.name}'));
 });
 
 test('Build 78 keeps one Isabella while giving each Work Thread its own conversation',()=>{
