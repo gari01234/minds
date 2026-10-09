@@ -407,7 +407,7 @@ function show(name){
   const previous=state.screen;
   // Preserve the selected date when changing lenses; Hoy is an explicit action.
   if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
-    $('#readingsFrame')?.contentWindow?.postMessage({type:'minds:sofia-close'},location.origin);
+    // Switching lenses is a visual suspension, not a command to discard Sofía's draft.
     $('#readingsScreen')?.classList.remove('sofia-chat-active');
     document.body.classList.remove('sofia-chat-open');
   }
@@ -935,17 +935,33 @@ async function renderIdeas(force=false){
 function readingsUrl(){
   return location.pathname.includes('/isabella/')?'../theory/?embedded=1':'./theory/?embedded=1';
 }
+let queuedSofiaRequest=null;
+function sendReadingsMessage(message){
+  $('#readingsFrame')?.contentWindow?.postMessage(message,location.origin);
+}
 function ensureReadings(){
   const frame=$('#readingsFrame');if(!frame)return;
-  if(!frame.dataset.loaded){frame.src=readingsUrl();frame.dataset.loaded='1'}
+  if(!frame.dataset.bridgeBound){
+    frame.dataset.bridgeBound='1';
+    frame.addEventListener('load',()=>{
+      frame.dataset.ready='1';
+      sendReadingsMessage({type:'minds:sofia-state-request'});
+      if(queuedSofiaRequest){const request=queuedSofiaRequest;queuedSofiaRequest=null;sendReadingsMessage(request)}
+    });
+  }
+  if(!frame.dataset.loaded){frame.dataset.loaded='1';frame.src=readingsUrl()}
+  else if(frame.dataset.ready==='1')sendReadingsMessage({type:'minds:sofia-state-request'});
 }
 function openSofia(prompt=''){
-  show('readings');ensureReadings();
-  setTimeout(()=>$('#readingsFrame')?.contentWindow?.postMessage({type:prompt?'minds:sofia-prompt':'minds:sofia-open',prompt},location.origin),260);
+  show('readings');
+  const frame=$('#readingsFrame'),request={type:prompt?'minds:sofia-prompt':'minds:sofia-open',prompt};
+  if(frame?.dataset.ready==='1')sendReadingsMessage(request);
+  else queuedSofiaRequest=request;
 }
 window.addEventListener('message',e=>{
-  if(e.origin!==location.origin||e.data?.type!=='minds:sofia-state')return;
-  const open=!!e.data.open;
+  const frame=$('#readingsFrame');
+  if(e.origin!==location.origin||e.source!==frame?.contentWindow||e.data?.type!=='minds:sofia-state')return;
+  const open=!!e.data.open&&document.body.dataset.section==='readings';
   $('#readingsScreen')?.classList.toggle('sofia-chat-active',open);
   document.body.classList.toggle('sofia-chat-open',open);
 });
@@ -2101,7 +2117,8 @@ async function openCanonicalTaskById(rowId){
     if(error)throw error;
     if(!data)throw new Error('Esta tarea ya no está disponible.');
     const key=data.client_key||data.id;
-    if(!itemBy('task',key))await window.ISABELLA_SYNC_PULL_NOW?.();
+    const refreshed=await window.ISABELLA_SYNC_PULL_NOW?.();
+    if(refreshed!==true)throw new Error('No pude comprobar la última versión de esta tarea en MINDS. Vuelve a intentarlo.');
     if(!itemBy('task',key))throw new Error('No pude actualizar esta tarea desde MINDS. Comprueba la sincronización e inténtalo de nuevo.');
     editItem('task',key);
   }catch(e){
@@ -2543,7 +2560,8 @@ function newPanel(presetDate=null){
     <select id="newType"><option value="task">Tarea</option><option value="event">Evento</option></select>
     <input id="newTitle" placeholder="Nombre">
     <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date" value="${esc(presetDate||'')}"></label>
-    <select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
+    <label>Categoría<select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
+    <label>Proyecto<select id="newProject"><option value="">Sin proyecto</option>${state.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
     <input id="newTime" type="time" value="09:00">
     <button id="newSave" class="primary">Guardar</button>
   </div>`);
@@ -2552,13 +2570,13 @@ function newPanel(presetDate=null){
   type.onchange=syncType;syncType();
   $('#newSave').onclick=()=>{
     const title=$('#newTitle').value.trim();if(!title)return;
-    const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value;
+    const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value,projectId=$('#newProject').value||null;
     if(kind==='task'){
-      const item={id:uid(),title,date,categoryId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};
+      const item={id:uid(),title,date,categoryId,projectId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};
       state.tasks.push(item);mutation('task','create',null,item,'manual');
     }else{
       if(!date)return;
-      const item={id:uid(),title,date,categoryId,start:timeInput.value||'09:00',duration:60};
+      const item={id:uid(),title,date,categoryId,projectId,start:timeInput.value||'09:00',duration:60};
       state.events.push(item);mutation('event','create',null,item,'manual');
     }
     save();closeModal();renderCalendar();
@@ -3282,7 +3300,10 @@ function categoriesPanel(){
     save();renderCalendar();closeModal();
   };
 }
-window.addEventListener('isabella:synced',()=>{void afterSync()});
+window.addEventListener('isabella:synced',()=>{
+  if(document.body.dataset.section==='feed')void window.MINDS_SITUATION?.render?.();
+  void afterSync();
+});
 window.ISABELLA_APP={
   getState:()=>JSON.parse(JSON.stringify(state)),
   replaceState:(next)=>{

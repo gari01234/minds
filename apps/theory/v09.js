@@ -348,6 +348,12 @@
   window.addEventListener('message',e=>{
     if(e.origin!==location.origin)return;
     const type=e.data?.type;
+    if(type==='minds:sofia-state-request'){
+      if(new URLSearchParams(location.search).get('embedded')==='1'){
+        parent.postMessage({type:'minds:sofia-state',open:sheet.dataset.kind==='chat'&&sheet.classList.contains('open')},location.origin);
+      }
+      return;
+    }
     if(type==='minds:sofia-close'){closeSofiaReactionPicker();sheet.classList.remove('open');sheet.dataset.kind='default';document.documentElement.classList.remove('sofia-chat-open');return}
     if(type!=='minds:sofia-open'&&type!=='minds:sofia-prompt')return;
     const conv=newConversation({type:'global',id:'sofia',label:'Sofía'},'memory',true);
