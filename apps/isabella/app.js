@@ -391,7 +391,12 @@ function show(name){
   }
   state.screen=name;
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
-  $$('.main-nav-item').forEach(x=>x.classList.toggle('active',x.dataset.nav===name));
+  document.querySelectorAll('.main-nav-item, .lens-nav-item').forEach(x=>{
+    const active=x.dataset.nav===name;
+    x.classList.toggle('active',active);
+    if(active)x.setAttribute('aria-current','page');
+    else x.removeAttribute('aria-current');
+  });
   document.body.dataset.section=name;
   syncOrbCompact();
   save();
@@ -1818,7 +1823,8 @@ function bind(){
    finally{$('#sendButton').disabled=false;attachButton.disabled=false}
  };
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
- $$('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
+ document.querySelectorAll('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
+ document.querySelectorAll('.lens-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  $('#refreshFeed').onclick=()=>renderFeed(true);
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
  $('#refreshIdeas').onclick=()=>renderIdeas(true);
