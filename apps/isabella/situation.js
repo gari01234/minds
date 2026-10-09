@@ -53,7 +53,7 @@ async function render(){
     (empty?'<p class="situation-caution">No aparecen elementos en las fuentes consultadas. Esto no certifica que no existan otros pendientes.</p>':'')+
     '<p class="situation-limit">Cobertura limitada a tareas fechadas hasta hoy, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p>';
   el.querySelector('[data-situation-calendar]')?.addEventListener('click',()=>document.querySelector('.main-nav-item[data-nav="calendar"]')?.click());
-  el.querySelectorAll('[data-situation-task]').forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.editTaskById?.(button.dataset.situationTask)));
+  (el.querySelectorAll?.('[data-situation-task]')||[]).forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.editTaskById?.(button.dataset.situationTask)));
 }
 window.MINDS_SITUATION={render};
 })();
