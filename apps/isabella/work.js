@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
-let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'desktop',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
+let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
 const workSignedCache=new Map();
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
@@ -27,15 +27,56 @@ function paintChrome(){
 }
 async function render(){
   bindStatic();setStatus('');
+  $('#workBody')?.classList.toggle('work-overview-host',view==='overview');
   try{
     const session=await getSession();
     if(!session){$('#workBody').innerHTML='<div class="work-empty">Conecta la memoria de MINDS para abrir Work.</div>';return}
     project=await loadProject();paintChrome();
     if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
-    if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
+    if(view==='overview')await renderOverview();else if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
   }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
 }
 let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnapshot=null;
+
+/* Build 90.3 — Project as a usable, source-bound understanding lens.
+   Read-only projection: no bucket creation, canonical mutation or secondary model. */
+async function renderOverview(){
+  const body=$('#workBody'),projectId=project.id;
+  body.classList.add('work-overview-host');
+  body.innerHTML='<div class="work-empty">Leyendo el estado del proyecto…</div>';
+  const [t,c,f,m]=await Promise.allSettled([
+    sb.from('isabella_tasks').select('id,title,due_date,assignee,work_status').eq('project_id',projectId).is('completed_at',null).is('archived_at',null).order('due_date',{ascending:true,nullsFirst:false}).limit(80),
+    sb.from('minds_work_claims').select('id,statement,status,provenance_class,claim_type').eq('project_id',projectId).in('status',['proposed','disputed']).order('updated_at',{ascending:false}).limit(40),
+    sb.from('minds_work_files').select('id',{count:'exact',head:true}).eq('project_id',projectId),
+    sb.rpc('minds_project_model_snapshot',{p_project_id:projectId})
+  ]);
+  if(view!=='overview'||project?.id!==projectId)return;
+  const norm=r=>r.status==='fulfilled'&&!r.value?.error?r.value:null;
+  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m);
+  const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
+  projectModelSnapshot=modelResult?.data||null;
+  const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
+  const taskText=taskRows.map(x=>'<article class="work-overview-item"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',x.work_status||''].filter(Boolean).join(' · '))+'</small></article>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
+  const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
+  const filesLabel=fileResult?String(fileResult.count??0)+' documentos registrados':'Cobertura documental no comprobable';
+  const rev=projectModelSnapshot?.current_revision;
+  const revLabel=rev?'Revisión del Model: '+String(rev.id||'').slice(0,8):'Sin revisión del Project Model publicada';
+  body.innerHTML='<div class="work-overview">'+
+    '<div class="work-overview-intro"><div class="eyebrow">MINDS · PROJECT</div><h2>Panorama de '+esc(project.name)+'</h2><p>Lectura operativa del proyecto. Los hechos, inferencias y decisiones conservan su procedencia y autoridad propias.</p></div>'+
+    '<div class="work-overview-coverage">'+esc('Fuentes consultadas: '+known+'/4 · '+filesLabel+' · '+revLabel)+(known<4?'<p>La lectura es parcial: alguna fuente no respondió.</p>':'')+'</div>'+
+    '<div class="work-overview-columns">'+
+    '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Movimientos abiertos</h3><button data-work-go="planner">Abrir Planner ↗</button></div>'+
+    (taskResult?taskText:'<p class="small">No pude consultar las tareas de este proyecto.</p>')+
+    (taskRows.length===80?'<p class="small">Puede haber más tareas abiertas; consulta Planner.</p>':'')+'</section>'+
+    '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Claims en revisión</h3><button data-work-go="knowledge">Ver Conocimiento ↗</button></div>'+
+    (claimResult?claimText:'<p class="small">No pude comprobar el conocimiento del proyecto.</p>')+
+    (claimRows.length===40?'<p class="small">Hay más registros; abre Conocimiento.</p>':'')+'</section></div>'+
+    '<div class="work-overview-model">'+projectModelPanel()+'</div>'+
+    '<div class="work-overview-footer"><button data-work-go="desktop">Abrir Desktop ↗</button><button data-work-go="threads">Abrir Threads ↗</button><p>Los documentos que todavía no están en el Desktop no forman parte de esta lectura. Un modelo sin lagunas registradas no demuestra cobertura completa.</p></div>'+
+    '</div>';
+  $('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
+}
+
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
 const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
 function knowledgeFlags(c){
