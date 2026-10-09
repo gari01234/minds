@@ -32,7 +32,7 @@ test('Build 90.2 places a canonical source-backed radar before the generative Fe
  const index=read('apps/isabella/index.html');
  assert.ok(shell.includes('id="situationLedger"'));
  assert.ok(shell.indexOf('id="situationLedger"')<shell.indexOf('id="feedList"'));
- assert.ok(index.includes('situation.js?v=1'));
+ assert.ok(index.includes('situation.js?v=2'));
  assert.ok(app.includes('void window.MINDS_SITUATION?.render?.()'));
  assert.ok(app.includes('feed-section-title">Sugerencias de Isabella'));
  assert.ok(!app.includes('Ahora mismo no hay nada que merezca interrumpirte.'));
