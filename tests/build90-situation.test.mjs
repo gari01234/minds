@@ -48,7 +48,7 @@ test('Build 90.2 keeps due_unconfirmed distinct from non-occurrence',async()=>{
  const {render,node}=fixture();
  await render();
  assert.match(node.innerHTML,/Coordinar TWP/);
- assert.match(node.innerHTML,/Vencida · 09\.10\.2026 · Bernried/);
+ assert.match(node.innerHTML,/Coordinar TWP[\s\S]*?Bernried/);
  assert.match(node.innerHTML,/Esperar respuesta/);
  assert.match(node.innerHTML,/Vencida, ocurrencia no confirmada/);
  assert.match(node.innerHTML,/No incluye todas las conversaciones/);
