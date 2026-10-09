@@ -34,7 +34,7 @@ test('Feed is a situational surface with weather and Now, not an editorial news 
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
   assert.ok(app.includes('feed-weather-section'));
-  assert.ok(app.includes('feed-section-title">Ahora'));
+  assert.ok(app.includes('feed-section-title">Sugerencias de Isabella'));
   assert.ok(!app.includes('feed-section-title">Noticias'));
   assert.ok(!app.includes('feed-section-title">Para mí'));
   assert.ok(ai.includes("surface_version:surface==='feed'?11"));
@@ -610,14 +610,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.09.90.1'));
+  assert.ok(shell.includes('Build 2026.10.09.90.2'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
-  assert.ok(index.includes('app.css?v=61'));
-  assert.ok(index.includes('shell.js?v=93'));
-  assert.ok(index.includes('app.js?v=99'));
+  assert.ok(index.includes('app.css?v=62'));
+  assert.ok(index.includes('shell.js?v=94'));
+  assert.ok(index.includes('app.js?v=100'));
   assert.ok(index.includes('sync.js?v=pwa31'));
   assert.ok(index.includes('ai.js?v=49'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v111'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v112'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
