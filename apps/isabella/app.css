@@ -1668,3 +1668,9 @@ body[data-section="work"] .topbar .eyebrow:after{content:" · WORK";letter-spaci
  .work-overview-columns{grid-template-columns:1fr;gap:23px}
  .work-overview-section-head h3{font-size:16px}
 }
+
+/* Build 90.4: constrain desktop composer; preserve vertical manual resize. */
+@media(min-width:1101px){.composer-wrap{left:50%;right:auto;transform:translateX(-50%);width:min(900px,calc(100% - 80px));padding-left:0;padding-right:0}.composer textarea{resize:vertical;max-height:280px}}
+.situation-item.situation-editable{display:block;width:100%;text-align:left;background:transparent;font:inherit;cursor:pointer}
+.situation-item.situation-editable:hover{background:#f7f7f8}
+.situation-item.situation-editable:focus-visible{outline:2px solid #444;outline-offset:2px}
