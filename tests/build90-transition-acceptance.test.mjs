@@ -106,7 +106,7 @@ test('90.5 Sofía iframe queues opening until loaded and preserves iframe on sub
   const c={window:{addEventListener:(name,handler)=>events['window-'+name]=handler},
     location:{pathname:'/minds/isabella/',origin:'https://example.com'},
     document,$:s=>elements[s],show:name=>{document.body.dataset.section=name;c.testBridge?.ensureReadings()},queuedSofiaRequest:null};
-  const source=part(app,'let queuedSofiaRequest=null;','let pendingReplyTo=null;');
+  const source=part(app,'function readingsUrl(){','let pendingReplyTo=null;');
   vm.runInNewContext(source+';globalThis.testBridge={openSofia,ensureReadings};',c);
   c.testBridge.openSofia('Explica esta lectura');
   assert.equal(sent.length,0,'Do not post before iframe load');
