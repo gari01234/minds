@@ -34,7 +34,7 @@ Presence is a projection, not another runtime. Closing or crashing it must never
 - The 15-second active poll loop stops when there is no live run, pending attention, open chat panel or active task surface. Because desktop Presence has no Realtime/push wake channel yet, an idle 120-second discovery probe remains so new server state is not missed.
 - Reopening Presence resynchronizes from canonical state rather than trusting local cache.
 
-### 88.4 — Minimum-exposure transport
+### 88.4 — Minimum-exposure transport **Implemented**
 - Reduce Presence queries and reply payloads to the canonical fields required by the active view.
 - Do not ship hidden project/memory context to Presence merely because MINDS knows it.
 - Keep canonical conversation and agenda shared with web MINDS.
