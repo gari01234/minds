@@ -100,7 +100,7 @@ Build 90 therefore does not start yet.
 Build 89 continues with a remediation slice rather than changing the failed v0.1 fixtures:
 
 1. Move categories that are already canonical MINDS state out of free model inference and into a deterministic **Constitutional State Adapter**.
-2. Define, before rerunning, which outputs are hard invariants versus intentionally model-dependent interpretation.
+2. Define, before rerunning, which outputs are hard invariants versus intentionally model-dependent interpretation. This hard-vs-interpretive split must be frozen before execution.
 3. Add a new fixture version (`v0.2`) that tests the adapter + replaceable model together while preserving every v0.1 run unchanged.
 4. For cold reconstruction, keep semantic differences visible, but validate provenance/uncertainty/authority boundaries independently from exact interpretive identity.
 5. Only if the new predeclared hard-boundary probe passes for both model families may Build 89 close and Build 90 begin.
