@@ -2486,7 +2486,7 @@ function newPanel(presetDate=null){
   modal('Agregar manualmente',`<div class="form">
     <select id="newType"><option value="task">Tarea</option><option value="event">Evento</option></select>
     <input id="newTitle" placeholder="Nombre">
-    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date" value="${esc(presetDate||state.date||today())}"></label>
+    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date" value="${esc(presetDate||'')}"></label>
     <select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select>
     <input id="newTime" type="time" value="09:00">
     <button id="newSave" class="primary">Guardar</button>
