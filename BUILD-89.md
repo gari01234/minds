@@ -57,8 +57,10 @@ Build 89 passes only if both model families preserve all hard governance invaria
 
 The first frozen production probes do not satisfy the predeclared gate. Their results remain immutable evidence; Build 89 continues with a new remediation slice rather than retuning v0.1 after the fact.
 
-### 89.R1 — Constitutional State Adapter
+### 89.R1 — Constitutional State Adapter **Implemented**
 Move already-canonical MINDS state out of free prose classification and expose it as deterministic constitutional input to the replaceable model.
+
+The adapter derives epistemic status, authority ceiling, scope action, relationship boundary and required uncertainty from structured MINDS state. A replaceable model may still suggest different labels or prose, but the constitutional fields can be overwritten deterministically and deviations remain observable. Detection of the structured input signal itself may still be model-dependent when no canonical state exists; this slice does not pretend otherwise.
 
 ### 89.R2 — Predeclared v0.2 rerun
 Freeze hard-vs-interpretive dimensions before execution, rerun Luna/Astra against the strengthened architecture, preserve v0.1 unchanged, and only then reconsider 89.5.
