@@ -345,8 +345,13 @@
     setTimeout(()=>{const log=sheetBody.querySelector('.v09-chat-log');if(log)log.scrollTop=log.scrollHeight;},0);
   }
   function askFromOrigin(origin,opts={}){const c=newConversation(origin,opts.mode||'memory',!!opts.reuseGeneral);openConversation(c);setTimeout(()=>sheetBody.querySelector('.v09-chat-form textarea')?.focus(),80);}
+  function acceptsSofiaBridgeMessage(e){
+    if(e?.origin!==location.origin)return false;
+    const embedded=new URLSearchParams(location.search).get('embedded')==='1';
+    return !embedded||e.source===parent;
+  }
   window.addEventListener('message',e=>{
-    if(e.origin!==location.origin)return;
+    if(!acceptsSofiaBridgeMessage(e))return;
     const type=e.data?.type;
     if(type==='minds:sofia-state-request'){
       if(new URLSearchParams(location.search).get('embedded')==='1'){
