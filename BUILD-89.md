@@ -23,13 +23,25 @@ Build 89 does not ask which model is smarter. It asks which parts of Isabella re
 - Preserve both outputs, deterministic metrics and failures.
 - Runs are read-only to authenticated clients and writable only by the controlled runner.
 
-### 89.2 — Model swap probe **Implemented; production acceptance run pending**
+### 89.2 — Model swap probe **Implemented; first production run completed and failed the hard acceptance threshold**
 - Run the same constitutional/relational cases through GPT-5.6 Luna and GPT-6 Astra.
 - Score exact structured decisions for authority, uncertainty, scope, temporal state and relationship boundaries.
 - Record cross-model agreement separately from correctness against the fixed contract.
 - Do not score stylistic wording as identity.
 
-### 89.3 — Cold reconstruction
+## Observed model-swap result
+
+The first production model-swap run is preserved as evidence rather than tuned away.
+
+Run `c819ad54-c18c-49b8-a834-f47bbfddf3f4` completed on 2026-10-09 with the frozen `model-swap-v0.1` fixture:
+- GPT-5.6 Luna passed 6/11 exact contract cases.
+- GPT-6 Astra passed 5/11 exact contract cases.
+- Cross-model field agreement was 48/55 = 87.27%.
+- `both_preserve_all_hard_invariants=false`.
+
+This means the strong claim “all tested Isabella constitutional behavior already lives outside the replaceable model” is **not supported by this first probe**. The result is not repaired by changing expected answers after seeing outputs. Build 89.3 proceeds independently so the final report can separate model-dependent judgment, fixture ambiguity and structurally governed behavior.
+
+### 89.3 — Cold reconstruction **Implemented; production run pending**
 - Give each model the same bounded Source fixture with the current Project Model hidden.
 - Reconstruct Claims/relations/Movements into a Variant-shaped output.
 - Compare each reconstruction to deterministic fixture expectations and to each other.
