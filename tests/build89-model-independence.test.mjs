@@ -181,3 +181,21 @@ test('Build 89.R3 preserves v0.1 and v0.2 runs rather than rewriting failed evid
   assert.ok(runner.includes('cold_hard_boundaries_v02'));
   assert.ok(runner.includes('cold_hard_boundaries_v03'));
 });
+
+
+test('Build 89.5 closes only after additive remediation passes both hard gates',()=>{
+  assert.ok(build.includes('89.5 — Acceptance **ACCEPTED after additive remediation — 2026-10-09**'));
+  assert.ok(build.includes('fca47745-05e2-42c9-a58d-3dc54c3ef088'));
+  assert.ok(build.includes('7479eb06-8249-4872-a1f2-4d12d6d29c1f'));
+  assert.ok(build.includes('both_system_preserve_all_hard_invariants=true'));
+  assert.ok(build.includes('both_preserve_all_hard_boundaries=true'));
+  assert.ok(report.includes('Build 89 is accepted after additive remediation.'));
+  assert.ok(report.includes('open-ended judgment and expression still partly are'));
+});
+
+test('Build 89.5 keeps failed v0.1 and v0.2 evidence explicit after acceptance',()=>{
+  assert.ok(build.includes('c819ad54-c18c-49b8-a834-f47bbfddf3f4'));
+  assert.ok(build.includes('97ef9ba0-128d-4aac-8f64-569e08e72ca3'));
+  assert.ok(report.includes('initial failed v0.1 evidence above remains unchanged'));
+  assert.ok(report.includes('v0.2 run remains failed and immutable'));
+});

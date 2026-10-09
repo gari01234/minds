@@ -52,22 +52,34 @@ This means the strong claim “all tested Isabella constitutional behavior alrea
 - Identify any invariant that changes across models.
 - Do not compensate for a failed invariant by tuning the evaluator after seeing the output.
 
-### 89.5 — Acceptance **FAILED; remediation required before Build 90**
-Build 89 passes only if both model families preserve all hard governance invariants in the controlled probe. Cold reconstruction may differ in non-authoritative interpretation, but must preserve provenance, uncertainty and authority boundaries.
+### 89.5 — Acceptance **ACCEPTED after additive remediation — 2026-10-09**
+Build 89 originally failed its frozen v0.1 probes. Those runs remain immutable evidence and are not reclassified as passes.
 
-The first frozen production probes do not satisfy the predeclared gate. Their results remain immutable evidence; Build 89 continues with a new remediation slice rather than retuning v0.1 after the fact.
+Acceptance is based on the strengthened architecture introduced after those failures:
+- `model-swap-v0.2` moves already-structured constitutional state into the deterministic Constitutional State Adapter before either replaceable model runs;
+- `cold-reconstruction-v0.3` evaluates hard provenance/authority/ownership/temporal boundaries after deterministic canonicalization of semantically symmetric `contradicts` relations;
+- interpretive prose, optional evidence bundles and non-authoritative relation packaging remain allowed to differ between models.
+
+Production acceptance evidence:
+- model swap v0.2 — run `fca47745-05e2-42c9-a58d-3dc54c3ef088`: Luna 11/11, Astra 11/11, raw model agreement 100%, `both_system_preserve_all_hard_invariants=true`;
+- cold reconstruction v0.2 — run `97ef9ba0-128d-4aac-8f64-569e08e72ca3`: Astra passed; Luna failed only the directional representation of the symmetric contradiction relation;
+- cold reconstruction v0.3 — run `7479eb06-8249-4872-a1f2-4d12d6d29c1f`: both models passed all hard boundaries, `both_preserve_all_hard_boundaries=true`.
+
+The accepted claim is deliberately narrower than “the models behave identically.” MINDS now demonstrates that durable constitutional state, authority boundaries, provenance requirements, ownership and temporal constraints can remain stable across the tested replaceable models. Open-ended judgment, evidence selection and explanatory style remain model-dependent.
 
 ### 89.R1 — Constitutional State Adapter **Implemented**
 Move already-canonical MINDS state out of free prose classification and expose it as deterministic constitutional input to the replaceable model.
 
 The adapter derives epistemic status, authority ceiling, scope action, relationship boundary and required uncertainty from structured MINDS state. A replaceable model may still suggest different labels or prose, but the constitutional fields can be overwritten deterministically and deviations remain observable. Detection of the structured input signal itself may still be model-dependent when no canonical state exists; this slice does not pretend otherwise.
 
-### 89.R2 — Predeclared v0.2 rerun **Implemented; production reruns pending**
+### 89.R2 — Predeclared v0.2 rerun **Implemented; production model-swap v0.2 passed, cold v0.2 exposed one representation instability**
 
-### 89.R3 — Symmetric relation canonicalization **Implemented; production v0.3 cold rerun pending**
+### 89.R3 — Symmetric relation canonicalization **Implemented; production cold v0.3 passed**
 The v0.2 cold probe preserved all hard boundaries except Luna reversed the direction of the `contradicts` relation. Because contradiction is semantically symmetric, Build 89 does not treat model-chosen orientation as authority. A deterministic representation layer now canonicalizes only symmetric `contradicts` pairs to stable key order before hard-boundary evaluation. Directional relations such as `supports`, `supersedes`, `depends_on` and `qualifies` are not normalized.
 
 The failed v0.2 run remains unchanged in the ledger. v0.3 is a new fixture version testing the new representation layer.
+
+Production v0.3 acceptance run `7479eb06-8249-4872-a1f2-4d12d6d29c1f` passed all hard boundaries for both Luna and Astra. Exact interpretive agreement remained low (20%), which is retained as evidence that interpretation is still model-dependent even when constitutional behavior is stable.
 
 Freeze hard-vs-interpretive dimensions before execution, rerun Luna/Astra against the strengthened architecture, preserve v0.1 unchanged, and only then reconsider 89.5.
 
