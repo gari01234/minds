@@ -56,7 +56,7 @@ async function renderOverview(){
   const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
   projectModelSnapshot=modelResult?.data||null;
   const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
-  const taskText=taskRows.map(x=>'<article class="work-overview-item"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',x.work_status||''].filter(Boolean).join(' · '))+'</small></article>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
+  const taskText=taskRows.map(x=>'<button type="button" class="work-overview-item work-overview-task" data-work-edit-task="'+esc(x.id)+'"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',x.work_status||''].filter(Boolean).join(' · '))+'</small></button>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
   const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
   const filesLabel=fileResult?String(fileResult.count??0)+' documentos registrados':'Cobertura documental no comprobable';
   const rev=projectModelSnapshot?.current_revision;
@@ -74,7 +74,8 @@ async function renderOverview(){
     '<div class="work-overview-model">'+projectModelPanel()+'</div>'+
     '<div class="work-overview-footer"><button data-work-go="desktop">Abrir Desktop ↗</button><button data-work-go="threads">Abrir Threads ↗</button><p>Los documentos que todavía no están en el Desktop no forman parte de esta lectura. Un modelo sin lagunas registradas no demuestra cobertura completa.</p></div>'+
     '</div>';
-  $$('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
+  $('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
+  $('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
 }
 
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
@@ -479,7 +480,7 @@ function threadMessageMarkup(m){
   const groups=threadArtifactGroups(artifacts),copy=cleanThreadDeliverableText(m.content,artifacts);
   const previews=groups.previews.length?`<div class="work-thread-previews">${groups.previews.slice(0,2).map(a=>`<button type="button" data-thread-artifact-preview="${esc(a.storage_path)}" aria-label="Abrir vista previa"><img data-thread-artifact-image="${esc(a.storage_path)}" alt="Vista previa del documento"></button>`).join('')}</div>`:'';
   const deliverables=groups.deliverables.length?`<div class="work-thread-artifacts">${groups.deliverables.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:'';
-  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}</article>`;
+  return `<article class="work-thread-message ${role}">${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}${role==='assistant'&&!sources.length?'<div class="work-thread-source-boundary">Esta respuesta no incluye fuentes citadas verificables.</div>':''}</article>`;
 }
 async function hydrateThreadArtifacts(root=document){
   const files=[...root.querySelectorAll?.('[data-thread-artifact]')||[]],images=[...root.querySelectorAll?.('[data-thread-artifact-image]')||[]];

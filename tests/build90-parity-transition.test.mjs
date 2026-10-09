@@ -78,3 +78,14 @@ test('90.5 knowledge keeps document registration separate from accepted claims',
   assert.match(work,/index_status==='indexed'/);
   assert.match(work,/Registrar un archivo no lo convierte automáticamente en conocimiento validado/);
 });
+
+test('90.4 Panorama opens the canonical task editor by row UUID',()=>{
+  assert.match(work,/data-work-edit-task/);
+  assert.match(work,/openCanonicalTaskById\?\.\(button\.dataset\.workEditTask\)/);
+  assert.ok(!work.includes("update({sort_order:"),'Work must not overwrite calendar/list order');
+});
+
+test('90.5 unreferenced Work responses disclose their missing citation receipt',()=>{
+  assert.match(work,/role==='assistant'&&!sources.length/);
+  assert.match(work,/Esta respuesta no incluye fuentes citadas verificables/);
+});

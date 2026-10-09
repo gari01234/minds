@@ -71,3 +71,9 @@ Thread and Isabella Chat should use one escaped Markdown formatter and surface h
 Supabase observation (2026-10-09): 28 Work files registered, 0 with index_status='indexed'; minds_work_claims and minds_project_model_revisions each contain 0 records. An empty Conocimiento view is thus not evidence of missing files, nor proof of ingestion or project comprehension. State that boundary in the interface and preserve Build 84.6 real Bernried acceptance for after Build 90.
 
 90.5 first transition slice preserves the selected calendar date across lens switches while retaining the current Thread identity and source-bound reading surface. Remaining 90.4/90.5 acceptance: cross-surface create/edit/recurrence/drag persistence, live authenticated task round-trip, mobile Safari/PWA, multi-context navigation, Readings text/highlights/annotations and evidence scope. Do not mark either build closed or make 84.6 claims from CI-only results.
+
+### 90.4/90.5 — Project inspection and response trace, 2026-10-09
+
+Panorama task rows now route the actual isabella_tasks.id to the same authenticated UUID-to-client-key editor used by Ahora. This is a read/edit affordance over a canonical task, not a new Project Movement state or a write-through model.
+
+For Work Thread responses, no cited sources is shown explicitly when the persisted message has no source metadata. A missing citation is not evidence that no files were read, and a filename list is not evidence of having read its contents. Live inspection of Bernried's first HLS & TWP exchange found zero sources on the response metadata. Preserve evidence/usage scope in subsequent reviews. The model's claims about indexed documents must not replace source receipts.
