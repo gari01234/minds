@@ -152,6 +152,8 @@ Do not copy Coucou’s character/assets or make Presence its own runtime.
 
 ## Build 89 — Model Independence & Cold Reconstruction Acceptance
 
+Status: closed and accepted 2026-10-09 after preserving the failed v0.1 probes, adding the Constitutional State Adapter, passing model-swap v0.2 across Luna/Astra, and passing the hard-boundary cold reconstruction v0.3. Interpretive judgment remains explicitly model-dependent.
+
 Test, rather than merely assert, that Isabella is more than the currently selected model.
 
 Two controlled experiments:
