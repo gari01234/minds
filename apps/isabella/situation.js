@@ -13,7 +13,7 @@ function normalized(p){
 }
 function projectName(id){return String((window.ISABELLA_STATE?.projects||[]).find(x=>x.id===id)?.name||'')}
 function section(label,items,zero,key,ok){
-  const rows=items.length?items.map(x=>'<div class="situation-item situation-'+key+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></div>').join(''):'<p class="situation-zero">'+esc(ok?zero:'Esta fuente no pudo comprobarse.')+'</p>';
+  const rows=items.length?items.map(x=>key==='task'&&x.id?'<button type="button" class="situation-item situation-task situation-editable" data-situation-task="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></button>':'<div class="situation-item situation-'+key+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></div>').join(''):'<p class="situation-zero">'+esc(ok?zero:'Esta fuente no pudo comprobarse.')+'</p>';
   return '<section class="situation-group"><h3>'+esc(label)+'</h3>'+rows+'</section>';
 }
 async function render(){
@@ -37,7 +37,7 @@ async function render(){
   if(version!==generation)return;
   const tasks=normalized(a),expectations=normalized(b),attention=normalized(c),reviews=normalized(d);
   const checked=[tasks,expectations,attention,reviews].filter(x=>x.ok).length;
-  const rowsTask=tasks.data.map(t=>({title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(projectName(t.project_id)?' · '+projectName(t.project_id):'')}));
+  const rowsTask=tasks.data.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(projectName(t.project_id)?' · '+projectName(t.project_id):'')}));
   const rowsExpect=expectations.data.map(x=>({title:x.title||'Confirmación esperada',detail:(x.status==='due_unconfirmed'?'Vencida, ocurrencia no confirmada':'Próxima comprobación')+' · '+displayDay(x.due_at)}));
   const rowsAttention=attention.data.map(x=>({title:x.title||'Necesita atención',detail:(x.route||'Atención')+(x.deadline_at?' · '+displayDay(x.deadline_at):'')+(x.reason?' · '+x.reason:'')}));
   const truncated=[tasks,expectations,attention].some(x=>x.ok&&x.count!==null&&x.count>x.data.length);
@@ -53,6 +53,7 @@ async function render(){
     (empty?'<p class="situation-caution">No aparecen elementos en las fuentes consultadas. Esto no certifica que no existan otros pendientes.</p>':'')+
     '<p class="situation-limit">Cobertura limitada a tareas fechadas hasta hoy, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p>';
   el.querySelector('[data-situation-calendar]')?.addEventListener('click',()=>document.querySelector('.main-nav-item[data-nav="calendar"]')?.click());
+  el.querySelectorAll('[data-situation-task]').forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.editTaskById?.(button.dataset.situationTask)));
 }
 window.MINDS_SITUATION={render};
 })();
