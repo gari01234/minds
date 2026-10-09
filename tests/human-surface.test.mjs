@@ -103,7 +103,7 @@ test('Build 72 humanizes proactive durable-work messages and briefings',()=>{
 
 test('Build 72 does not create a new top-level product surface',()=>{
   const shell=read('apps/isabella/shell.js');
-  assert.ok(shell.includes('Build 2026.10.08.87.5'));
+  assert.ok(shell.includes('Build 2026.10.09.88.5'));
   assert.ok(!shell.includes('data-nav="human"'));
   assert.ok(!shell.includes('data-nav="state"'));
   assert.ok(!shell.includes('Human Surface'));

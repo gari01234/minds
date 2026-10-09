@@ -134,6 +134,8 @@ Self-Evaluation / Evolution remains behind this build because otherwise it would
 
 ## Build 88 — Presence Reliability & Exact Decision Binding v0.2
 
+Status: closed and accepted 2026-10-09. Exact decision binding, deterministic alert queue, fail-open adaptive polling and minimum-exposure transport are implemented. A future desktop Realtime/push wake channel may replace the idle discovery probe without changing these invariants.
+
 Keep Presence as a thin projection of canonical MINDS, not another agent.
 
 Adopt the useful Coucou patterns:

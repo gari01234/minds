@@ -39,10 +39,30 @@ Presence is a projection, not another runtime. Closing or crashing it must never
 - Do not ship hidden project/memory context to Presence merely because MINDS knows it.
 - Keep canonical conversation and agenda shared with web MINDS.
 
-### 88.5 — Acceptance
+### 88.5 — Acceptance **Implemented and accepted**
 - stale decision answer rejected before reasoning;
 - exact revision accepted;
 - two alerts queue and advance one-by-one;
 - closing Presence does not stop background work;
 - idle Presence stops unnecessary polling and resumes cleanly;
 - no independent Presence authority/runtime/memory appears.
+
+## Acceptance result
+
+Build 88 is **closed and accepted — 2026-10-09**.
+
+The acceptance combines the latest green Verify MINDS suite, green cross-platform Presence validation, deployed production schema/runtime checks and the current production baseline.
+
+Verified properties:
+- stale Presence decisions are rejected server-side before route selection or model reasoning;
+- the client carries the exact Attention event revision it displayed;
+- live decisions are ordered deterministically and only one focal decision is rendered at a time;
+- resolving/replying refreshes canonical state immediately so the next request can advance;
+- Presence has no write path into Mission or Attention authority;
+- the permanent 15-second idle loop is gone; active work retains fast polling while idle state uses a 120-second discovery probe because no desktop Realtime/push wake channel exists yet;
+- conversation history is fetched only when the Chat panel is open, and Presence receives a reduced chat response payload;
+- production has the request_revision column and exact-binding validator deployed in isabella-chat v82.
+
+At acceptance time production had 0 live interrupt decisions and no Mission waiting_for_user. Therefore no synthetic production decision was inserted merely to manufacture a positive-path acceptance case. Exact-live acceptance is covered structurally and by the automated suite; the first naturally occurring Presence decision will serve as an additional real-world acceptance probe without blocking Build 89.
+
+The Windows installer build is a delivery artifact, not an authority/runtime dependency. Presence validation is the acceptance gate for the native shell; installer publication may complete independently.
