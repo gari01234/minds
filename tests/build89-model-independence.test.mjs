@@ -9,6 +9,7 @@ const migration=read('supabase/migrations/20261009072000_model_independence_ledg
 const runner=read('supabase/functions/isabella-model-independence-runner/index.ts');
 const config=read('supabase/config.toml');
 const build=read('BUILD-89.md');
+const report=read('BUILD-89-REPORT.md');
 
 test('Build 89.1 experiment ledger freezes models policy version hashes and exact input',()=>{
   assert.ok(migration.includes('create table if not exists public.minds_model_independence_runs'));
@@ -103,4 +104,21 @@ test('Build 89.3 runs both model families against one frozen cold fixture',()=>{
   assert.ok(runner.includes('const b=await callColdModel'));
   assert.ok(runner.includes('both_preserve_all_structural_invariants'));
   assert.ok(runner.includes('agreement_structures'));
+});
+
+
+test('Build 89.4 report preserves failed v0.1 evidence instead of retuning the evaluator',()=>{
+  assert.ok(report.includes('does **not** pass its predeclared 89.5 acceptance gate'));
+  assert.ok(report.includes('c819ad54-c18c-49b8-a834-f47bbfddf3f4'));
+  assert.ok(report.includes('57e53a81-a37a-43e4-a36e-2e7687e0542f'));
+  assert.ok(report.includes('48/55 fields = 87.27%'));
+  assert.ok(report.includes('Result: **FAILED — by design, not waived.**'));
+  assert.ok(report.includes('Build 90 therefore does not start yet.'));
+});
+
+test('Build 89 remediation is additive: v0.1 stays failed and v0.2 must be predeclared',()=>{
+  assert.ok(build.includes('89.R1 — Constitutional State Adapter'));
+  assert.ok(build.includes('89.R2 — Predeclared v0.2 rerun'));
+  assert.ok(report.includes('v0.1 experiments remain immutable evidence'));
+  assert.ok(report.includes('hard-vs-interpretive'));
 });
