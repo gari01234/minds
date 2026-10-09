@@ -74,3 +74,19 @@ test('Build 88.2 advances the queue from canonical state after a reply',()=>{
   assert.ok(presence.includes("await refresh({force:true})"));
   assert.ok(presence.includes(".in('status',['pending','delivered'])"));
 });
+
+
+test('Build 88.3 removes the permanent 15-second idle loop while preserving discovery',()=>{
+  assert.ok(presence.includes('IDLE_DISCOVERY_MS=120000'));
+  assert.ok(presence.includes('function needsActivePolling'));
+  assert.ok(presence.includes('function scheduleNextPoll'));
+  assert.ok(presence.includes('timer=setTimeout(()=>void refresh(),wait)'));
+  assert.ok(presence.includes('needsActivePolling()?POLL_MS:IDLE_DISCOVERY_MS'));
+  assert.ok(!presence.includes('setInterval(()=>refresh(),POLL_MS)'));
+});
+
+test('Build 88.3 Presence auth/window lifecycle cannot become an execution dependency',()=>{
+  assert.ok(presence.includes("else{if(timer){clearTimeout(timer);timer=null}void renderAuth('')}"));
+  assert.ok(!presence.includes("sb.from('minds_mission_runs').update("));
+  assert.ok(!presence.includes("sb.from('minds_attention_events').update("));
+});
