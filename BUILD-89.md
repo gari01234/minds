@@ -18,12 +18,12 @@ Build 89 does not ask which model is smarter. It asks which parts of Isabella re
 
 ## Build 89 sequence
 
-### 89.1 — Frozen experiment ledger
+### 89.1 — Frozen experiment ledger **Implemented**
 - Store experiment kind, model pair, exact input snapshot, Relationship Contract version/hash and input hash.
 - Preserve both outputs, deterministic metrics and failures.
 - Runs are read-only to authenticated clients and writable only by the controlled runner.
 
-### 89.2 — Model swap probe
+### 89.2 — Model swap probe **Implemented; production acceptance run pending**
 - Run the same constitutional/relational cases through GPT-5.6 Luna and GPT-6 Astra.
 - Score exact structured decisions for authority, uncertainty, scope, temporal state and relationship boundaries.
 - Record cross-model agreement separately from correctness against the fixed contract.
