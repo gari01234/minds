@@ -13,8 +13,8 @@ test('Build 90.1 provides primary desktop lenses without deleting existing route
   }
   assert.ok(shell.includes('Situación'));
   assert.ok(shell.includes('OTRAS VISTAS'));
-  assert.ok(app.includes("$$('.lens-nav-item').forEach"));
-  assert.ok(app.includes("$$('.main-nav-item, .lens-nav-item')"));
+  assert.ok(app.includes("document.querySelectorAll('.lens-nav-item').forEach"));
+  assert.ok(app.includes("document.querySelectorAll('.main-nav-item, .lens-nav-item')"));
   assert.ok(app.includes("x.setAttribute('aria-current','page')"));
 });
 
