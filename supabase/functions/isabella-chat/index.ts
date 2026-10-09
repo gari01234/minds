@@ -2623,7 +2623,7 @@ Deno.serve(async (req: Request) => {
   if(surface==="presence"&&context?.reply_context){
     const attentionId=String(context.reply_context?.attention_id||"").trim();
     const requestRevision=Number(context.reply_context?.request_revision||0);
-    if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(attentionId)||!Number.isInteger(requestRevision)||requestRevision<1){
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attentionId)||!Number.isInteger(requestRevision)||requestRevision<1){
       return json({error:"stale_decision",reason:"invalid_binding",message:"La solicitud ya no coincide con una decisión vigente."},409);
     }
     const binding=await supabaseClient(req)?.rpc("minds_validate_presence_reply_v01",{
