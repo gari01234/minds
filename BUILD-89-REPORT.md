@@ -106,3 +106,58 @@ Build 89 continues with a remediation slice rather than changing the failed v0.1
 5. Only if the new predeclared hard-boundary probe passes for both model families may Build 89 close and Build 90 begin.
 
 This is not evaluator tuning. The failed v0.1 experiments remain immutable evidence; v0.2 tests a stronger system architecture in which hard constitutional state is no longer delegated to prose interpretation.
+
+## Remediation addendum — 2026-10-09
+
+The initial failed v0.1 evidence above remains unchanged. MINDS changed the architecture, not the old evaluator.
+
+### Constitutional State Adapter
+
+Build 89.R1 moved already-structured epistemic state, authority ceilings, scope boundaries, relationship boundaries and required uncertainty out of free prose classification. The replaceable model may still produce different wording or even suggest a different classification, but the final constitutional envelope is deterministic server state.
+
+### Model swap v0.2
+
+Run: `fca47745-05e2-42c9-a58d-3dc54c3ef088`
+
+Observed:
+- Luna: 11/11 raw compliant cases and 11/11 system hard cases.
+- Astra: 11/11 raw compliant cases and 11/11 system hard cases.
+- raw cross-model agreement: 100%.
+- `both_system_preserve_all_hard_invariants=true`.
+- the failed v0.1 run remains in the ledger.
+
+### Cold reconstruction v0.2
+
+Run: `97ef9ba0-128d-4aac-8f64-569e08e72ca3`
+
+Astra preserved every predeclared hard boundary. Luna preserved every boundary except the evaluator required one direction for the `contradicts` edge while Luna emitted the same symmetric contradiction in the reverse direction.
+
+This was treated as a representation problem, not silently waived. The v0.2 run remains failed and immutable.
+
+### Cold reconstruction v0.3
+
+Run: `7479eb06-8249-4872-a1f2-4d12d6d29c1f`
+
+Before execution, MINDS introduced one representation rule: `contradicts` is semantically symmetric and is canonicalized to stable claim-key order. Directional relations remain directional.
+
+Observed:
+- Luna hard-boundary pass: true.
+- Astra hard-boundary pass: true.
+- `both_preserve_all_hard_boundaries=true`.
+- Project Model hidden: true.
+- authority mutation allowed: false.
+- exact interpretive agreement: 20%.
+
+The low interpretive agreement is not a defect hidden by the acceptance rule. It shows exactly where model dependence remains: evidence bundles, optional support relations and other non-authoritative packaging.
+
+## Final Build 89 conclusion
+
+**Build 89 is accepted after additive remediation.**
+
+The evidence supports a precise statement:
+
+> Isabella's durable state and constitutional authority do not have to be the replaceable model. Her open-ended judgment and expression still partly are.
+
+This is a stronger and more useful result than claiming model identity. The system now has empirical evidence that hard governance boundaries can survive a Luna/Astra swap when those boundaries are represented as MINDS state rather than left implicit in prose.
+
+Build 90 may begin. The deferred real Bernried Work-source acceptance from Build 84.6 remains separate and will occur after the Human Surface redesign, as previously decided.
