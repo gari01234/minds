@@ -12,7 +12,8 @@ function fixture({connected=true,fail=[]}={}){
     for(const method of ['select','eq','is','not','lte','in','order','limit'])q[method]=()=>q;
     q.then=(resolve,reject)=>{
       const outcome=fail.includes(name)?{data:null,error:{message:'offline'}}:
-      name==='isabella_tasks'?{data:[{id:'one',title:'Coordinar TWP',due_date:'2026-10-09',project_id:null}],count:1,error:null}:
+      name==='isabella_tasks'?{data:[{id:'one',title:'Coordinar TWP',due_date:'2026-10-09',project_id:'project-uuid-bernried'}],count:1,error:null}:
+      name==='isabella_projects'?{data:[{id:'project-uuid-bernried',name:'Bernried'}],count:1,error:null}:
       name==='minds_expectations'?{data:[{id:'two',title:'Esperar respuesta',due_at:'2026-10-08',status:'due_unconfirmed'}],count:1,error:null}:
       name==='minds_attention_events'?{data:[],count:0,error:null}:
       {data:null,count:2,error:null};
@@ -32,7 +33,7 @@ test('Build 90.2 places a canonical source-backed radar before the generative Fe
  const index=read('apps/isabella/index.html');
  assert.ok(shell.includes('id="situationLedger"'));
  assert.ok(shell.indexOf('id="situationLedger"')<shell.indexOf('id="feedList"'));
- assert.ok(index.includes('situation.js?v=3'));
+ assert.ok(index.includes('situation.js?v=4'));
  assert.ok(app.includes('void window.MINDS_SITUATION?.render?.()'));
  assert.ok(app.includes('feed-section-title">Sugerencias de Isabella'));
  assert.ok(!app.includes('Ahora mismo no hay nada que merezca interrumpirte.'));
@@ -47,6 +48,7 @@ test('Build 90.2 keeps due_unconfirmed distinct from non-occurrence',async()=>{
  const {render,node}=fixture();
  await render();
  assert.match(node.innerHTML,/Coordinar TWP/);
+ assert.match(node.innerHTML,/Coordinar TWP[\s\S]*?Bernried/);
  assert.match(node.innerHTML,/Esperar respuesta/);
  assert.match(node.innerHTML,/Vencida, ocurrencia no confirmada/);
  assert.match(node.innerHTML,/No incluye todas las conversaciones/);
