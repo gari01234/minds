@@ -22,17 +22,17 @@ Navigating never changes usage scope, epistemic status, permissions, review stat
 
 ## Build 90 execution
 
-### 90.1 — Desktop lens navigation (implemented in this slice)
+### 90.1 — Desktop lens navigation — accepted and merged 2026-10-09
 
 Introduce an actual desktop-first navigation rail above 1100px. It uses the same route actions and the same screen/data stores as mobile; active selection and keyboard focus are explicit. Primary desktop destinations are Situación, Chat, Tiempo, Work and Lecturas. Ideas remains secondary and available. The existing six-way mobile navigation remains unchanged. No backend, schema, permission, data flow, Work file or task changes.
 
 The first label is deliberately **Situación**, not yet **Ahora**: the existing Feed route mixes immediate conditions and contextual information. Renaming it to canonical Ahora would be a false coverage claim until 90.2.
 
-### 90.2 — Ahora as an honest attention lens
+### 90.2 — Ahora as an honest attention lens — accepted and merged 2026-10-09
 
 Derive current attention from canonical Attention Economy and Review Economy, explicitly distinguish no pending items from withheld/suppressed items and unknown coverage, and provide exact contextual actions. Preserve Feed items as a secondary, labeled contextual section. Never store a second attention status machine.
 
-### 90.3 — Work as a project understanding lens
+### 90.3 — Work as a project understanding lens — implemented; CI and integration pending
 
 Keep Desktop, Planner, Conocimiento, Threads and their canonical identities. Make the Project Model revision, Variants, open Movements, Perimeter and gaps intelligible in a coherent overview without turning inferred Claims into accepted truth. Preserve existing task ordering and file interactions.
 
@@ -51,3 +51,9 @@ Check all destinations, keyboard and touch navigation, project task interactions
 ## Non-goals
 
 No global navigation rewrite that destroys existing features. No new model inference to choose the next screen. No speculative import of chat attachments into Work. No automatic promotion of an Idea, memory, proposal or artifact. No redesign of the native Presence runtime in the first slice.
+
+## Progress and validation boundary — 2026-10-09
+
+90.1 introduced the desktop navigation rail without removing mobile destinations or changing canonical state. 90.2 introduced a source-backed situational radar; its coverage remains explicitly limited to dated tasks, selected Expectations, unconsumed user-required Attention Events, and pending action proposals. Generated Feed suggestions are not treated as authoritative attention.
+
+90.3 introduces the read-only Work Panorama over canonical project tasks, proposed/disputed Claims, the existing Project Model snapshot and the file count. It does **not** claim to understand the real Bernried source corpus yet: the empirical 84.6 acceptance remains deferred until Work/Desktop uploads after Build 90. A model without listed gaps does not imply complete perimeter coverage. The existing Desktop, Planner, Conocimiento and Threads stay intact and navigable.
