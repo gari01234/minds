@@ -18,7 +18,7 @@ test('unified MINDS navigation wires all five destinations',()=>{
     assert.ok(shell.includes(`data-nav="${name}"`),`missing nav: ${name}`);
     assert.ok(app.includes(`'${name}'`),`missing route: ${name}`);
   }
-  assert.ok(app.includes("$$('.main-nav-item').forEach"));
+  assert.ok(app.includes("document.querySelectorAll('.main-nav-item').forEach"));
 });
 
 test('ORB compact mode is driven by conversation state',()=>{
@@ -757,7 +757,7 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
 
 test('Build 47 uses the requested navigation order',()=>{
   const shell=read('apps/isabella/shell.js');
-  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>')+6);
+  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"'))+6);
   const order=['data-nav="assistant"','data-nav="calendar"','data-nav="feed"','data-nav="ideas"','data-nav="readings"','data-nav="work"'].map(x=>nav.indexOf(x));
   assert.ok(order.every((x,i)=>x>=0&&(i===0||x>order[i-1])));
 });
