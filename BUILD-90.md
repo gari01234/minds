@@ -133,3 +133,15 @@ The iPhone test found that closing Sofía and reopening after switching to Isabe
 Build 90.6 PR #86 introduced permanently visible up/down buttons on Work cards without visual acceptance. On iPhone these overcrowded the card hierarchy, while the user reports that the original drag interaction worked. Revert these visible buttons, handler, styles and button-specific tests. Preserve the original drag implementation and its separate canonical work_sort_order. Retain the upload error reporting improvements from #86. Accessibility can be revisited with an interaction that does not impose permanent visual controls.
 
 These are field-reported regressions and source-level fixes, not final empirical acceptance. Confirm both on iPhone Safari/PWA after publication before closing the corresponding gates.
+
+### 2026-10-09 — Build 90.6 read-only production and deterministic order acceptance
+
+The user confirmed real iPhone flows: a Calendar-created task reprogrammed through Ahora persisted in Calendar and disappeared from overdue Ahora once moved into the future; Sofía's unsent draft survived closing/reopening; Work Planner drag remained functional after the move arrows were removed. These are concrete, bounded acceptances rather than a universal device approval.
+
+Production read-only validation: 112 active tasks and 11 events with no invalid project/category references, wrong-project Work buckets, or missing task client keys. Twenty-eight Work file rows have no missing project/folder references or storage paths. Five Work threads have no missing project/conversation references. Four task reminders have a time; zero active tasks have recurrence JSON; no Work file is indexed. No user data was written by the validation.
+
+Nine project/bucket/order groups share the same work_sort_order. Six remain tied after sort_order. Add task UUID as a tertiary ordering key in the Work Planner query, ensuring deterministic display without changing any persisted order value. Existing drag, separation of work_sort_order vs calendar sort_order, and visual design remain unchanged. Automated acceptance verifies the canonical query's tie-break and read-only behavior.
+
+Presence shell: Validate Isabella Presence run 37885870377 completed successfully on Ubuntu, macOS 14 and Windows. The checked source apps/isabella-presence/ui/presence.js remains the same SHA 8c3e2592477422d0c479070f509062c379540924. This confirms native compile/build parity, not a live authenticated cross-surface Presence session.
+
+Outstanding empirical Build 90.6 checks: authenticated Work file binary upload/download; Readings selection/highlight/annotation persistence across switching and reload; reminder/recurrence execution; Presence after a task change; narrow desktop viewport and source-boundary navigation. Do not close full Build 90 or begin Bernried 84.6 without documenting these outcomes.
