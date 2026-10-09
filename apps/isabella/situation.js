@@ -11,7 +11,7 @@ function normalized(p){
   if(p?.status!=='fulfilled'||p.value?.error)return {ok:false,data:[],count:null};
   return {ok:true,data:Array.isArray(p.value.data)?p.value.data:[],count:p.value.count??null};
 }
-function projectName(id){return String((window.ISABELLA_STATE?.projects||[]).find(x=>x.id===id)?.name||'')}
+// Project names are resolved from canonical project UUIDs, never client-side project keys.
 function section(label,items,zero,key,ok){
   const rows=items.length?items.map(x=>key==='task'&&x.id?'<button type="button" class="situation-item situation-task situation-editable" data-situation-task="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></button>':'<div class="situation-item situation-'+key+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></div>').join(''):'<p class="situation-zero">'+esc(ok?zero:'Esta fuente no pudo comprobarse.')+'</p>';
   return '<section class="situation-group"><h3>'+esc(label)+'</h3>'+rows+'</section>';
@@ -31,13 +31,16 @@ async function render(){
     sb.from('isabella_tasks').select('id,title,due_date,project_id',{count:'exact'}).eq('user_id',user).is('completed_at',null).is('archived_at',null).not('due_date','is',null).lte('due_date',today).order('due_date',{ascending:true}).limit(CAP),
     sb.from('minds_expectations').select('id,title,due_at,status,observability',{count:'exact'}).eq('user_id',user).in('status',['active','due_unconfirmed']).lte('due_at',withinWeek).order('due_at',{ascending:true}).limit(CAP),
     sb.from('minds_attention_events').select('id,title,reason,deadline_at,route,created_at',{count:'exact'}).eq('user_id',user).eq('requires_user',true).is('consumed_at',null).in('status',['pending','delivered']).order('created_at',{ascending:false}).limit(CAP),
-    sb.from('minds_shadow_decisions').select('request_id',{count:'exact',head:true}).eq('user_id',user).eq('status','pending')
+    sb.from('minds_shadow_decisions').select('request_id',{count:'exact',head:true}).eq('user_id',user).eq('status','pending'),
+    sb.from('isabella_projects').select('id,name').eq('user_id',user)
   ];
-  const [a,b,c,d]=await Promise.allSettled(queries);
+  const [a,b,c,d,pj]=await Promise.allSettled(queries);
   if(version!==generation)return;
   const tasks=normalized(a),expectations=normalized(b),attention=normalized(c),reviews=normalized(d);
+  const projects=normalized(pj);
+  const canonicalProjectNames=new Map(projects.data.map(x=>[String(x.id),String(x.name||'')]));
   const checked=[tasks,expectations,attention,reviews].filter(x=>x.ok).length;
-  const rowsTask=tasks.data.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(projectName(t.project_id)?' · '+projectName(t.project_id):'')}));
+  const rowsTask=tasks.data.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(canonicalProjectNames.get(String(t.project_id))?' · '+canonicalProjectNames.get(String(t.project_id)):'')}));
   const rowsExpect=expectations.data.map(x=>({title:x.title||'Confirmación esperada',detail:(x.status==='due_unconfirmed'?'Vencida, ocurrencia no confirmada':'Próxima comprobación')+' · '+displayDay(x.due_at)}));
   const rowsAttention=attention.data.map(x=>({title:x.title||'Necesita atención',detail:(x.route||'Atención')+(x.deadline_at?' · '+displayDay(x.deadline_at):'')+(x.reason?' · '+x.reason:'')}));
   const truncated=[tasks,expectations,attention].some(x=>x.ok&&x.count!==null&&x.count>x.data.length);
