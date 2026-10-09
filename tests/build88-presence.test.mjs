@@ -90,3 +90,23 @@ test('Build 88.3 Presence auth/window lifecycle cannot become an execution depen
   assert.ok(!presence.includes("sb.from('minds_mission_runs').update("));
   assert.ok(!presence.includes("sb.from('minds_attention_events').update("));
 });
+
+
+test('Build 88.4 Presence fetches only fields needed by its active projections',()=>{
+  assert.ok(presence.includes("select('id,title,status,summary,error,metadata,completed_at,updated_at')"));
+  assert.ok(presence.includes("select('id,status,instruction,result_summary,wait_kind,updated_at')"));
+  assert.ok(presence.includes("select('id,title,body,urgency,requires_user,deadline_at,route,status,source_type,source_id,request_revision,metadata,created_at,updated_at')"));
+  assert.ok(!presence.includes("artifact_ids,summary,error,origin_kind,project_id,work_thread_id"));
+});
+
+test('Build 88.4 conversation content is fetched only while the Chat view is actually open',()=>{
+  assert.ok(presence.includes("expanded&&panelView==='chat'&&!chatBusy?await loadConversationHistory"));
+  assert.ok(!presence.includes("void loadConversationHistory({render:false}).then(()=>refresh({force:true}))"));
+});
+
+test('Build 88.4 Presence chat response omits unused memory/source/artifact payloads',()=>{
+  assert.ok(chat.includes('if(surface!=="presence"){'));
+  assert.ok(chat.includes('responsePayload.memory_candidates=toolMemories'));
+  assert.ok(chat.includes('responsePayload.sources=webSources'));
+  assert.ok(chat.includes('responsePayload.artifacts=artifactResults'));
+});
