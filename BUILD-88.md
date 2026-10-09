@@ -24,7 +24,7 @@ Presence is a projection, not another runtime. Closing or crashing it must never
 - isabella-chat validates the binding server-side before model reasoning.
 - A stale/missing/resolved request returns a structured stale-decision response; it cannot resume a Mission or apply another decision.
 
-### 88.2 — Alert queue
+### 88.2 — Alert queue **Implemented**
 - Canonical pending interrupt events are ordered deterministically.
 - Presence displays one decision card at a time and keeps the rest as a count/queue.
 - Resolving or invalidating the head advances to the next live request.
