@@ -13,7 +13,7 @@ test('Build 90.3 makes Panorama the first Work lens while preserving established
 test('Build 90.3 Project understanding reads the canonical project data and never creates buckets or accepted facts',()=>{
  const work=read('apps/isabella/work.js');
  const start=work.indexOf('async function renderOverview()');
- const end=work.indexOf('let knowledgeRows=',start);
+ const end=work.indexOf('const knowledgeStates=',start);
  assert.ok(start>=0&&end>start);
  const body=work.slice(start,end);
  assert.ok(body.includes("sb.from('isabella_tasks').select("));
