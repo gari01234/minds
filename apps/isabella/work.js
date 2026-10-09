@@ -205,7 +205,7 @@ function taskCard(t){
   const overdue=!!(t.due_date&&t.due_date<localIso()&&!t.completed_at);
   return `<article class="work-task-card ${t.completed_at?'is-done':''}" draggable="true" data-work-task="${t.id}" tabindex="0">
     ${firstImage?`<img class="work-task-cover" ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-work-task-image="${esc(firstImage.path)}" alt="${esc(firstImage.name||t.title)}">`:''}
-    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong><span class="work-task-move-controls"><button type="button" data-work-move="up" aria-label="Subir ${esc(t.title)} en su columna">↑</button><button type="button" data-work-move="down" aria-label="Bajar ${esc(t.title)} en su columna">↓</button></span></div>
+    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong></div>
     ${checks.length?`<div class="work-card-checks">${checks.slice(0,5).map(x=>`<div class="${x.done?'done':''}"><span>${x.done?'●':'○'}</span><span>${esc(x.text||'')}</span></div>`).join('')}${checks.length>5?`<div class="work-check-more">+${checks.length-5} weitere</div>`:''}</div>`:''}
     <footer>
       <div class="work-task-chips">${due?`<span class="work-due ${overdue?'is-overdue':''}">▣ ${esc(due)}</span>`:''}${checks.length?`<span>☑ ${done}/${checks.length}</span>`:''}${attachments.length?`<span>⌕ ${attachments.length}</span>`:''}</div>
@@ -230,8 +230,8 @@ async function renderPlanner(){
   $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
   $$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));
   $$('[data-work-task]').forEach(card=>{
-    card.onclick=e=>{if(card.dataset.justDragged==='1'){card.dataset.justDragged='0';return}if(e.target.closest('[data-work-toggle],[data-work-move]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};
-    card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle],[data-work-move]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}};
+    card.onclick=e=>{if(card.dataset.justDragged==='1'){card.dataset.justDragged='0';return}if(e.target.closest('[data-work-toggle]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};
+    card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}};
     card.ondragstart=e=>{draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
     card.ondragend=()=>{draggedWorkTaskId=null;card.classList.remove('is-dragging');$$('.work-bucket.is-drop-target').forEach(x=>x.classList.remove('is-drop-target'));setTimeout(()=>{card.dataset.justDragged='0'},120)};
   });
@@ -259,7 +259,6 @@ async function renderPlanner(){
       if(targetList)void persistWorkTaskOrder(id,bucket.dataset.workBucketDrop||null,targetList);
     };
   });
-  $$('[data-work-move]').forEach(button=>button.onclick=e=>{e.stopPropagation();void moveWorkTaskByButton(button)});
   $$('[data-work-toggle]').forEach(b=>b.onclick=e=>{e.stopPropagation();void toggleTask(b.dataset.workToggle)});
   void hydratePlannerImages(body);
 }
@@ -267,16 +266,6 @@ async function toggleTask(id){
   const t=tasks.find(x=>x.id===id);if(!t)return;const done=!t.completed_at;
   const {error}=await sb.from('isabella_tasks').update({completed_at:done?new Date().toISOString():null,work_status:done?'completed':'not_started',updated_at:new Date().toISOString()}).eq('id',id);
   if(!error){await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0)}
-}
-async function moveWorkTaskByButton(button){
-  const card=button?.closest('[data-work-task]'),list=card?.closest('[data-work-task-list]');
-  if(!card||!list)return false;
-  const adjacent=button.dataset.workMove==='up'?card.previousElementSibling:card.nextElementSibling;
-  if(!adjacent?.matches('[data-work-task]'))return false;
-  if(button.dataset.workMove==='up')list.insertBefore(card,adjacent);
-  else list.insertBefore(adjacent,card);
-  await persistWorkTaskOrder(card.dataset.workTask,list.dataset.workListBucket||null,list);
-  return true;
 }
 async function persistWorkTaskOrder(id,bucketId,list){
   const dragged=tasks.find(x=>x.id===id);if(!dragged||!list)return;

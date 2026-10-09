@@ -125,3 +125,11 @@ Automated tests and publication confirm the code contract, not empirical mobile 
 ### 2026-10-09 — Build 90.5 embedded Readings bridge provenance
 
 When Sofía runs inside the Readings iframe, same-origin is not sufficient to authorize incoming `minds:sofia-open`, `minds:sofia-prompt`, `minds:sofia-close` or `minds:sofia-state-request` commands. The listener now requires that messages originate from its actual embedding parent window. The parent already verifies its actual iframe as source of responses. Standalone Readings retains the preexisting same-origin behavior. No annotations or conversation data are migrated, rewritten, silently promoted or deleted. Node tests explicitly check genuine parent acceptance, rejection of another same-origin window, foreign-origin rejection, standalone compatibility, and absence of a forced Sofía close when switching lenses. This is a communication-boundary regression gate, not a real Safari/PWA annotation round-trip test.
+
+### 2026-10-09 — field correction: Sofía drafts and Planner visual hierarchy
+
+The iPhone test found that closing Sofía and reopening after switching to Isabella discarded unsent input. Root cause: openConversation replaces sheetBody.innerHTML without preserving the unsent textarea. Unsent drafts now remain separate from submitted messages and evidence, locally scoped to the Readings conversation store and conversation ID, captured before closing or replacing sheets, restored on reopening, and cleared only when sent. Voice dictation and incoming prompts update the same draft state. This is not a server-side message write or a cross-lens truth promotion.
+
+Build 90.6 PR #86 introduced permanently visible up/down buttons on Work cards without visual acceptance. On iPhone these overcrowded the card hierarchy, while the user reports that the original drag interaction worked. Revert these visible buttons, handler, styles and button-specific tests. Preserve the original drag implementation and its separate canonical work_sort_order. Retain the upload error reporting improvements from #86. Accessibility can be revisited with an interaction that does not impose permanent visual controls.
+
+These are field-reported regressions and source-level fixes, not final empirical acceptance. Confirm both on iPhone Safari/PWA after publication before closing the corresponding gates.
