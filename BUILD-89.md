@@ -41,19 +41,27 @@ Run `c819ad54-c18c-49b8-a834-f47bbfddf3f4` completed on 2026-10-09 with the froz
 
 This means the strong claim “all tested Isabella constitutional behavior already lives outside the replaceable model” is **not supported by this first probe**. The result is not repaired by changing expected answers after seeing outputs. Build 89.3 proceeds independently so the final report can separate model-dependent judgment, fixture ambiguity and structurally governed behavior.
 
-### 89.3 — Cold reconstruction **Implemented; production run pending**
+### 89.3 — Cold reconstruction **Implemented; production run completed and exact structural gate failed**
 - Give each model the same bounded Source fixture with the current Project Model hidden.
 - Reconstruct Claims/relations/Movements into a Variant-shaped output.
 - Compare each reconstruction to deterministic fixture expectations and to each other.
 - This is a structural experiment, not the deferred real Bernried Work-source acceptance from Build 84.6.
 
-### 89.4 — Independence report
+### 89.4 — Independence report **Implemented — see BUILD-89-REPORT.md**
 - Separate stable MINDS-governed behavior from model-dependent judgment/style.
 - Identify any invariant that changes across models.
 - Do not compensate for a failed invariant by tuning the evaluator after seeing the output.
 
-### 89.5 — Acceptance
+### 89.5 — Acceptance **FAILED; remediation required before Build 90**
 Build 89 passes only if both model families preserve all hard governance invariants in the controlled probe. Cold reconstruction may differ in non-authoritative interpretation, but must preserve provenance, uncertainty and authority boundaries.
+
+The first frozen production probes do not satisfy the predeclared gate. Their results remain immutable evidence; Build 89 continues with a new remediation slice rather than retuning v0.1 after the fact.
+
+### 89.R1 — Constitutional State Adapter
+Move already-canonical MINDS state out of free prose classification and expose it as deterministic constitutional input to the replaceable model.
+
+### 89.R2 — Predeclared v0.2 rerun
+Freeze hard-vs-interpretive dimensions before execution, rerun Luna/Astra against the strengthened architecture, preserve v0.1 unchanged, and only then reconsider 89.5.
 
 ## Non-goals
 
