@@ -2619,6 +2619,28 @@ Deno.serve(async (req: Request) => {
   const surface=String(body?.surface||"").trim();
   const clientMessageId=String(body?.client_message_id||"").trim();
   const persistPresence=surface==="presence"&&!background&&/^[A-Za-z0-9:_-]{8,140}$/.test(clientMessageId);
+
+  if(surface==="presence"&&context?.reply_context){
+    const attentionId=String(context.reply_context?.attention_id||"").trim();
+    const requestRevision=Number(context.reply_context?.request_revision||0);
+    if(!/^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(attentionId)||!Number.isInteger(requestRevision)||requestRevision<1){
+      return json({error:"stale_decision",reason:"invalid_binding",message:"La solicitud ya no coincide con una decisión vigente."},409);
+    }
+    const binding=await supabaseClient(req)?.rpc("minds_validate_presence_reply_v01",{
+      p_attention_id:attentionId,p_request_revision:requestRevision
+    });
+    if(binding?.error)return json({error:"decision_binding_error",detail:binding.error.message},500);
+    if(binding?.data?.status!=="ok"){
+      return json({
+        error:"stale_decision",
+        reason:binding?.data?.reason||"request_not_live",
+        current_revision:binding?.data?.current_revision||null,
+        message:"La decisión cambió o ya no necesita respuesta."
+      },409);
+    }
+    context.reply_context=binding.data.reply_context;
+  }
+
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
