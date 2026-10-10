@@ -43,3 +43,31 @@ button,input{font:inherit}button{border:0}.hidden{display:none!important}
 .composer input{min-width:0;flex:1;border:0;outline:0;background:transparent;font-size:10.5px;padding:7px 3px}.composer input::placeholder{color:#aaa}.composer button{width:29px;height:29px;border-radius:50%;background:#111;color:#fff;cursor:pointer;font-size:14px}.composer button:disabled{opacity:.35;cursor:default}
 .auth-view{border-radius:0 0 24px 24px;padding:13px;height:100%;overflow:hidden}.auth-head{display:flex;align-items:center;justify-content:space-between}.auth-copy{text-align:center;padding:16px 10px 8px}.auth-copy .orb{display:block;margin:0 auto 10px}.auth-copy h1{font-size:17px;margin:0 0 6px}.auth-copy p{font-size:10.5px;line-height:1.4;color:#777;margin:0 auto;max-width:270px}.auth-form{display:flex;gap:6px;margin-top:10px}.auth-form input{min-width:0;flex:1;border:1px solid #ddd;border-radius:12px;padding:9px 10px;outline:0}.dark-button{background:#111;color:#fff;border-radius:12px;padding:9px 10px;cursor:pointer;font-size:10px}.status-text{font-size:9.5px;color:#777;min-height:14px;margin:8px 3px 0}
 @keyframes dotPulse{0%,100%{opacity:.35;transform:scale(.7)}50%{opacity:1;transform:scale(1.2)}}@keyframes orbPulse{0%,100%{transform:scale(.96);opacity:.7}50%{transform:scale(1.04);opacity:1}}
+
+/* MINDS UX A.4 — native Presence uses the same semantic meanings, not a second theme.
+   Native asset is self-contained by design; compare token values in acceptance tests. */
+:root{
+  --m-paper:#fff;--m-surface:#f7f7f6;--m-ink:#171717;
+  --m-ink-soft:#60636a;--m-border:#e6e6e4;
+  --m-success:#287557;--m-attention:#92521d;--m-error:#b54736;
+  --m-focus:#235c84;--m-radius-card:12px;
+  --m-motion-fast:160ms;--m-ease:cubic-bezier(.2,.7,.2,1);
+  color:var(--m-ink);
+}
+.pill,.panel,.auth-view,.boot-view{background:rgba(255,255,255,.975);border-color:var(--m-border)}
+.panel-head{border-bottom-color:var(--m-border)}
+.panel-head .identity .eyebrow,.panel-head .identity strong{display:none}
+.surface-tabs{background:var(--m-surface)}
+.surface-tab{color:var(--m-ink-soft);transition:color var(--m-motion-fast) var(--m-ease),background var(--m-motion-fast) var(--m-ease)}
+.surface-tab.on{background:var(--m-paper);color:var(--m-ink);box-shadow:none}
+.card{border-radius:var(--m-radius-card);background:var(--m-surface)}
+.card[data-kind="question"]{background:var(--m-ink)}
+.card[data-kind="working"] .state-dot,.card[data-kind="preparing"] .state-dot{animation-duration:1.6s}
+.task-row:hover{background:var(--m-surface)}
+.status-text,.pill-copy small,.task-row small{color:var(--m-ink-soft)}
+input:focus-visible,button:focus-visible{outline:2px solid var(--m-focus);outline-offset:2px}
+@media(prefers-reduced-motion:reduce){
+ .card[data-kind="working"] .state-dot,.card[data-kind="preparing"] .state-dot,
+ [data-busy="true"] .orb,.orb.busy{animation:none!important}
+ .surface-tab{transition:none!important}
+}
