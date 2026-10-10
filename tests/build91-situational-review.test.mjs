@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,dirname} from 'node:path';
 import {
   SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,
-  weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence
+  weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence,scopedWorkContext
 } from '../supabase/functions/_shared/situational-review.mjs';
 import {runSituationalReview} from '../supabase/functions/_shared/situational-review-runner.mjs';
 
@@ -77,7 +77,7 @@ test('Build 91: Heartbeat owns review clock and uses approved Attention Economy'
   assert.ok(migration.includes("v_route:=case when p_candidate->>'urgency'='urgent' then 'interrupt' else 'ambient' end"));
   assert.ok(migration.includes("when 'contextual_reassessment'"));
   assert.ok(config.includes('[functions.isabella-heartbeat]\nverify_jwt = false'));
-  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.3');
+  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.4');
 });
 
 test('Build 91.1: explain abstention vs rejected evidence without recording hidden reasoning',()=>{
@@ -130,4 +130,29 @@ test('Build 91.3: source-change acceleration respects cooldown, repeat and three
   assert.ok(runner.includes('context_signature:contextSignature'));
   assert.ok(runner.includes('trigger:trigger.reason'));
   assert.ok(runner.includes('await finish("skipped"'));
+});
+
+test('Build 91.4: an operational Work dependency must cite another real task in the same active project',()=>{
+  const own={...task,project_id:'p1'},related={id:'same',project_id:'p1',title:'Comprobar Grundriss',due_date:'2026-10-12',work_status:'not_started'};
+  const foreign={id:'foreign',project_id:'p2',title:'Schwarz',due_date:'2026-10-13'};
+  const scopes=scopedWorkContext([own],[related,foreign],[{id:'p1',name:'Bernried',archived:false},{id:'p2',name:'Schwarz',archived:false}]);
+  assert.equal(scopes.length,1);
+  assert.equal(scopes[0].project_id,'p1');
+  assert.equal(scopes[0].document_coverage,'unverified');
+  assert.ok(scopes[0].related_tasks.some(x=>x.id==='same'));
+  assert.ok(!scopes[0].related_tasks.some(x=>x.id==='foreign'));
+  const value={...proposal,task_id:own.id,evidence:['task','work'],related_task_id:'same'};
+  const ctx={clock,tasks:[own],events:[],weather:null,work_scopes:scopes};
+  assert.equal(evaluateReviewDecision(value,ctx).status,'accepted');
+  assert.equal(evaluateReviewDecision({...value,related_task_id:'foreign'},ctx).status,'rejected');
+  assert.equal(evaluateReviewDecision(value,{...ctx,work_scopes:[]}).status,'rejected');
+  assert.equal(evaluateReviewDecision({...value,task_id:task.id}, {...ctx,tasks:[task]}).status,'rejected');
+});
+test('Build 91.4: Work evidence is operational, never document certification',()=>{
+  const runner=read('supabase/functions/_shared/situational-review-runner.mjs');
+  assert.ok(runner.includes('work_scopes:workScopes'));
+  assert.ok(runner.includes('related_work_task_id:review.workRelatedTaskId'));
+  assert.ok(runner.includes('work_coverage:review.anchors.includes("work")?"operational_tasks_only"'));
+  assert.ok(runner.includes('No inventes dependencias formales entre tareas'));
+  assert.ok(runner.includes('No relaciones automáticamente proyectos o ámbitos personales diferentes'));
 });
