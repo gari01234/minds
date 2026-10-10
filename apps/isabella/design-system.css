@@ -425,3 +425,19 @@ body:not([data-section="assistant"]) .app .topbar{display:none!important}
   .app .main-nav-item{height:52px}
   .app .situation-weather{margin-top:2px;margin-bottom:16px}
 }
+
+/* UX A.4.4 — more restrained navigation glyphs and source-derived weather cues. */
+.app .main-nav .nav-icon svg{width:20px;height:20px;stroke-width:1.9}
+.app .main-nav .main-nav-item{min-height:44px}
+.app .situation-weather .weather-location-symbol,
+.app .situation-weather .weather-condition-symbol{
+  display:inline-block;
+  width:1.45em;
+  text-align:left;
+  vertical-align:baseline;
+  font-family:var(--m-type-system);
+  font-size:.82em;
+  font-weight:400;
+  letter-spacing:0;
+}
+.app .situation-weather .weather-condition-symbol{font-size:.8em}

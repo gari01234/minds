@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=4'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=5'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=4']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=5']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v127'));
+  assert.ok(sw.includes('isabella-shell-v128'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -208,4 +208,29 @@ test('UX A.4.3 displays one source-backed weather section ahead of operational S
   assert.ok(app.includes("document.querySelectorAll('.weather-toggle')"));
   assert.ok(web.includes('.app .situation-weather .weather-card'));
   assert.ok(web.includes('border-radius:0'));
+});
+
+
+test('UX A.4.4 removes the duplicate context heading and preserves weather-first semantics',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(!shell.includes('CONTEXTO Y SUGERENCIAS'));
+  assert.ok(app.includes('Sugerencias de Isabella'));
+  assert.ok(app.includes('function weatherConditionEmoji('));
+  const start=app.indexOf('function weatherConditionEmoji('),end=app.indexOf('\nfunction surfaceCard(',start);
+  assert.ok(start>=0&&end>start);
+  const emoji=new Function(app.slice(start,end)+';return weatherConditionEmoji;')();
+  assert.equal(emoji('Nublado · 12 °C ahora'),'☁️');
+  assert.equal(emoji('Soleado · 20 °C'),'☀️');
+  assert.equal(emoji('Lluvia · 11 °C'),'🌧️');
+  assert.equal(emoji('Estado no especificado'),'🌡️');
+  assert.ok(app.includes('weather-location-symbol'));
+  assert.ok(app.includes('weather-condition-symbol'));
+  assert.ok(shell.includes('id="situationWeather"'));
+});
+
+test('UX A.4.4 reduces navigation icon artwork without shrinking touch targets',()=>{
+  assert.ok(web.includes('.app .main-nav .nav-icon svg{width:20px;height:20px;stroke-width:1.9}'));
+  assert.ok(web.includes('.app .main-nav .main-nav-item{min-height:44px}'));
+  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
 });
