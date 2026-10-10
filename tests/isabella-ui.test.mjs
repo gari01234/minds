@@ -11,13 +11,15 @@ test('Isabella collection selectors use querySelectorAll before forEach',()=>{
   assert.deepEqual([...source.matchAll(singular)].map(m=>m[0]),[]);
 });
 
-test('unified MINDS navigation wires all five destinations',()=>{
+test('five canonical destinations and two contextual Situation routes remain wired',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  for(const name of ['assistant','feed','ideas','calendar','readings']){
-    assert.ok(shell.includes(`data-nav="${name}"`),`missing nav: ${name}`);
+  for(const name of ['feed','assistant','calendar','work','readings']){
+    assert.ok(shell.includes(`data-nav="${name}"`),`missing destination: ${name}`);
     assert.ok(app.includes(`'${name}'`),`missing route: ${name}`);
   }
+  assert.ok(!shell.includes('data-nav="ideas"'));
+  assert.ok(shell.includes('data-situation-view="ideas"'));
   assert.ok(app.includes("document.querySelectorAll('.main-nav-item').forEach"));
 });
 
@@ -613,11 +615,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=96'));
-  assert.ok(index.includes('app.js?v=105'));
+  assert.ok(index.includes('shell.js?v=97'));
+  assert.ok(index.includes('app.js?v=106'));
   assert.ok(index.includes('sync.js?v=pwa32'));
   assert.ok(index.includes('ai.js?v=50'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v125'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v126'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -758,7 +760,7 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
 test('Build 47 uses the requested navigation order',()=>{
   const shell=read('apps/isabella/shell.js');
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"'))+6);
-  const order=['data-nav="assistant"','data-nav="calendar"','data-nav="feed"','data-nav="ideas"','data-nav="readings"','data-nav="work"'].map(x=>nav.indexOf(x));
+  const order=['data-nav="feed"','data-nav="assistant"','data-nav="calendar"','data-nav="work"','data-nav="readings"'].map(x=>nav.indexOf(x));
   assert.ok(order.every((x,i)=>x>=0&&(i===0||x>order[i-1])));
 });
 
