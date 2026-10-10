@@ -487,3 +487,8 @@ body:not([data-section="assistant"]) .app .topbar{display:none!important}
   align-items:center;
   justify-content:center;
 }
+
+/* UX A.4.6: move keyboard focus indication to the composer capsule, not a blue textarea rectangle. */
+.app .composer #chatInput:focus,
+.app .composer #chatInput:focus-visible{outline:0!important;box-shadow:none!important}
+.app .composer:focus-within{border-color:var(--m-ink-soft)}
