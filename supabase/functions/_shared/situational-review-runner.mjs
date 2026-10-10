@@ -1,5 +1,5 @@
 /* Build 91 · server-side situational plan review (bounded, no writes to planning data) */
-import {SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence} from "./situational-review.mjs";
+import {SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence,scopedWorkContext} from "./situational-review.mjs";
 
 function requireData(response,label){
   if(response?.error)throw new Error(label+":"+response.error.message);
@@ -57,8 +57,12 @@ async function evaluate(context){
     "time_sensitive:true únicamente si la intervención perdería utilidad hoy, con evidencia clara.",
     "Razón concreta, propuesta concisa como pregunta, sin generalidades, sin exageraciones y con incertidumbre explícita.",
     "Si tienes una alternativa realista en los días comprobados del calendario, devuelve alternative_date con una fecha ISO de la lista. Si no, alternative_date:null.",
+    "Puedes considerar tareas relacionadas solo dentro del MISMO proyecto de Work, si work_scopes contiene la relación operativa. Si invocas evidencia work, incluye related_task_id (ID canónico de una segunda tarea del mismo proyecto).",
+    "No inventes dependencias formales entre tareas: cuando la relación solo se desprenda de los títulos, descríbela como posible coordinación y no como hecho confirmado.",
+    "Los registros de Work NO representan documentos de proyecto extraídos o aprobados. Nunca afirmes haber leído planos, documentos ni Project Model.",
+    "No relaciones automáticamente proyectos o ámbitos personales diferentes: limita cualquier observación de Work a un único project_id.",
     "Una fecha sin eventos registrados no garantiza que sea un día libre; no afirmes disponibilidad total, horario ni que ya se ha cambiado la tarea.",
-    'Solo JSON: {"propose":boolean,"task_id":string,"reason":string,"suggestion":string,"evidence":string[],"time_sensitive":boolean,"alternative_date":string|null}.'
+    'Solo JSON: {"propose":boolean,"task_id":string,"reason":string,"suggestion":string,"evidence":string[],"time_sensitive":boolean,"alternative_date":string|null,"related_task_id":string|null}.'
   ].join("\n");
   const r=await fetch("https://api.openai.com/v1/responses",{
     method:"POST",signal:AbortSignal.timeout(12000),
@@ -117,13 +121,26 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
         task_count:tasks.length,weather_available:!!weather});
       return {status:"skipped",reason:trigger.reason};
     }
+    const projectIds=[...new Set(tasks.map(t=>t.project_id).filter(Boolean))].slice(0,4);
+    const [relatedQ,projectsQ]=projectIds.length?await Promise.all([
+      sb.from("isabella_tasks").select("id,title,due_date,project_id,work_status,priority")
+        .eq("user_id",userId).in("project_id",projectIds)
+        .is("completed_at",null).is("archived_at",null)
+        .order("due_date",{ascending:true,nullsFirst:false}).limit(60),
+      sb.from("isabella_projects").select("id,name,archived").eq("user_id",userId)
+        .in("id",projectIds).eq("archived",false).limit(4)
+    ]):[{data:[]},{data:[]}];
+    const relatedTasks=requireData(relatedQ,"review_work_tasks")||[];
+    const projects=requireData(projectsQ,"review_projects")||[];
+    const workScopes=scopedWorkContext(tasks,relatedTasks,projects);
     const candidates=calendarDays(clock,events,timezone,14);
     const data={clock,timezone,calendar_date_candidates:candidates,
+      work_scopes:workScopes,
       tasks:tasks.map(t=>({id:t.id,title:String(t.title||"").slice(0,180),due_date:t.due_date,notes:String(t.notes||"").slice(0,300),priority:t.priority,project_id:t.project_id})),
       calendar:events.map(e=>({title:String(e.title||"").slice(0,150),starts_at:e.starts_at,ends_at:e.ends_at,all_day:e.all_day,project_id:e.project_id})),
       weather:weather||{status:location?"unavailable":"not_configured"}};
     const raw=await evaluate(data);
-    const decision=evaluateReviewDecision(raw,{clock,tasks,events,weather});
+    const decision=evaluateReviewDecision(raw,{clock,tasks,events,weather,work_scopes:workScopes});
     const review=decision.review;
     const alternative=verifyAlternative(raw,review,candidates);
     let publication=null;
@@ -139,7 +156,9 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
           calendar_event_ids:review.anchors.includes("calendar")?events.map(e=>e.id).slice(0,32):[],
           evaluated_at:new Date().toISOString(),
           alternative_date:alternative?.date||null,
-          calendar_coverage:alternative?.scope||"not_checked"},
+          calendar_coverage:alternative?.scope||"not_checked",
+          related_work_task_id:review.workRelatedTaskId||null,
+          work_coverage:review.anchors.includes("work")?"operational_tasks_only":"not_used"},
         metadata:{review_version:SITUATIONAL_REVIEW_VERSION,decision:"proposal_only",
           task_id:review.task.id,evidence:review.anchors,time_sensitive:review.timeSensitive,
           calendar_candidate_checked:!!alternative},
@@ -152,6 +171,7 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
       evidence_used:review?.anchors||[],task_ref:review?.task?.id||null,
       candidate_calendar_dates:candidates.length,verified_alternative:alternative?.date||null,
       task_count:tasks.length,weather_available:!!weather,
+      work_scope_count:workScopes.length,
       publication:publication?{id:publication.id,created:publication.created,route:publication.attention_route}:null});
     return {status:review?"proposed":"nothing_material",decision_code:decision.reason_code,route:publication?.attention_route||null};
   }catch(e){
