@@ -2597,6 +2597,26 @@ async function consultSofia(req:Request,args:any,userMessage:string){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
+/* Browser-only read receipt for a completed streamed text answer (24h TTL).
+ * Authentication comes exclusively from the signed request, never body.user_id.
+ */
+async function saveBrowserChatStreamReceipt(req:Request,requestId:string,reply:string,completed:boolean,reason:string|null){
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))return false;
+  const sb=supabaseClient(req),service=serviceClient();
+  if(!sb||!service)return false;
+  try{
+    const {data:{user},error:authError}=await sb.auth.getUser();
+    if(authError||!user?.id)return false;
+    const {error}=await service.from("minds_chat_stream_delivery_receipts").upsert({
+      user_id:user.id,request_id:requestId,status:completed?"completed":"incomplete",
+      reply:String(reply||"").slice(0,100000),
+      incomplete_reason:completed?null:String(reason||"unconfirmed_completion").slice(0,160),
+      expires_at:new Date(Date.now()+86400000).toISOString()
+    },{onConflict:"user_id,request_id"});
+    return !error;
+  }catch{return false}
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -2667,7 +2687,15 @@ Deno.serve(async (req: Request) => {
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const scheduleAssessment=calendarAssessmentIntent(effectiveMessage);
+  const responseContinuation=/(contin[uú]a (?:la )?respuesta|contin[uú]a desde|desde (?:el punto|donde) se interrumpi[oó]|respuesta anterior|sin repetir lo ya escrito)/i.test(effectiveMessage);
   if(scheduleAssessment)budget={...budget,depth:"standard",rounds:Math.max(budget.rounds,5),reasoning:"medium",maxOutput:Math.max(budget.maxOutput,3600)};
+  // The route model can call a substantive Work follow-up "light"; do not
+  // starve its response. Continuations must not hit the same output ceiling.
+  if(!background&&(route.work||responseContinuation))budget={
+    ...budget,depth:budget.depth==="light"?"standard":budget.depth,
+    reasoning:budget.reasoning==="low"?"medium":budget.reasoning,
+    maxOutput:Math.max(budget.maxOutput,responseContinuation?6200:4400)
+  };
   const initialSemantic=!background&&!!route.deep_memory;
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
@@ -2987,9 +3015,11 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
           if(persistPresence&&streamConversation?.dbId){
             await persistPresenceTurn(req,streamConversation.dbId,"presence:"+clientMessageId+":assistant","assistant",finalText.trim(),{request_id:clientMessageId,direct_stream:true,exposure_scope:exposureScope,incomplete_response:!streamCompleted,incomplete_reason:incompleteReason});
           }
+          const deliveryReceiptSaved=surface==="chat_browser"?
+            await saveBrowserChatStreamReceipt(req,clientMessageId,finalText.trim(),streamCompleted,incompleteReason):false;
           await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-          await finishAgentRun(req,run,streamCompleted?"success":"error",{incomplete_response:!streamCompleted,incomplete_reason:incompleteReason,partial_chars:streamCompleted?0:finalText.length,rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt},incompleteReason||undefined);
+          await finishAgentRun(req,run,streamCompleted?"success":"error",{incomplete_response:!streamCompleted,incomplete_reason:incompleteReason,partial_chars:streamCompleted?0:finalText.length,rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,delivery_receipt_saved:deliveryReceiptSaved,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt},incompleteReason||undefined);
           send("result",{
             reply:finalText.trim(),proposal:null,proposals:[],memory_candidates:[],
             standing_intent_delivery:streamCompleted&&standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
