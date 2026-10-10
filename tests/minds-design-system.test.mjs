@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=5'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=6'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=5']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=6']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v128'));
+  assert.ok(sw.includes('isabella-shell-v129'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -233,4 +233,35 @@ test('UX A.4.4 reduces navigation icon artwork without shrinking touch targets',
   assert.ok(web.includes('.app .main-nav .main-nav-item{min-height:44px}'));
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+});
+
+
+test('UX A.4.5 removes bottom-nav capsule but retains interaction, safe area and active feedback',()=>{
+  const css=web.slice(web.indexOf('/* UX A.4.5'));
+  assert.ok(css.startsWith('/* UX A.4.5'));
+  assert.match(css,/\.app \.main-nav\{[\s\S]*?border:0;[\s\S]*?background:transparent;[\s\S]*?box-shadow:none;[\s\S]*?backdrop-filter:none;/);
+  assert.match(css,/\.app \.main-nav-item\.active\{[\s\S]*?background:transparent;/);
+  assert.ok(css.includes('.app .main-nav-item.active::after'));
+  assert.ok(css.includes('.app .main-nav-item:focus-visible'));
+  assert.ok(web.includes('min-height:44px'));
+  const old=read('apps/isabella/app.css');
+  assert.ok(old.includes('var(--safe)'));
+  assert.ok(!css.includes('.app .composer{'));
+});
+
+test('UX A.4.5 places month add action between grid and agenda without changing other modes',()=>{
+  const app=read('apps/isabella/app.js');
+  const monthStart=app.indexOf('function month(){');
+  const weekStart=app.indexOf('function week(){',monthStart);
+  assert.ok(monthStart>=0&&weekStart>monthStart);
+  const month=app.slice(monthStart,weekStart);
+  const gridEnd=month.indexOf("h+='</div>'");
+  const create=month.indexOf('calendar-create-after-grid');
+  const agenda=month.indexOf('class="agenda"');
+  assert.ok(gridEnd>=0&&create>gridEnd&&agenda>create,'Month create action must be after month grid and before agenda');
+  assert.equal((month.match(/data-calendar-create/g)||[]).length,1);
+  assert.ok(app.includes("if(state.view!=='month'&&!calendarBody.querySelector('[data-calendar-create]'))"));
+  assert.ok(app.includes("calendarBody.querySelector('[data-calendar-create]')?.addEventListener('click',()=>newPanel(state.date))"));
+  assert.ok(web.includes('.app .calendar-create-after-grid button'));
+  assert.ok(web.includes('min-height:var(--m-touch)'));
 });
