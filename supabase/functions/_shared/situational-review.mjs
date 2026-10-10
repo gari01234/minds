@@ -1,7 +1,7 @@
 /* Build 91 · Situational Review v0.1
  * Pure evidence/decision boundary. No tasks, events, memory or permissions are changed here.
  */
-export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.2";
+export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.3";
 
 export function localClock(timezone,date=new Date()){
   const pieces=new Intl.DateTimeFormat("en-GB",{
@@ -113,4 +113,27 @@ export function planProposalText(review,weather,alternative){
   return observed+" He comprobado los eventos registrados para el "+date+
     " y no aparece ningún evento que comience ese día. Esto no garantiza disponibilidad total. "+
     "¿Quieres que cambie la fecha de esta tarea al "+date+"?";
+}
+
+/* Build 91.3: compare only canonical source-state changes and weather transitions.
+ * This is a trigger hint, not a causal claim or global priority score.
+ */
+export function reviewChangeSignature(tasks,events,weather,clock){
+  const t=(tasks||[]).map(x=>[String(x.id),String(x.due_date||""),String(x.updated_at||"")]).sort((a,b)=>a[0].localeCompare(b[0]));
+  const e=(events||[]).map(x=>[String(x.id),String(x.starts_at||""),String(x.ends_at||""),String(x.updated_at||"")]).sort((a,b)=>a[0].localeCompare(b[0]));
+  const weatherState=!weather?"unavailable":Number(weather.precipitation_mm)>0?"wet":"no_observed_precipitation";
+  const daytimePhase=clock.hour>=16?"late_day":"daytime";
+  const input=JSON.stringify([clock.date,daytimePhase,t,e,weatherState]);
+  let hash=2166136261;
+  for(let i=0;i<input.length;i++){hash^=input.charCodeAt(i);hash=Math.imul(hash,16777619)}
+  return "source_state_v1:"+((hash>>>0).toString(16).padStart(8,"0"));
+}
+export function reviewCadence(previous,now,signature){
+  if(!previous)return {run:true,reason:"baseline"};
+  const age=now.getTime()-new Date(previous.started_at).getTime();
+  if(!Number.isFinite(age)||age<0)return {run:false,reason:"invalid_clock"};
+  if(age<30*60000)return {run:false,reason:"debounce"};
+  if(age>=3*3600000)return {run:true,reason:"periodic"};
+  if(previous.metadata?.context_signature!==signature)return {run:true,reason:"source_state_changed"};
+  return {run:false,reason:"unchanged"};
 }

@@ -1,5 +1,5 @@
 /* Build 91 · server-side situational plan review (bounded, no writes to planning data) */
-import {SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText} from "./situational-review.mjs";
+import {SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence} from "./situational-review.mjs";
 
 function requireData(response,label){
   if(response?.error)throw new Error(label+":"+response.error.message);
@@ -79,14 +79,17 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
       .eq("user_id",userId).is("completed_at",null).is("archived_at",null)
       .gte("due_date",clock.date).lte("due_date",dayOffset(clock.date,2))
       .order("due_date",{ascending:true}).limit(30),
-    sb.from("minds_agent_runs").select("id,status,started_at").eq("user_id",userId)
-      .eq("feature","situational_review").gte("started_at",new Date(now.getTime()-3*3600000).toISOString())
+    sb.from("minds_agent_runs").select("id,status,started_at,metadata").eq("user_id",userId)
+       .eq("feature","situational_review").in("status",["running","success","error"])
+      .gte("started_at",new Date(now.getTime()-3*3600000).toISOString())
       .order("started_at",{ascending:false}).limit(1)
   ]);
   const tasks=eligibleTasks(requireData(tasksQ,"review_tasks")||[],clock.date);
   requireData(recentQ,"review_cadence");
   if(!eligibleToReview(clock,tasks))return {status:"skipped",reason:"no_reviewable_tasks"};
-  if((recentQ.data||[]).length)return {status:"skipped",reason:"cadence"};
+  const previous=(recentQ.data||[])[0]||null;
+  if(previous&&now.getTime()-new Date(previous.started_at).getTime()<30*60000)
+    return {status:"skipped",reason:"debounce"};
   const run=requireData(await sb.from("minds_agent_runs").insert({
     user_id:userId,feature:"situational_review",status:"running",route:{mode:"bounded_ai"},
     metadata:{version:SITUATIONAL_REVIEW_VERSION,clock,task_count:tasks.length}
@@ -97,7 +100,7 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
   };
   try{
     const [eventQ,prefQ]=await Promise.all([
-      sb.from("isabella_events").select("id,title,starts_at,ends_at,all_day,project_id")
+      sb.from("isabella_events").select("id,title,starts_at,ends_at,all_day,project_id,updated_at")
         .eq("user_id",userId).gte("starts_at",now.toISOString())
         .lte("starts_at",new Date(now.getTime()+21*86400000).toISOString())
         .order("starts_at",{ascending:true}).limit(32),
@@ -107,6 +110,13 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
     const events=requireData(eventQ,"review_events")||[],preferences=requireData(prefQ,"review_preferences")||[];
     const location=String(preferences[0]?.value?.weatherLocation||"").trim();
     const weather=location?await observedWeather(location):null;
+    const contextSignature=reviewChangeSignature(tasks,events,weather,clock);
+    const trigger=reviewCadence(previous,now,contextSignature);
+    if(!trigger.run){
+      await finish("skipped",{version:SITUATIONAL_REVIEW_VERSION,context_signature:contextSignature,trigger:trigger.reason,
+        task_count:tasks.length,weather_available:!!weather});
+      return {status:"skipped",reason:trigger.reason};
+    }
     const candidates=calendarDays(clock,events,timezone,14);
     const data={clock,timezone,calendar_date_candidates:candidates,
       tasks:tasks.map(t=>({id:t.id,title:String(t.title||"").slice(0,180),due_date:t.due_date,notes:String(t.notes||"").slice(0,300),priority:t.priority,project_id:t.project_id})),
@@ -138,6 +148,7 @@ export async function runSituationalReview(sb,userId,timezone,now,publish){
     }
     await finish("success",{version:SITUATIONAL_REVIEW_VERSION,status:review?"proposed":"nothing_material",
       decision_code:decision.reason_code,decision_status:decision.status,
+      context_signature:contextSignature,trigger:trigger.reason,
       evidence_used:review?.anchors||[],task_ref:review?.task?.id||null,
       candidate_calendar_dates:candidates.length,verified_alternative:alternative?.date||null,
       task_count:tasks.length,weather_available:!!weather,

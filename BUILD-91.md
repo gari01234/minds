@@ -33,3 +33,9 @@ The reviewer now classifies model abstention separately from rejected proposals 
 ## 91.2 — checked alternative dates
 
 The model receives a bounded list of the next 14 dates with counts of **events starting** on each date in the currently recorded calendar. It may select a date, but the server checks membership and requires no recorded event starting that day before proposing it. The message explicitly states that this does **not** prove complete availability. There is no inferred duration, no timeslot reservation, no automatic event/task mutation and no cross-app calendar claims. Future acceptance should verify an actual approved task change via canonical edit tools.
+
+## 91.3 — change-aware heartbeat evaluation
+
+Keep the existing 15-minute Heartbeat as the only temporal detector, with no ungoverned background agent. Every eligible tick can compare canonical near-term task IDs, due dates, update revisions, forthcoming event IDs/times/revisions, local day-phase and weather transition (observed precipitation versus no observed precipitation). A stable source-state signature is compared with the last meaningful evaluation; the comparison does not infer a user's intent. Reviews remain on a three-hour periodic floor, but can run sooner when a source state actually changes, after a 30-minute debounce to limit inference cost. An unchanged state records a skipped evaluation and does not invoke the model. Weather is polled only after that debounce in the existing reviewed task window; the signature ignores mere observation timestamps. This is change-aware polling, not immediate push event handling, and exact weather transitions are not guaranteed to be caught within one tick.
+
+No new notification channel, additional cron or autonomous approval path is introduced. Confirm responsiveness and provider freshness empirically after deploying.

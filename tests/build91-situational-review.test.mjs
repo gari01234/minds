@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,dirname} from 'node:path';
 import {
   SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,
-  weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText
+  weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText,reviewChangeSignature,reviewCadence
 } from '../supabase/functions/_shared/situational-review.mjs';
 import {runSituationalReview} from '../supabase/functions/_shared/situational-review-runner.mjs';
 
@@ -77,7 +77,7 @@ test('Build 91: Heartbeat owns review clock and uses approved Attention Economy'
   assert.ok(migration.includes("v_route:=case when p_candidate->>'urgency'='urgent' then 'interrupt' else 'ambient' end"));
   assert.ok(migration.includes("when 'contextual_reassessment'"));
   assert.ok(config.includes('[functions.isabella-heartbeat]\nverify_jwt = false'));
-  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.2');
+  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.3');
 });
 
 test('Build 91.1: explain abstention vs rejected evidence without recording hidden reasoning',()=>{
@@ -107,4 +107,27 @@ test('Build 91.2: a candidate is checked against recorded calendar only',()=>{
   assert.match(planProposalText(review,weather,option),/no garantiza disponibilidad total/);
   assert.match(planProposalText(review,weather,option),/¿Quieres que cambie/);
   assert.equal(verifyAlternative({alternative_date:'2026-11-21'},review,days),null);
+});
+
+test('Build 91.3: detect material source change but not cosmetic observation timestamp',()=>{
+  const t=[{...task}],e=[{id:'c',starts_at:'2026-10-11T12:00:00Z',ends_at:'2026-10-11T13:00:00Z',updated_at:'2026-10-10T11:00:00Z'}];
+  const dry={...weather,precipitation_mm:0,observed_at:'2026-10-10T10:00:00Z'};
+  const sig=reviewChangeSignature(t,e,dry,clock);
+  assert.equal(sig,reviewChangeSignature(t,e,{...dry,observed_at:'2026-10-10T15:00:00Z'},clock));
+  assert.notEqual(sig,reviewChangeSignature(t,e,{...dry,precipitation_mm:2},clock));
+  assert.notEqual(sig,reviewChangeSignature([{...task,updated_at:'2026-10-10T13:00:00Z'}],e,dry,clock));
+  assert.notEqual(sig,reviewChangeSignature(t,[{...e[0],starts_at:'2026-10-11T14:00:00Z'}],dry,clock));
+  assert.notEqual(sig,reviewChangeSignature(t,e,dry,{...clock,hour:15}));
+});
+test('Build 91.3: source-change acceleration respects cooldown, repeat and three-hour periodic check',()=>{
+  const base=new Date('2026-10-10T13:00:00Z'),old={started_at:base.toISOString(),metadata:{context_signature:'abc'}};
+  assert.deepEqual(reviewCadence(old,new Date(base.getTime()+10*60000),'different'),{run:false,reason:'debounce'});
+  assert.deepEqual(reviewCadence(old,new Date(base.getTime()+45*60000),'abc'),{run:false,reason:'unchanged'});
+  assert.deepEqual(reviewCadence(old,new Date(base.getTime()+45*60000),'changed'),{run:true,reason:'source_state_changed'});
+  assert.deepEqual(reviewCadence(old,new Date(base.getTime()+3*3600000),'abc'),{run:true,reason:'periodic'});
+  const runner=read('supabase/functions/_shared/situational-review-runner.mjs');
+  assert.ok(runner.includes('.in("status",["running","success","error"])'));
+  assert.ok(runner.includes('context_signature:contextSignature'));
+  assert.ok(runner.includes('trigger:trigger.reason'));
+  assert.ok(runner.includes('await finish("skipped"'));
 });
