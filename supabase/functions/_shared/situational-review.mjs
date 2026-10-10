@@ -1,7 +1,7 @@
 /* Build 91 · Situational Review v0.1
  * Pure evidence/decision boundary. No tasks, events, memory or permissions are changed here.
  */
-export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.1";
+export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.2";
 
 export function localClock(timezone,date=new Date()){
   const pieces=new Intl.DateTimeFormat("en-GB",{
@@ -65,4 +65,52 @@ export function reviewMessage(review,weather){
   const groundedLocation=review.anchors.includes("weather")&&weather?.location?
     " (clima de "+weather.location+")":"";
   return review.reason+groundedLocation+" "+review.suggestion;
+}
+
+/* Build 91.1: a compact explanation for an actual accept/abstain/reject
+ * decision; never persist model hidden reasoning or full unrelated context.
+ */
+export function evaluateReviewDecision(raw,context){
+  if(raw?.propose===false)return {status:"abstained",reason_code:"model_abstained",review:null};
+  if(raw?.propose!==true)return {status:"rejected",reason_code:"not_a_proposal",review:null};
+  const task=(context.tasks||[]).find(t=>String(t.id)===String(raw.task_id||""));
+  if(!task)return {status:"rejected",reason_code:"unverified_task",review:null};
+  if(!Array.isArray(raw.evidence)||!raw.evidence.includes("task")||raw.evidence.length<2)
+    return {status:"rejected",reason_code:"insufficient_evidence",review:null};
+  const review=validateReview(raw,context);
+  if(!review)return {status:"rejected",reason_code:"unverified_evidence_or_text",review:null};
+  return {status:"accepted",reason_code:"material_proposal",review};
+}
+/* Build 91.2: the available days are *only* the recorded calendar's coverage,
+ * not an assertion that the person is entirely free.
+ * No explicit duration -> no inferred time slot.
+ */
+export function calendarDays(clock,events,timezone,horizon=14){
+  const days=[];
+  for(let offset=1;offset<=Math.max(1,Math.min(horizon,21));offset++){
+    const date=dayOffset(clock.date,offset);
+    const count=(events||[]).filter(event=>{
+      if(!event?.starts_at)return false;
+      try {
+        return localClock(timezone,new Date(event.starts_at)).date===date;
+      }catch{return false}
+    }).length;
+    days.push({date,registered_event_starts:count,scope:"registered_events_only"});
+  }
+  return days;
+}
+export function verifyAlternative(raw,review,candidates){
+  const date=String(raw?.alternative_date||"");
+  if(!review||!(/^\d{4}-\d{2}-\d{2}$/.test(date)))return null;
+  const checked=(candidates||[]).find(x=>x.date===date);
+  if(!checked||checked.registered_event_starts>0)return null;
+  return {date,scope:"registered_events_only",registered_event_starts:0};
+}
+export function planProposalText(review,weather,alternative){
+  if(!alternative)return reviewMessage(review,weather);
+  const observed=reviewMessage({...review,suggestion:""},weather).trim();
+  const date=alternative.date;
+  return observed+" He comprobado los eventos registrados para el "+date+
+    " y no aparece ningún evento que comience ese día. Esto no garantiza disponibilidad total. "+
+    "¿Quieres que cambie la fecha de esta tarea al "+date+"?";
 }
