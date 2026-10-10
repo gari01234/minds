@@ -113,6 +113,7 @@ function needsCalendarAssessment(message=''){
 async function askDirectStream(message,state,options={},replyContext=''){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
   const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
+  const streamRequestId=globalThis.crypto?.randomUUID?.()||null;
   const response=await fetch(cfg.url+'/functions/v1/isabella-chat',{
     method:'POST',
     headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
@@ -120,7 +121,8 @@ async function askDirectStream(message,state,options={},replyContext=''){
       message:String(message),
       context:{...compact(state),reply_context:replyContext},
       background:false,attachments:[],stream:true,
-      work_thread_id:options.workThread?.id||null
+      work_thread_id:options.workThread?.id||null,
+      surface:'chat_browser',client_message_id:streamRequestId
     })
   });
   if(response.status===409){options.onTextReset?.();return null}
@@ -140,6 +142,9 @@ async function askDirectStream(message,state,options={},replyContext=''){
     }
   }catch(e){transportError=e}
   if(result)return result;
+  options.onProgress?.({type:'status',phase:'recovering',label:'Comprobando la respuesta terminada…'});
+  const recovered=await window.MINDS_CHAT_STREAM_RECOVERY?.(streamRequestId);
+  if(recovered)return {...recovered,streamed_text:streamedText};
   // No terminal result: do not retry the request implicitly.
   if(streamedText.trim()){
     options.onProgress?.({type:'status',phase:'incomplete',label:'La respuesta se interrumpió; el texto recibido quedará marcado como parcial.'});
