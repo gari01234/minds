@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=6'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=7'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=6']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=7']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v129'));
+  assert.ok(sw.includes('isabella-shell-v130'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -264,4 +264,11 @@ test('UX A.4.5 places month add action between grid and agenda without changing 
   assert.ok(app.includes("calendarBody.querySelector('[data-calendar-create]')?.addEventListener('click',()=>newPanel(state.date))"));
   assert.ok(web.includes('.app .calendar-create-after-grid button'));
   assert.ok(web.includes('min-height:var(--m-touch)'));
+});
+
+
+test('UX A.4.6 removes iOS blue textarea focus rectangle without losing composer focus indication',()=>{
+  assert.match(web,/\.app \.composer #chatInput:focus-visible\{outline:0!important;box-shadow:none!important\}/);
+  assert.ok(web.includes('.app .composer:focus-within{border-color:var(--m-ink-soft)}'));
+  assert.ok(web.includes('.app button:focus-visible'));
 });
