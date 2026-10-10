@@ -75,3 +75,14 @@ html.embedded button:focus-visible,html.embedded textarea:focus-visible,html.emb
 @media(prefers-reduced-motion:reduce){
   html.embedded .v09-sheet{transition:none!important}
 }
+
+/* UX A.4.1 — filters share Work's quiet text-and-underline tab grammar. */
+html.embedded .v09-reading-filters{gap:14px;padding-bottom:1px;border-bottom:1px solid var(--m-border)}
+html.embedded .v09-reading-filters button{
+  border:0;border-bottom:2px solid transparent;border-radius:0;
+  background:transparent;color:var(--m-ink-soft);
+  padding:10px 2px 9px;min-height:44px;
+}
+html.embedded .v09-reading-filters button.active{
+  border:0;border-bottom:2px solid var(--m-ink);background:transparent;color:var(--m-ink);
+}
