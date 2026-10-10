@@ -458,10 +458,22 @@ function recordFeedSignal(kind,item,extra={}){
   const signal={id:uid(),kind,at:new Date().toISOString(),title:String(item?.title||''),source_url:String(item?.source_url||item?.metadata?.source_url||''),entities:feedEntities(item).map(x=>x.name),...extra};
   state.feedSignals=[...(state.feedSignals||[]),signal].slice(-80);save();
 }
+function weatherConditionEmoji(description){
+  const text=String(description||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  if(/torment|truen|gewitter|thunder|storm/.test(text))return '⛈️';
+  if(/nieve|snow|schnee/.test(text))return '❄️';
+  if(/lluv|rain|regen|schauer|drizzle|chubasc/.test(text))return '🌧️';
+  if(/niebla|nebl|fog|mist|dunst/.test(text))return '🌫️';
+  if(/parcial|interval|teilweise|partly|wolkig.*sonn|sonn.*wolk/.test(text))return '⛅';
+  if(/nubl|cloud|bewolk|wolk/.test(text))return '☁️';
+  if(/solead|despejad|sunny|clear|sonnig|heiter/.test(text))return '☀️';
+  return '🌡️'; // Neutral marker when no condition can be derived.
+}
 function surfaceCard(item,surface){
   const agent=String(item.agent||'isabella'),prompt=String(item.action_prompt||item.metadata?.action_prompt||'').trim(),icon=String(item.icon||'').trim();
   const kind=String(item.kind||item.metadata?.kind||'').toLowerCase(),improvement=kind==='isabella_improvement',details=Array.isArray(item.details)?item.details:(Array.isArray(item.metadata?.details)?item.metadata.details:[]);
   const weather=kind==='weather',news=kind==='news',rawSource=String(item.source_url||item.metadata?.source_url||'').trim(),sourceUrl=/^https?:\/\//i.test(rawSource)?rawSource:'';
+  const weatherSymbol=weather?weatherConditionEmoji(item.body):'';
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const why=String(item.why||item.metadata?.why||'').trim();
   const deliverable=String(item.deliverable||item.metadata?.deliverable||'').trim();
@@ -474,7 +486,7 @@ function surfaceCard(item,surface){
   const lifecycle=String(item.lifecycle_state||'new');
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''} ${feedback==='liked'?'liked':''}" data-agent="${esc(agent)}" data-surface-item="${esc(itemKey)}">
     <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span>${surface==='feed'&&!operational&&lifecycle==='new'?'<span class="surface-state">NUEVO</span>':''}</div>
-    <h2>${esc(item.title||'')}</h2><p>${esc(item.body||'')}</p>${detailHtml}${idea&&deliverable?`<div class="idea-deliverable"><span>RESULTADO</span><strong>${esc(deliverable)}</strong></div>`:''}
+    <h2>${weather?'<span class="weather-location-symbol" aria-hidden="true">📍</span>':''}${esc(item.title||'')}</h2><p>${weather?'<span class="weather-condition-symbol" aria-hidden="true">'+weatherSymbol+'</span>':''}${esc(item.body||'')}</p>${detailHtml}${idea&&deliverable?`<div class="idea-deliverable"><span>RESULTADO</span><strong>${esc(deliverable)}</strong></div>`:''}
     ${why?`<div class="surface-why-copy hidden" data-why-copy="${esc(itemKey)}">${esc(why)}</div>`:''}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
