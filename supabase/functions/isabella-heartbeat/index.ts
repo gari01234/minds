@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {cleanLegacyConversation,closeConversation} from "../_shared/conversations.ts";
 import {checked} from "../_shared/cognitive.ts";
+import {runSituationalReview} from "../_shared/situational-review-runner.mjs";
 
 function json(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
 function localDateISO(tz:string,date=new Date()){
@@ -221,12 +222,13 @@ Deno.serve(async(req:Request)=>{
       await resolveAbsent(sb,userId,candidates);
       const watchChecks=await runWatchChecks(sb,userId,routineTz);
       const contextMaintenance=await maintainConversationContext(sb,userId);
-      const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0;
+      const situationalReview=await runSituationalReview(sb,userId,routineTz,now,(candidate:any)=>publishCandidate(sb,userId,candidate));
+      const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0||situationalReview.status==="error";
       await finishRun(sb,run,heartbeatError?"error":"success",{
         timezone:routineTz,candidates:candidates.length,new_events:created,
-        prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,context_maintenance:contextMaintenance
+        prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,context_maintenance:contextMaintenance,situational_review:situationalReview
       },contextMaintenance.status==="error"?contextMaintenance.detail:(watchChecks.errors?String(watchChecks.errors)+" watch checks failed":undefined));
-      results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks});
+      results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,situational_review:situationalReview});
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);await finishRun(sb,run,"error",{},detail);results.push({user_id:userId,status:"error",error:detail});
     }
