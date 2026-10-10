@@ -54,7 +54,6 @@ document.body.innerHTML = `
         <div class="pull-refresh-indicator" data-pull-indicator="feed" aria-hidden="true"><span>Desliza para actualizar</span></div>
         <div id="situationWeather" class="situation-weather" aria-label="Clima"></div>
         <div id="situationLedger" class="situation-ledger" aria-live="polite"><p class="situation-loading">Comprobando tu situación…</p></div>
-        <div class="situation-context-label">CONTEXTO Y SUGERENCIAS</div>
         <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
       </div>
     </section>
