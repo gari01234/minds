@@ -74,8 +74,8 @@ async function renderOverview(){
     '<div class="work-overview-model">'+projectModelPanel()+'</div>'+
     '<div class="work-overview-footer"><button data-work-go="desktop">Abrir Desktop ↗</button><button data-work-go="threads">Abrir Threads ↗</button><p>Los documentos que todavía no están en el Desktop no forman parte de esta lectura. Un modelo sin lagunas registradas no demuestra cobertura completa.</p></div>'+
     '</div>';
-  $('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
-  $('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
+  $$('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
+  $$('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
 }
 
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
