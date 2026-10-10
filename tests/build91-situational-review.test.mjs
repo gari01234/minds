@@ -5,7 +5,7 @@ import {fileURLToPath} from 'node:url';
 import {resolve,dirname} from 'node:path';
 import {
   SITUATIONAL_REVIEW_VERSION,localClock,dayOffset,eligibleTasks,eligibleToReview,
-  weatherProof,validateReview,reviewFingerprint,reviewMessage
+  weatherProof,validateReview,reviewFingerprint,reviewMessage,evaluateReviewDecision,calendarDays,verifyAlternative,planProposalText
 } from '../supabase/functions/_shared/situational-review.mjs';
 import {runSituationalReview} from '../supabase/functions/_shared/situational-review-runner.mjs';
 
@@ -77,5 +77,34 @@ test('Build 91: Heartbeat owns review clock and uses approved Attention Economy'
   assert.ok(migration.includes("v_route:=case when p_candidate->>'urgency'='urgent' then 'interrupt' else 'ambient' end"));
   assert.ok(migration.includes("when 'contextual_reassessment'"));
   assert.ok(config.includes('[functions.isabella-heartbeat]\nverify_jwt = false'));
-  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.1');
+  assert.equal(SITUATIONAL_REVIEW_VERSION,'situational-review-v0.2');
+});
+
+test('Build 91.1: explain abstention vs rejected evidence without recording hidden reasoning',()=>{
+  const ctx={clock,tasks:[task],events:[],weather};
+  assert.deepEqual(evaluateReviewDecision({propose:false},ctx),
+    {status:'abstained',reason_code:'model_abstained',review:null});
+  assert.equal(evaluateReviewDecision({...proposal,evidence:['task']},ctx).reason_code,'insufficient_evidence');
+  assert.equal(evaluateReviewDecision({...proposal,task_id:'bad'},ctx).reason_code,'unverified_task');
+  assert.equal(evaluateReviewDecision(proposal,ctx).status,'accepted');
+  const runner=read('supabase/functions/_shared/situational-review-runner.mjs');
+  assert.ok(runner.includes('decision_code:decision.reason_code'));
+  assert.ok(runner.includes('evidence_used:review?.anchors'));
+  assert.ok(!runner.includes('raw_model_output:'));
+});
+
+test('Build 91.2: a candidate is checked against recorded calendar only',()=>{
+  const ctx={clock,tasks:[task],events:[],weather};
+  const review=evaluateReviewDecision(proposal,ctx).review;
+  const events=[{id:'a',starts_at:'2026-10-11T12:00:00+02:00'}];
+  const days=calendarDays(clock,events,'Europe/Berlin',14);
+  assert.equal(days.length,14);
+  assert.equal(days[0].date,'2026-10-11');
+  assert.equal(days[0].registered_event_starts,1);
+  assert.equal(verifyAlternative({alternative_date:'2026-10-11'},review,days),null);
+  const option=verifyAlternative({alternative_date:'2026-10-17'},review,days);
+  assert.deepEqual(option,{date:'2026-10-17',scope:'registered_events_only',registered_event_starts:0});
+  assert.match(planProposalText(review,weather,option),/no garantiza disponibilidad total/);
+  assert.match(planProposalText(review,weather,option),/¿Quieres que cambie/);
+  assert.equal(verifyAlternative({alternative_date:'2026-11-21'},review,days),null);
 });
