@@ -615,11 +615,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=97'));
-  assert.ok(index.includes('app.js?v=106'));
+  assert.ok(index.includes('shell.js?v=98'));
+  assert.ok(index.includes('app.js?v=107'));
   assert.ok(index.includes('sync.js?v=pwa32'));
   assert.ok(index.includes('ai.js?v=50'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v126'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v127'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -761,7 +761,7 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
 test('Build 47 uses the requested navigation order',()=>{
   const shell=read('apps/isabella/shell.js');
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"'))+6);
-  const order=['data-nav="feed"','data-nav="assistant"','data-nav="calendar"','data-nav="work"','data-nav="readings"'].map(x=>nav.indexOf(x));
+  const order=['data-nav="assistant"','data-nav="feed"','data-nav="calendar"','data-nav="work"','data-nav="readings"'].map(x=>nav.indexOf(x));
   assert.ok(order.every((x,i)=>x>=0&&(i===0||x>order[i-1])));
 });
 
