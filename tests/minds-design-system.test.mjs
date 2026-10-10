@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=1'));
-  assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=1'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=2'));
+  assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=1']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=2']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v124'));
+  assert.ok(sw.includes('isabella-shell-v125'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -106,4 +106,33 @@ test('UX A.4 shares progress semantics across Isabella, Threads and Presence',()
 
 test('UX A.4 CSS layers have balanced rules',()=>{
   for(const css of [tokens,web,reading,presence])checkCssBalance(css);
+});
+
+
+test('UX A.4.1 retains one global More button and places it inside every contextual lens',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.equal((shell.match(/id="menuButton"/g)||[]).length,1);
+  for(const lens of ['feed','ideas','work','calendar','readings'])
+    assert.ok(shell.includes('data-menu-slot="'+lens+'"'),'Menu destination missing: '+lens);
+  assert.ok(app.includes('placeGlobalMenu(name)'));
+  assert.ok(app.includes('host.appendChild(button)'));
+  assert.ok(web.includes('body:not([data-section="assistant"]) .app .topbar{display:none!important}'));
+  assert.ok(web.includes('grid-template-rows:0px minmax(0,1fr)'));
+  assert.ok(web.includes('safe-area-inset-top'));
+});
+
+test('UX A.4.1 uses underline tabs for embedded reading filters',()=>{
+  assert.match(reading,/\.v09-reading-filters button\.active\{[\s\S]*?border-bottom:2px solid var\(--m-ink\)/);
+  assert.ok(reading.includes('min-height:44px'));
+  assert.ok(read('apps/theory/v09.js').includes("['all','Todo']"));
+});
+
+test('UX A.4.1 hides empty attention sections but keeps unknown sources and scope visible',()=>{
+  const src=read('apps/isabella/situation.js');
+  assert.ok(src.includes('rowsExpect.length||!expectations.ok'));
+  assert.ok(src.includes('rowsAttention.length||!attention.ok'));
+  assert.ok(src.includes('pendingReviews?'));
+  assert.ok(src.includes('details class="situation-scope"'));
+  assert.ok(src.includes('No incluye todas las conversaciones'));
+  assert.ok(!src.includes('situation-limit'));
 });

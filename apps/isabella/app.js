@@ -401,6 +401,11 @@ async function afterSync(){
     if(!nudged)await maybeCuriosityQuestion();
   }finally{proactiveCycleBusy=false}
 }
+function placeGlobalMenu(name){
+  const button=$('#menuButton');
+  const host=name==='assistant'?$('.top-actions'):document.querySelector('[data-menu-slot="'+name+'"]');
+  if(button&&host&&button.parentElement!==host)host.appendChild(button);
+}
 function show(name){
   const allowed=['assistant','feed','ideas','work','calendar','readings'];
   if(!allowed.includes(name))name='assistant';
@@ -420,6 +425,7 @@ function show(name){
     else x.removeAttribute('aria-current');
   });
   document.body.dataset.section=name;
+  placeGlobalMenu(name);
   syncOrbCompact();
   save();
   if(name==='assistant'&&previous!=='assistant')setTimeout(()=>scrollAssistantToLatest(true),0);

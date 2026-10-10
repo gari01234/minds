@@ -613,11 +613,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('Build 2026.10.09.90.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=95'));
-  assert.ok(index.includes('app.js?v=104'));
+  assert.ok(index.includes('shell.js?v=96'));
+  assert.ok(index.includes('app.js?v=105'));
   assert.ok(index.includes('sync.js?v=pwa32'));
   assert.ok(index.includes('ai.js?v=50'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v124'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v125'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{

@@ -45,16 +45,18 @@ async function render(){
   const rowsAttention=attention.data.map(x=>({title:x.title||'Necesita atención',detail:(x.route||'Atención')+(x.deadline_at?' · '+displayDay(x.deadline_at):'')+(x.reason?' · '+x.reason:'')}));
   const truncated=[tasks,expectations,attention].some(x=>x.ok&&x.count!==null&&x.count>x.data.length);
   const note=checked===4?'Cuatro fuentes consultadas':'Cobertura parcial: '+checked+' de cuatro fuentes comprobadas';
-  const reviewLabel=reviews.ok?String(reviews.count??0)+' propuestas de acción pendientes de confirmar':'Propuestas pendientes: fuente no disponible';
-  const empty=rowsTask.length+rowsExpect.length+rowsAttention.length===0;
+  const pendingReviews=Number(reviews.count??0);
+  const allChecked=tasks.ok&&expectations.ok&&attention.ok&&reviews.ok;
+  const noRequests=allChecked&&!rowsExpect.length&&!rowsAttention.length&&!pendingReviews;
+  const noSignals=allChecked&&!rowsTask.length&&!rowsExpect.length&&!rowsAttention.length&&!pendingReviews;
   el.innerHTML='<div class="situation-heading"><div><span class="situation-kicker">REGISTROS DE MINDS</span><h2>Ahora</h2></div><button type="button" data-situation-calendar>Calendario ↗</button></div>'+
     '<p class="situation-coverage">'+esc(note+(truncated?' · Hay más resultados que los mostrados':'')+' · '+now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}))+'</p>'+
-    section('Tareas para hoy y vencidas',rowsTask,'Sin tareas fechadas en esta consulta.','task',tasks.ok)+
-    section('Respuestas por comprobar',rowsExpect,'Sin Expectations próximas o sin confirmar.','expectation',expectations.ok)+
-    section('Atención que requiere respuesta',rowsAttention,'Sin avisos sin consumir en esta consulta.','attention',attention.ok)+
-    '<div class="situation-reviews">'+esc(reviewLabel)+'</div>'+
-    (empty?'<p class="situation-caution">No aparecen elementos en las fuentes consultadas. Esto no certifica que no existan otros pendientes.</p>':'')+
-    '<p class="situation-limit">Cobertura limitada a tareas fechadas hasta hoy, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p>';
+    (rowsTask.length||!tasks.ok?section('Tareas para hoy y vencidas',rowsTask,'Sin tareas fechadas en esta consulta.','task',tasks.ok):'')+
+    (rowsExpect.length||!expectations.ok?section('Respuestas por comprobar',rowsExpect,'Sin Expectations próximas o sin confirmar.','expectation',expectations.ok):'')+
+    (rowsAttention.length||!attention.ok?section('Atención que requiere respuesta',rowsAttention,'Sin avisos sin consumir en esta consulta.','attention',attention.ok):'')+
+    (reviews.ok?(pendingReviews?'<div class="situation-reviews">'+esc(String(pendingReviews)+' propuestas de acción pendientes de confirmar')+'</div>':''):'<p class="situation-unavailable">Propuestas pendientes: fuente no disponible.</p>')+
+    (noSignals?'<p class="situation-clear">Sin tareas vencidas ni solicitudes pendientes en las fuentes comprobadas.</p>':noRequests?'<p class="situation-clear">Sin otras solicitudes pendientes en las fuentes comprobadas.</p>':'')+
+    '<details class="situation-scope"><summary>Alcance de la consulta</summary><p>Cobertura limitada a tareas fechadas hasta hoy, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p></details>';
   el.querySelector('[data-situation-calendar]')?.addEventListener('click',()=>document.querySelector('.main-nav-item[data-nav="calendar"]')?.click());
   (el.querySelectorAll?.('[data-situation-task]')||[]).forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.situationTask)));
 }

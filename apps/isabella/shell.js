@@ -39,7 +39,7 @@ document.body.innerHTML = `
 
     <section id="feedScreen" class="screen surface-screen" data-screen="feed">
       <div class="surface-scroll">
-        <div class="surface-head surface-head-compact"><div class="surface-head-actions"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span><button id="feedSettings" class="surface-text-action">Ajustar</button><button id="refreshFeed" class="round surface-refresh" aria-label="Actualizar Feed">↻</button></div></div>
+        <div class="surface-head surface-head-compact"><div class="surface-head-actions"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span><button id="feedSettings" class="surface-text-action">Ajustar</button><button id="refreshFeed" class="round surface-refresh" aria-label="Actualizar Feed">↻</button><span class="minds-menu-slot" data-menu-slot="feed"></span></div></div>
         <div id="situationLedger" class="situation-ledger" aria-live="polite"><p class="situation-loading">Comprobando tu situación…</p></div>
         <div class="situation-context-label">CONTEXTO Y SUGERENCIAS</div>
         <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
@@ -48,7 +48,7 @@ document.body.innerHTML = `
 
     <section id="ideasScreen" class="screen surface-screen" data-screen="ideas">
       <div class="surface-scroll">
-        <div class="surface-head surface-head-compact"><button id="refreshIdeas" class="round surface-refresh" aria-label="Actualizar Ideas">↻</button></div>
+        <div class="surface-head surface-head-compact"><button id="refreshIdeas" class="round surface-refresh" aria-label="Actualizar Ideas">↻</button><span class="minds-menu-slot" data-menu-slot="ideas"></span></div>
         <div id="ideasList" class="surface-list"><div class="surface-loading">Buscando algo que valga la pena producir…</div></div>
       </div>
     </section>
@@ -61,6 +61,7 @@ document.body.innerHTML = `
             <button data-work-project="bernried" class="active">Bernried</button>
             <button data-work-project="schwarz">Schwarz</button>
           </div>
+          <span class="minds-menu-slot" data-menu-slot="work"></span>
         </div>
         <div class="work-tabs" role="tablist">
           <button data-work-view="overview" class="active">Panorama</button>
@@ -75,13 +76,13 @@ document.body.innerHTML = `
     </section>
 
     <section id="calendarScreen" class="screen" data-screen="calendar">
-      <div class="cal-toolbar"><button id="backButton" class="text-btn">‹ Isabella</button><div class="segments"><button data-view="day">Día</button><button data-view="week">Semana</button><button class="active" data-view="month">Mes</button></div><button id="todayButton" class="text-btn right">Hoy</button></div>
+      <div class="cal-toolbar"><button id="backButton" class="text-btn">‹ Isabella</button><div class="segments"><button data-view="day">Día</button><button data-view="week">Semana</button><button class="active" data-view="month">Mes</button></div><div class="cal-toolbar-right"><button id="todayButton" class="text-btn right">Hoy</button><span class="minds-menu-slot" data-menu-slot="calendar"></span></div></div>
       <div class="cal-nav"><button id="prevButton" class="round">‹</button><div id="calTitle" class="cal-title"></div><button id="nextButton" class="round">›</button></div>
       <div id="calendarContent" class="calendar-content"></div>
     </section>
 
     <section id="readingsScreen" class="screen readings-screen" data-screen="readings">
-      <div class="readings-topline"><div><span class="readings-agent">SOFÍA</span><span class="readings-title">Readings</span></div><button id="openSofiaButton" class="sofia-button">Hablar con Sofía</button></div>
+      <div class="readings-topline"><div><span class="readings-agent">SOFÍA</span><span class="readings-title">Readings</span></div><div class="readings-top-actions"><button id="openSofiaButton" class="sofia-button">Hablar con Sofía</button><span class="minds-menu-slot" data-menu-slot="readings"></span></div></div>
       <iframe id="readingsFrame" class="readings-frame" title="MINDS Readings · Sofía" loading="lazy"></iframe>
     </section>
   </main>
