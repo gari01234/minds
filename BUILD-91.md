@@ -25,3 +25,11 @@ Unit and structural tests use synthetic fixtures to exercise non-effects and evi
 ## Deploy order
 
 Merge the GitHub PR after Verify MINDS. Apply the Attention Economy SQL migration first, then deploy `isabella-heartbeat` from the merged source with `verify_jwt=false`, bundling the two new shared `.mjs` files and existing shared runtime dependencies. Verify runtime status/metadata and the next cron invocation; do not inject synthetic user tasks into production.
+
+## 91.1 — evidence trace and false positive/negative baseline
+
+The reviewer now classifies model abstention separately from rejected proposals and accepted evidence-bound suggestions. Each run records a minimal decision code, reviewed task reference, actual evidence anchors, number of candidate calendar dates and whether a checked alternative was selected. It does not store the model's private reasoning or full unrelated user inputs. The first acceptance suite covers stale/missing evidence, abstention and accepted material proposals. This is diagnostic transparency, not an external certification of model judgment.
+
+## 91.2 — checked alternative dates
+
+The model receives a bounded list of the next 14 dates with counts of **events starting** on each date in the currently recorded calendar. It may select a date, but the server checks membership and requires no recorded event starting that day before proposing it. The message explicitly states that this does **not** prove complete availability. There is no inferred duration, no timeslot reservation, no automatic event/task mutation and no cross-app calendar claims. Future acceptance should verify an actual approved task change via canonical edit tools.
