@@ -1,0 +1,47 @@
+/* MINDS Design A.4 — Readings extension.
+   Keep editorial reading typography and marks; unify only control rhythm/contrast.
+   Embedded Reading is already identified by the host's bottom navigation. */
+:root{
+  --ds-ink:#171717;--ds-secondary:#60636a;--ds-line:#e6e6e4;
+  --ds-action:#171717;--ds-radius-item:12px;--ds-radius-panel:20px
+}
+html.embedded #app{min-height:0}
+html.embedded header{min-height:44px}
+html.embedded header .brand,html.embedded header .sub,
+html.embedded header .alive{display:none!important}
+html.embedded header{gap:8px;padding:0 16px}
+html.embedded header .nav{margin-left:auto}
+html.embedded .nav button{font-size:12px!important;min-height:38px;padding:8px 11px!important}
+.v09-reading-filters{gap:6px}
+.v09-reading-filters button{font-size:13px;min-height:40px}
+.v09-reading-filters button.active{background:var(--ds-ink);border-color:var(--ds-ink);color:#fff}
+.v09-reading-list article{gap:18px}
+.v09-reading-author b{font-size:15px}
+.v09-reading-main h2{font-size:20px}
+.v09-reader-tools button,.v09-thread-footer button{font-size:13px;min-height:42px}
+.v09-selection-bar{border-radius:var(--ds-radius-item)}
+.v09-selection-bar button{font-size:13px;min-height:44px}
+.v09-ask-button,.v09-history-button{min-height:40px;font-size:13px}
+.v09-note-dialog,.v10-auth-dialog{border-color:var(--ds-line);border-radius:var(--ds-radius-panel)}
+.v10-auth-card p{font-size:13px;line-height:1.55}
+.v10-auth-form button,.v10-auth-primary,.v10-auth-secondary{font-size:13px;min-height:40px}
+.v10-auth-state span,.v10-auth-message{font-size:12px}
+button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--ds-ink);outline-offset:3px
+}
+@media(max-width:840px){
+  html.embedded header{position:sticky;top:0;min-height:42px}
+  .v09-readings-head{padding:14px 20px 14px}
+  .v09-readings-head h1{font-size:24px;line-height:1.25}
+  .v09-reading-filters{padding:0 20px 12px;flex-wrap:nowrap;overflow-x:auto;
+    -webkit-overflow-scrolling:touch;scrollbar-width:none}
+  .v09-reading-filters button{flex:none}
+  .v09-reading-filters::-webkit-scrollbar{display:none}
+  .v09-reading-list{padding:0 20px 48px}
+  .v09-reading-list article{grid-template-columns:1fr;gap:8px;padding:18px 0}
+  .v09-minds-shell{padding:20px 20px 60px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
