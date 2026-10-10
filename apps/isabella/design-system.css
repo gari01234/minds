@@ -1,0 +1,280 @@
+/* MINDS UX A.4 — unified surface language.
+   This layer owns presentation; app.css continues to own behavior/layout infrastructure.
+   The ORB and its existing animations/sizing are intentionally untouched. */
+.app{
+  --ink:var(--m-ink);
+  --muted:var(--m-ink-soft);
+  --line:var(--m-border);
+  font-family:var(--m-type-system);
+  color:var(--m-ink);
+  background:var(--m-paper);
+}
+.app button:focus-visible,.app [role="button"]:focus-visible,
+.app input:focus-visible,.app textarea:focus-visible,.app select:focus-visible{
+  outline:2px solid var(--m-focus);
+  outline-offset:2px;
+}
+/* Shared chrome: one quiet top edge and one reliable location indicator at bottom. */
+.app .topbar{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);
+  align-items:center;
+  height:calc(48px + env(safe-area-inset-top,0px));
+  min-height:calc(48px + env(safe-area-inset-top,0px));
+  padding:env(safe-area-inset-top,0px) var(--m-content-gutter) 0;
+  border:0;
+  background:var(--m-paper);
+}
+.app .topbar-brand{visibility:hidden}
+.app .top-actions{justify-self:end;gap:8px}
+.app .topbar .dots{
+  min-width:var(--m-touch);
+  min-height:var(--m-touch);
+  display:grid;
+  place-items:center;
+  font-size:21px;
+  color:var(--m-ink);
+}
+.app .main-nav{
+  border:1px solid var(--m-border);
+  background:rgba(255,255,255,.98);
+  box-shadow:none;
+  backdrop-filter:none;
+  -webkit-backdrop-filter:none;
+}
+.app .main-nav-item{color:var(--m-ink-soft);transition:background var(--m-motion-fast) var(--m-ease),color var(--m-motion-fast) var(--m-ease)}
+.app .main-nav-item.active{color:var(--m-ink);background:var(--m-surface)}
+.app .nav-label{font-size:10px;letter-spacing:0}
+.app .nav-icon{font-weight:400}
+.app .composer,.app .work-thread-composer{
+  border:1px solid var(--m-border);
+  box-shadow:none;
+  background:var(--m-paper);
+}
+.app .composer textarea,.app .work-thread-composer textarea{
+  font-family:var(--m-type-system);
+  font-size:var(--m-size-body);
+  line-height:var(--m-leading-body);
+}
+.app .message,.app .work-thread-message{
+  font-size:var(--m-size-body);
+  line-height:var(--m-leading-body);
+}
+.app .message.user,.app .work-thread-message.user{
+  background:var(--m-surface)!important;
+}
+.app .message.assistant,.app .work-thread-message.assistant{
+  background:var(--m-paper)!important;
+}
+/* One state vocabulary for chat, work threads and source loading. */
+.app .chat-activity{
+  color:var(--m-ink-soft);
+  font-size:var(--m-size-meta);
+  line-height:1.45;
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.app .chat-activity:not([hidden]):not(:empty)::before{
+  content:"";
+  width:7px;height:7px;flex:0 0 7px;
+  border-radius:50%;
+  background:currentColor;
+  opacity:.55;
+  animation:minds-working 1.6s ease-in-out infinite;
+}
+.app .work-thread-progress[data-phase="error"]{color:var(--m-error)}
+.app .work-thread-progress[data-phase="error"]::before{animation:none!important;opacity:1}
+.app .work-status{color:var(--m-ink-soft);font-size:var(--m-size-meta)}
+.app .work-status:empty{min-height:0;margin:0}
+@keyframes minds-working{0%,100%{opacity:.2}50%{opacity:.8}}
+/* Tight, honest chrome in every work view: active project is context, never a hero. */
+.app .work-shell{padding:8px var(--m-content-gutter) 16px}
+.app .work-head{
+  position:relative;
+  width:100%;
+  max-width:none;
+  margin:0;
+  display:flex;
+  align-items:center;
+  justify-content:flex-start;
+  gap:8px;
+  min-height:40px;
+}
+.app .work-head h1{
+  position:absolute;
+  width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);
+  white-space:nowrap;border:0;
+}
+.app .work-project-switch{gap:4px}
+.app .work-project-switch button{
+  font-family:var(--m-type-system);
+  font-size:14px;
+  font-weight:500;
+  line-height:20px;
+  min-height:40px;
+  padding:8px 13px;
+  border-radius:var(--m-radius-pill);
+  background:transparent;
+  color:var(--m-ink-soft);
+}
+.app .work-project-switch button.active{background:var(--m-ink);color:#fff}
+.app .work-tabs{
+  display:flex;
+  flex-wrap:nowrap!important;
+  gap:12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  scrollbar-width:none;
+  -webkit-overflow-scrolling:touch;
+  width:100%;
+  max-width:none;
+  margin:3px 0 0;
+  padding:0 0 1px;
+  border-bottom:1px solid var(--m-border);
+}
+.app .work-tabs::-webkit-scrollbar{display:none}
+.app .work-tabs button{
+  flex:0 0 auto;
+  background:transparent;
+  color:var(--m-ink-soft);
+  border:0;
+  border-bottom:2px solid transparent;
+  border-radius:0;
+  font-family:var(--m-type-system);
+  font-size:13px;
+  font-weight:500;
+  min-height:44px;
+  padding:10px 2px 9px;
+  white-space:nowrap;
+}
+.app .work-tabs button.active{
+  color:var(--m-ink);
+  border-bottom-color:var(--m-ink);
+  background:transparent;
+}
+.app .work-body{max-width:none;width:100%}
+.app .work-desktop-toolbar,.app .work-planner-toolbar{padding-top:8px}
+.app .work-file{
+  border-color:var(--m-border);
+  border-radius:var(--m-radius-card);
+  min-height:100px;
+  padding:12px;
+  box-shadow:none;
+}
+.app .work-folder{background:var(--m-surface)}
+.app .work-file strong{font-size:15px;font-weight:600;line-height:1.4}
+.app .work-file small,.app .work-file-meta{font-size:var(--m-size-meta);color:var(--m-ink-soft)}
+.app .work-bucket{
+  background:var(--m-surface);
+  border-radius:var(--m-radius-card);
+  padding:10px;
+}
+.app .work-bucket header strong{font-size:14px;font-weight:600}
+.app .work-task-card{
+  background:var(--m-paper);
+  border-color:var(--m-border);
+  border-radius:var(--m-radius-card);
+  box-shadow:none;
+}
+.app .work-task-title-row strong{font-size:15px;line-height:1.45;font-weight:550}
+.app .work-planner-toolbar span,.app .work-task-card footer{font-size:var(--m-size-meta);color:var(--m-ink-soft)}
+.app .work-overview-intro h2{font-family:var(--m-type-system);font-size:18px;line-height:1.3;font-weight:600}
+.app .work-overview-section h3{font-size:var(--m-size-section);font-weight:600}
+.app .work-overview-item strong{font-size:15px;font-weight:550}
+.app .work-overview-item small{font-size:var(--m-size-meta);color:var(--m-ink-soft)}
+.app .work-thread-card{border-color:var(--m-border)}
+.app .work-thread-card-main strong{font-size:16px;font-weight:600}
+.app .work-thread-card-main span{font-size:var(--m-size-meta);color:var(--m-ink-soft)}
+/* Utility views: content and current obligations, not decorative headings. */
+.app .surface-scroll{padding:8px var(--m-content-gutter) 36px}
+.app .surface-head-compact{margin-bottom:8px}
+.app .situation-ledger{margin-bottom:16px;padding-bottom:16px;border-bottom-color:var(--m-border)}
+.app .situation-kicker{display:none}
+.app .situation-heading{margin:0}
+.app .situation-heading h2{
+  position:absolute;width:1px;height:1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;
+}
+.app .situation-heading button{background:var(--m-surface);color:var(--m-ink);border-radius:var(--m-radius-pill)}
+.app .situation-coverage,.app .situation-zero,.app .situation-item small{
+  color:var(--m-ink-soft);
+  font-size:var(--m-size-meta);
+  line-height:1.5;
+}
+.app .situation-item{
+  border:0;
+  border-bottom:1px solid var(--m-border);
+  border-radius:0;
+  padding:13px 2px;
+  margin:0;
+  background:transparent;
+}
+.app .situation-item.situation-editable{border:0;border-bottom:1px solid var(--m-border);padding:13px 2px;background:transparent}
+.app .situation-item strong{font-size:15px;line-height:1.45;font-weight:600}
+.app .situation-context-label{color:var(--m-ink-soft);letter-spacing:.08em}
+.app .surface-card{border-color:var(--m-border);padding:16px 0}
+.app .surface-card h2{font-size:var(--m-size-section);line-height:1.35;font-weight:600}
+.app .surface-card p{font-size:15px;line-height:var(--m-leading-body);color:var(--m-ink-soft)}
+/* Calendar: calm, compact, functional. Category-colored dots remain untouched. */
+.app .cal-toolbar{padding:4px var(--m-content-gutter) 2px}
+.app .cal-nav{padding:2px var(--m-content-gutter) 5px}
+.app .cal-title{font-family:var(--m-type-system);font-size:20px;font-weight:600;letter-spacing:-.02em}
+.app .round{min-width:var(--m-touch);min-height:var(--m-touch);background:var(--m-surface)}
+.app .segments{background:var(--m-surface);border-radius:var(--m-radius-control)}
+.app .segments button{font-size:14px;color:var(--m-ink-soft)}
+.app .segments button.active{box-shadow:none;color:var(--m-ink);border:1px solid var(--m-border)}
+.app .agenda{padding-left:var(--m-content-gutter);padding-right:var(--m-content-gutter)}
+.app .agenda-item{border-color:var(--m-border)}
+.app .agenda-item strong{font-weight:600}
+.app .agenda-head{color:var(--m-ink-soft);letter-spacing:.06em}
+.app .calendar-create-row button{border-color:var(--m-border);border-radius:var(--m-radius-pill);color:var(--m-ink)}
+/* Sofía and Readings retain their editorial document typography. */
+.app .readings-topline{
+  height:46px;
+  padding:1px var(--m-content-gutter);
+  border-bottom:1px solid var(--m-border);
+}
+.app .readings-topline .readings-agent,.app .readings-title{display:none}
+.app .sofia-button{
+  margin-left:auto;
+  min-height:40px;
+  border-radius:var(--m-radius-pill);
+  background:var(--m-surface);
+  color:var(--m-ink);
+  font-family:var(--m-type-system);
+  font-size:13px;
+}
+/* More: a quiet settings list, not another oversized landing page. */
+.app .drawer-title{font-family:var(--m-type-system);font-size:18px;font-weight:600}
+.app .drawer>button[data-action],.app .drawer>#authButton{
+  border-top-color:var(--m-border);
+  font-size:15px;
+  line-height:1.5;
+  padding:13px 2px;
+}
+.app .drawer-note{color:var(--m-ink-soft);font-size:var(--m-size-meta)}
+.app .modal{border-radius:var(--m-radius-overlay)}
+/* Desktop is denser without inventing a different typographic hierarchy. */
+@media(min-width:1100px){
+  .app .topbar{height:54px;min-height:54px;padding:0 28px;border-bottom:1px solid var(--m-border)}
+  .app .work-shell{padding:12px 28px 18px}
+  .app .work-head,.app .work-tabs,.app .work-status,.app .work-body{max-width:1600px;margin-left:auto;margin-right:auto}
+  .app .surface-scroll{padding:16px 36px 44px}
+}
+@media(max-width:620px){
+  .app .topbar{padding-left:var(--m-content-gutter);padding-right:var(--m-content-gutter)}
+  .app .work-shell{padding:6px var(--m-content-gutter) 12px}
+  .app .work-tabs{gap:14px}
+  .app .work-file{min-height:94px}
+  .app .work-bucket{flex:0 0 min(86vw,320px)}
+  .app .surface-scroll{padding-top:6px}
+  .app .main-nav{margin-top:4px;margin-bottom:calc(7px + var(--safe));width:calc(100% - 24px)}
+  .app .main-nav-item{height:48px}
+  .app .nav-label{font-size:9px}
+}
+@media(prefers-reduced-motion:reduce){
+  .app .chat-activity::before{animation:none!important;opacity:.65}
+  .app .main-nav-item{transition:none!important}
+}
