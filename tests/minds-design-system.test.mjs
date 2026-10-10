@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=3'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=4'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=3']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=4']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v126'));
+  assert.ok(sw.includes('isabella-shell-v127'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -145,7 +145,7 @@ test('UX A.4.2 uses the same five vector navigation icons and names in mobile an
   for(const [route,label] of [['feed','Situación'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas']]){
     assert.ok(nav.includes('data-nav="'+route+'"'));
     assert.ok(desktop.includes('data-nav="'+route+'"'));
-    assert.ok(nav.includes('class="nav-label">'+label+'</span>'));
+    assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
     assert.ok(desktop.includes('<strong>'+label+'</strong>'));
     assert.ok(shell.includes('NAV_ICONS.'+route));
   }
@@ -178,4 +178,34 @@ test('UX A.4.2 keeps source re-check separate from forced idea generation',()=>{
   assert.ok(app.includes("id=\"refreshViewAction\"")||shell.includes('id="refreshViewAction"'));
   assert.ok(!shell.includes('id="refreshFeed"'));
   assert.ok(!shell.includes('id="refreshIdeas"'));
+});
+
+
+test('UX A.4.3 keeps five accessible icon-only mobile destinations in Chat-first order',()=>{
+  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
+  const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
+  const order=['assistant','feed','calendar','work','readings'];
+  for(const part of [nav,desktop]){
+    const positions=order.map(route=>part.indexOf('data-nav="'+route+'"'));
+    assert.ok(positions.every((n,i)=>n>=0&&(i===0||n>positions[i-1])));
+  }
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+  assert.doesNotMatch(nav,/class="nav-label"/);
+  for(const [route,label] of [['assistant','Chat'],['feed','Situación'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas']])
+    assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
+});
+
+test('UX A.4.3 displays one source-backed weather section ahead of operational Situation',()=>{
+  const app=read('apps/isabella/app.js');
+  const weather=shell.indexOf('id="situationWeather"');
+  const ledger=shell.indexOf('id="situationLedger"');
+  const tabs=shell.indexOf('class="situation-tabs"');
+  assert.ok(tabs>=0&&weather>tabs&&ledger>weather);
+  assert.ok(app.includes("weatherBox=$('#situationWeather')"));
+  assert.ok(app.includes("weatherBox.innerHTML=`<section class=\"feed-weather-section\""));
+  assert.ok(!app.includes("box.innerHTML=`<section class=\"feed-weather-section\""));
+  assert.ok(app.includes("surfaceCard(weather,'feed')"));
+  assert.ok(app.includes("document.querySelectorAll('.weather-toggle')"));
+  assert.ok(web.includes('.app .situation-weather .weather-card'));
+  assert.ok(web.includes('border-radius:0'));
 });

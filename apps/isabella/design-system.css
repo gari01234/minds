@@ -374,3 +374,54 @@ body:not([data-section="assistant"]) .app .topbar{display:none!important}
   .app #generateIdeas{font-size:11px;padding:8px 4px;white-space:normal;text-align:right;line-height:1.2;max-width:138px}
 }
 @media(prefers-reduced-motion:reduce){.app .pull-refresh-indicator{transition:none}}
+
+/* UX A.4.3 — quiet, icon-only bottom navigation and weather-first Situation. */
+.app .main-nav-item{
+  height:54px;
+  min-height:var(--m-touch);
+  gap:0;
+}
+.app .nav-icon svg{width:26px;height:26px}
+.app .situation-weather{
+  width:min(100%,780px);
+  margin:3px auto 20px;
+}
+.app .situation-weather .feed-weather-section{margin:0}
+.app .situation-weather .weather-card,
+.app .situation-weather .feed-weather-placeholder{
+  border:0;
+  border-bottom:1px solid var(--m-border);
+  border-radius:0;
+  background:transparent;
+  padding:11px 2px 22px;
+  margin:0;
+  box-shadow:none;
+}
+.app .situation-weather .weather-card .surface-card-top{display:none}
+.app .situation-weather .weather-card h2{
+  font-family:var(--m-type-system);
+  font-size:16px;
+  font-weight:500;
+  letter-spacing:-.015em;
+  line-height:1.45;
+  color:var(--m-ink-soft);
+  margin:0 0 7px;
+}
+.app .situation-weather .weather-card p{
+  font-family:var(--m-type-system);
+  font-size:clamp(22px,3.5vw,29px);
+  font-weight:600;
+  line-height:1.34;
+  letter-spacing:-.025em;
+  color:var(--m-ink);
+  margin:0;
+}
+.app .situation-weather .weather-card .surface-card-actions{margin-top:6px}
+.app .situation-weather .weather-card .weather-toggle{font-size:13px;font-weight:500;color:var(--m-ink-soft);padding:10px 0;min-height:var(--m-touch)}
+.app .situation-weather .feed-weather-placeholder{align-items:center;gap:16px}
+.app .situation-weather .feed-weather-placeholder strong{font-size:17px;font-weight:600}
+.app .situation-weather .feed-weather-placeholder button{min-height:var(--m-touch);background:var(--m-surface)}
+@media(max-width:620px){
+  .app .main-nav-item{height:52px}
+  .app .situation-weather{margin-top:2px;margin-bottom:16px}
+}

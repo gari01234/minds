@@ -17,8 +17,8 @@ document.body.innerHTML = `
 
   <nav id="desktopLenses" class="desktop-lenses" aria-label="Vistas de MINDS">
     <div class="lenses-heading">VISTAS</div>
-    <button class="lens-nav-item" data-nav="feed" aria-label="Situación"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.feed}</span><span class="lens-copy"><strong>Situación</strong><small>Ahora e Ideas</small></span></button>
     <button class="lens-nav-item active" data-nav="assistant" aria-label="Chat"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.assistant}</span><span class="lens-copy"><strong>Chat</strong><small>Hablar con Isabella</small></span></button>
+    <button class="lens-nav-item" data-nav="feed" aria-label="Situación"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.feed}</span><span class="lens-copy"><strong>Situación</strong><small>Ahora e Ideas</small></span></button>
     <button class="lens-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.calendar}</span><span class="lens-copy"><strong>Tiempo</strong><small>Calendario y tareas</small></span></button>
     <button class="lens-nav-item" data-nav="work" aria-label="Work"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.work}</span><span class="lens-copy"><strong>Work</strong><small>Proyectos</small></span></button>
     <button class="lens-nav-item" data-nav="readings" aria-label="Lecturas"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.readings}</span><span class="lens-copy"><strong>Lecturas</strong><small>Investigación</small></span></button>
@@ -52,6 +52,7 @@ document.body.innerHTML = `
           <div class="situation-tools"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span><button id="feedSettings" class="surface-text-action">Ajustar</button><span class="minds-menu-slot" data-menu-slot="feed"></span></div>
         </div>
         <div class="pull-refresh-indicator" data-pull-indicator="feed" aria-hidden="true"><span>Desliza para actualizar</span></div>
+        <div id="situationWeather" class="situation-weather" aria-label="Clima"></div>
         <div id="situationLedger" class="situation-ledger" aria-live="polite"><p class="situation-loading">Comprobando tu situación…</p></div>
         <div class="situation-context-label">CONTEXTO Y SUGERENCIAS</div>
         <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
@@ -138,11 +139,11 @@ document.body.innerHTML = `
   </section>
 
   <nav id="mainNav" class="main-nav" aria-label="MINDS">
-    <button class="main-nav-item" data-nav="feed" aria-label="Situación"><span class="nav-icon">${NAV_ICONS.feed}</span><span class="nav-label">Situación</span></button>
-    <button class="main-nav-item active" data-nav="assistant" aria-label="Chat"><span class="nav-icon">${NAV_ICONS.assistant}</span><span class="nav-label">Chat</span></button>
-    <button class="main-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="nav-icon">${NAV_ICONS.calendar}</span><span class="nav-label">Tiempo</span></button>
-    <button class="main-nav-item" data-nav="work" aria-label="Work"><span class="nav-icon">${NAV_ICONS.work}</span><span class="nav-label">Work</span></button>
-    <button class="main-nav-item" data-nav="readings" aria-label="Lecturas"><span class="nav-icon">${NAV_ICONS.readings}</span><span class="nav-label">Lecturas</span></button>
+    <button class="main-nav-item active" data-nav="assistant" aria-label="Chat"><span class="nav-icon">${NAV_ICONS.assistant}</span></button>
+    <button class="main-nav-item" data-nav="feed" aria-label="Situación"><span class="nav-icon">${NAV_ICONS.feed}</span></button>
+    <button class="main-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="nav-icon">${NAV_ICONS.calendar}</span></button>
+    <button class="main-nav-item" data-nav="work" aria-label="Work"><span class="nav-icon">${NAV_ICONS.work}</span></button>
+    <button class="main-nav-item" data-nav="readings" aria-label="Lecturas"><span class="nav-icon">${NAV_ICONS.readings}</span></button>
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
