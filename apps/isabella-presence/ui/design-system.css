@@ -1,0 +1,19 @@
+/* MINDS Design A.4 for thin native Presence.
+   Keep its native window size and ORB geometry unchanged. */
+:root{--ds-ink:#171717;--ds-secondary:#60636a;--ds-line:#e6e6e4;
+  --ds-surface:#f7f7f6;--ds-success:#287557;--ds-warning:#92521d;--ds-error:#b54736}
+.pill,.panel,.auth-view,.boot-view{border-color:rgba(23,23,23,.09)}
+.pill-copy small,.boot-copy small,.eyebrow,.status-text{color:var(--ds-secondary)}
+.surface-tabs{background:rgba(23,23,23,.035)}
+.surface-tab{color:var(--ds-secondary)}
+.surface-tab.on{color:var(--ds-ink)}
+.panel-head{border-bottom-color:var(--ds-line)}
+.card{border-radius:12px;background:var(--ds-surface)}
+.card[data-kind="question"]{background:var(--ds-ink)}
+.window-button:focus-visible,.surface-tab:focus-visible,button:focus-visible,input:focus-visible{
+  outline:2px solid var(--ds-ink);outline-offset:2px
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;
+    transition-duration:.01ms!important}
+}
