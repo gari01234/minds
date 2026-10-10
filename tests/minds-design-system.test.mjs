@@ -100,7 +100,8 @@ test('UX A.4 shares progress semantics across Isabella, Threads and Presence',()
     assert.equal(token(presence,name),token(tokens,name),'Presence token drift: '+name);
   }
   assert.ok(!reading.includes('.orb-core'));
-  assert.ok(!presence.includes('.orb.large{width:'));
+  const nativeLayer=presence.slice(presence.indexOf('/* MINDS UX A.4'));
+  assert.doesNotMatch(nativeLayer,/\.orb\.(?:tiny|micro|medium|large)\s*\{/);
 });
 
 test('UX A.4 CSS layers have balanced rules',()=>{
