@@ -1,0 +1,206 @@
+/* MINDS Design System A.4 v0.1
+   One vocabulary of contrast, type, spacing, geometry and feedback.
+   Overrides legacy app.css deliberately; does not resize or replace Isabella's ORB.
+   No authority, data, event routing or gesture behavior changes. */
+:root{
+  --ds-bg:#fff;--ds-surface:#f7f7f6;--ds-surface-active:#f1f1f0;
+  --ds-ink:#171717;--ds-secondary:#60636a;--ds-subtle:#767980;
+  --ds-line:#e6e6e4;--ds-info:#235c84;--ds-success:#287557;
+  --ds-attention:#92521d;--ds-error:#b54736;
+  --ds-radius-item:12px;--ds-radius-panel:20px;--ds-radius-pill:999px;
+  --ds-space-1:4px;--ds-space-2:8px;--ds-space-3:12px;
+  --ds-space-4:16px;--ds-space-5:24px;--ds-space-6:32px;
+  --ds-type-meta:13px;--ds-type-body:16px;--ds-type-heading:18px;
+  --ds-content:680px;--ds-side:20px;
+  --ink:var(--ds-ink);--muted:var(--ds-secondary);--line:var(--ds-line);
+}
+html,body{background:var(--ds-bg);color:var(--ds-ink);-webkit-text-size-adjust:100%}
+button,input,select,textarea{font-family:inherit}
+button:focus-visible,[role="button"]:focus-visible,
+a:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:2px solid var(--ds-ink);outline-offset:3px
+}
+@media(hover:hover){
+  button:not(:disabled){transition:background-color 160ms ease,border-color 160ms ease,color 160ms ease}
+}
+
+/* Primary orientation. Navigation already names the section: don't repeat the masthead. */
+.topbar{
+  display:grid;grid-template-columns:1fr 48px 1fr;align-items:center;
+  padding:calc(2px + env(safe-area-inset-top,0px)) var(--ds-side) 2px!important;
+  min-height:52px;background:#fff
+}
+.topbar-brand{width:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.topbar .orb-dock{grid-column:2}
+.topbar .top-actions{grid-column:3;justify-self:end}
+.topbar .dots{width:44px;min-height:44px;display:grid;place-items:center;font-size:20px}
+.main-nav{
+  border-color:var(--ds-line);background:rgba(255,255,255,.96);
+  box-shadow:0 4px 16px rgba(0,0,0,.035)
+}
+.main-nav-item{color:var(--ds-secondary);border-radius:var(--ds-radius-panel);min-height:48px}
+.main-nav-item.active{background:var(--ds-surface-active);color:var(--ds-ink)}
+.nav-label{font-size:11px!important;letter-spacing:0;line-height:1.15}
+.nav-icon{font-size:20px;line-height:22px}
+
+/* Conversation: the existing ORB scale and animations are explicitly untouched. */
+.messages{width:min(100%,var(--ds-content))}
+.message,.message .message-text{font-size:var(--ds-type-body);line-height:1.52}
+.message.user{background:var(--ds-surface-active)!important;border-radius:var(--ds-radius-panel)}
+.message.assistant{background:var(--ds-surface)!important;border-radius:var(--ds-radius-panel)}
+.message.system,.message-react{color:var(--ds-secondary)}
+.composer{border-color:var(--ds-line);box-shadow:0 3px 16px rgba(0,0,0,.035)}
+.composer textarea{font-size:var(--ds-type-body);line-height:1.5}
+.composer-wrap{max-width:860px;margin-inline:auto}
+.chat-activity,.work-thread-progress{
+  font-size:var(--ds-type-meta);color:var(--ds-secondary);line-height:1.5
+}
+.work-thread-progress[data-phase="error"],.message-incomplete{color:var(--ds-error)}
+.message-incomplete{border-top-color:var(--ds-line);font-size:var(--ds-type-meta)}
+.message-incomplete button{border-radius:var(--ds-radius-pill)}
+
+/* Now / Ideas: importance comes from content, not a second oversized heading. */
+.surface-scroll{padding:var(--ds-space-2) var(--ds-side) var(--ds-space-6)}
+.surface-head{margin-bottom:var(--ds-space-2);align-items:center}
+.surface-head-compact{min-height:44px}
+.surface-card{border-color:var(--ds-line);padding:var(--ds-space-4) 2px}
+.surface-card h2{font-size:var(--ds-type-body);font-weight:650;line-height:1.4}
+.surface-card p{font-size:14px;line-height:1.55;color:var(--ds-secondary)}
+.surface-agent,.surface-card-agent{font-size:11px;color:var(--ds-secondary)}
+.surface-loading,.surface-empty{color:var(--ds-secondary);font-size:14px}
+.situation-kicker,.situation-heading h2{display:none}
+.situation-heading{justify-content:flex-end;align-items:center;margin-bottom:var(--ds-space-2)}
+.situation-ledger{border-bottom-color:var(--ds-line);margin-bottom:var(--ds-space-4);padding-bottom:var(--ds-space-3)}
+.situation-coverage,.situation-limit,.situation-caution{color:var(--ds-secondary);font-size:var(--ds-type-meta);line-height:1.55}
+.situation-group{border-top-color:var(--ds-line);padding:var(--ds-space-4) 0 var(--ds-space-2)}
+.situation-group h3{font-size:15px;font-weight:650}
+.situation-item.situation-editable{border-color:var(--ds-line);border-radius:var(--ds-radius-item);padding:12px}
+.situation-item strong,.situation-item.situation-editable strong{font-size:15px;line-height:1.45}
+.situation-item small,.situation-item.situation-editable small{font-size:var(--ds-type-meta);color:var(--ds-secondary);line-height:1.4}
+.situation-zero{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.situation-context-label{color:var(--ds-secondary);font-size:11px}
+
+/* Calendar: compact controls and month; preserve dates, tap zones and category colors. */
+.cal-toolbar{padding:var(--ds-space-2) var(--ds-side) var(--ds-space-1)}
+.cal-nav{padding:0 var(--ds-side) var(--ds-space-2)}
+.cal-title{font:600 19px/1.3 -apple-system,BlinkMacSystemFont,"SF Pro Text",Arial,sans-serif;letter-spacing:-.02em}
+.segments{background:var(--ds-surface);border-radius:var(--ds-radius-item)}
+.segments button{font-size:14px;min-height:38px;border-radius:9px}
+.segments button.active{box-shadow:0 1px 3px rgba(0,0,0,.07)}
+.cal-nav .round{width:42px;height:42px;background:transparent;font-size:21px}
+.month-year{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.mh{color:var(--ds-secondary);border-color:var(--ds-line)}
+.mw,.mc{min-height:64px;border-color:var(--ds-line)}
+.mc{padding:7px 0;gap:3px}
+.mn{width:33px;height:33px;font-size:15px}
+.agenda{padding:var(--ds-space-3) var(--ds-side) var(--ds-space-6)}
+.agenda-head{font-size:var(--ds-type-meta);color:var(--ds-secondary);letter-spacing:0}
+.agenda-item{border-color:var(--ds-line);padding:14px 0;gap:10px}
+.agenda-item strong{font-size:var(--ds-type-body);line-height:1.4}
+.agenda-item .meta,.meta,.atime{color:var(--ds-secondary);font-size:var(--ds-type-meta)}
+.calendar-create-row{padding:var(--ds-space-2) var(--ds-side)}
+.calendar-create-row button{border-radius:var(--ds-radius-pill);font-size:var(--ds-type-meta);
+  min-height:42px;border-color:var(--ds-line)}
+
+/* Work: show selected project just once, give the work content priority. */
+.work-shell{padding:var(--ds-space-2) var(--ds-side) var(--ds-space-3)}
+.work-head{align-items:center;justify-content:flex-start;gap:0;min-height:44px}
+.work-head h1{position:absolute;width:1px;height:1px;padding:0;margin:-1px;
+  overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.work-project-switch{align-items:center;gap:var(--ds-space-1)}
+.work-project-switch button{font-size:14px;min-height:40px;padding:8px 14px}
+.work-tabs{flex-wrap:nowrap!important;overflow-x:auto;overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;touch-action:pan-x;
+  scrollbar-width:none;gap:var(--ds-space-1);margin-top:var(--ds-space-2);padding:0 0 var(--ds-space-2);
+  border-color:var(--ds-line)}
+.work-tabs::-webkit-scrollbar{display:none}
+.work-tabs button{flex:none;white-space:nowrap;min-height:39px;font-size:14px;padding:8px 14px}
+.work-status{font-size:var(--ds-type-meta);color:var(--ds-secondary);min-height:0}
+.work-body{padding-top:var(--ds-space-2)}
+.work-desktop-toolbar,.work-planner-toolbar{padding:var(--ds-space-2) 0 var(--ds-space-3)}
+.work-desktop-toolbar button,.work-planner-toolbar button,.work-toolbar-actions button{font-size:var(--ds-type-meta);min-height:40px}
+.work-breadcrumb button{font-size:14px}
+.work-drop-hint{color:var(--ds-secondary);border-color:var(--ds-line);font-size:var(--ds-type-meta)}
+.work-files{gap:var(--ds-space-2)}
+.work-file{border-color:var(--ds-line);border-radius:var(--ds-radius-item);
+  min-height:92px;padding:var(--ds-space-3);box-shadow:none}
+.work-file strong{font-size:15px;line-height:1.4;margin-top:10px}
+.work-file small{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.work-file-icon{font-size:21px;color:var(--ds-secondary)}
+.work-folder{background:var(--ds-surface)}
+.work-bucket{background:var(--ds-surface);border-radius:var(--ds-radius-item)}
+.work-bucket header strong{font-size:15px}
+.work-task-card{border-color:var(--ds-line);border-radius:var(--ds-radius-item);box-shadow:none}
+.work-task-card:focus-visible{outline:2px solid var(--ds-ink);outline-offset:2px}
+.work-task-title-row strong{font-size:15px;line-height:1.42;font-weight:550}
+.work-card-checks>div{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.work-task-card footer{border-color:var(--ds-line)}
+.work-task-card footer small,.work-task-chips{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.work-overview-intro h2{font:600 18px/1.3 -apple-system,BlinkMacSystemFont,Arial,sans-serif;letter-spacing:0;margin:0 0 8px}
+.work-overview-intro p,.work-overview-coverage,.work-overview-item small{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.work-overview-section h3{font-size:var(--ds-type-heading)}
+.work-overview-item strong{font-size:15px}
+.work-overview-section-head button,.work-overview-footer button{font-size:var(--ds-type-meta)}
+.work-thread-message-copy,.work-thread-message{line-height:1.55}
+.work-thread-source-boundary{color:var(--ds-secondary);font-size:var(--ds-type-meta)}
+
+/* Readings: the main navigation identifies the section; keep Sofía as an action. */
+.readings-topline{height:46px;min-height:46px;padding:2px var(--ds-side);justify-content:flex-end;
+  border-color:var(--ds-line)}
+.readings-topline>div{display:none}
+.sofia-button{font-size:var(--ds-type-meta);min-height:40px;
+  background:var(--ds-surface);border-radius:var(--ds-radius-pill)}
+
+/* Secondary surfaces: treat overlays consistently. */
+.drawer,.modal{border-radius:var(--ds-radius-panel);border-color:var(--ds-line)}
+.drawer-title,.drawer-head .eyebrow{display:none}
+.drawer-head{min-height:44px}
+.drawer>button[data-action],.drawer>#authButton{border-color:var(--ds-line);
+  font-size:15px;line-height:1.4;min-height:48px}
+.drawer-note{color:var(--ds-secondary);font-size:var(--ds-type-meta)}
+.form label{font-size:var(--ds-type-meta);color:var(--ds-secondary)}
+.form input,.form select,.form textarea{border-color:var(--ds-line);border-radius:var(--ds-radius-item)}
+
+/* One semantically stable feedback contract; never animate all content at once. */
+[data-phase="error"],.human-state.tone-error{--ds-status-color:var(--ds-error)}
+[data-phase="completed"],.human-state.tone-complete{--ds-status-color:var(--ds-success)}
+[data-phase="active"],.human-state.tone-active{--ds-status-color:var(--ds-info)}
+[data-phase="attention"],.human-state.tone-attention{--ds-status-color:var(--ds-attention)}
+.human-state{border-color:var(--ds-line);border-radius:var(--ds-radius-item);
+  background:var(--ds-surface);box-shadow:none}
+.human-state>b{font-size:15px}
+.human-state p{font-size:14px}
+.message-incomplete button:focus-visible{outline-offset:2px}
+
+@media(max-width:520px){
+  .topbar{padding:calc(2px + env(safe-area-inset-top,0px)) 16px 2px!important}
+  .surface-scroll{padding:8px var(--ds-side) 32px}
+  .main-nav{width:calc(100% - 20px);padding:4px;margin-top:4px}
+  .main-nav-item{height:50px}
+  .work-shell{padding:8px var(--ds-side) 12px}
+  .work-file{min-height:96px}
+  .work-tabs button{font-size:13px}
+  .work-overview{padding:8px 0 32px}
+  .work-overview-intro h2{font-size:18px}
+  .work-overview-columns{gap:var(--ds-space-5)}
+}
+@media(hover:none),(pointer:coarse){
+  .work-drop-hint{display:none}
+  .work-tabs button{min-height:44px}
+}
+@media(min-width:1100px){
+  .app{grid-template-rows:56px minmax(0,1fr)}
+  .topbar{min-height:56px;padding:4px 24px!important;border-bottom:1px solid var(--ds-line)}
+  #desktopLenses{border-color:var(--ds-line);padding-top:16px}
+  .lens-nav-item{border-radius:var(--ds-radius-item)}
+  .lens-nav-item strong{font-size:13px}
+  .lenses-heading,.lenses-foot{color:var(--ds-secondary)}
+  .work-shell{padding:8px 24px 16px}
+  .work-tabs{margin-top:4px}
+  .composer-wrap{max-width:760px}
+  .surface-scroll{padding:16px 32px 40px}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;
+    animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
