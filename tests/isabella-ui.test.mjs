@@ -639,7 +639,8 @@ test('Build 41 shows visible AI activity around action buttons',()=>{
   const css=read('apps/isabella/app.css');
   assert.ok(app.includes('function setWorking'));
   assert.ok(app.includes("setWorking($('#sendButton'),true)"));
-  assert.ok(app.includes("setWorking(refresh,true)"));
+  assert.ok(app.includes("setWorking(generate,true)"));
+  assert.ok(app.includes("label.textContent='Actualizando…'"));
   assert.ok(css.includes('.send.is-working::before'));
   assert.ok(css.includes('@keyframes minds-ai-ring'));
 });
