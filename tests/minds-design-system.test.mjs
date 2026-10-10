@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-const tokens=read('apps/shared/minds-design-tokens.css');
+const tokens=read('shared/minds-design-tokens.css');
 const web=read('apps/isabella/design-system.css');
 const reading=read('apps/theory/design-system.css');
 const presence=read('apps/isabella-presence/ui/presence.css');
