@@ -59,7 +59,7 @@ test('UX A.4 loads design tokens and each surface layer after legacy CSS with PW
   for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=7']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v130'));
+  assert.ok(sw.includes('isabella-shell-v131'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 

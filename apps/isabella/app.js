@@ -481,6 +481,7 @@ function surfaceCard(item,surface){
   const storyKey=feedStoryKey(item),itemKey=String(item.id||storyKey||item.title||'');
   const operational=weather||kind==='commitment'||kind==='pending';
   const feedStory=surface==='feed'&&!operational;
+  const contextualReview=feedStory&&String(item.metadata?.reason_code||'')==='contextual_reassessment';
   const idea=surface==='idea';
   const feedback=String(item.user_feedback||'');
   const lifecycle=String(item.lifecycle_state||'new');
@@ -490,12 +491,12 @@ function surfaceCard(item,surface){
     ${why?`<div class="surface-why-copy hidden" data-why-copy="${esc(itemKey)}">${esc(why)}</div>`:''}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
-      ${feedStory?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
+      ${feedStory&&!contextualReview?`<button class="surface-readmore" data-news-key="${esc(storyKey)}">Leer más</button>`:''}
       ${feedStory&&why?`<button class="surface-why" data-why-key="${esc(itemKey)}">¿Por qué esto?</button>`:''}
       ${feedStory&&sourceUrl?`<a class="surface-source" data-feed-source="${esc(storyKey)}" href="${esc(sourceUrl)}" target="_blank" rel="noopener">${esc(sourceTitle)}</a>`:''}
       ${idea?`<button class="surface-discuss" data-idea-workspace="${esc(itemKey)}">Convertir en trabajo</button>`:(!feedStory&&prompt?`<button class="surface-discuss" data-surface-agent="${esc(agent)}" data-surface-prompt="${esc(prompt)}">${agent==='sofia'?'Hablar con Sofía':'Hablar con Isabella'}</button>`:'')}
     </div>
-    ${feedStory?`<div class="surface-feedback"><button class="${feedback==='liked'?'active':''}" data-feed-feedback="liked" data-feed-item="${esc(itemKey)}">Me gusta</button><button data-feed-feedback="not_relevant" data-feed-item="${esc(itemKey)}">No es relevante</button><button class="danger-text" data-feed-feedback="dismissed" data-feed-item="${esc(itemKey)}">Eliminar</button></div>`:''}
+    ${feedStory?`<div class="surface-feedback"><button class="${feedback==='liked'?'active':''}" data-feed-feedback="liked" data-feed-item="${esc(itemKey)}">${contextualReview?'Me ayudó':'Me gusta'}</button><button data-feed-feedback="not_relevant" data-feed-item="${esc(itemKey)}">${contextualReview?'No encajaba':'No es relevante'}</button><button class="danger-text" data-feed-feedback="dismissed" data-feed-item="${esc(itemKey)}">Eliminar</button></div>`:''}
     ${idea?`<div class="surface-feedback idea-lifecycle"><button data-idea-sleep="${esc(itemKey)}">Dormir</button><button class="danger-text" data-idea-dismiss="${esc(itemKey)}">Descartar</button></div>`:''}
   </article>`;
 }
@@ -511,7 +512,8 @@ function dbSurfaceId(item){
 async function persistSurfaceFeedback(item,action){
   if(!item)return;
   const sb=window.MINDS_SUPABASE,id=dbSurfaceId(item),storyKey=feedStoryKey(item);
-  recordFeedSignal(action,item);
+  // Review feedback is evidence about one proposal, not preference training for feed topics.
+  if(String(item.metadata?.reason_code||'')!=='contextual_reassessment')recordFeedSignal(action,item);
   if(action==='liked')item.user_feedback='liked';
   if(action==='not_relevant')item.user_feedback='not_relevant';
   if(action==='dismissed'||action==='not_relevant'){
@@ -524,7 +526,9 @@ async function persistSurfaceFeedback(item,action){
     const {data:{session}}=await sb.auth.getSession();if(!session)return;
     await sb.from('minds_surface_feedback').insert({
       user_id:session.user.id,item_id:id,surface:'feed',action,title:String(item.title||''),
-      metadata:{kind:String(item.kind||item.metadata?.kind||''),section:String(item.section||item.metadata?.section||''),entities:feedEntities(item).map(x=>x.name),source_url:String(item.source_url||item.metadata?.source_url||'')}
+      metadata:{kind:String(item.kind||item.metadata?.kind||''),section:String(item.section||item.metadata?.section||''),entities:feedEntities(item).map(x=>x.name),source_url:String(item.source_url||item.metadata?.source_url||''),
+        review_feedback:String(item.metadata?.reason_code||'')==='contextual_reassessment'?
+          (action==='liked'?'explicit_useful':action==='not_relevant'?'explicit_not_applicable':'not_a_rating'):null}
     });
     if(id){
       const patch=action==='liked'?{user_feedback:'liked'}:action==='not_relevant'?{user_feedback:'not_relevant',status:'dismissed',lifecycle_state:'dismissed'}:action==='dismissed'?{status:'dismissed',lifecycle_state:'dismissed'}:{};
