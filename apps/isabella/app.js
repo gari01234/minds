@@ -296,6 +296,7 @@ function init(){
   save();
   setOrbPalette();
   bind();
+  initSituationPullRefresh();
   renderMessages(true);
   renderToday();
   renderCalendar();
@@ -419,10 +420,15 @@ function show(name){
   state.screen=name;
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
   document.querySelectorAll('.main-nav-item, .lens-nav-item').forEach(x=>{
-    const active=x.dataset.nav===name;
+    const active=x.dataset.nav===name||(name==='ideas'&&x.dataset.nav==='feed');
     x.classList.toggle('active',active);
     if(active)x.setAttribute('aria-current','page');
     else x.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('[data-situation-view]').forEach(tab=>{
+    const active=tab.dataset.situationView===name;
+    tab.classList.toggle('active',active);
+    tab.setAttribute('aria-selected',String(active));
   });
   document.body.dataset.section=name;
   placeGlobalMenu(name);
@@ -811,8 +817,8 @@ function renderFeedItems(items){
 }
 async function renderFeed(force=false){
   void window.MINDS_SITUATION?.render?.();
-  const box=$('#feedList'),refresh=$('#refreshFeed'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
-  let visible=[...feedItems];if(force&&refresh){refresh.disabled=true;setWorking(refresh,true)}
+  const box=$('#feedList'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
+  let visible=[...feedItems];
   try{
     const cached=await (window.ISABELLA_AI?.loadSurface?.('feed','isabella',{allowStale:true})||[]);
     visible=dedupeFeedItems([...(cached||[]),...visible]);
@@ -837,7 +843,6 @@ async function renderFeed(force=false){
     if(status){status.textContent='No pude reevaluar';setTimeout(()=>{if(status.textContent==='No pude reevaluar')status.textContent=''},2600)}
   }finally{
     feedBusy=false;
-    if(refresh){refresh.disabled=false;setWorking(refresh,false)}
   }
 }
 function feedThreadFor(item){
@@ -929,14 +934,15 @@ async function submitFeedStoryQuestion(text){
 }
 
 async function renderIdeas(force=false){
-  const box=$('#ideasList'),refresh=$('#refreshIdeas');if(!box||ideasBusy)return;ideasBusy=true;setWorking(refresh,true);
+  const box=$('#ideasList'),generate=$('#generateIdeas');if(!box||ideasBusy)return;ideasBusy=true;
+  if(force&&generate){generate.disabled=true;setWorking(generate,true)}
   box.innerHTML='<div class="surface-loading">Buscando una propuesta que pueda convertirse en trabajo…</div>';
   try{
     const [items,workspaces]=await Promise.all([window.ISABELLA_AI?.ideas?.(state,{force})||[],loadIdeaWorkspaces()]);
     ideaWorkspaces=workspaces||[];
     renderIdeaItems((items||[]).slice(0,3));
   }catch(err){box.innerHTML='<div class="surface-empty">No pude actualizar Ideas ahora mismo.</div>'}
-  finally{ideasBusy=false;setWorking(refresh,false)}
+  finally{ideasBusy=false;if(generate){generate.disabled=false;setWorking(generate,false)}}
 }
 function readingsUrl(){
   return location.pathname.includes('/isabella/')?'../theory/?embedded=1':'./theory/?embedded=1';
@@ -1885,9 +1891,9 @@ function bind(){
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
  document.querySelectorAll('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  document.querySelectorAll('.lens-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
- $('#refreshFeed').onclick=()=>renderFeed(true);
+ document.querySelectorAll('[data-situation-view]').forEach(tab=>tab.onclick=()=>show(tab.dataset.situationView));
  $('#feedSettings').onclick=()=>feedPreferencesPanel();
- $('#refreshIdeas').onclick=()=>renderIdeas(true);
+ $('#generateIdeas').onclick=()=>renderIdeas(true);
  $('#closeFeedDetail').onclick=closeFeedStory;
  const feedThreadInput=$('#feedThreadInput'),feedThreadForm=$('#feedThreadForm');
  const autosizeFeedThread=()=>{feedThreadInput.style.height='auto';feedThreadInput.style.height=Math.min(feedThreadInput.scrollHeight,132)+'px'};
@@ -1902,6 +1908,57 @@ function bind(){
  ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
  ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
  $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
+/* Pull-to-refresh checks existing sources; generating entirely new Ideas remains an explicit choice. */
+function initSituationPullRefresh(){
+  for(const view of ['feed','ideas']){
+    const screen=$('#'+(view==='feed'?'feedScreen':'ideasScreen'));
+    const scroller=screen?.querySelector('.surface-scroll');
+    const indicator=screen?.querySelector('[data-pull-indicator="'+view+'"]');
+    const label=indicator?.querySelector('span');
+    if(!screen||!scroller||!indicator||!label)continue;
+    let start=null,pulling=false,travel=0,refreshing=false;
+    const reset=()=>{
+      start=null;pulling=false;travel=0;
+      indicator.classList.remove('is-pulling');
+      if(!refreshing){indicator.style.opacity='';label.style.transform='';label.textContent='Desliza para actualizar'}
+    };
+    scroller.addEventListener('touchstart',event=>{
+      if(refreshing||event.touches.length!==1||!screen.classList.contains('active')||scroller.scrollTop>1||feedBusy&&view==='feed'||ideasBusy&&view==='ideas'||document.body.classList.contains('drawer-open'))return;
+      if(event.target.closest?.('button,a,input,textarea,select,[contenteditable="true"]'))return;
+      start={x:event.touches[0].clientX,y:event.touches[0].clientY};
+      travel=0;pulling=false;
+    },{passive:true});
+    scroller.addEventListener('touchmove',event=>{
+      if(!start||event.touches.length!==1||!screen.classList.contains('active'))return;
+      const dx=event.touches[0].clientX-start.x,dy=event.touches[0].clientY-start.y;
+      if(dy<=10||dy<Math.abs(dx)*1.3||scroller.scrollTop>1)return;
+      if(event.cancelable)event.preventDefault();
+      pulling=true;travel=dy;
+      indicator.classList.add('is-pulling');
+      label.textContent=dy>=84?'Suelta para actualizar':'Desliza para actualizar';
+      label.style.transform='translateY('+Math.min(9,-35+dy*.47)+'px)';
+      indicator.style.opacity=String(Math.min(1,dy/42));
+    },{passive:false});
+    const finish=cancel=>{
+      const refresh=!cancel&&pulling&&travel>=84&&!refreshing&&screen.classList.contains('active');
+      reset();
+      if(!refresh)return;
+      refreshing=true;
+      indicator.classList.add('is-refreshing');
+      indicator.style.opacity='1';
+      label.style.transform='translateY(4px)';
+      label.textContent='Actualizando…';
+      Promise.resolve().then(()=>view==='feed'?renderFeed(false):renderIdeas(false)).catch(()=>{
+        label.textContent='No pude actualizar';
+      }).finally(()=>{
+        refreshing=false;indicator.classList.remove('is-refreshing');
+        indicator.style.opacity='';label.style.transform='';label.textContent='Desliza para actualizar';
+      });
+    };
+    scroller.addEventListener('touchend',()=>finish(false),{passive:true});
+    scroller.addEventListener('touchcancel',()=>finish(true),{passive:true});
+  }
+}
 function initSwipe(){const a=$('#swipeArea');let sx=0,sy=0,on=false;a.addEventListener('touchstart',e=>{if(e.touches.length!==1)return;if(e.target.closest?.('.message,.message-actions,.composer-wrap,.generated-artifact,a,button,input,textarea')){on=false;return}const t=e.touches[0];sx=t.clientX;sy=t.clientY;on=true},{passive:true});a.addEventListener('touchend',e=>{if(!on)return;on=false;const t=e.changedTouches[0],dx=t.clientX-sx,dy=t.clientY-sy;if(Math.abs(dx)>46&&Math.abs(dx)>Math.abs(dy)*1.05){if(dx<0&&state.screen==='assistant')show('calendar');else if(dx>0&&state.screen==='calendar')show('assistant')}},{passive:true})}
 function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -2302,8 +2359,8 @@ function initEventDrag(){
     row.addEventListener('touchcancel',finish,{passive:true});
   });
 }
-function openDrawer(){const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+function openDrawer(){const refresh=$('#refreshViewAction');if(refresh){refresh.classList.toggle('hidden',!['feed','ideas'].includes(state.screen));refresh.textContent=state.screen==='feed'?'Actualizar situación':'Actualizar ideas guardadas'}const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
+function action(a){if(a==='refreshview'){if(state.screen==='feed')void renderFeed(false);if(state.screen==='ideas')void renderIdeas(false)}if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 function reviewAgeCopy(hours){
   const n=Math.max(0,Number(hours||0));
   if(n<1)return 'ahora';

@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=2'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=3'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=2']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=3']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v125'));
+  assert.ok(sw.includes('isabella-shell-v126'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -84,8 +84,9 @@ test('UX A.4 does not resize Isabella ORB or remove validated routes and drag in
   assert.doesNotMatch(web,/\.orb-(?:button|core|haze)\s*\{/);
   const oldCss=read('apps/isabella/app.css');
   assert.ok(oldCss.includes('.assistant-scroll.orb-compact .orb-button'));
-  for(const route of ['assistant','calendar','feed','work','readings','ideas'])
-    assert.ok(shell.includes('data-nav="'+route+'"'),'Existing lens removed: '+route);
+  for(const route of ['feed','assistant','calendar','work','readings'])
+    assert.ok(shell.includes('data-nav="'+route+'"'),'Destination removed: '+route);
+  assert.ok(shell.includes('data-situation-view="ideas"'),'Ideas tab must remain available');
   assert.ok(read('apps/isabella/work.js').includes('card.ondragstart'));
   assert.ok(!web.includes('data-work-move'));
 });
@@ -135,4 +136,46 @@ test('UX A.4.1 hides empty attention sections but keeps unknown sources and scop
   assert.ok(src.includes('details class="situation-scope"'));
   assert.ok(src.includes('No incluye todas las conversaciones'));
   assert.ok(!src.includes('situation-limit'));
+});
+
+
+test('UX A.4.2 uses the same five vector navigation icons and names in mobile and desktop',()=>{
+  const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
+  const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
+  for(const [route,label] of [['feed','Situación'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas']]){
+    assert.ok(nav.includes('data-nav="'+route+'"'));
+    assert.ok(desktop.includes('data-nav="'+route+'"'));
+    assert.ok(nav.includes('class="nav-label">'+label+'</span>'));
+    assert.ok(desktop.includes('<strong>'+label+'</strong>'));
+    assert.ok(shell.includes('NAV_ICONS.'+route));
+  }
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,5);
+  assert.ok(!nav.includes('data-nav="ideas"'));
+  assert.ok(!desktop.includes('data-nav="ideas"'));
+  assert.ok(web.includes('grid-template-columns:repeat(5,minmax(0,1fr))'));
+});
+
+test('UX A.4.2 keeps both Situation tabs while preserving existing source-bound routes',()=>{
+  const app=read('apps/isabella/app.js');
+  for(const route of ['feed','ideas']){
+    assert.equal((shell.match(new RegExp('data-situation-view="'+route+'"','g'))||[]).length,2);
+  }
+  assert.match(app,/name==='ideas'&&x\.dataset\.nav==='feed'/);
+  assert.ok(app.includes('aria-selected'));
+  assert.ok(shell.includes('id="situationLedger"'));
+  assert.ok(shell.includes('id="ideasList"'));
+  assert.ok(shell.includes('id="generateIdeas"'));
+});
+
+test('UX A.4.2 keeps source re-check separate from forced idea generation',()=>{
+  const app=read('apps/isabella/app.js');
+  assert.ok(app.includes('function initSituationPullRefresh()'));
+  assert.ok(app.includes("scroller.addEventListener('touchmove'"));
+  assert.ok(app.includes('scroller.scrollTop>1'));
+  assert.ok(app.includes("renderFeed(false):renderIdeas(false)"));
+  assert.ok(app.includes("$('#generateIdeas').onclick=()=>renderIdeas(true)"));
+  assert.ok(app.includes("id=\"refreshViewAction\"")||shell.includes('id="refreshViewAction"'));
+  assert.ok(!shell.includes('id="refreshFeed"'));
+  assert.ok(!shell.includes('id="refreshIdeas"'));
 });
