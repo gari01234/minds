@@ -402,15 +402,53 @@ async function afterSync(){
     if(!nudged)await maybeCuriosityQuestion();
   }finally{proactiveCycleBusy=false}
 }
+/* Dear: Thoughts stays authoritative in Architectures.
+ * The opaque-origin sandbox intentionally has no access to MINDS auth or storage.
+ * Load WebGL only on entry, and destroy the browsing context on exit.
+ */
+const THOUGHTS_ORIGINAL_URL='https://gari01234.github.io/architectures/dear_thoughts.html?hide=1';
+function mountThoughts(){
+  const host=$('#thoughtsHost'),status=$('#thoughtsLoadStatus'),error=$('#thoughtsFrameError');
+  if(!host||host.querySelector('iframe'))return;
+  status?.classList.remove('hidden');
+  error?.classList.add('hidden');
+  const frame=document.createElement('iframe');
+  frame.id='thoughtsFrame';
+  frame.className='thoughts-frame';
+  frame.title='Dear: Thoughts — obra original';
+  frame.setAttribute('sandbox','allow-scripts');
+  frame.setAttribute('referrerpolicy','no-referrer');
+  frame.setAttribute('loading','eager');
+  frame.addEventListener('load',()=>{
+    if(frame.isConnected)status?.classList.add('hidden');
+  });
+  frame.addEventListener('error',()=>{
+    if(!frame.isConnected)return;
+    status?.classList.add('hidden');
+    error?.classList.remove('hidden');
+  });
+  // Fresh HTML on each visit follows updates to the original artwork.
+  const url=new URL(THOUGHTS_ORIGINAL_URL);
+  url.searchParams.set('opened',String(Date.now()));
+  frame.src=url.toString();
+  host.appendChild(frame);
+}
+function unmountThoughts(){
+  const frame=$('#thoughtsHost iframe');
+  if(frame)frame.remove(); // release WebGL and stop the original page's animation loop
+  $('#thoughtsLoadStatus')?.classList.remove('hidden');
+  $('#thoughtsFrameError')?.classList.add('hidden');
+}
 function placeGlobalMenu(name){
   const button=$('#menuButton');
   const host=name==='assistant'?$('.top-actions'):document.querySelector('[data-menu-slot="'+name+'"]');
   if(button&&host&&button.parentElement!==host)host.appendChild(button);
 }
 function show(name){
-  const allowed=['assistant','feed','ideas','work','calendar','readings'];
+  const allowed=['assistant','feed','ideas','work','calendar','readings','thoughts'];
   if(!allowed.includes(name))name='assistant';
   const previous=state.screen;
+  if(previous==='thoughts'&&name!=='thoughts')unmountThoughts();
   // Preserve the selected date when changing lenses; Hoy is an explicit action.
   if(name!=='readings'&&$('#readingsScreen')?.classList.contains('sofia-chat-active')){
     // Switching lenses is a visual suspension, not a command to discard Sofía's draft.
@@ -443,6 +481,7 @@ function show(name){
   if(name==='ideas')renderIdeas();
   if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);
   if(name==='readings')ensureReadings();
+  if(name==='thoughts')mountThoughts();
 }
 function surfaceAgentLabel(agent){return agent==='sofia'?'SOFÍA':agent==='minds'?'MINDS':'ISABELLA'}
 function feedStoryKey(item){

@@ -7,7 +7,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('Build 90.1 provides primary desktop lenses without deleting existing routes',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  for(const screen of ['feed','assistant','calendar','work','readings']){
+  for(const screen of ['feed','assistant','calendar','work','readings','thoughts']){
     assert.ok(shell.includes('class="lens-nav-item')&&shell.includes('data-nav="'+screen+'"'),'Missing desktop destination '+screen);
     assert.ok(shell.includes('data-screen="'+screen+'"'),'Missing screen '+screen);
   }

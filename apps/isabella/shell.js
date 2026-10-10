@@ -4,7 +4,8 @@ const NAV_ICONS = Object.freeze({
   assistant:navIcon('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"/>'),
   calendar:navIcon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>'),
   work:navIcon('<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/>'),
-  readings:navIcon('<path d="M12 21V5a4 4 0 0 0-4-2H3v16h5a4 4 0 0 1 4 2zm0 0V5a4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2z"/>')
+  readings:navIcon('<path d="M12 21V5a4 4 0 0 0-4-2H3v16h5a4 4 0 0 1 4 2zm0 0V5a4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2z"/>'),
+  thoughts:navIcon('<path d="m12 2 9 5-9 5-9-5 9-5zM3 7v10l9 5 9-5V7M12 12v10"/>')
 });
 
 document.body.innerHTML = `
@@ -22,6 +23,7 @@ document.body.innerHTML = `
     <button class="lens-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.calendar}</span><span class="lens-copy"><strong>Tiempo</strong><small>Calendario y tareas</small></span></button>
     <button class="lens-nav-item" data-nav="work" aria-label="Work"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.work}</span><span class="lens-copy"><strong>Work</strong><small>Proyectos</small></span></button>
     <button class="lens-nav-item" data-nav="readings" aria-label="Lecturas"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.readings}</span><span class="lens-copy"><strong>Lecturas</strong><small>Investigación</small></span></button>
+    <button class="lens-nav-item" data-nav="thoughts" aria-label="Thoughts"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.thoughts}</span><span class="lens-copy"><strong>Thoughts</strong><small>Dear: Thoughts</small></span></button>
     <div class="lenses-foot">Una memoria · distintas vistas</div>
   </nav>
 
@@ -101,6 +103,15 @@ document.body.innerHTML = `
       <div class="readings-topline"><div><span class="readings-agent">SOFÍA</span><span class="readings-title">Readings</span></div><div class="readings-top-actions"><button id="openSofiaButton" class="sofia-button">Hablar con Sofía</button><span class="minds-menu-slot" data-menu-slot="readings"></span></div></div>
       <iframe id="readingsFrame" class="readings-frame" title="MINDS Readings · Sofía" loading="lazy"></iframe>
     </section>
+
+    <section id="thoughtsScreen" class="screen thoughts-screen" data-screen="thoughts" aria-label="Dear: Thoughts">
+      <div id="thoughtsHost" class="thoughts-host">
+        <div id="thoughtsLoadStatus" class="thoughts-load-status" role="status">Abriendo Thoughts…</div>
+        <div id="thoughtsFrameError" class="thoughts-load-error hidden" role="alert">
+          No pude cargar Thoughts. <a href="https://gari01234.github.io/architectures/dear_thoughts.html" target="_blank" rel="noopener noreferrer">Abrir la obra original</a>
+        </div>
+      </div>
+    </section>
   </main>
 
   <section id="feedDetail" class="feed-detail hidden" aria-hidden="true">
@@ -143,6 +154,7 @@ document.body.innerHTML = `
     <button class="main-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="nav-icon">${NAV_ICONS.calendar}</span></button>
     <button class="main-nav-item" data-nav="work" aria-label="Work"><span class="nav-icon">${NAV_ICONS.work}</span></button>
     <button class="main-nav-item" data-nav="readings" aria-label="Lecturas"><span class="nav-icon">${NAV_ICONS.readings}</span></button>
+    <button class="main-nav-item" data-nav="thoughts" aria-label="Thoughts"><span class="nav-icon">${NAV_ICONS.thoughts}</span></button>
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>

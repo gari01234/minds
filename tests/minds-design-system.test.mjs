@@ -53,13 +53,13 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
   assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=7'));
+  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=8'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
-  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=7']){
+  for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=8']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v131'));
+  assert.ok(sw.includes('isabella-shell-v132'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -84,7 +84,7 @@ test('UX A.4 does not resize Isabella ORB or remove validated routes and drag in
   assert.doesNotMatch(web,/\.orb-(?:button|core|haze)\s*\{/);
   const oldCss=read('apps/isabella/app.css');
   assert.ok(oldCss.includes('.assistant-scroll.orb-compact .orb-button'));
-  for(const route of ['feed','assistant','calendar','work','readings'])
+  for(const route of ['feed','assistant','calendar','work','readings','thoughts'])
     assert.ok(shell.includes('data-nav="'+route+'"'),'Destination removed: '+route);
   assert.ok(shell.includes('data-situation-view="ideas"'),'Ideas tab must remain available');
   assert.ok(read('apps/isabella/work.js').includes('card.ondragstart'));
@@ -139,21 +139,21 @@ test('UX A.4.1 hides empty attention sections but keeps unknown sources and scop
 });
 
 
-test('UX A.4.2 uses the same five vector navigation icons and names in mobile and desktop',()=>{
+test('UX A.4.2 uses the same six vector navigation icons and names in mobile and desktop',()=>{
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
-  for(const [route,label] of [['feed','Situación'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas']]){
+  for(const [route,label] of [['feed','Situación'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas'],['thoughts','Thoughts']]){
     assert.ok(nav.includes('data-nav="'+route+'"'));
     assert.ok(desktop.includes('data-nav="'+route+'"'));
     assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
     assert.ok(desktop.includes('<strong>'+label+'</strong>'));
     assert.ok(shell.includes('NAV_ICONS.'+route));
   }
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
-  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,5);
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
+  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,6);
   assert.ok(!nav.includes('data-nav="ideas"'));
   assert.ok(!desktop.includes('data-nav="ideas"'));
-  assert.ok(web.includes('grid-template-columns:repeat(5,minmax(0,1fr))'));
+  assert.ok(web.includes('grid-template-columns:repeat(6,minmax(0,1fr))'));
 });
 
 test('UX A.4.2 keeps both Situation tabs while preserving existing source-bound routes',()=>{
@@ -181,17 +181,17 @@ test('UX A.4.2 keeps source re-check separate from forced idea generation',()=>{
 });
 
 
-test('UX A.4.3 keeps five accessible icon-only mobile destinations in Chat-first order',()=>{
+test('UX A.4.3 keeps six accessible icon-only mobile destinations in Chat-first order',()=>{
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
-  const order=['assistant','feed','calendar','work','readings'];
+  const order=['assistant','feed','calendar','work','readings','thoughts'];
   for(const part of [nav,desktop]){
     const positions=order.map(route=>part.indexOf('data-nav="'+route+'"'));
     assert.ok(positions.every((n,i)=>n>=0&&(i===0||n>positions[i-1])));
   }
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
   assert.doesNotMatch(nav,/class="nav-label"/);
-  for(const [route,label] of [['assistant','Chat'],['feed','Situación'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas']])
+  for(const [route,label] of [['assistant','Chat'],['feed','Situación'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas'],['thoughts','Thoughts']])
     assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
 });
 
@@ -232,7 +232,7 @@ test('UX A.4.4 reduces navigation icon artwork without shrinking touch targets',
   assert.ok(web.includes('.app .main-nav .nav-icon svg{width:20px;height:20px;stroke-width:1.9}'));
   assert.ok(web.includes('.app .main-nav .main-nav-item{min-height:44px}'));
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
 });
 
 
