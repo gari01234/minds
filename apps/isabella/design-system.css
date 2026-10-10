@@ -315,3 +315,23 @@
   .app .chat-activity::before{animation:none!important;opacity:.65}
   .app .main-nav-item{transition:none!important}
 }
+
+/* UX A.4.1 — one contextual More action, no unused global strip outside Chat. */
+body:not([data-section="assistant"]) .app .topbar{display:none!important}
+.app .minds-menu-slot{display:flex;align-items:center;justify-content:center;flex:0 0 var(--m-touch);min-height:var(--m-touch)}
+.app .minds-menu-slot .dots{display:grid;place-items:center;width:var(--m-touch);height:var(--m-touch);padding:0;font-size:21px;line-height:1;color:var(--m-ink);letter-spacing:.08em}
+.app .work-head{justify-content:center;min-height:var(--m-touch)}
+.app .work-head .minds-menu-slot{position:absolute;right:0;top:0}
+.app .surface-head.surface-head-compact{justify-content:flex-end;align-items:center}
+.app .readings-top-actions,.app .cal-toolbar-right{display:flex;align-items:center;justify-content:flex-end;gap:6px}
+.app .readings-top-actions .sofia-button{margin-left:0}
+.app .cal-toolbar{grid-template-columns:auto minmax(0,1fr) auto;gap:6px}
+.app .cal-toolbar-right{justify-self:end}
+.app .situation-clear{font-size:var(--m-size-meta);color:var(--m-ink-soft);line-height:1.5;margin:4px 0 10px}
+.app .situation-scope{font-size:var(--m-size-meta);color:var(--m-ink-soft);margin:10px 0 2px}
+.app .situation-scope summary{cursor:pointer;width:max-content;max-width:100%;padding:8px 0;list-style:revert}
+.app .situation-scope p{line-height:1.55;margin:3px 0 8px;max-width:650px}
+@media(min-width:1100px){body:not([data-section="assistant"]) .app{grid-template-rows:0px minmax(0,1fr)}}
+@media(max-width:1099px){
+  body:not([data-section="assistant"]) .app .screen.active{padding-top:env(safe-area-inset-top,0px)}
+}
