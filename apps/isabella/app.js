@@ -2072,6 +2072,8 @@ function month(){
     }
   }
   h+='</div>';
+  // The month action belongs between the month grid and the selected-day agenda.
+  h+='<div class="calendar-create-row calendar-create-after-grid"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>';
   const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start));
   const ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
@@ -2100,9 +2102,12 @@ function day(){
 }
 function bindCalendarItems(){
   const calendarBody=$('#calendarContent');
-  if(calendarBody&&!calendarBody.querySelector('[data-calendar-create]')){
-    calendarBody.insertAdjacentHTML('afterbegin','<div class="calendar-create-row"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>');
-    calendarBody.querySelector('[data-calendar-create]').onclick=()=>newPanel(state.date);
+  if(calendarBody){
+    // Day/Week retain their existing create placement; Month owns its position after the grid.
+    if(state.view!=='month'&&!calendarBody.querySelector('[data-calendar-create]')){
+      calendarBody.insertAdjacentHTML('afterbegin','<div class="calendar-create-row"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>');
+    }
+    calendarBody.querySelector('[data-calendar-create]')?.addEventListener('click',()=>newPanel(state.date));
   }
 
   document.querySelectorAll('[data-task-toggle]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();toggleTaskDone(b.dataset.taskToggle)});
