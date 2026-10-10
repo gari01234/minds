@@ -335,3 +335,42 @@ body:not([data-section="assistant"]) .app .topbar{display:none!important}
 @media(max-width:1099px){
   body:not([data-section="assistant"]) .app .screen.active{padding-top:env(safe-area-inset-top,0px)}
 }
+
+/* UX A.4.2 — five matching destinations, vector glyphs, and contextual Situation tabs. */
+.app .main-nav{grid-template-columns:repeat(5,minmax(0,1fr))}
+.app .nav-icon,.app .lens-glyph{display:grid;place-items:center}
+.app .nav-icon svg{width:23px;height:23px;display:block;stroke-width:2}
+.app .lens-glyph svg{width:21px;height:21px;display:block;stroke-width:2}
+.app .nav-label{font-size:11px;letter-spacing:0;font-weight:500}
+.app .situation-toolbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:min(100%,780px);margin:0 auto 13px;min-height:var(--m-touch);
+}
+.app .situation-tabs{display:flex;flex:none;gap:15px;align-items:stretch;border-bottom:1px solid var(--m-border)}
+.app .situation-tabs button{
+  border:0;border-bottom:2px solid transparent;border-radius:0;background:transparent;
+  color:var(--m-ink-soft);font-family:var(--m-type-system);font-weight:500;
+  font-size:13px;min-height:44px;padding:10px 2px 9px;cursor:pointer;
+}
+.app .situation-tabs button.active{border-bottom-color:var(--m-ink);color:var(--m-ink)}
+.app .situation-tools{display:flex;align-items:center;justify-content:flex-end;gap:8px;min-width:0}
+.app .situation-tools .surface-refresh-status:empty{display:none}
+.app #generateIdeas{font-size:12px;white-space:nowrap;min-height:44px}
+.app .pull-refresh-indicator{
+  position:relative;z-index:3;height:0;overflow:visible;opacity:0;
+  pointer-events:none;text-align:center;transition:opacity var(--m-motion-fast) var(--m-ease);
+}
+.app .pull-refresh-indicator span{
+  display:inline-block;padding:7px 12px;background:var(--m-surface);
+  border-radius:var(--m-radius-pill);font-size:12px;color:var(--m-ink-soft);
+  transform:translateY(-40px);
+}
+.app .pull-refresh-indicator.is-pulling,.app .pull-refresh-indicator.is-refreshing{opacity:1}
+@media(max-width:620px){
+  .app .nav-label{font-size:10px}
+  .app .situation-toolbar{gap:6px}
+  .app .situation-tabs{gap:12px}
+  .app .situation-tools{gap:2px}
+  .app #generateIdeas{font-size:11px;padding:8px 4px;white-space:normal;text-align:right;line-height:1.2;max-width:138px}
+}
+@media(prefers-reduced-motion:reduce){.app .pull-refresh-indicator{transition:none}}
