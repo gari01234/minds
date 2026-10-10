@@ -1,7 +1,7 @@
 /* Build 91 · Situational Review v0.1
  * Pure evidence/decision boundary. No tasks, events, memory or permissions are changed here.
  */
-export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.3";
+export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.4";
 
 export function localClock(timezone,date=new Date()){
   const pieces=new Intl.DateTimeFormat("en-GB",{
@@ -39,12 +39,19 @@ export function validateReview(raw,context){
   const id=String(raw.task_id||"");
   const task=(context.tasks||[]).find(t=>String(t.id)===id);
   if(!task)return null;
-  const allowed=new Set(["task","weather","calendar","time"]);
+  const allowed=new Set(["task","weather","calendar","time","work"]);
   const anchors=[...new Set(Array.isArray(raw.evidence)?raw.evidence.filter(x=>typeof x==="string"&&allowed.has(x)):[])];
   if(!anchors.includes("task")||!anchors.some(x=>x!=="task"))return null;
   if(anchors.includes("weather")&&!weatherProof(context.weather))return null;
   if(anchors.includes("calendar")&&!(context.events||[]).length)return null;
   if(anchors.includes("time")&&task.due_date!==context.clock.date)return null;
+  let workRelatedTaskId=null;
+  if(anchors.includes("work")){
+    workRelatedTaskId=String(raw.related_task_id||"");
+    const scope=(context.work_scopes||[]).find(x=>x.project_id&&x.project_id===task.project_id);
+    if(!scope||!workRelatedTaskId||!(scope.related_tasks||[]).some(x=>x.id===workRelatedTaskId&&x.id!==task.id))
+      return null;
+  }
   const reason=String(raw.reason||"").trim(),suggestion=String(raw.suggestion||"").trim();
   if(reason.length<16||reason.length>380||suggestion.length<12||suggestion.length>280)return null;
   if(/https?:\/\/|<[^>]*>/.test(reason+" "+suggestion))return null;
@@ -53,7 +60,7 @@ export function validateReview(raw,context){
     (anchors.includes("weather")&&Number(context.weather?.precipitation_mm)>0)||
     (anchors.includes("calendar")&&(context.events||[]).some(e=>e.starts_at))
   );
-  return {task,anchors,reason,suggestion,timeSensitive};
+  return {task,anchors,reason,suggestion,timeSensitive,workRelatedTaskId};
 }
 export function reviewFingerprint(review,clock,weather){
   const external=review.anchors.filter(x=>x!=="task").sort().join("-");
@@ -136,4 +143,21 @@ export function reviewCadence(previous,now,signature){
   if(age>=3*3600000)return {run:true,reason:"periodic"};
   if(previous.metadata?.context_signature!==signature)return {run:true,reason:"source_state_changed"};
   return {run:false,reason:"unchanged"};
+}
+
+/* Build 91.4: operational project boundaries; only actual canonical tasks.
+ * Neither a stored binary nor an inferred task dependency is certified project knowledge.
+ */
+export function scopedWorkContext(reviewable,projectTasks,projects){
+  const ids=[...new Set((reviewable||[]).map(x=>x.project_id).filter(Boolean))].slice(0,4);
+  return ids.map(project_id=>{
+    const project=(projects||[]).find(x=>x.id===project_id&&!x.archived);
+    if(!project)return null;
+    const related_tasks=(projectTasks||[]).filter(x=>x.project_id===project_id&&x.id).slice(0,18)
+      .map(x=>({id:String(x.id),title:String(x.title||"").slice(0,180),
+        due_date:x.due_date||null,work_status:x.work_status||null,
+        priority:x.priority||null}));
+    return {project_id,project_name:String(project.name||"").slice(0,100),related_tasks,
+      source:"operational_tasks_only",document_coverage:"unverified"};
+  }).filter(Boolean);
 }
