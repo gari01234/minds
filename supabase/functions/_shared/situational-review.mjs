@@ -1,0 +1,68 @@
+/* Build 91 · Situational Review v0.1
+ * Pure evidence/decision boundary. No tasks, events, memory or permissions are changed here.
+ */
+export const SITUATIONAL_REVIEW_VERSION="situational-review-v0.1";
+
+export function localClock(timezone,date=new Date()){
+  const pieces=new Intl.DateTimeFormat("en-GB",{
+    timeZone:timezone,year:"numeric",month:"2-digit",day:"2-digit",
+    hour:"2-digit",minute:"2-digit",hourCycle:"h23"
+  }).formatToParts(date);
+  const get=k=>pieces.find(x=>x.type===k)?.value||"";
+  return {date:get("year")+"-"+get("month")+"-"+get("day"),hour:Number(get("hour")),time:get("hour")+":"+get("minute")};
+}
+export function dayOffset(iso,days){
+  const d=new Date(iso+"T12:00:00Z");d.setUTCDate(d.getUTCDate()+days);
+  return d.toISOString().slice(0,10);
+}
+export function eligibleTasks(tasks,today){
+  const end=dayOffset(today,2);
+  return (tasks||[]).filter(t=>t&&typeof t.id==="string"&&t.due_date>=today&&t.due_date<=end)
+    .slice(0,30);
+}
+export function eligibleToReview(clock,tasks){
+  return clock.hour>=8&&clock.hour<21&&eligibleTasks(tasks,clock.date).length>0;
+}
+export function weatherProof(weather){
+  if(!weather||typeof weather.location!=="string"||!weather.observed_at)return null;
+  const precipitation=Number(weather.precipitation_mm);
+  return {
+    location:weather.location,
+    observed_at:weather.observed_at,
+    condition:String(weather.condition||"").slice(0,90),
+    precipitation_mm:Number.isFinite(precipitation)?precipitation:null,
+    today_forecast:String(weather.today_forecast||"").slice(0,180)
+  };
+}
+export function validateReview(raw,context){
+  if(!raw||typeof raw!=="object"||raw.propose!==true)return null;
+  const id=String(raw.task_id||"");
+  const task=(context.tasks||[]).find(t=>String(t.id)===id);
+  if(!task)return null;
+  const allowed=new Set(["task","weather","calendar","time"]);
+  const anchors=[...new Set(Array.isArray(raw.evidence)?raw.evidence.filter(x=>typeof x==="string"&&allowed.has(x)):[])];
+  if(!anchors.includes("task")||!anchors.some(x=>x!=="task"))return null;
+  if(anchors.includes("weather")&&!weatherProof(context.weather))return null;
+  if(anchors.includes("calendar")&&!(context.events||[]).length)return null;
+  if(anchors.includes("time")&&task.due_date!==context.clock.date)return null;
+  const reason=String(raw.reason||"").trim(),suggestion=String(raw.suggestion||"").trim();
+  if(reason.length<16||reason.length>380||suggestion.length<12||suggestion.length>280)return null;
+  if(/https?:\/\/|<[^>]*>/.test(reason+" "+suggestion))return null;
+  const timeSensitive=raw.time_sensitive===true&&task.due_date===context.clock.date&&(
+    (anchors.includes("time")&&context.clock.hour>=16)||
+    (anchors.includes("weather")&&Number(context.weather?.precipitation_mm)>0)||
+    (anchors.includes("calendar")&&(context.events||[]).some(e=>e.starts_at))
+  );
+  return {task,anchors,reason,suggestion,timeSensitive};
+}
+export function reviewFingerprint(review,clock,weather){
+  const external=review.anchors.filter(x=>x!=="task").sort().join("-");
+  const weatherState=review.anchors.includes("weather")?
+    (Number(weather?.precipitation_mm)>0?"wet":"dry"):"no-weather";
+  return ["situational_review",review.task.id,review.task.due_date,clock.date,external,weatherState].join(":");
+}
+export function reviewMessage(review,weather){
+  const groundedLocation=review.anchors.includes("weather")&&weather?.location?
+    " (clima de "+weather.location+")":"";
+  return review.reason+groundedLocation+" "+review.suggestion;
+}
