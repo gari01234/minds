@@ -33,3 +33,9 @@ These checks are distinct from pending Build 90.5/90.6 empirical validation of s
 ## Future work, not added to this PR
 
 Extract existing declarations from the large historical CSS files into the new system incrementally after real-device signoff; remove superseded rules with regression evidence instead of a mass CSS replacement. Catalog interaction icons and introduce a unified icon set only with approval. Profile screen-reader ordering and alternate keyboard/touch reordering for Work without visible permanent arrow controls. Establish automated screenshot diffing when browser-test infrastructure and representative view fixtures are available.
+
+## UX A.4.1 — first authenticated iPhone observations, 2026-10-10
+
+After the initial published UX A.4, real iPhone Safari screenshots identified a redundant global menu strip outside Chat, a mismatch between Lecturas filter pills and Work underline tabs, and three empty attention groups plus an overlong always-visible coverage disclaimer in Feed/Ahora. This is a presentation correction, not an acceptance claim for Build 90.6.
+
+Move the existing global More button to a contextual slot in each non-Chat lens, preserving its identity, handlers and the Chat ORB; collapse the non-Chat header while respecting iOS safe-area insets. In embedded Lecturas, filter buttons adopt the Work text/underline language while retaining their semantics. Ahora only shows populated groups; failed source queries remain explicit, and a concise no-other-requests status is shown only when the relevant sources were checked successfully. Preserve the detailed epistemic coverage limitation in an accessible disclosure, rather than rendering it permanently. No source, scope, task, or permission changes. Mobile Safari/PWA and narrow desktop acceptance remain pending after CI.
