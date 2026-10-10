@@ -1,10 +1,10 @@
-const CACHE_NAME = 'isabella-shell-v129';
+const CACHE_NAME = 'isabella-shell-v130';
 const SHELL = [
   './',
   './index.html',
   './app.css?v=69',
   '../shared/minds-design-tokens.css?v=1',
-  './design-system.css?v=6',
+  './design-system.css?v=7',
   './shell.js?v=100',
   './situation.js?v=5',
   './app.js?v=109',
