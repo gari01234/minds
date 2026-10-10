@@ -796,7 +796,7 @@ function fixedTodayFeedItems(){
   return [...events,...tasks].slice(0,10);
 }
 function renderFeedItems(items){
-  const box=$('#feedList');if(!box)return;
+  const box=$('#feedList'),weatherBox=$('#situationWeather');if(!box||!weatherBox)return;
   const all=dedupeFeedItems(items),generation=String(all.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id||'');
   const current=all.filter(x=>!generation||String(x?.metadata?.generation_id||'')===generation);
   const kindOf=x=>String(x?.kind||x?.metadata?.kind||'').toLowerCase(),sectionOf=x=>String(x?.section||x?.metadata?.section||'').toLowerCase();
@@ -811,7 +811,8 @@ function renderFeedItems(items){
   const weatherHtml=weather?surfaceCard(weather,'feed'):`<div class="feed-weather-placeholder"><div><span>CLIMA</span><strong>Sin localidad configurada</strong></div><button data-weather-settings>Ajustar</button></div>`;
   const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">No hay sugerencias nuevas. Esto no significa que no tengas pendientes.</div>';
   const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">Retomar</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
-  box.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section><section class="feed-section"><h2 class="feed-section-title">Sugerencias de Isabella</h2>${nowHtml}</section>${ongoingHtml}`;
+  weatherBox.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section>`;
+  box.innerHTML=`<section class="feed-section"><h2 class="feed-section-title">Sugerencias de Isabella</h2>${nowHtml}</section>${ongoingHtml}`;
   bindSurfaceActions();
   document.querySelector('[data-weather-settings]')?.addEventListener('click',feedPreferencesPanel);
 }
