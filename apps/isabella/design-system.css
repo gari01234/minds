@@ -239,6 +239,33 @@
 .app .agenda-item strong{font-weight:600}
 .app .agenda-head{color:var(--m-ink-soft);letter-spacing:.06em}
 .app .calendar-create-row button{border-color:var(--m-border);border-radius:var(--m-radius-pill);color:var(--m-ink)}
+/* Ideas uses the operational hierarchy; a production state is not a hero title. */
+.app .feed-section-title{
+  font-family:var(--m-type-system);
+  font-size:var(--m-size-section);
+  line-height:1.35;
+  letter-spacing:0;
+  font-weight:600;
+  padding:12px 0 10px;
+  border-bottom:1px solid var(--m-border);
+}
+.app .idea-workspace-cards{gap:0}
+.app .idea-workspace-card{
+  border:0;
+  border-bottom:1px solid var(--m-border);
+  border-radius:0;
+  background:transparent;
+  padding:14px 2px;
+  box-shadow:none;
+}
+.app .idea-workspace-card strong{font-size:15px;font-weight:600;line-height:1.45}
+.app .idea-workspace-card-state,.app .idea-workspace-card>span:last-child{
+  color:var(--m-ink-soft);
+  font-size:var(--m-size-meta);
+  letter-spacing:0;
+}
+.app .surface-head h1{font-family:var(--m-type-system);font-size:var(--m-size-section);font-weight:600;letter-spacing:0}
+.app .surface-empty,.app .surface-loading{color:var(--m-ink-soft);font-size:var(--m-size-meta);padding:16px 0}
 /* Sofía and Readings retain their editorial document typography. */
 .app .readings-topline{
   height:46px;
