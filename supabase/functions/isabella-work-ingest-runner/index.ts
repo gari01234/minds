@@ -38,6 +38,12 @@ Deno.serve(async(req:Request)=>{
       results.push({status:x.status,claim_count:x.claims||0});
     }catch(e){
       const lastError=String(e instanceof Error?e.message:e).slice(0,160);
+      // Internal diagnostics omit source contents; needed to distinguish
+      // parser crashes from malformed cells without exposing documents.
+      console.error("work_source_intake_failure",JSON.stringify({
+        queue_id:job.id,error:lastError,
+        stack:String(e instanceof Error?e.stack||"": "").slice(0,900)
+      }));
       const terminal=Number(job.attempts)>=4,now=new Date().toISOString();
       await sb.from("minds_work_ingest_queue").update({
         status:terminal?"failed":"queued",last_error:lastError,locked_at:null,
