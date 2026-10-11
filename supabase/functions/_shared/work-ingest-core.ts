@@ -5,7 +5,7 @@ import {materializeWorkSourceText} from "./work-source-materialize.ts";
 const supported=new Set(["pdf","doc","docx","xls","xlsx","ppt","pptx","txt","md","csv","rtf","eml","png","jpg","jpeg"]);
 const image=new Set(["png","jpg","jpeg"]);
 const fileMax=48*1024*1024,providerMax=20*1024*1024;
-const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)))
+const sha256=async(bytes:Uint8Array)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",Uint8Array.from(bytes).buffer)))
   .map(n=>n.toString(16).padStart(2,"0")).join("");
 export async function processWorkFile(sb:any,job:any){
   const {data:file,error}=await sb.from("minds_work_files")

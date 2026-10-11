@@ -7,7 +7,8 @@ export async function convertWithDocling(file:{name:string;mime_type:string},byt
   const base=new URL(endpoint);
   if(base.protocol!=="https:")throw new Error("docling_requires_https");
   const body=new FormData();
-  body.append("files",new File([bytes],file.name,{type:file.mime_type||"application/octet-stream"}));
+  const sourceBuffer=new ArrayBuffer(bytes.byteLength);new Uint8Array(sourceBuffer).set(bytes);
+  body.append("files",new File([sourceBuffer],file.name,{type:file.mime_type||"application/octet-stream"}));
   body.append("to_formats","md");
   body.append("to_formats","json");
   body.append("image_export_mode","placeholder");
