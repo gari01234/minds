@@ -1220,7 +1220,8 @@ test('Build 65 streams useful acknowledgement without persisting partial chat te
   assert.ok(ai.includes('options.onTextDelta?.'));
   assert.ok(app.includes('function streamAssistantDelta'));
   assert.ok(app.includes("el.className='message assistant message-streaming'"));
-  assert.ok(app.includes('clearAssistantStream();say('));
+  assert.ok(app.includes('clearAssistantStream();'));
+  assert.ok(app.includes("say('assistant',"));
 });
 
 test('Build 65 config keeps the streaming function JWT-protected',()=>{
