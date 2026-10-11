@@ -95,7 +95,7 @@ begin
     'quiet_hours_applied',v_quiet,'recent_interruptions',v_recent,
     'max_interruptions_per_hour',v_max,'policy_version','attention_v1'
   );
-end $function$
+end $function$;
 
 -- A terminal durable job produces one attention event, never an extra Chat message.
 -- The existing route policy retains quiet hours and hourly interruption budget.
