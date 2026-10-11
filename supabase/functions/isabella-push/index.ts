@@ -1,6 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { ensureVapidKeys } from "../_shared/webpush.ts";
+import { ensureVapidKeys,VAPID_SUBJECT } from "../_shared/webpush.ts";
+import { sendPushNotification,WebPushError } from "npm:@mmmike/web-push@1.3.0/send";
 
 const cors={
   "Access-Control-Allow-Origin":"*",
@@ -31,9 +32,46 @@ Deno.serve(async(req:Request)=>{
 
   let body:any={};
   try{body=await req.json()}catch{return json({error:"invalid_json"},400)}
-  if(String(body?.action||"config")!=="config")return json({error:"unsupported_action"},400);
+  const action=String(body?.action||"config");
+  if(!["config","test"].includes(action))return json({error:"unsupported_action"},400);
 
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+  if(action==="test"){
+    // An explicit user click is the only way to send a diagnostic Push.
+    const {data:requestId,error:claimError}=await sb.rpc("minds_claim_push_test",{p_user:user.id});
+    if(claimError)return json({error:"push_test_unavailable",detail:claimError.message},503);
+    if(!requestId)return json({error:"push_test_rate_limited",message:"Espera 90 segundos antes de repetir la prueba."},429);
+    const {data:sub,error:subError}=await sb.from("minds_push_subscriptions")
+      .select("id,endpoint,p256dh,auth_key").eq("user_id",user.id).eq("active",true)
+      .order("last_seen_at",{ascending:false}).limit(1).maybeSingle();
+    if(subError||!sub){
+      await sb.from("minds_push_test_requests").update({result:{status:"no_active_subscription"}}).eq("id",requestId);
+      return json({error:"no_active_subscription",message:"Este dispositivo no tiene una suscripción activa en MINDS."},409);
+    }
+    try{
+      const vapid=await ensureVapidKeys(sb);
+      const accepted=await sendPushNotification(
+        {endpoint:String(sub.endpoint),keys:{p256dh:String(sub.p256dh),auth:String(sub.auth_key)}},
+        {title:"Isabella · prueba",body:"Esta es una notificación de prueba solicitada desde MINDS.",
+          url:"/minds/isabella/",tag:"isabella-user-requested-push-test"},
+        {publicKey:vapid.publicKey,privateKey:vapid.privateKey,subject:VAPID_SUBJECT},
+        {ttl:300,urgency:"high"}
+      );
+      await sb.from("minds_push_test_requests").update({
+        result:{status:accepted?"accepted_by_push_service":"subscription_gone",
+          http_status:accepted?201:410,subscription_id:sub.id}
+      }).eq("id",requestId);
+      return json({ok:accepted,status:accepted?"accepted_by_push_service":"subscription_gone",
+        message:accepted?"El servicio Push aceptó el aviso. Comprueba ahora el iPhone.":"La suscripción ya no es válida; renueva el registro."});
+    }catch(e){
+      const code=e instanceof WebPushError?Number(e.statusCode||0):0;
+      const reason=e instanceof Error?e.message:String(e);
+      await sb.from("minds_push_test_requests").update({
+        result:{status:"failed",http_status:code||null,error:reason.slice(0,200)}
+      }).eq("id",requestId);
+      return json({error:"push_test_failed",detail:reason},502);
+    }
+  }
   try{
     const keys=await ensureVapidKeys(sb);
     return json({ok:true,public_key:keys.publicKey,transport:"web_push_v1",user_id:user.id});

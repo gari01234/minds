@@ -616,10 +616,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=101'));
-  assert.ok(index.includes('app.js?v=111'));
+  assert.ok(index.includes('app.js?v=112'));
   assert.ok(index.includes('sync.js?v=pwa32'));
-  assert.ok(index.includes('ai.js?v=51'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v133'"));
+  assert.ok(index.includes('ai.js?v=52'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v134'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1220,7 +1220,8 @@ test('Build 65 streams useful acknowledgement without persisting partial chat te
   assert.ok(ai.includes('options.onTextDelta?.'));
   assert.ok(app.includes('function streamAssistantDelta'));
   assert.ok(app.includes("el.className='message assistant message-streaming'"));
-  assert.ok(app.includes('clearAssistantStream();say('));
+  assert.ok(app.includes('clearAssistantStream();'));
+  assert.ok(app.includes("say('assistant',"));
 });
 
 test('Build 65 config keeps the streaming function JWT-protected',()=>{
