@@ -31,7 +31,11 @@ test('Partial input remains partial and segments have unique sequential indices'
   assert.equal(b.coverage,'partial_text');
 });
 test('Source segments are private and only materialized by service-role RPC',()=>{
-  const sql=read('supabase/migrations/20261011183000_work_source_segments_v01.sql');
+  const sql=[
+  'supabase/migrations/20261011165747_work_source_segments_tables_v01.sql',
+  'supabase/migrations/20261011165758_work_source_segments_commit_v01.sql',
+  'supabase/migrations/20261011165808_work_source_segments_search_v01.sql'
+].map(read).join('\n');
   assert.match(sql,/minds_work_source_segments_owner_select/);
   assert.match(sql,/using\(user_id=\(select auth.uid\(\)\)\)/);
   assert.match(sql,/revoke all on function public.minds_commit_work_source_segments/);
