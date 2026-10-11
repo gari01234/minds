@@ -73,3 +73,7 @@ begin
 end $$;
 revoke all on function public.minds_claim_push_test(uuid) from public,anon,authenticated;
 grant execute on function public.minds_claim_push_test(uuid) to service_role;
+
+-- own runtime secret
+insert into public.isabella_runtime_secrets(key,value) values('chat_runner',md5(gen_random_uuid()::text||clock_timestamp()::text)) on conflict(key) do nothing;
+select cron.schedule('minds-chat-runner','* * * * *', $$select net.http_post(url:='https://lodexwyyynlarkqgkyhy.supabase.co/functions/v1/isabella-chat-runner',headers:='{"Content-Type":"application/json"}'::jsonb,body:=jsonb_build_object('secret',(select value from public.isabella_runtime_secrets where key='chat_runner')),timeout_milliseconds:=30000)$$);
