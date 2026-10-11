@@ -313,9 +313,24 @@ async function updateMessageMetadata(clientKey,patch){
   }catch(e){setStatus('No pude sincronizar la reacción: '+apiError(e));return false}
 }
 function mergeConversationMessages(remote=[],local=[]){
-  const seen=new Set(),out=[];
-  for(const m of remote||[]){if(!m?.id||seen.has(m.id))continue;seen.add(m.id);out.push(m)}
-  for(const m of local||[]){if(!m?.id||seen.has(m.id))continue;seen.add(m.id);out.push(m)}
+  const byId=new Map(),out=[];
+  for(const m of remote||[]){
+    if(!m?.id||byId.has(m.id))continue;
+    byId.set(m.id,m);out.push(m);
+  }
+  for(const m of local||[]){
+    if(!m?.id)continue;
+    const saved=byId.get(m.id);
+    if(!saved){byId.set(m.id,m);out.push(m);continue}
+    // A remote echo can predate the first durable metadata write.
+    // Preserve a local, explicit request binding without overwriting
+    // newer server-delivered status, content or provenance.
+    const requestId=m.metadata?.durable_request_id;
+    if(requestId&&!saved.metadata?.durable_request_id){
+      saved.metadata={...(saved.metadata||{}),durable_request_id:requestId,
+        ...(m.metadata?.durable_status?{durable_status:m.metadata.durable_status}:{})};
+    }
+  }
   out.sort((a,b)=>String(a.at||'').localeCompare(String(b.at||'')));
   return out;
 }

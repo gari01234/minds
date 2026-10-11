@@ -612,14 +612,14 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   const shell=read('apps/isabella/shell.js');
   const index=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
-  assert.ok(shell.includes('Build 2026.10.09.90.3'));
+  assert.ok(shell.includes('Build 2026.10.11.90.8.3'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=101'));
-  assert.ok(index.includes('app.js?v=113'));
-  assert.ok(index.includes('sync.js?v=pwa32'));
-  assert.ok(index.includes('ai.js?v=52'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v135'"));
+  assert.ok(index.includes('shell.js?v=102'));
+  assert.ok(index.includes('app.js?v=114'));
+  assert.ok(index.includes('sync.js?v=pwa33'));
+  assert.ok(index.includes('ai.js?v=53'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v136'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -844,7 +844,8 @@ test('Build 49 supports quoted replies that Isabella can resolve',()=>{
   assert.ok(shell.includes('id="chatReplyPreview"'));
   assert.ok(app.includes('function setReplyTarget(id)'));
   assert.ok(app.includes('message-reply-reference'));
-  assert.ok(app.includes("say('user',text||'📷 Foto',{attachments:copy,replyTo})"));
+  assert.ok(app.includes("const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,"));
+  assert.ok(app.includes('metadata:durableRequestId?{durable_request_id:durableRequestId}:{}'));
   assert.ok(ai.includes('Gari está respondiendo específicamente a este mensaje previo'));
   assert.ok(ai.includes('reply_to:m.replyTo?.id'));
 });
@@ -1146,7 +1147,7 @@ test('Build 64 gives light turns a lower-latency cognitive budget without weaken
 test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const a=chat.indexOf('function simpleAgendaMutation');
-  const b=chat.indexOf('function directTextStreamEligible',a);
+  const b=chat.indexOf('function readOnlyDailyAgendaIntent',a);
   assert.ok(a>=0&&b>a);
   const source=chat.slice(a,b);
   const make=new Function('normalizeText',source+';return simpleAgendaMutation;');
@@ -1247,8 +1248,8 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||calendarAssessmentIntent(message))return false'));
-  assert.ok(chat.includes('if(String(route?.complexity||"light")!=="light")return false'));
+  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||(!dailyRead&&calendarAssessmentIntent(message)))return false'));
+  assert.ok(chat.includes('if(!dailyRead&&String(route?.complexity||"light")!=="light")return false'));
   assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
   assert.ok(chat.includes('const tools=background?['));
