@@ -46,13 +46,22 @@ test('90.8.3: read-only daily agenda can use durable lane but mutations cannot',
   assert.doesNotThrow(()=>new Script(ai));
 });
 
-test('90.8.3: menu reports current release and PWA pins all changed assets',()=>{
+test('90.8.4: menu reports current release and PWA pins all changed assets',()=>{
   const html=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
   assert.match(shell,/Build 2026\.10\.11\.90\.8\.3/);
-  for(const asset of ['app.js?v=114','ai.js?v=53','shell.js?v=102','sync.js?v=pwa33']){
+  for(const asset of ['app.js?v=115','ai.js?v=53','shell.js?v=103','sync.js?v=pwa33']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
-  assert.ok(sw.includes('isabella-shell-v136'));
+  assert.ok(sw.includes('isabella-shell-v137'));
+});
+
+test('90.8.4: acknowledgement does not append another assistant placeholder',()=>{
+  const start=app.indexOf('if(result?.durable){');
+  const stop=app.indexOf('if(durableRequestId){delete userTurn.metadata',start);
+  const slice=app.slice(start,stop);
+  assert.ok(slice.includes("state.messages.find(m=>m.role==='assistant'"));
+  assert.ok(slice.includes('if(!existing){'));
+  assert.ok(slice.includes('durable_request_id:result.durable_request_id'));
 });

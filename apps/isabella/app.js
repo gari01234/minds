@@ -1896,9 +1896,15 @@ async function handle(text,attachments=[],replyTo=null){
       state.pendingIntent=null;
       clearAssistantStream();
       if(result?.durable){
-        say('assistant','Isabella sigue trabajando…',{metadata:{
-          durable_request_id:result.durable_request_id,durable_status:result.durable_status||'running'
-        }});
+        // Reconciliation may already have inserted or completed this exact turn
+        // while the original HTTP acknowledgement was still in flight.
+        const existing=state.messages.find(m=>m.role==='assistant'
+          &&m.metadata?.durable_request_id===result.durable_request_id);
+        if(!existing){
+          say('assistant','Isabella sigue trabajando…',{metadata:{
+            durable_request_id:result.durable_request_id,durable_status:result.durable_status||'running'
+          }});
+        }
         void syncDurableChatJobs();
         return;
       }
