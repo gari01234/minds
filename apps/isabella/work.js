@@ -138,9 +138,17 @@ function paintKnowledge(){
 }
 async function loadFolders(){const {data,error}=await sb.from('minds_work_folders').select('id,parent_id,name,sort_order,created_at').eq('project_id',project.id).order('sort_order').order('name');if(error)throw error;folders=data||[]}
 function folderTrail(){const out=[];let id=folderId,guard=0;while(id&&guard++<30){const f=folders.find(x=>x.id===id);if(!f)break;out.unshift(f);id=f.parent_id}return out}
+function workKnowledgeStatus(file){
+  const k=String(file?.index_status||'stored');
+  const coverage=String(file?.metadata?.knowledge_intake?.coverage||'');
+  if(k==='queued')return 'Lectura pendiente';
+  if(k==='indexed')return coverage==='claims_only'?'Evidencia extraída · cobertura parcial':'Evidencia extraída · sin confirmar';
+  if(k==='failed')return 'No se pudo leer · revisar';
+  return 'Solo almacenado · aún sin leer';
+}
 async function renderDesktop(){
   await loadFolders();
-  let fq=sb.from('minds_work_files').select('id,folder_id,name,mime_type,size_bytes,source_kind,index_status,storage_path,created_at').eq('project_id',project.id).order('created_at',{ascending:false});
+  let fq=sb.from('minds_work_files').select('id,folder_id,name,mime_type,size_bytes,source_kind,index_status,metadata,storage_path,created_at').eq('project_id',project.id).order('created_at',{ascending:false});
   fq=folderId?fq.eq('folder_id',folderId):fq.is('folder_id',null);
   const {data:fileRows,error:fe}=await fq;if(fe)throw fe;files=fileRows||[];
   const childFolders=folders.filter(x=>(x.parent_id||null)===(folderId||null)),trail=folderTrail(),body=$('#workBody');
@@ -149,7 +157,7 @@ async function renderDesktop(){
     <div class="work-files">
       ${folderId?`<button class="work-file work-folder work-up" data-work-up><span class="work-file-icon">↰</span><strong>Zurück</strong><small>Ordner</small></button>`:''}
       ${childFolders.map(f=>`<button class="work-file work-folder" data-work-folder="${f.id}"><span class="work-file-icon">▰</span><strong>${esc(f.name)}</strong><small>Ordner</small></button>`).join('')}
-      ${files.map(f=>`<button class="work-file" data-work-file="${f.id}"><span class="work-file-icon">${f.source_kind==='email'?'✉':f.source_kind==='image'?'▧':'▤'}</span><strong>${esc(f.name)}</strong><small>${esc((f.mime_type||'Datei').split('/').pop())} · ${Math.max(1,Math.round(Number(f.size_bytes||0)/1024))} KB</small></button>`).join('')}
+      ${files.map(f=>`<button class="work-file" data-work-file="${f.id}"><span class="work-file-icon">${f.source_kind==='email'?'✉':f.source_kind==='image'?'▧':'▤'}</span><strong>${esc(f.name)}</strong><small>${esc((f.mime_type||'Datei').split('/').pop())} · ${Math.max(1,Math.round(Number(f.size_bytes||0)/1024))} KB · ${esc(workKnowledgeStatus(f))}</small></button>`).join('')}
       ${!childFolders.length&&!files.length&&!folderId?'<div class="work-empty work-empty-wide">Este Desktop está vacío. Crea un Ordner o arrastra aquí tus primeros Unterlagen.</div>':''}
     </div>`;
   $('[data-work-upload]')?.addEventListener('click',()=>$('#workFileInput')?.click());

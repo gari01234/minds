@@ -82,9 +82,9 @@ test('Build 78 current PWA assets are aligned',()=>{
   assert.ok(shell.includes('Build 2026.10.11.90.8.4'));
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=102'));
-  assert.ok(index.includes('work.js?v=22'));
+  assert.ok(index.includes('work.js?v=23'));
   assert.ok(index.includes('ai.js?v=53'));
-  assert.ok(sw.includes("isabella-shell-v137"));
+  assert.ok(sw.includes("isabella-shell-v138"));
 });
 
 test('Build 78 Work client remains valid JavaScript',()=>{
