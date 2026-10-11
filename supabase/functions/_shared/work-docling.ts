@@ -2,7 +2,14 @@
  * Submit once; poll task status on later server runs; no browser involvement.
  */
 import {doclingConnection,validDoclingTaskId,doclingTaskState,doclingConvertResult} from "./work-docling-contract.mjs";
-const settings=()=>doclingConnection(Deno.env.get("DOCLING_SERVE_URL"),Deno.env.get("DOCLING_SERVE_API_KEY"));
+// Optional server-only runtime config, loaded after the ingest-runner secret is verified.
+// The canonical secret table is service-role-only; never expose these values to clients.
+let runtimeDocling:null|{origin:string;key:string}=null;
+export function configureDoclingRuntime(endpoint:string|null,key:string|null){
+  runtimeDocling=doclingConnection(endpoint,key);
+  return !!runtimeDocling;
+}
+const settings=()=>runtimeDocling||doclingConnection(Deno.env.get("DOCLING_SERVE_URL"),Deno.env.get("DOCLING_SERVE_API_KEY"));
 export const isDoclingConfigured=()=>!!settings();
 const secureFetch=async(url:string,key:string,init:RequestInit={},ms=35000)=>{
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),ms);
@@ -38,8 +45,15 @@ export async function convertWithDocling(
     const state=doclingTaskState(await secureFetch(
       conf.origin+"/v1/status/poll/"+encodeURIComponent(taskId),conf.key,{},20000));
     if(state.kind==="pending")return {pending:true,taskId};
-    const result=await secureFetch(conf.origin+"/v1/result/"+encodeURIComponent(taskId),conf.key,{},65000);
-    return doclingConvertResult(result);
+    try{
+      const result=await secureFetch(conf.origin+"/v1/result/"+encodeURIComponent(taskId),conf.key,{},65000);
+      return doclingConvertResult(result);
+    }catch(error){
+      // Single-use results can expire after conversion. The original remains in Storage.
+      if(error instanceof Error&&error.message==="docling_http_404")
+        throw new Error("docling_result_expired");
+      throw error;
+    }
   }
   // No signed URL is passed to Docling. The original is streamed by MINDS
   // as multipart data from private Storage to the authenticated converter.

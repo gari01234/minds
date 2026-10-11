@@ -44,7 +44,7 @@ async function readWorkbook(bytes:Uint8Array){
 }
 export async function materializeWorkSourceText(sb:any,file:any,bytes:Uint8Array,version:string,converted:any){
   const extension=String(file.name||"").toLowerCase().split(".").pop()||"";
-  const supported=extension==="xlsx"||extension==="pdf"&&!!converted;
+  const supported=extension==="xlsx"||!!converted&&["pdf","docx","pptx","png","jpg","jpeg"].includes(extension);
   if(!supported)return {status:"not_supported"};
   const {data:existing,error:priorError}=await sb.from("minds_work_source_text_receipts")
     .select("id,coverage,segment_count,locator_class").eq("file_id",file.id)

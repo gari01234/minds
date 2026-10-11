@@ -4,7 +4,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
-import {isDoclingReady} from "../_shared/work-docling.ts";
+import {isDoclingReady,configureDoclingRuntime} from "../_shared/work-docling.ts";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -14,8 +14,15 @@ Deno.serve(async(req:Request)=>{
   const sb=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:secret}=await sb.from("isabella_runtime_secrets").select("value").eq("key","work_ingest_runner").maybeSingle();
   if(!secret?.value||String(body.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
+  // Runtime secret lookup happens only after the private runner has authenticated.
+  // The table permits service_role and postgres, never anon/authenticated.
+  const {data:doclingSecrets,error:doclingSecretError}=await sb.from("isabella_runtime_secrets")
+    .select("key,value").in("key",["docling_serve_url","docling_serve_key"]);
+  if(doclingSecretError)console.error("work_docling_config_unavailable");
+  const credentials=new Map((doclingSecrets||[]).map((s:any)=>[s.key,s.value]));
+  configureDoclingRuntime(credentials.get("docling_serve_url")||null,credentials.get("docling_serve_key")||null);
   // One-time historical catch-up is incremental and gives newly uploaded files priority.
-  // Waiting documents are reactivated only after a private Docling URL is configured.
+  // Waiting documents are reactivated only after authenticated private Docling readiness.
   const doclingReady=await isDoclingReady();
   const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
     p_limit:1,p_docling_ready:doclingReady
@@ -68,14 +75,19 @@ Deno.serve(async(req:Request)=>{
         stack:String(e instanceof Error?e.stack||"": "").slice(0,900)
       }));
       const terminal=Number(job.attempts)>=4,now=new Date().toISOString();
-      await sb.from("minds_work_ingest_queue").update({
-        status:terminal?"failed":"queued",last_error:lastError,locked_at:null,
+      const expired=lastError==="docling_result_expired";
+      const recovery=expired?{docling_task_id:null,docling_started_at:null}:{};
+      const {error:retryError}=await sb.from("minds_work_ingest_queue").update({
+        status:terminal?(expired?"waiting_parser":"failed"):"queued",
+        last_error:lastError,locked_at:null,...recovery,
         next_attempt_at:new Date(Date.now()+Math.min(30,Math.pow(2,Number(job.attempts)))*60000).toISOString(),
         completed_at:terminal?now:null,updated_at:now
       }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
-      if(terminal)await sb.from("minds_work_files").update({index_status:"failed"})
-        .eq("id",job.file_id).eq("user_id",job.user_id);
-      results.push({status:terminal?"failed":"retry_scheduled"});
+      if(retryError)console.error("work_ingest_retry_state_failed",job.id);
+      if(terminal)await sb.from("minds_work_files").update({
+        index_status:expired?"waiting_parser":"failed"
+      }).eq("id",job.file_id).eq("user_id",job.user_id);
+      results.push({status:terminal?(expired?"waiting_parser":"failed"):"retry_scheduled"});
     }
   }
   return json({ok:true,claimed:(jobs||[]).length,results});
