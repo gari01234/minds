@@ -39,7 +39,7 @@ create table if not exists public.minds_work_source_text_receipts (
  locator_class text not null check(locator_class in ('worksheet_rows','pdf_page','unverified_page')),
  metadata jsonb not null default '{}'::jsonb check(jsonb_typeof(metadata)='object'),
  created_at timestamptz not null default now(),
- unique(file_id,source_version,extractor)
+ unique(file_id,source_version)
 );
 alter table public.minds_work_source_text_receipts enable row level security;
 revoke all on public.minds_work_source_text_receipts from public,anon,authenticated;
@@ -89,7 +89,7 @@ begin
  insert into public.minds_work_source_text_receipts(
   user_id,project_id,file_id,source_version,extractor,coverage,segment_count,content_chars,locator_class,metadata)
  values(p_user_id,p_project_id,p_file_id,p_source_version,p_extractor,p_coverage,v_count,v_chars,p_locator_class,coalesce(p_metadata,'{}'::jsonb))
- on conflict(file_id,source_version,extractor) do nothing
+ on conflict(file_id,source_version) do nothing
  returning id into v_receipt;
  if v_receipt is null then
    return jsonb_build_object('status','already_materialized');
