@@ -16,6 +16,7 @@ test('90.8.3: user request binding exists before the first save/sync',()=>{
   assert.match(app,/candidates\.length===1/);
   assert.match(app,/Math\.abs\(Date\.parse\(m\.at\|\|''\)-started\)<=90000/);
   assert.match(app,/at:job\.created_at/);
+  assert.match(app,/if\(!existing\)say\('assistant','Isabella sigue trabajando…'/);
   assert.doesNotThrow(()=>new Script(app));
 });
 
@@ -51,8 +52,8 @@ test('90.8.3: menu reports current release and PWA pins all changed assets',()=>
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
   assert.match(shell,/Build 2026\.10\.11\.90\.8\.3/);
-  for(const asset of ['app.js?v=114','ai.js?v=53','shell.js?v=102','sync.js?v=pwa33']){
+  for(const asset of ['app.js?v=115','ai.js?v=53','shell.js?v=102','sync.js?v=pwa33']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
-  assert.ok(sw.includes('isabella-shell-v136'));
+  assert.ok(sw.includes('isabella-shell-v137'));
 });
