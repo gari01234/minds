@@ -4,7 +4,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
-import {isDoclingReady} from "../_shared/work-docling.ts";
+import {isDoclingReady,configureDoclingRuntime} from "../_shared/work-docling.ts";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -14,8 +14,15 @@ Deno.serve(async(req:Request)=>{
   const sb=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:secret}=await sb.from("isabella_runtime_secrets").select("value").eq("key","work_ingest_runner").maybeSingle();
   if(!secret?.value||String(body.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
+  // Runtime secret lookup happens only after the private runner has authenticated.
+  // The table permits service_role and postgres, never anon/authenticated.
+  const {data:doclingSecrets,error:doclingSecretError}=await sb.from("isabella_runtime_secrets")
+    .select("key,value").in("key",["docling_serve_url","docling_serve_key"]);
+  if(doclingSecretError)console.error("work_docling_config_unavailable");
+  const credentials=new Map((doclingSecrets||[]).map((s:any)=>[s.key,s.value]));
+  configureDoclingRuntime(credentials.get("docling_serve_url")||null,credentials.get("docling_serve_key")||null);
   // One-time historical catch-up is incremental and gives newly uploaded files priority.
-  // Waiting documents are reactivated only after a private Docling URL is configured.
+  // Waiting documents are reactivated only after authenticated private Docling readiness.
   const doclingReady=await isDoclingReady();
   const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
     p_limit:1,p_docling_ready:doclingReady
