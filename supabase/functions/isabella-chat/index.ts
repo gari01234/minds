@@ -97,9 +97,16 @@ function likelyMaterialDeliverable(message=""){
   const object=/\b(lista|listado|tabla|tabelle|teilnehmerliste|formulario|formular|documento|dokument|plantilla|vorlage|informe|bericht|minuta|acta|protokoll|presentaci[oó]n|präsentation|spreadsheet|hoja)\b/i.test(t);
   return explicit||physical||(action&&object);
 }
+function readOnlyDailyAgendaIntent(message:string){
+  const t=normalizeText(message);
+  if(!/\b(mañana|manana|lunes|martes|mi[eé]rcoles|jueves|viernes|sábado|sabado|domingo)\b/i.test(t))return false;
+  if(!/(qu[eé] tengo|que tengo|qu[eé] hay|que hay|dame una lista|lista de lo que|rev[ií]salo bien|revisalo bien|tengo muchas tareas|tareas tengo|pendientes tengo)/i.test(t))return false;
+  return !/\b(agrega|añade|crea|mueve|cambia|borra|elimina|reprograma|reserva|env[ií]a|manda|agenda|programa|termina|completa)\b/i.test(t);
+}
 function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
-  if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||calendarAssessmentIntent(message))return false;
-  if(String(route?.complexity||"light")!=="light")return false;
+  const dailyRead=readOnlyDailyAgendaIntent(message);
+  if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||(!dailyRead&&calendarAssessmentIntent(message)))return false;
+  if(!dailyRead&&String(route?.complexity||"light")!=="light")return false;
   if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
   const normalized=normalizeText(message);
   if(/autonom|permis|shadow agency/i.test(normalized))return false;
@@ -150,6 +157,9 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     if(taskQ.error||eventQ.error)return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]};
     const taskView=(x:any)=>({id:x.client_key||x.id,title:x.title,date:x.due_date||null,reminder_time:x.reminder_time||null,sort_order:Number(x.sort_order||0),project_id:x.project_id||null,category_id:x.category_id||null,priority:x.priority||null,start_date:x.start_date||null,notes:x.notes||""});
     const tasks=(taskQ.data||[]).map(taskView);
+    const tomorrowDate=new Date(new Date(currentDate+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10);
+    const tomorrowTasks=tasks.filter((x:any)=>x.date===tomorrowDate)
+      .sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title)));
     const todayTasks=tasks.filter((x:any)=>x.date===currentDate).sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title)));
     const overdueTasks=tasks.filter((x:any)=>x.date&&x.date<currentDate).sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||a.sort_order-b.sort_order);
     const undatedTasks=tasks.filter((x:any)=>!x.date).sort((a:any,b:any)=>a.sort_order-b.sort_order).slice(0,30);
@@ -164,6 +174,7 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     };
     const events=(eventQ.data||[]).map(eventView);
     const todayEvents=events.filter((x:any)=>x.local_date===currentDate);
+    const tomorrowEvents=events.filter((x:any)=>x.local_date===tomorrowDate);
     const upcoming=[
       ...futureTasks.map((x:any)=>({kind:"task",id:x.id,date:x.date,title:x.title,reminder_time:x.reminder_time,project_id:x.project_id,category_id:x.category_id})),
       ...events.filter((x:any)=>x.local_date>currentDate).map((x:any)=>({
@@ -172,7 +183,9 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
         project_id:x.project_id,category_id:x.category_id
       }))
     ].sort((a:any,b:any)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,30);
-    return {status:"ok",today_tasks:todayTasks.slice(0,40),overdue_tasks:overdueTasks.slice(0,40),undated_tasks:undatedTasks,today_events:todayEvents.slice(0,30),upcoming};
+    return {status:"ok",today_tasks:todayTasks.slice(0,40),tomorrow_date:tomorrowDate,
+      tomorrow_tasks:tomorrowTasks.slice(0,80),tomorrow_events:tomorrowEvents.slice(0,50),
+      overdue_tasks:overdueTasks.slice(0,40),undated_tasks:undatedTasks,today_events:todayEvents.slice(0,30),upcoming};
   }catch{return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]}}
 }
 
@@ -2726,6 +2739,10 @@ Deno.serve(async (req: Request) => {
   const recent = mergeRecentConversations(recentDb, [], effectiveMessage);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
+  if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
+    await finishAgentRun(req,run,"skipped",{reason:"canonical_agenda_unavailable"});
+    return json({fallback:true,reason:"canonical_agenda_unavailable"},409);
+  }
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
 
 PRINCIPIO CENTRAL:
@@ -2733,6 +2750,7 @@ Primero conversa y entiende la intención como lo haría ChatGPT. Solo usa una h
 
 AGENDA CANÓNICA:
 CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
+Cuando pregunte por "mañana", usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events como referencia del día siguiente; jamás confundas ese día con current_date. Si la consulta pide todas las tareas de mañana, examina primero el conjunto completo de tomorrow_tasks. Si agenda_context_source no es server_canonical, no afirmes que no hay tareas sin verificar la información disponible. Para una consulta puramente informativa de mañana no es necesario modificar ninguna tarea.
 Los eventos canónicos incluyen local_date, local_start_time, local_end_time, display_time y timezone calculados por MINDS. Para comunicar horas usa SIEMPRE esos campos locales cuando existan. starts_at/ends_at son timestamps de almacenamiento y no deben mostrarse ni reinterpretarse como hora local. No hagas conversiones UTC manuales si display_time ya está disponible.
 
 CONTINUIDAD Y EXPOSICIÓN:
@@ -2903,6 +2921,9 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     available_capabilities:capabilityPromptSummary(),
     current_work_thread:currentWorkThread?{id:currentWorkThread.id,title:currentWorkThread.title,project:currentWorkThread.project,summary:currentWorkThread.summary,capability_profile:currentWorkThread.capability_profile}:null,
     current_date:temporal.current_date,
+    tomorrow_date:new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10),
+    tomorrow_tasks:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_tasks:(context.upcoming||[]).filter((x:any)=>x.kind==="task"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
+    tomorrow_events:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_events:(context.upcoming||[]).filter((x:any)=>x.kind==="event"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
     current_local_datetime:temporal.current_local_datetime,
     current_local_time:temporal.current_local_time,
     current_daypart:temporal.current_daypart,

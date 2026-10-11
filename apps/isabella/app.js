@@ -1069,7 +1069,7 @@ function clearAssistantStream(){
 }
 function say(role,text,meta={}){
   const message={
-    id:uid(),role,text,at:new Date().toISOString(),reaction:null,
+    id:uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
     metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
     sources:Array.isArray(meta.sources)?meta.sources:[],
@@ -1838,8 +1838,20 @@ async function syncDurableChatJobs(){
       const key=String(job.request_id||'');if(!key)continue;
       let user=state.messages.find(m=>m.role==='user'&&m.metadata?.durable_request_id===key);
       if(!user){
-        // A submitted request outlived a tab close before local persistence.
-        user=say('user',String(job.user_message||''),{metadata:{durable_request_id:key}});
+        // Older local/remote merges may have dropped the binding before the job returned.
+        // Rebind only an unclaimed, exact-text user turn sent close to this job.
+        const started=Date.parse(job.created_at||'');
+        const candidates=state.messages.filter(m=>m.role==='user'
+          &&String(m.text||'')===String(job.user_message||'')
+          &&!m.metadata?.durable_request_id
+          &&Number.isFinite(started)&&Math.abs(Date.parse(m.at||'')-started)<=90000);
+        if(candidates.length===1){
+          user=candidates[0];
+          user.metadata={...(user.metadata||{}),durable_request_id:key};
+        }else{
+          // A genuinely missing local turn is recovered with its original timestamp.
+          user=say('user',String(job.user_message||''),{metadata:{durable_request_id:key},at:job.created_at});
+        }
         changed=true;
       }
       let answer=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key);
@@ -1860,7 +1872,10 @@ async function syncDurableChatJobs(){
         user.metadata={...(user.metadata||{}),durable_status:status};changed=true;
       }
     }
-    if(changed){save();renderMessages()}
+    if(changed){
+      state.messages.sort((a,b)=>String(a.at||'').localeCompare(String(b.at||'')));
+      save();renderMessages();
+    }
   }catch(e){console.warn('durable chat reconciliation failed',e)}
   finally{durableChatSyncBusy=false}
 }
@@ -1868,9 +1883,11 @@ async function syncDurableChatJobs(){
 async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
-  const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo});
+  // Persist the binding atomically with the first user turn; syncing between
+  // say() and a later metadata patch previously produced duplicate user turns.
   const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
-  if(durableRequestId){userTurn.metadata={...(userTurn.metadata||{}),durable_request_id:durableRequestId};save()}
+  const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,
+    metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){

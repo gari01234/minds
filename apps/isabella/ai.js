@@ -184,6 +184,12 @@ function messageMentionsKnownProject(message,state){
   });
 }
 
+function readOnlyDailyAgendaIntent(message=''){
+  const t=String(message||'').toLocaleLowerCase('es');
+  if(!/\b(mañana|manana|lunes|martes|mi[eé]rcoles|jueves|viernes|sábado|sabado|domingo)\b/i.test(t))return false;
+  if(!/(qu[eé] tengo|que tengo|qu[eé] hay|que hay|dame una lista|lista de lo que|rev[ií]salo bien|revisalo bien|tengo muchas tareas|tareas tengo|pendientes tengo)/i.test(t))return false;
+  return !/\b(agrega|añade|crea|mueve|cambia|borra|elimina|reprograma|reserva|env[ií]a|manda|agenda|programa|termina|completa)\b/i.test(t);
+}
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
@@ -202,7 +208,7 @@ async function ask(message,state,options={}){
       options.onTextReset?.();throw e;
     }
   }
-  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!needsCalendarAssessment(message)){
+  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&(!needsCalendarAssessment(message)||readOnlyDailyAgendaIntent(message))){
     const durable=await askDurableChat(message,state,options,replyContext);
     if(durable)return durable;
   }
