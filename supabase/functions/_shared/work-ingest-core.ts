@@ -1,5 +1,5 @@
 /* Work intake processor. Uses canonical Source-First RPC; no new truth store. */
-import {convertWithDocling} from "./work-docling.ts";
+import {convertWithDocling,isDoclingConfigured,doclingSupportedExtension} from "./work-docling.ts";
 import {base64Bytes,proposedEvidence} from "./work-source-proposals.ts";
 import {materializeWorkSourceText} from "./work-source-materialize.ts";
 const supported=new Set(["pdf","doc","docx","xls","xlsx","ppt","pptx","txt","md","csv","rtf","eml","png","jpg","jpeg"]);
@@ -15,10 +15,19 @@ export async function processWorkFile(sb:any,job:any){
   const ext=String(file.name||"").toLowerCase().split(".").pop()||"";
   if(!supported.has(ext))return {status:"waiting_parser",reason:"needs_format_reader",file};
   if(file.size_bytes>fileMax)return {status:"waiting_parser",reason:"needs_larger_worker",file};
-  if(file.size_bytes>providerMax&&!Deno.env.get("DOCLING_SERVE_URL"))
+  if(file.size_bytes>providerMax&&!isDoclingConfigured())
     return {status:"waiting_parser",reason:"docling_required_large_source",file};
-  if(image.has(ext)&&file.size_bytes>8*1024*1024&&!Deno.env.get("DOCLING_SERVE_URL"))
+  if(image.has(ext)&&file.size_bytes>8*1024*1024&&!isDoclingConfigured())
     return {status:"waiting_parser",reason:"needs_private_docling_image",file};
+  let converted:any=null;
+  if(job.docling_task_id){
+    if(job.docling_started_at&&Date.now()-Date.parse(job.docling_started_at)>4*60*60*1000)
+      return {status:"waiting_parser",reason:"docling_task_stale",file};
+    converted=await convertWithDocling(file,new Uint8Array(),String(job.docling_task_id));
+    if(!converted)return {status:"waiting_parser",reason:"docling_service_unavailable",file};
+    if(converted.pending)
+      return {status:"docling_pending",taskId:converted.taskId,version:job.source_version||null,file};
+  }
   const {data:blob,error:storageError}=await sb.storage.from("minds-work").download(file.storage_path);
   if(storageError||!blob)throw new Error("source_download_failed");
   const bytes=new Uint8Array(await blob.arrayBuffer());
@@ -27,7 +36,12 @@ export async function processWorkFile(sb:any,job:any){
   const {data:prior}=await sb.from("minds_project_source_ingestions")
     .select("status,claim_count").eq("user_id",file.user_id).eq("project_id",file.project_id)
     .eq("source_kind","work_file").eq("source_ref",file.id).eq("source_version",version).maybeSingle();
-  const converted=await convertWithDocling(file,bytes);
+  if(!converted&&doclingSupportedExtension(ext)&&isDoclingConfigured()){
+    converted=await convertWithDocling(file,bytes);
+    if(converted?.pending)return {
+      status:"docling_pending",taskId:converted.taskId,version,file
+    };
+  }
   const structuredText=await materializeWorkSourceText(sb,file,bytes,version,converted);
   if(prior?.status==="completed")
     return {status:"completed",version,parser:"source_first_existing",claims:prior.claim_count||0,coverage:"claims_only",structuredText,file};

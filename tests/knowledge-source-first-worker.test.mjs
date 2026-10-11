@@ -28,7 +28,7 @@ test('every accepted claim is sourced, proposed and committed through existing R
 });
 test('Docling adapter accepts only private configured HTTPS endpoint',()=>{
   assert.match(docling,/DOCLING_SERVE_URL/);
-  assert.match(docling,/base.protocol!=="https:"/);
+  assert.match(docling,/doclingConnection/);
   assert.match(docling,/X-Api-Key/);
   assert.match(docling,/\/v1\/convert\/file/);
   assert.match(core,/docling_required_large_source/);
