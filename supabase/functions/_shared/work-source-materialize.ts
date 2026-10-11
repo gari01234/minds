@@ -7,24 +7,37 @@ async function readWorkbook(bytes:Uint8Array){
   const module=await import("npm:exceljs@4.4.0");
   const ExcelJS:any=module.default||module;
   const workbook=new ExcelJS.Workbook();
-  await workbook.xlsx.load(bytes as any);
+  try{await workbook.xlsx.load(bytes as any)}
+  catch(e){throw new Error("xlsx_load:"+String(e instanceof Error?e.message:e).slice(0,140))}
+  const safeCellText=(cell:any)=>{
+    const v=cell.value;
+    if(v===null||v===undefined)return "";
+    if(typeof v==="string"||typeof v==="number"||typeof v==="boolean")return String(v);
+    if(v instanceof Date)return v.toISOString();
+    if(Array.isArray(v.richText))return v.richText.map((p:any)=>String(p?.text||"")).join("");
+    if(v.result!==undefined)return v.result===null?"":String(v.result);
+    if(typeof v.text==="string")return v.text;
+    // Unknown structured cell value is not evidence: never stringify an object.
+    return "";
+  };
   const sheets:any[]=[];
   let truncated=false,totalRows=0;
   for(const ws of workbook.worksheets){
     if(sheets.length>=32){truncated=true;break}
     const rows:any[]=[];
-    ws.eachRow({includeEmpty:false},(row:any,rowNumber:number)=>{
+    try{ws.eachRow({includeEmpty:false},(row:any,rowNumber:number)=>{
       if(totalRows>=4000){truncated=true;return}
       const cells:any[]=[];
       row.eachCell({includeEmpty:false},(cell:any)=>{
         if(cells.length>=128){truncated=true;return}
-        const val=String(cell.text??"").trim();
+        const val=safeCellText(cell).trim();
         if(!val)return;
         if(val.length>2500)truncated=true;
         cells.push({address:String(cell.address||""),text:val.slice(0,2500)});
       });
       if(cells.length){rows.push({row:rowNumber,cells});totalRows++}
     });
+    }catch(e){throw new Error("xlsx_sheet:"+String(e instanceof Error?e.message:e).slice(0,140))}
     sheets.push({name:ws.name,rows});
   }
   return fromSheetRows(sheets,{truncated});
