@@ -2,7 +2,14 @@
  * Submit once; poll task status on later server runs; no browser involvement.
  */
 import {doclingConnection,validDoclingTaskId,doclingTaskState,doclingConvertResult} from "./work-docling-contract.mjs";
-const settings=()=>doclingConnection(Deno.env.get("DOCLING_SERVE_URL"),Deno.env.get("DOCLING_SERVE_API_KEY"));
+// Optional server-only runtime config, loaded after the ingest-runner secret is verified.
+// The canonical secret table is service-role-only; never expose these values to clients.
+let runtimeDocling:null|{origin:string;key:string}=null;
+export function configureDoclingRuntime(endpoint:string|null,key:string|null){
+  runtimeDocling=doclingConnection(endpoint,key);
+  return !!runtimeDocling;
+}
+const settings=()=>runtimeDocling||doclingConnection(Deno.env.get("DOCLING_SERVE_URL"),Deno.env.get("DOCLING_SERVE_API_KEY"));
 export const isDoclingConfigured=()=>!!settings();
 const secureFetch=async(url:string,key:string,init:RequestInit={},ms=35000)=>{
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),ms);
