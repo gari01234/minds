@@ -1250,7 +1250,7 @@ test('Build 66 refuses streaming when tools or deep context may be required',()=
   const chat=read('supabase/functions/isabella-chat/index.ts');
   assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||(!dailyRead&&calendarAssessmentIntent(message)))return false'));
   assert.ok(chat.includes('if(!dailyRead&&String(route?.complexity||"light")!=="light")return false'));
-  assert.ok(chat.includes('if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
+  assert.ok(chat.includes('if((route?.web&&!freshWeather)||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
   assert.ok(chat.includes('const tools=background?['));
   assert.ok(chat.includes('name:"orchestrate_specialists"'));
