@@ -844,7 +844,8 @@ test('Build 49 supports quoted replies that Isabella can resolve',()=>{
   assert.ok(shell.includes('id="chatReplyPreview"'));
   assert.ok(app.includes('function setReplyTarget(id)'));
   assert.ok(app.includes('message-reply-reference'));
-  assert.match(app,/say\\('user',text\\|\\|'📷 Foto',\\{attachments:copy,replyTo,\\s*metadata:durableRequestId/);
+  assert.ok(app.includes("const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,"));
+  assert.ok(app.includes('metadata:durableRequestId?{durable_request_id:durableRequestId}:{}'));
   assert.ok(ai.includes('Gari está respondiendo específicamente a este mensaje previo'));
   assert.ok(ai.includes('reply_to:m.replyTo?.id'));
 });
