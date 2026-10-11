@@ -74,7 +74,23 @@ export function fromDoclingDocument(markdown,doc,{partial=false}={}){
           locator:{page,verified:true},content:part});
       }
     }
-    if(loose.length)truncated=true; // Unknown-page pieces must not silently be asserted as sourced to a page.
+    // Docling's page-anchored JSON can omit headings, lists or captions still
+    // present in the Markdown export. Preserve those words for search without
+    // assigning an invented page. Prefer the whole Markdown as a recoverable
+    // fallback when it contains content not represented by page-anchored text.
+    const canonical=v=>clean(v).replace(/\s+/g," ").toLocaleLowerCase();
+    const pageText=[...pageItems.values()].flat().join(" ");
+    const markdownFallback=clean(markdown);
+    const fallback=markdownFallback&&!canonical(pageText).includes(canonical(markdownFallback))
+      ?markdownFallback:loose.join("\n");
+    if(fallback.trim()){
+      truncated=true; // unverified material forbids complete page coverage
+      for(const part of blocks(fallback)){
+        if(segments.length>=MAX_SEGMENTS){truncated=true;break}
+        segments.push({segment_no:segments.length,segment_kind:"unpaged_text",
+          locator:{page_verified:false,sequence:segments.length+1},content:part});
+      }
+    }
   }else{
     locatorClass="unverified_page";
     truncated=true; // No verified page provenance: never claim complete page-addressable coverage.
@@ -85,5 +101,7 @@ export function fromDoclingDocument(markdown,doc,{partial=false}={}){
     }
   }
   return {segments,coverage:truncated?"partial_text":"complete_text",
-    locator_class:locatorClass,metadata:{verified_pages:pageItems.size,unlocated_elements:loose.length,truncated}};
+    locator_class:locatorClass,metadata:{verified_pages:pageItems.size,unlocated_elements:loose.length,
+      unverified_segments:segments.filter(s=>s.segment_kind==="unpaged_text").length,
+      markdown_chars:clean(markdown).length,truncated}};
 }
