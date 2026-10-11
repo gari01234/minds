@@ -110,6 +110,29 @@ function needsCalendarAssessment(message=''){
   return /(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t)
     && /(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
 }
+/* Informational Chat uses durable background provider execution when the
+ * existing server route confirms that no tools or user approvals are involved.
+ * No transport error ever triggers an implicit second model invocation.
+ */
+async function askDurableChat(message,state,options,replyContext){
+  const requestId=String(options?.durableRequestId||"");
+  if(!requestId)return null;
+  const cfg=window.MINDS_SUPABASE_CONFIG;
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session||!cfg?.url||!cfg?.publishableKey)return null;
+  const response=await fetch(cfg.url+'/functions/v1/isabella-chat',{
+    method:'POST',headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},
+    body:JSON.stringify({message:String(message),context:{...compact(state),reply_context:replyContext},
+      background:false,attachments:[],stream:false,durable:true,surface:'chat_browser',client_message_id:requestId})
+  });
+  if(response.status===409)return null; // tool/approval path, nothing was launched
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(String(data?.message||data?.detail||'No pude confirmar que Isabella recibiera la solicitud.'));
+  if(data?.durable&&data.job_id)return {durable:true,durable_job_id:data.job_id,
+    durable_request_id:requestId,durable_status:data.status||'running'};
+  return null;
+}
+
 async function askDirectStream(message,state,options={},replyContext=''){
   const {data:{session}}=await sb.auth.getSession();if(!session)return null;
   const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
@@ -178,6 +201,10 @@ async function ask(message,state,options={}){
       // to full Isabella as a fresh proposal.
       options.onTextReset?.();throw e;
     }
+  }
+  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!needsCalendarAssessment(message)){
+    const durable=await askDurableChat(message,state,options,replyContext);
+    if(durable)return durable;
   }
   if(!options.workThread&&!options.background&&!attachments.length&&!needsCalendarAssessment(message)){
     const streamed=await askDirectStream(message,state,options,replyContext);

@@ -300,11 +300,16 @@ function init(){
   renderMessages(true);
   renderToday();
   renderCalendar();
+  void syncDurableChatJobs();
+  setInterval(()=>{if(!document.hidden)void syncDurableChatJobs()},7000);
   const reviewId=reviewRequestIdFromUrl();
   show(reviewId?'assistant':state.screen);
   if(reviewId)setTimeout(()=>void handleReviewDeepLink(),0);
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'&&state.screen==='calendar')window.ISABELLA_SYNC_PULL_NOW?.();
+    if(document.visibilityState==='visible'){
+      void syncDurableChatJobs();
+      if(state.screen==='calendar')window.ISABELLA_SYNC_PULL_NOW?.();
+    }
   });
 }
 let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false;
@@ -1812,17 +1817,75 @@ function setChatActivity(label=''){
   if(!node){node=document.createElement('div');node.id='isabellaChatActivity';node.className='chat-activity';node.setAttribute('role','status');node.setAttribute('aria-live','polite');box.appendChild(node)}
   node.textContent=label;
 }
+/* The durable response ledger is authoritative for request completion, while
+ * local UI messages are just the current rendering. Reconcile after return,
+ * refresh or a broken network connection. Never re-execute a pending request.
+ */
+let durableChatSyncBusy=false;
+async function syncDurableChatJobs(){
+  if(durableChatSyncBusy)return;
+  const sb=window.MINDS_SUPABASE;if(!sb)return;
+  durableChatSyncBusy=true;
+  try{
+    const {data:{session}}=await sb.auth.getSession();if(!session)return;
+    const {data,error}=await sb.from('minds_chat_jobs')
+      .select('request_id,user_message,status,reply,incomplete_reason,created_at')
+      .gte('created_at',new Date(Date.now()-48*3600000).toISOString())
+      .order('created_at',{ascending:false}).limit(32);
+    if(error||!data?.length)return;
+    let changed=false;
+    for(const job of [...data].reverse()){
+      const key=String(job.request_id||'');if(!key)continue;
+      let user=state.messages.find(m=>m.role==='user'&&m.metadata?.durable_request_id===key);
+      if(!user){
+        // A submitted request outlived a tab close before local persistence.
+        user=say('user',String(job.user_message||''),{metadata:{durable_request_id:key}});
+        changed=true;
+      }
+      let answer=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key);
+      const status=String(job.status||'');
+      const resolved=['completed','incomplete','failed'].includes(status);
+      const reply=status==='completed'?String(job.reply||''):
+        status==='incomplete'?String(job.reply||'')||'La respuesta quedó interrumpida.':
+        status==='failed'?'Isabella no pudo terminar esta respuesta. Puedes intentarlo de nuevo.':
+        'Isabella sigue trabajando…';
+      const desiredMeta={durable_request_id:key,durable_status:status,
+        incomplete_response:status==='incomplete',
+        incomplete_reason:status==='incomplete'?job.incomplete_reason||'provider_incomplete':null};
+      if(!answer){answer=say('assistant',reply,{metadata:desiredMeta});changed=true}
+      else if(answer.text!==reply||answer.metadata?.durable_status!==status){
+        answer.text=reply;answer.metadata={...(answer.metadata||{}),...desiredMeta};changed=true;
+      }
+      if(resolved&&user.metadata?.durable_status!==status){
+        user.metadata={...(user.metadata||{}),durable_status:status};changed=true;
+      }
+    }
+    if(changed){save();renderMessages()}
+  }catch(e){console.warn('durable chat reconciliation failed',e)}
+  finally{durableChatSyncBusy=false}
+}
+
 async function handle(text,attachments=[],replyTo=null){
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
   const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo});
+  const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
+  if(durableRequestId){userTurn.metadata={...(userTurn.metadata||{}),durable_request_id:durableRequestId};save()}
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
       setChatActivity('Isabella está preparando la respuesta…');
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
+      if(result?.durable){
+        say('assistant','Isabella sigue trabajando…',{metadata:{
+          durable_request_id:result.durable_request_id,durable_status:result.durable_status||'running'
+        }});
+        void syncDurableChatJobs();
+        return;
+      }
+      if(durableRequestId){delete userTurn.metadata.durable_request_id;save()}
       const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
         ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
       userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
@@ -1835,7 +1898,13 @@ async function handle(text,attachments=[],replyTo=null){
       else if(result?.proposal){state.pendingIntent=null;save();confirmProposal(result.proposal)}
       else save();
     }else say('assistant',localFallback(text));
-  }catch(e){clearAssistantStream();say('assistant',e?.message||localFallback(text))}
+  }catch(e){
+    clearAssistantStream();
+    say('assistant',e?.message||localFallback(text),{metadata:durableRequestId?{
+      durable_request_id:durableRequestId,durable_status:'unconfirmed'
+    }:{}});
+    void syncDurableChatJobs();
+  }
   finally{clearAssistantStream();setChatActivity('');orb();setWorking($('#sendButton'),false)}
 }
 let pendingChatFiles=[];
