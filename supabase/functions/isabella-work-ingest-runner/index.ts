@@ -4,6 +4,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
+import {isDoclingReady} from "../_shared/work-docling.ts";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -15,9 +16,7 @@ Deno.serve(async(req:Request)=>{
   if(!secret?.value||String(body.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
   // One-time historical catch-up is incremental and gives newly uploaded files priority.
   // Waiting documents are reactivated only after a private Docling URL is configured.
-  const doclingUrl=Deno.env.get("DOCLING_SERVE_URL")||"";
-  let doclingReady=false;
-  try{doclingReady=Boolean(doclingUrl)&&new URL(doclingUrl).protocol==="https:"}catch{}
+  const doclingReady=await isDoclingReady();
   const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
     p_limit:1,p_docling_ready:doclingReady
   });
@@ -28,6 +27,20 @@ Deno.serve(async(req:Request)=>{
   for(const job of jobs||[]){
     try{
       const x=await processWorkFile(sb,job),now=new Date().toISOString();
+      if(x.status==="docling_pending"){
+        // Polling in later Heartbeats does not increment extraction attempts.
+        // The original remains queued, and neither text nor Claims are invented.
+        const {error:pendingError}=await sb.from("minds_work_ingest_queue")
+          .update({status:"docling_pending",docling_task_id:x.taskId,
+            docling_started_at:job.docling_started_at||now,
+            source_version:x.version||job.source_version||null,
+            locked_at:null,next_attempt_at:new Date(Date.now()+120000).toISOString(),
+            updated_at:now})
+          .eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
+        if(pendingError)throw pendingError;
+        results.push({status:"docling_pending"});
+        continue;
+      }
       const indexed=x.status==="completed";
       const needsParser=x.status==="waiting_parser";
       const metadata={...(x.file?.metadata||{}),knowledge_intake:{
