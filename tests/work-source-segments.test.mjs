@@ -18,7 +18,8 @@ test('Docling provenance uses pages only when emitted by source',()=>{
     {text:'Westfassade',prov:[{page_no:2}]},
     {text:'Schnitt A',prov:[{page_no:3}]}]});
   assert.equal(r.locator_class,'pdf_page');
-  assert.deepEqual(r.segments.map(s=>s.locator.page),[2,3]);
+  assert.deepEqual(r.segments.filter(s=>s.segment_kind==='page_text').map(s=>s.locator.page),[2,3]);
+  assert.ok(r.segments.some(s=>s.segment_kind==='unpaged_text'&&s.locator.page_verified===false));
   const unknown=fromDoclingDocument('Ohne Seite',null);
   assert.equal(unknown.locator_class,'unverified_page');
   assert.equal(unknown.segments[0].locator.page_verified,false);
