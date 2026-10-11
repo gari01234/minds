@@ -1860,7 +1860,7 @@ async function searchWork(req:Request,args:any){
     const terms=normalizeText(query).split(/[^a-z0-9äöüß]+/).filter((x:string)=>x.length>2&&!stop.has(x)).slice(0,12);
     const workQueries=await Promise.all([
       sb.from("minds_work_folders").select("id,parent_id,name").eq("project_id",project.id).limit(300),
-      sb.from("minds_work_files").select("id,folder_id,name,mime_type,size_bytes,source_kind,index_status,created_at").eq("project_id",project.id).order("created_at",{ascending:false}).limit(120),
+      sb.from("minds_work_files").select("id,folder_id,name,mime_type,size_bytes,source_kind,index_status,metadata,created_at").eq("project_id",project.id).order("created_at",{ascending:false}).limit(120),
       sb.from("minds_work_buckets").select("id,name").eq("project_id",project.id).eq("archived",false).limit(50),
       sb.from("isabella_tasks").select("id,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist").eq("project_id",project.id).is("archived_at",null).order("updated_at",{ascending:false}).limit(160),
       sb.from("minds_work_memory").select("id,memory_type,title,body,status,source_file_ids,provenance,occurred_at,updated_at").eq("project_id",project.id).in("status",["proposed","confirmed","resolved"]).order("updated_at",{ascending:false}).limit(160),
@@ -1873,14 +1873,38 @@ async function searchWork(req:Request,args:any){
     const folders=folderRows||[],buckets=bucketRows||[];
     const folderName=(id:any)=>folders.find((x:any)=>x.id===id)?.name||null;
     const bucketName=(id:any)=>buckets.find((x:any)=>x.id===id)?.name||null;
-    const files=(fileRows||[]).filter((x:any)=>workMatch({name:x.name,folder:folderName(x.folder_id)},terms)).sort(rank).slice(0,24).map((x:any)=>({...x,folder:folderName(x.folder_id)}));
+    const sourceRows=fileRows||[];
+    const sourceById=new Map(sourceRows.map((f:any)=>[String(f.id),f]));
+    const knowledgeCoverage={
+      files_seen:sourceRows.length,
+      files_total_at_least:sourceRows.length,
+      stored_only:sourceRows.filter((f:any)=>f.index_status==="stored").length,
+      queued:sourceRows.filter((f:any)=>f.index_status==="queued").length,
+      indexed:sourceRows.filter((f:any)=>f.index_status==="indexed").length,
+      failed:sourceRows.filter((f:any)=>f.index_status==="failed").length,
+      indexing_is_not_full_understanding:true
+    };
+    const describeFile=(x:any)=>({
+      id:x.id,name:x.name,index_status:x.index_status,
+      extraction_coverage:x.metadata?.knowledge_intake?.coverage||"none"
+    });
+    const files=sourceRows.filter((x:any)=>workMatch({name:x.name,folder:folderName(x.folder_id)},terms))
+      .sort(rank).slice(0,24).map((x:any)=>({...describeFile(x),folder:folderName(x.folder_id),mime_type:x.mime_type,size_bytes:x.size_bytes}));
+
     const tasks=(taskRows||[]).filter((x:any)=>workMatch(x,terms)).sort(rank).slice(0,30).map((x:any)=>({...x,bucket:bucketName(x.work_bucket_id)}));
     const memory=(memoryRows||[]).filter((x:any)=>workMatch(x,terms)).sort(rank).slice(0,24);
-    const claims=(claimRows||[]).filter((x:any)=>workMatch(x,terms)).sort((a:any,b:any)=>rank(a,b)||(b.status==="confirmed"?1:0)-(a.status==="confirmed"?1:0)).slice(0,30);
+    const sourcedClaims=(claimRows||[]).map((c:any)=>({...c,source_documents:(c.minds_work_evidence||[])
+      .map((e:any)=>sourceById.get(String(e.source_file_id||"")))
+      .filter(Boolean).map(describeFile)}));
+    // The user may ask for a document by its actual Desktop filename. The
+    // extracted claims are linked by UUID, so include source names *before*
+    // relevance filtering instead of silently missing those claims.
+    const claims=sourcedClaims.filter((x:any)=>workMatch(x,terms))
+      .sort((a:any,b:any)=>rank(a,b)||(b.status==="confirmed"?1:0)-(a.status==="confirmed"?1:0)).slice(0,30);
     return {
       status:"ok",
       project:{id:project.id,key:project.client_key,name:project.name},
-      query,files,tasks,memory,claims,threads:threadRows?.threads||[],
+      query,files,tasks,memory,claims,knowledge_coverage:knowledgeCoverage,threads:threadRows?.threads||[],
       project_model:projectModel||null,
       provenance:{
         class:"project_source",
