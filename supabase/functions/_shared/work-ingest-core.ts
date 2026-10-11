@@ -13,10 +13,12 @@ export async function processWorkFile(sb:any,job:any){
     .eq("id",job.file_id).eq("user_id",job.user_id).eq("project_id",job.project_id).maybeSingle();
   if(error||!file)throw new Error("canonical_file_missing");
   const ext=String(file.name||"").toLowerCase().split(".").pop()||"";
-  if(!supported.has(ext))return {status:"skipped",reason:"unsupported_format",file};
-  if(file.size_bytes>fileMax)return {status:"skipped",reason:"over_48_mib_limit",file};
+  if(!supported.has(ext))return {status:"waiting_parser",reason:"needs_format_reader",file};
+  if(file.size_bytes>fileMax)return {status:"waiting_parser",reason:"needs_larger_worker",file};
   if(file.size_bytes>providerMax&&!Deno.env.get("DOCLING_SERVE_URL"))
-    return {status:"skipped",reason:"docling_required_large_source",file};
+    return {status:"waiting_parser",reason:"docling_required_large_source",file};
+  if(image.has(ext)&&file.size_bytes>8*1024*1024&&!Deno.env.get("DOCLING_SERVE_URL"))
+    return {status:"waiting_parser",reason:"needs_private_docling_image",file};
   const {data:blob,error:storageError}=await sb.storage.from("minds-work").download(file.storage_path);
   if(storageError||!blob)throw new Error("source_download_failed");
   const bytes=new Uint8Array(await blob.arrayBuffer());
@@ -29,7 +31,7 @@ export async function processWorkFile(sb:any,job:any){
   const structuredText=await materializeWorkSourceText(sb,file,bytes,version,converted);
   if(prior?.status==="completed")
     return {status:"completed",version,parser:"source_first_existing",claims:prior.claim_count||0,coverage:"claims_only",structuredText,file};
-  if(!converted&&bytes.length>providerMax)return {status:"skipped",reason:"docling_required",version,file};
+  if(!converted&&bytes.length>providerMax)return {status:"waiting_parser",reason:"docling_required_large_source",version,file};
   const {data:knownRefs}=await sb.from("minds_project_referents")
     .select("kind,label,canonical_key").eq("user_id",file.user_id)
     .eq("project_id",file.project_id).eq("status","active").limit(100);
