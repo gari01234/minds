@@ -28,6 +28,34 @@ Deno.serve(async(req:Request)=>{
     p_limit:1,p_docling_ready:doclingReady
   });
   if(reconcileError)return json({error:"intake_reconciliation_failed"},500);
+  // Enrich one historic, Claims-only PDF per cron run, without losing its
+  // existing source ingestion/Claims or displacing newly queued originals.
+  if(doclingReady){
+    const {data:historic,error:historicError}=await sb.from("minds_work_ingest_queue")
+      .select("id,file_id").eq("status","completed")
+      .eq("parser_name","existing-provider-file-input")
+      .order("completed_at",{ascending:true}).limit(1);
+    if(historicError)console.error("work_historic_enrichment_lookup_failed");
+    else if(historic?.length){
+      const job=historic[0];
+      const {data:receipt,error:receiptError}=await sb.from("minds_work_source_text_receipts")
+        .select("id").eq("file_id",job.file_id).limit(1);
+      if(receiptError)console.error("work_historic_receipt_lookup_failed");
+      else{
+        const now=new Date().toISOString();
+        const alreadyReadable=!!receipt?.length;
+        const {error:enrichError}=await sb.from("minds_work_ingest_queue").update(
+          alreadyReadable?{parser_name:"source_first_existing",updated_at:now}:{
+            status:"queued",parser_name:"docling_enrichment",attempts:0,
+            is_backfill:true,last_error:null,locked_at:null,completed_at:null,
+            docling_task_id:null,docling_started_at:null,
+            next_attempt_at:now,updated_at:now
+          }).eq("id",job.id).eq("status","completed")
+          .eq("parser_name","existing-provider-file-input");
+        if(enrichError)console.error("work_historic_enrichment_queue_failed");
+      }
+    }
+  }
   const {data:jobs,error:claimError}=await sb.rpc("minds_claim_work_ingest",{p_limit:1});
   if(claimError)return json({error:"queue_claim_failed"},500);
   const results:any[]=[];
@@ -84,7 +112,8 @@ Deno.serve(async(req:Request)=>{
         completed_at:terminal?now:null,updated_at:now
       }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
       if(retryError)console.error("work_ingest_retry_state_failed",job.id);
-      if(terminal)await sb.from("minds_work_files").update({
+      // An enrichment failure must not erase the already-indexed Claims.
+      if(terminal&&job.parser_name!=="docling_enrichment")await sb.from("minds_work_files").update({
         index_status:expired?"waiting_parser":"failed"
       }).eq("id",job.file_id).eq("user_id",job.user_id);
       results.push({status:terminal?(expired?"waiting_parser":"failed"):"retry_scheduled"});
