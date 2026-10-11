@@ -103,11 +103,11 @@ function readOnlyDailyAgendaIntent(message:string){
   if(!/(qu[eé] tengo|que tengo|qu[eé] hay|que hay|dame una lista|lista de lo que|rev[ií]salo bien|revisalo bien|tengo muchas tareas|tareas tengo|pendientes tengo)/i.test(t))return false;
   return !/\b(agrega|añade|crea|mueve|cambia|borra|elimina|reprograma|reserva|env[ií]a|manda|agenda|programa|termina|completa)\b/i.test(t);
 }
-function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean){
+function directTextStreamEligible(message:string,route:any,attachments:any[],background:boolean,freshWeather=false){
   const dailyRead=readOnlyDailyAgendaIntent(message);
   if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||(!dailyRead&&calendarAssessmentIntent(message)))return false;
   if(!dailyRead&&String(route?.complexity||"light")!=="light")return false;
-  if(route?.web||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
+  if((route?.web&&!freshWeather)||route?.work||route?.sofia||route?.deep_memory||route?.project)return false;
   const normalized=normalizeText(message);
   if(/autonom|permis|shadow agency/i.test(normalized))return false;
   if(/\b(commitment|compromis|mission|mant[eé]n|mantener vivo|avanza|avanzar|retoma|retomar|seguimos con|contin[uú]a con|trabaja en segundo plano|avísame cuando|avisame cuando)\b/i.test(normalized))return false;
@@ -141,6 +141,37 @@ function localTemporalContext(timeZone:string){
   }
 }
 
+
+// Reuse only the current, sourced forecast already present in Ahora.
+async function currentWeatherFromSituation(req:Request,message:string){
+  const text=normalizeText(message);
+  if(!/\b(clima|meteorolog\w*|pron[oó]stic\w*|previsi[oó]n|temperatura\w*|lluvia\w*|weather|forecast)\b/i.test(text))return null;
+  if(/\b(actualiza|actualizar|refresca|otra ciudad|otra localidad)\b/i.test(text))return null;
+  try{
+    const sb=supabaseClient(req);if(!sb)return null;
+    const {data:{user}}=await sb.auth.getUser();if(!user)return null;
+    const freshSince=new Date(Date.now()-2*3600000).toISOString(),now=new Date().toISOString();
+    const [forecast,preference]=await Promise.all([
+      sb.from("minds_surface_items").select("title,body,metadata,generated_at,expires_at")
+        .eq("user_id",user.id).eq("surface","feed").eq("status","active")
+        .contains("metadata",{kind:"weather"}).gte("generated_at",freshSince)
+        .gt("expires_at",now).order("generated_at",{ascending:false}).limit(1).maybeSingle(),
+      sb.from("isabella_preferences").select("value").eq("user_id",user.id)
+        .eq("preference_key","feed").eq("status","confirmed")
+        .order("updated_at",{ascending:false}).limit(1).maybeSingle()
+    ]);
+    if(forecast.error||preference.error||!forecast.data||!preference.data)return null;
+    const configured=String(preference.data.value?.weatherLocation||"").trim();
+    const location=String(forecast.data.metadata?.weather_location||"").trim();
+    if(!configured||!location.toLocaleLowerCase().includes(configured.toLocaleLowerCase()))return null;
+    const details=forecast.data.metadata?.details;
+    if(!Array.isArray(details)||!details.length)return null;
+    return {location,generated_at:forecast.data.generated_at,expires_at:forecast.data.expires_at,
+      source:"Open-Meteo · MINDS Situación/Ahora",summary:forecast.data.body,
+      days:details.slice(0,7).map((x:any)=>({label:String(x?.label||"").slice(0,40),
+        summary:String(x?.summary||"").slice(0,160)}))};
+  }catch{return null}
+}
 
 async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:string){
   try{
@@ -2691,11 +2722,12 @@ Deno.serve(async (req: Request) => {
     route.source=String(route.source||"router")+"+work_thread";
   }
   const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
+  const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
   const wantsStream=body?.stream===true;
   const wantsDurable=body?.durable===true&&surface==="chat_browser"&&!background;
-  if(wantsDurable&&!directTextStreamEligible(effectiveMessage,route,attachments,background))
+  if(wantsDurable&&!directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather))
     return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
-  const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background);
+  const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
   const fastAgenda=!background&&!attachments.length&&route.complexity==="light"&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
@@ -2751,6 +2783,8 @@ Primero conversa y entiende la intención como lo haría ChatGPT. Solo usa una h
 AGENDA CANÓNICA:
 CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
 Cuando pregunte por "mañana", usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events como referencia del día siguiente; jamás confundas ese día con current_date. Si la consulta pide todas las tareas de mañana, examina primero el conjunto completo de tomorrow_tasks. Si agenda_context_source no es server_canonical, no afirmes que no hay tareas sin verificar la información disponible. Para una consulta puramente informativa de mañana no es necesario modificar ninguna tarea.
+PREVISIÓN METEOROLÓGICA COMPARTIDA:
+Si CONTEXTO PRIVADO.situation_weather contiene una previsión reciente, ya está disponible en MINDS/Situación (Ahora), con procedencia y fecha de generación. Para una pregunta sobre el clima de esa localidad y los días cubiertos, UTILIZA esos datos. No afirmes que careces de acceso al pronóstico. Aclara su antigüedad si es relevante. Nunca extrapoles a días fuera de los siete incluidos ni a una ciudad diferente; si piden otra localidad, consulta web_search en la ruta que lo permita o reconoce el límite.
 Los eventos canónicos incluyen local_date, local_start_time, local_end_time, display_time y timezone calculados por MINDS. Para comunicar horas usa SIEMPRE esos campos locales cuando existan. starts_at/ends_at son timestamps de almacenamiento y no deben mostrarse ni reinterpretarse como hora local. No hagas conversiones UTC manuales si display_time ya está disponible.
 
 CONTINUIDAD Y EXPOSICIÓN:
@@ -2921,6 +2955,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     available_capabilities:capabilityPromptSummary(),
     current_work_thread:currentWorkThread?{id:currentWorkThread.id,title:currentWorkThread.title,project:currentWorkThread.project,summary:currentWorkThread.summary,capability_profile:currentWorkThread.capability_profile}:null,
     current_date:temporal.current_date,
+    situation_weather:situationWeather,
     tomorrow_date:new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10),
     tomorrow_tasks:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_tasks:(context.upcoming||[]).filter((x:any)=>x.kind==="task"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
     tomorrow_events:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_events:(context.upcoming||[]).filter((x:any)=>x.kind==="event"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
