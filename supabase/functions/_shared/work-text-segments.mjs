@@ -77,6 +77,7 @@ export function fromDoclingDocument(markdown,doc,{partial=false}={}){
     if(loose.length)truncated=true; // Unknown-page pieces must not silently be asserted as sourced to a page.
   }else{
     locatorClass="unverified_page";
+    truncated=true; // No verified page provenance: never claim complete page-addressable coverage.
     for(const part of blocks(markdown)){
       if(segments.length>=MAX_SEGMENTS){truncated=true;break}
       segments.push({segment_no:segments.length,segment_kind:"unpaged_text",
