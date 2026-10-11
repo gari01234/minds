@@ -142,6 +142,12 @@ function workKnowledgeStatus(file){
   const k=String(file?.index_status||'stored');
   const coverage=String(file?.metadata?.knowledge_intake?.coverage||'');
   if(k==='queued')return 'Lectura pendiente';
+  if(k==='waiting_parser'){
+    const reason=String(file?.metadata?.knowledge_intake?.reason||'');
+    if(reason==='needs_larger_worker')return 'Pendiente · archivo grande';
+    if(reason==='needs_format_reader')return 'Pendiente · lector de formato';
+    return 'Pendiente · lector especializado';
+  }
   if(k==='indexed')return coverage==='claims_only'?'Evidencia extraída · cobertura parcial':'Evidencia extraída · sin confirmar';
   if(k==='failed')return 'No se pudo leer · revisar';
   return 'Solo almacenado · aún sin leer';
