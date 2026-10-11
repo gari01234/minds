@@ -78,3 +78,16 @@ test('90.8: asset update is PWA-cache coherent',()=>{
   assert.ok(sw.includes('app.js?v=112'));
   assert.ok(sw.includes('ai.js?v=52'));
 });
+
+test('90.8.1: fast observation cannot repeat or replace the background provider request',()=>{
+  assert.ok(server.includes('edgeRuntime.waitUntil(fastObserve)'));
+  assert.ok(server.includes('const {data:runnerSecret}=await service.from("isabella_runtime_secrets")'));
+  assert.ok(server.includes('base+"/functions/v1/isabella-chat-runner"'));
+  assert.ok(server.includes('if(!current||current.status!=="running")break'));
+  assert.ok(server.includes('step===0?1600:3000'));
+  assert.ok(server.includes('The cron still owns eventual durable reconciliation'));
+  // The run still has only one OpenAI create; fast observation only calls the existing reconciler.
+  const region=server.slice(server.indexOf('const fastObserve='),server.indexOf('edgeRuntime.waitUntil(fastObserve)'));
+  assert.ok(!region.includes('api.openai.com/v1/responses'));
+  assert.ok(!region.includes('minds_chat_jobs").insert('));
+});

@@ -3014,6 +3014,37 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         status:"running",provider_response_id:String(payload.id),updated_at:new Date().toISOString()
       }).eq("id",job.id).eq("status","preparing");
       if(updateError)throw updateError;
+      // Fast-path observation: once OpenAI accepted the background response,
+      // let this Edge isolate poll the *existing* internal reconciler briefly.
+      // The request has already been acknowledged; a cancelled isolate never
+      // cancels the provider work. The one-minute durable cron is the fallback.
+      const edgeRuntime=(globalThis as any).EdgeRuntime;
+      if(edgeRuntime&&typeof edgeRuntime.waitUntil==="function"){
+        const fastObserve=(async()=>{
+          try{
+            const {data:runnerSecret}=await service.from("isabella_runtime_secrets")
+              .select("value").eq("key","chat_runner").maybeSingle();
+            const secret=String(runnerSecret?.value||"");
+            const base=Deno.env.get("SUPABASE_URL")||"";
+            if(!secret||!base)return;
+            for(let step=0;step<7;step++){
+              await new Promise(resolve=>setTimeout(resolve,step===0?1600:3000));
+              const {data:current}=await service.from("minds_chat_jobs")
+                .select("status").eq("id",job.id).maybeSingle();
+              if(!current||current.status!=="running")break;
+              const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),18000);
+              try{
+                await fetch(base+"/functions/v1/isabella-chat-runner",{
+                  method:"POST",signal:controller.signal,
+                  headers:{"Content-Type":"application/json"},
+                  body:JSON.stringify({secret})
+                });
+              }catch{}finally{clearTimeout(timeout)}
+            }
+          }catch{/* The cron still owns eventual durable reconciliation. */}
+        })();
+        edgeRuntime.waitUntil(fastObserve);
+      }
       return json({durable:true,job_id:job.id,request_id:clientMessageId,status:"running"},202);
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);
