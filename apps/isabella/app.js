@@ -3033,9 +3033,28 @@ async function pushNotificationsPanel(){
   modal('Avisos de Isabella',
     '<div class="continuity-intro"><p><b>'+esc(active?'Avisos activados':'Avisos no activados')+'</b></p><p>'+esc(pushStatusCopy(env,permission,active))+'</p><p>Activarlos no cambia cuándo decido avisarte; solo permite que el aviso pueda llegar hasta este dispositivo cuando realmente haga falta.</p><details class="human-tech"><summary>Ver detalle técnico</summary><p>Internamente, Attention Economy sigue decidiendo si una señal debe interrumpir, esperar al briefing, aparecer en Feed o permanecer silenciosa. Delivery Layer solo transporta los interrupts ya decididos.</p></details></div>'+
     iosHelp+actionButton+
+    (active?'<div class="proposal-actions"><button id="pushTest" class="secondary">Enviar aviso de prueba</button><button id="pushRenew" class="secondary">Renovar registro</button></div>':'')+
     (recent?'<div class="small section-label">Entregas recientes</div>'+recent:'')+
     '<div id="pushError" class="small" role="status"></div>'
   );
+  const testButton=$('#pushTest');
+  if(testButton)testButton.onclick=async()=>{
+    if(testButton.disabled)return;
+    testButton.disabled=true;
+    const box=$('#pushError');if(box)box.textContent='Solicitando prueba de entrega…';
+    try{
+      const {data,error}=await sb.functions.invoke('isabella-push',{body:{action:'test'}});
+      if(error||!data?.ok)throw new Error(data?.message||data?.detail||'El servidor no pudo enviar el aviso de prueba.');
+      if(box)box.textContent='Servicio Push: aceptado. Comprueba si el iPhone muestra el aviso; esta aceptación no garantiza su visualización.';
+    }catch(e){if(box)box.textContent=e instanceof Error?e.message:String(e)}
+    finally{if(testButton.isConnected)testButton.disabled=false}
+  };
+  const renewButton=$('#pushRenew');
+  if(renewButton)renewButton.onclick=async()=>{
+    if(renewButton.disabled)return;renewButton.disabled=true;
+    try{await enablePushNotifications();await pushNotificationsPanel()}
+    catch(e){const box=$('#pushError');if(box)box.textContent=e instanceof Error?e.message:String(e);renewButton.disabled=false}
+  };
   const button=$('#pushToggle');
   if(button)button.onclick=async()=>{
     if(button.disabled)return;button.disabled=true;
