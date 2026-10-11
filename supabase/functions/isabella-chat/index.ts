@@ -2679,6 +2679,9 @@ Deno.serve(async (req: Request) => {
   }
   const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
   const wantsStream=body?.stream===true;
+  const wantsDurable=body?.durable===true&&surface==="chat_browser"&&!background;
+  if(wantsDurable&&!directTextStreamEligible(effectiveMessage,route,attachments,background))
+    return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
   const fastAgenda=!background&&!attachments.length&&route.complexity==="light"&&simpleAgendaMutation(effectiveMessage);
@@ -2955,6 +2958,70 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       }
     }catch(e){
       await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
+    }
+  }
+
+
+  /* Build 90.8: informational text-only messages can survive browser closure
+   * because OpenAI background work is identified independently of HTTP.
+   */
+  if(wantsDurable){
+    const userClient=supabaseClient(req),service=serviceClient();
+    const validId=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(clientMessageId);
+    const authenticated=userClient?await userClient.auth.getUser():null;
+    const user=authenticated?.data?.user;
+    if(!service||authenticated?.error||!user?.id||!validId)return json({error:"durable_auth_or_request_id_invalid"},401);
+    const {data:existing}=await service.from("minds_chat_jobs")
+      .select("id,status,request_id").eq("user_id",user.id).eq("request_id",clientMessageId).maybeSingle();
+    if(existing)return json({durable:true,job_id:existing.id,request_id:clientMessageId,status:existing.status},202);
+    const {data:job,error:insertError}=await service.from("minds_chat_jobs").insert({
+      user_id:user.id,request_id:clientMessageId,user_message:effectiveMessage,
+      status:"preparing",agent_run_id:run?.id||null,
+      exposure_scope:exposureScope,model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna",
+      provider_conversation_id:conversationInfo.id||null,
+      metadata:{version:"durable_chat_v0.1",delivery:"on_return",capabilities:"text_only",route}
+    }).select("id").single();
+    if(insertError){
+      if(insertError.code==="23505"){
+        const {data:same}=await service.from("minds_chat_jobs").select("id,status")
+          .eq("user_id",user.id).eq("request_id",clientMessageId).maybeSingle();
+        if(same)return json({durable:true,job_id:same.id,request_id:clientMessageId,status:same.status},202);
+        await finishAgentRun(req,run,"skipped",{reason:"another_chat_turn_in_progress"});
+        return json({error:"another_chat_turn_in_progress",message:"Isabella está terminando la respuesta anterior. Espera a que termine antes de enviar otra."},423);
+      }
+      await finishAgentRun(req,run,"error",{},insertError.message);
+      return json({error:"durable_job_create_failed",detail:insertError.message},500);
+    }
+    const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
+    try{
+      const provider=await fetch("https://api.openai.com/v1/responses",{
+        method:"POST",
+        headers:{"Authorization":"Bearer "+apiKey,"Content-Type":"application/json"},
+        body:JSON.stringify({
+          model,background:true,store:true,
+          ...(conversationInfo.id?{conversation:conversationInfo.id}:{}),
+          instructions:transientInstructions(system,JSON.parse(dynamicContext)),
+          reasoning:{effort:budget.reasoning},
+          max_output_tokens:Math.max(3600,budget.maxOutput),
+          prompt_cache_options:{mode:"implicit",ttl:"30m"},
+          ...(conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
+          input:[{role:"user",content:[{type:"input_text",text:effectiveMessage}]}]
+        })
+      });
+      const payload=await provider.json().catch(()=>({}));
+      if(!provider.ok||!payload?.id)throw new Error("provider_background_start_"+provider.status+":"+String(payload?.error?.message||"missing_response_id").slice(0,150));
+      const {error:updateError}=await service.from("minds_chat_jobs").update({
+        status:"running",provider_response_id:String(payload.id),updated_at:new Date().toISOString()
+      }).eq("id",job.id).eq("status","preparing");
+      if(updateError)throw updateError;
+      return json({durable:true,job_id:job.id,request_id:clientMessageId,status:"running"},202);
+    }catch(e){
+      const detail=e instanceof Error?e.message:String(e);
+      await service.from("minds_chat_jobs").update({
+        status:"failed",incomplete_reason:detail.slice(0,300),completed_at:new Date().toISOString(),updated_at:new Date().toISOString()
+      }).eq("id",job.id);
+      await finishAgentRun(req,run,"error",{durable:true},detail);
+      return json({durable:true,job_id:job.id,request_id:clientMessageId,status:"failed"},202);
     }
   }
 
