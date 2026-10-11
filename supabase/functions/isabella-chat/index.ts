@@ -2372,6 +2372,34 @@ function deterministicRoute(message:string,background:boolean,context:any={}){
   const complexity=t.length>900||/\b(exhaustiv|profund|arquitectura|estrategia|compara|investiga|diseña|planifica|informe|sintetiza)\b/i.test(t)?"deep":t.length>220?"standard":"light";
   return {project,work,sofia,deep_memory,web,complexity,source:"deterministic",background};
 }
+function canonicalWorkFilename(value:string){
+  // Normalize only for routing, never change the original file's identity.
+  return normalizeText(value).normalize("NFKD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/\.[a-z0-9]{2,5}$/i,"").replace(/[_./-]+/g," ")
+    .replace(/\s+/g," ").trim();
+}
+async function projectFromExplicitWorkFile(req:Request,message:string){
+  // Only an explicit Work/document reference justifies cross-file discovery.
+  // Never infer a project from generic personal chat or a loose topic.
+  if(!/(?:\b(?:planliste|terminplan|raumprogramm|fragenkatalog|grundriss|desktop|work|documento|archivo|pdf|excel|plano|unterlagen)\b|\.(?:pdf|xlsx|docx|pptx|csv|dwg)\b)/i.test(message))return null;
+  try{
+    const sb=supabaseClient(req);if(!sb)return null;
+    const {data:files,error}=await sb.from("minds_work_files")
+      .select("name,project_id,isabella_projects(name)").order("created_at",{ascending:false}).limit(150);
+    if(error||!files?.length)return null;
+    const query=canonicalWorkFilename(message);
+    const projects=new Set<string>();
+    for(const file of files){
+      const stem=canonicalWorkFilename(String(file.name||""));
+      if(stem.length<12||!query.includes(stem))continue;
+      const parent:any=file.isabella_projects;
+      const name=String(parent?.name||"").trim();
+      if(name)projects.add(name);
+    }
+    // A duplicated name across projects must never cause a silent guess.
+    return projects.size===1?[...projects][0]:null;
+  }catch{return null}
+}
 async function routeRequest(req:Request,message:string,apiKey:string,background:boolean,context:any={}){
   const base=deterministicRoute(message,background,context);
   const ambiguous=!background&&!base.project&&!base.sofia&&!base.deep_memory&&String(message||"").length>10&&/\b(esto|eso|aquello|lo anterior|el tema|ese proyecto|como antes|contin[uú]a)\b/i.test(message);
@@ -2740,6 +2768,15 @@ Deno.serve(async (req: Request) => {
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
   const exposureHint=currentWorkThread?null:await latestExposureHint(req);
   const route=await routeRequest(req,effectiveMessage,apiKey,background,{...context,exposure_hint_project:exposureHint?.project||null});
+  if(!background&&!currentWorkThread&&!route.project){
+    const fileProject=await projectFromExplicitWorkFile(req,effectiveMessage);
+    if(fileProject){
+      route.project=fileProject;
+      route.work=true;
+      if(route.complexity==="light")route.complexity="standard";
+      route.source=String(route.source||"deterministic")+"+canonical_work_file";
+    }
+  }
   if(currentWorkThread){
     route.project=currentWorkThread.project.name;
     route.work=true;
