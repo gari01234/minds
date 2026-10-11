@@ -21,7 +21,10 @@ Deno.serve(async(req:Request)=>{
       const x=await processWorkFile(sb,job),now=new Date().toISOString();
       const indexed=x.status==="completed";
       const metadata={...(x.file?.metadata||{}),knowledge_intake:{
-        status:x.status,parser:x.parser||null,coverage:x.coverage||"none",source_version:x.version||null,claim_count:x.claims||0}};
+        ...(x.file?.metadata?.knowledge_intake||{}),
+        status:x.status,parser:x.parser||null,coverage:x.coverage||"none",
+        source_version:x.version||null,claim_count:x.claims||0,
+        structured_text:x.structuredText||{status:"not_supported"}}};
       const {error:fileError}=await sb.from("minds_work_files")
         .update({index_status:indexed?"indexed":"failed",metadata,updated_at:now})
         .eq("id",job.file_id).eq("user_id",job.user_id);

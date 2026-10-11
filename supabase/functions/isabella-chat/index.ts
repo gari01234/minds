@@ -1866,9 +1866,10 @@ async function searchWork(req:Request,args:any){
       sb.from("minds_work_memory").select("id,memory_type,title,body,status,source_file_ids,provenance,occurred_at,updated_at").eq("project_id",project.id).in("status",["proposed","confirmed","resolved"]).order("updated_at",{ascending:false}).limit(160),
       sb.from("minds_work_claims").select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,supersedes_id,superseded_by,confirmed_at,valid_from,valid_to,learned_at,updated_at,minds_work_evidence(id,source_kind,source_file_id,source_message_id,locator,excerpt,stance,trust_level)").eq("project_id",project.id).in("status",["proposed","confirmed","disputed","resolved"]).order("updated_at",{ascending:false}).limit(180),
       searchWorkThreads(req,{project:project.name,query,current_thread_id:args?.current_thread_id}),
-      sb.rpc("minds_project_model_snapshot",{p_project_id:project.id})
+      sb.rpc("minds_project_model_snapshot",{p_project_id:project.id}),
+      sb.rpc("minds_search_work_source_segments",{p_project_id:project.id,p_query:query,p_limit:12})
     ]);
-    const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
+    const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel,sourceSegmentRows]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
     const rank=(a:any,b:any)=>terms.filter(t=>normalizeText(JSON.stringify(b)).includes(t)).length-terms.filter(t=>normalizeText(JSON.stringify(a)).includes(t)).length;
     const folders=folderRows||[],buckets=bucketRows||[];
     const folderName=(id:any)=>folders.find((x:any)=>x.id===id)?.name||null;
@@ -1904,7 +1905,15 @@ async function searchWork(req:Request,args:any){
     return {
       status:"ok",
       project:{id:project.id,key:project.client_key,name:project.name},
-      query,files,tasks,memory,claims,knowledge_coverage:knowledgeCoverage,threads:threadRows?.threads||[],
+      query,files,tasks,memory,claims,knowledge_coverage:knowledgeCoverage,
+      source_segments:(sourceSegmentRows||[]).slice(0,12).map((x:any)=>({
+        file_id:x.file_id,file_name:x.file_name,source_version:x.source_version,
+        locator:x.locator,segment_kind:x.segment_kind,extractor:x.extractor,
+        excerpt:String(x.content||"").slice(0,1600),
+        excerpt_truncated:String(x.content||"").length>1600,
+        evidential_status:"extracted_original_text_not_confirmed"
+      })),
+      threads:threadRows?.threads||[],
       project_model:projectModel||null,
       provenance:{
         class:"project_source",
@@ -2851,6 +2860,9 @@ Los eventos canónicos incluyen local_date, local_start_time, local_end_time, di
 CONTINUIDAD Y EXPOSICIÓN:
 Esta conversación visible puede contener muchos ámbitos, pero MINDS te entrega una ventana persistente separada por exposure_scope. Solo los turnos del ámbito activo forman parte automáticamente de tu contexto de trabajo. No arrastres información de otro proyecto o del ámbito personal solo porque exista en el historial visible. Si el usuario pregunta explícitamente por algo del pasado o pide cruzar ámbitos, usa search_memory: la herramienta devuelve procedencia y scope. Recuperar algo no lo convierte en un recuerdo nuevo ni en un hecho confirmado. Dentro del mismo scope, no vuelvas a preguntar algo que el usuario ya explicó. Si el usuario da información en varios mensajes consecutivos del mismo asunto, intégrala como una sola intención continua. Una corrección breve modifica únicamente el dato corregido y conserva el resto de lo ya entendido.
 Ejemplo: "Agrega un Termin" → "el 15 de octubre a las 15:00" → "5 y no 15" → "con los Bauherren de Bernried" describe UN MISMO evento. "Termin", "Besprechung", reunión o cita significa event salvo indicación contraria.
+
+SEGMENTOS DOCUMENTALES DE WORK:
+Si search_work o routed_work_context incluye source_segments, son fragmentos extraídos del original, con versión y localizadores de hoja/fila o página. Puedes citarlos como contenido del archivo, pero NO son decisiones confirmadas ni prueban que se haya leído el documento completo. Si locator.page_verified es false, no inventes una página. Diferencia los fragmentos de Claims propuestos/confirmados y respeta knowledge_coverage.
 
 PROJECT THREAD MODE:
 Si CONTEXTO PRIVADO.current_work_thread existe, estás dentro de un Thread persistente de Work. La conversación persistente actual es la historia local de ese Thread. Mantén el foco temático del Thread, pero puedes consultar Desktop, Planner, Conocimiento y otros Threads del mismo proyecto cuando sean materialmente relevantes. Los mensajes de otros Threads son contexto conversacional con provenance, NO verdad confirmada del proyecto. No copies toda la historia de otros Threads al actual: recupera solo lo necesario. Un hecho compartido estable debe vivir en Conocimiento mediante las rutas normales de revisión, no por aparecer en un chat. Isabella sigue siendo la interlocutora; el Thread no crea otra personalidad ni otro cerebro.
