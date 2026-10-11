@@ -45,8 +45,15 @@ export async function convertWithDocling(
     const state=doclingTaskState(await secureFetch(
       conf.origin+"/v1/status/poll/"+encodeURIComponent(taskId),conf.key,{},20000));
     if(state.kind==="pending")return {pending:true,taskId};
-    const result=await secureFetch(conf.origin+"/v1/result/"+encodeURIComponent(taskId),conf.key,{},65000);
-    return doclingConvertResult(result);
+    try{
+      const result=await secureFetch(conf.origin+"/v1/result/"+encodeURIComponent(taskId),conf.key,{},65000);
+      return doclingConvertResult(result);
+    }catch(error){
+      // Single-use results can expire after conversion. The original remains in Storage.
+      if(error instanceof Error&&error.message==="docling_http_404")
+        throw new Error("docling_result_expired");
+      throw error;
+    }
   }
   // No signed URL is passed to Docling. The original is streamed by MINDS
   // as multipart data from private Storage to the authenticated converter.
