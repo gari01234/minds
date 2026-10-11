@@ -2982,6 +2982,22 @@ async function enablePushNotifications(){
   try{await navigator.clearAppBadge?.()}catch{}
   return subscription;
 }
+/* Re-enroll only from an explicit click: a second RPC with the same endpoint
+ * is not a renewal. Revoke the old registration and subscribe again.
+ */
+async function renewPushNotifications(){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb)throw new Error('Conecta la memoria antes de renovar los avisos.');
+  const registration=await navigator.serviceWorker.ready;
+  const previous=await registration.pushManager.getSubscription();
+  if(previous){
+    const {error}=await sb.rpc('minds_remove_push_subscription',{p_endpoint:previous.endpoint});
+    if(error)throw new Error('No pude retirar el registro anterior; no se ha cambiado este dispositivo.');
+    const removed=await previous.unsubscribe();
+    if(!removed)throw new Error('iOS no pudo retirar el registro anterior. Cierra y vuelve a abrir Isabella.');
+  }
+  return enablePushNotifications();
+}
 async function disablePushNotifications(){
   const sb=window.MINDS_SUPABASE;
   if(!('serviceWorker' in navigator))return;
@@ -2999,7 +3015,7 @@ function pushStatusCopy(env,permission,subscribed){
   if(!env.supported)return 'Este navegador no admite avisos push.';
   if(env.ios&&!env.standalone)return 'En iPhone o iPad, primero añade Isabella a la pantalla de inicio y ábrela desde allí.';
   if(permission==='denied')return 'Los avisos están bloqueados por el dispositivo. Puedes volver a permitirlos desde los ajustes del sistema.';
-  if(subscribed)return 'Isabella puede avisarte en este dispositivo aunque MINDS no esté abierto.';
+  if(subscribed)return 'Este dispositivo tiene permiso y una suscripción local. Usa «Enviar aviso de prueba» para comprobar si iOS muestra realmente la notificación.';
   return 'Isabella todavía no puede avisarte fuera de MINDS en este dispositivo.';
 }
 async function pushNotificationsPanel(){
@@ -3052,7 +3068,7 @@ async function pushNotificationsPanel(){
   const renewButton=$('#pushRenew');
   if(renewButton)renewButton.onclick=async()=>{
     if(renewButton.disabled)return;renewButton.disabled=true;
-    try{await enablePushNotifications();await pushNotificationsPanel()}
+    try{await renewPushNotifications();await pushNotificationsPanel()}
     catch(e){const box=$('#pushError');if(box)box.textContent=e instanceof Error?e.message:String(e);renewButton.disabled=false}
   };
   const button=$('#pushToggle');
