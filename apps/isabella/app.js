@@ -1896,8 +1896,12 @@ async function handle(text,attachments=[],replyTo=null){
       state.pendingIntent=null;
       clearAssistantStream();
       if(result?.durable){
-        say('assistant','Isabella sigue trabajando…',{metadata:{
-          durable_request_id:result.durable_request_id,durable_status:result.durable_status||'running'
+        const key=String(result.durable_request_id||'');
+        // Reconciliation can complete before this acknowledgement reaches Safari.
+        // Never append a second placeholder for the same accepted provider turn.
+        const existing=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key);
+        if(!existing)say('assistant','Isabella sigue trabajando…',{metadata:{
+          durable_request_id:key,durable_status:result.durable_status||'running'
         }});
         void syncDurableChatJobs();
         return;
