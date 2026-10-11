@@ -55,3 +55,28 @@ test('Work runner preserves existing metadata and Chat distinguishes extracted t
   assert.match(chat,/extracted_original_text_not_confirmed/);
   assert.match(chat,/Si locator.page_verified es false/);
 });
+
+test('Docling preserves Markdown-only captions and unlocated elements without inventing page numbers',()=>{
+  const md='## Hauptüberschrift\\nWestfassade\\nNicht zugeordnete Bildunterschrift';
+  const x=fromDoclingDocument(md,{texts:[
+    {text:'Westfassade',prov:[{page_no:2}]},
+    {text:'Text ohne Seitenreferenz',prov:[]}
+  ]});
+  assert.equal(x.coverage,'partial_text');
+  assert.equal(x.locator_class,'pdf_page');
+  const located=x.segments.filter(s=>s.segment_kind==='page_text');
+  const unlocated=x.segments.filter(s=>s.segment_kind==='unpaged_text');
+  assert.equal(located.length,1);
+  assert.deepEqual(located[0].locator,{page:2,verified:true});
+  assert.ok(unlocated.length>=1);
+  assert.ok(unlocated.every(s=>s.locator.page_verified===false));
+  assert.ok(unlocated.some(s=>s.content.includes('Bildunterschrift')));
+  assert.equal(x.metadata.unlocated_elements,1);
+  assert.ok(x.metadata.unverified_segments>=1);
+});
+test('Docling page-complete text does not create a spurious unverified fallback',()=>{
+  const x=fromDoclingDocument('Westfassade',{texts:[{text:'Westfassade',prov:[{page_no:2}]}]});
+  assert.equal(x.coverage,'complete_text');
+  assert.equal(x.segments.length,1);
+  assert.equal(x.segments[0].locator.page,2);
+});
