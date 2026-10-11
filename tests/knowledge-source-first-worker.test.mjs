@@ -37,7 +37,7 @@ test('Docling adapter accepts only private configured HTTPS endpoint',()=>{
 });
 test('a file is indexed only after completed source-first commit',()=>{
   assert.match(runner,/const indexed=x.status==="completed"/);
-  assert.match(runner,/index_status:indexed\?"indexed":"failed"/);
+  assert.match(runner,/index_status:needsParser\?"waiting_parser":indexed\?"indexed":"failed"/);
   assert.match(core,/\["completed","already_indexed"\]/);
   assert.doesNotMatch(core,/minds_attention_events/);
 });

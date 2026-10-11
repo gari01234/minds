@@ -13,6 +13,15 @@ Deno.serve(async(req:Request)=>{
   const sb=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
   const {data:secret}=await sb.from("isabella_runtime_secrets").select("value").eq("key","work_ingest_runner").maybeSingle();
   if(!secret?.value||String(body.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
+  // One-time historical catch-up is incremental and gives newly uploaded files priority.
+  // Waiting documents are reactivated only after a private Docling URL is configured.
+  const doclingUrl=Deno.env.get("DOCLING_SERVE_URL")||"";
+  let doclingReady=false;
+  try{doclingReady=Boolean(doclingUrl)&&new URL(doclingUrl).protocol==="https:"}catch{}
+  const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
+    p_limit:1,p_docling_ready:doclingReady
+  });
+  if(reconcileError)return json({error:"intake_reconciliation_failed"},500);
   const {data:jobs,error:claimError}=await sb.rpc("minds_claim_work_ingest",{p_limit:1});
   if(claimError)return json({error:"queue_claim_failed"},500);
   const results:any[]=[];
@@ -20,17 +29,18 @@ Deno.serve(async(req:Request)=>{
     try{
       const x=await processWorkFile(sb,job),now=new Date().toISOString();
       const indexed=x.status==="completed";
+      const needsParser=x.status==="waiting_parser";
       const metadata={...(x.file?.metadata||{}),knowledge_intake:{
         ...(x.file?.metadata?.knowledge_intake||{}),
         status:x.status,parser:x.parser||null,coverage:x.coverage||"none",
-        source_version:x.version||null,claim_count:x.claims||0,
+        reason:x.reason||null,source_version:x.version||null,claim_count:x.claims||0,
         structured_text:x.structuredText||{status:"not_supported"}}};
       const {error:fileError}=await sb.from("minds_work_files")
-        .update({index_status:indexed?"indexed":"failed",metadata,updated_at:now})
+        .update({index_status:needsParser?"waiting_parser":indexed?"indexed":"failed",metadata,updated_at:now})
         .eq("id",job.file_id).eq("user_id",job.user_id);
       if(fileError)throw fileError;
       const {error:finishError}=await sb.from("minds_work_ingest_queue")
-        .update({status:indexed?"completed":"skipped",parser_name:x.parser||null,
+        .update({status:needsParser?"waiting_parser":indexed?"completed":"skipped",parser_name:x.parser||null,
           source_version:x.version||null,last_error:x.reason||null,locked_at:null,
           completed_at:now,updated_at:now})
         .eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
