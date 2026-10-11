@@ -16,6 +16,7 @@ test('90.8.3: user request binding exists before the first save/sync',()=>{
   assert.match(app,/candidates\.length===1/);
   assert.match(app,/Math\.abs\(Date\.parse\(m\.at\|\|''\)-started\)<=90000/);
   assert.match(app,/at:job\.created_at/);
+  assert.match(app,/if\(!existing\)say\('assistant','Isabella sigue trabajando…'/);
   assert.doesNotThrow(()=>new Script(app));
 });
 
