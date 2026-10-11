@@ -44,7 +44,7 @@ export async function processWorkFile(sb:any,job:any){
   }
   const structuredText=await materializeWorkSourceText(sb,file,bytes,version,converted);
   if(prior?.status==="completed")
-    return {status:"completed",version,parser:"source_first_existing",claims:prior.claim_count||0,coverage:"claims_only",structuredText,file};
+    return {status:"completed",version,parser:"source_first_existing",claims:prior.claim_count||0,coverage:structuredText.coverage||"claims_only",structuredText,file};
   if(!converted&&bytes.length>providerMax)return {status:"waiting_parser",reason:"docling_required_large_source",version,file};
   const {data:knownRefs}=await sb.from("minds_project_referents")
     .select("kind,label,canonical_key").eq("user_id",file.user_id)
