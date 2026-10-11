@@ -75,14 +75,19 @@ Deno.serve(async(req:Request)=>{
         stack:String(e instanceof Error?e.stack||"": "").slice(0,900)
       }));
       const terminal=Number(job.attempts)>=4,now=new Date().toISOString();
-      await sb.from("minds_work_ingest_queue").update({
-        status:terminal?"failed":"queued",last_error:lastError,locked_at:null,
+      const expired=lastError==="docling_result_expired";
+      const recovery=expired?{docling_task_id:null,docling_started_at:null}:{};
+      const {error:retryError}=await sb.from("minds_work_ingest_queue").update({
+        status:terminal?(expired?"waiting_parser":"failed"):"queued",
+        last_error:lastError,locked_at:null,...recovery,
         next_attempt_at:new Date(Date.now()+Math.min(30,Math.pow(2,Number(job.attempts)))*60000).toISOString(),
         completed_at:terminal?now:null,updated_at:now
       }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
-      if(terminal)await sb.from("minds_work_files").update({index_status:"failed"})
-        .eq("id",job.file_id).eq("user_id",job.user_id);
-      results.push({status:terminal?"failed":"retry_scheduled"});
+      if(retryError)console.error("work_ingest_retry_state_failed",job.id);
+      if(terminal)await sb.from("minds_work_files").update({
+        index_status:expired?"waiting_parser":"failed"
+      }).eq("id",job.file_id).eq("user_id",job.user_id);
+      results.push({status:terminal?(expired?"waiting_parser":"failed"):"retry_scheduled"});
     }
   }
   return json({ok:true,claimed:(jobs||[]).length,results});
