@@ -8,7 +8,7 @@ export function interactiveTurnContract({surface="",background=false,
   workThread=false,attachments=0}={}){
   if(background)return {lane:"legacy_background",reason:"background_call",
     provider_history:"legacy",tools:"existing"};
-  if(surface!=="chat_browser")return {lane:"legacy_nonbrowser",
+  if(surface&&surface!=="chat_browser")return {lane:"legacy_nonbrowser",
     reason:"non_browser_transport",provider_history:"legacy",tools:"existing"};
   // All interactive browser messages, whether phrased as commands,
   // questions, statements or contextual references, keep tool access.
