@@ -7,14 +7,21 @@ const object=/\b(tarea|task|termin|cita|reunión|reunion|evento|event|recordator
 const dateRef=/\b(mañana|manana|pasado mañana|hoy|tomorrow|today|morgen|heute|übermorgen)\b/i;
 export function isSimpleAgendaMutation(message){
  const t=clean(message);
- if(!t||t.length>320||!action.test(t))return false;
+ if(!t||t.length>320)return false;
+ // A direct correction of a recent calendar date also needs an action path.
+ if(dateRef.test(t)&&/\\b(te has confundido|te confundiste|fecha incorrecta|fecha est[aá] mal|corrige la fecha|día equivocado|dia equivocado)\\b/i.test(t))
+   return true;
+ if(!action.test(t))return false;
  // Natural speech: "agrega para mañana proyecto Bernried hacer un
  // Besprechungsnotiz" is a calendar task despite lacking "tarea".
  return object.test(t)||dateRef.test(t)&&
    /\b(proyecto|projekt|para|hacer|terminar|revisar|preparar|calendario|agenda)\b/i.test(t);
 }
-const isoDay=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&
-  new Date(s+"T12:00:00Z").toISOString().slice(0,10)===s;
+const isoDay=s=>{
+ if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(s))return false;
+ const d=new Date(s+"T12:00:00Z");
+ return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;
+};
 function shiftDay(day,offset){
  if(!isoDay(day))throw Error("invalid_server_calendar_date");
  return new Date(Date.parse(day+"T12:00:00Z")+offset*86400000).toISOString().slice(0,10);
@@ -68,9 +75,9 @@ export function calendarProposalReply(proposal){
     timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"
   }).format(d);
  }
- const verb=proposal.action==="update"?"la actualización de":"la";
  const noun=proposal.kind==="event"?"evento":"tarea";
- return "He preparado "+verb+" "+noun+' "'+title+'"'+shown+
+ const intro=proposal.action==="update"?"He preparado la actualización de la ":"He preparado la ";
+ return intro+noun+' "'+title+'"'+shown+
    (proposal.project?" (proyecto "+String(proposal.project)+")":"")+
    ". Queda pendiente de tu confirmación en la interfaz.";
 }
