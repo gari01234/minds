@@ -42,8 +42,16 @@ export async function convertWithDocling(
   const conf=settings();if(!conf)return null;
   if(taskId){
     if(!validDoclingTaskId(taskId))throw Error("docling_invalid_task_id");
-    const state=doclingTaskState(await secureFetch(
-      conf.origin+"/v1/status/poll/"+encodeURIComponent(taskId),conf.key,{},20000));
+    let poll:any;
+    try{poll=await secureFetch(
+      conf.origin+"/v1/status/poll/"+encodeURIComponent(taskId),conf.key,{},20000)}
+    catch(error){
+      // A sleeping/restarted container may lose ephemeral async task state.
+      if(error instanceof Error&&error.message==="docling_http_404")
+        throw new Error("docling_task_lost");
+      throw error;
+    }
+    const state=doclingTaskState(poll);
     if(state.kind==="pending")return {pending:true,taskId};
     try{
       const result=await secureFetch(conf.origin+"/v1/result/"+encodeURIComponent(taskId),conf.key,{},65000);

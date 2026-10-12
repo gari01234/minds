@@ -22,7 +22,7 @@ export async function processWorkFile(sb:any,job:any){
   let converted:any=null;
   if(job.docling_task_id){
     if(job.docling_started_at&&Date.now()-Date.parse(job.docling_started_at)>4*60*60*1000)
-      return {status:"waiting_parser",reason:"docling_task_stale",file};
+      throw new Error("docling_task_stale");
     converted=await convertWithDocling(file,new Uint8Array(),String(job.docling_task_id));
     if(!converted)return {status:"waiting_parser",reason:"docling_service_unavailable",file};
     if(converted.pending)
@@ -33,9 +33,22 @@ export async function processWorkFile(sb:any,job:any){
   const bytes=new Uint8Array(await blob.arrayBuffer());
   if(bytes.length>fileMax)throw new Error("actual_file_size_exceeds_limit");
   const version=await sha256(bytes);
-  const {data:prior}=await sb.from("minds_project_source_ingestions")
+  const {data:prior,error:priorError}=await sb.from("minds_project_source_ingestions")
     .select("status,claim_count").eq("user_id",file.user_id).eq("project_id",file.project_id)
     .eq("source_kind","work_file").eq("source_ref",file.id).eq("source_version",version).maybeSingle();
+  if(priorError)throw new Error("source_intake_receipt_check_failed");
+  // Idempotence must be checked BEFORE calling Docling: receipts alone used
+  // to be checked only after an expensive unnecessary conversion.
+  if(prior?.status==="completed"){
+    const {data:existing,error:receiptError}=await sb.from("minds_work_source_text_receipts")
+      .select("coverage,segment_count,locator_class").eq("file_id",file.id)
+      .eq("source_version",version).maybeSingle();
+    if(receiptError)throw new Error("source_text_receipt_check_failed");
+    if(existing)return {status:"completed",file,version,parser:"source_first_existing",
+      claims:prior.claim_count||0,coverage:existing.coverage,
+      structuredText:{status:"materialized",coverage:existing.coverage,
+        segments:existing.segment_count,locator_class:existing.locator_class,reused:true}};
+  }
   if(!converted&&doclingSupportedExtension(ext)&&isDoclingConfigured()){
     converted=await convertWithDocling(file,bytes);
     if(converted?.pending)return {
@@ -56,7 +69,18 @@ export async function processWorkFile(sb:any,job:any){
       :{type:"input_file",filename:file.name,file_data:"data:"+file.mime_type+";base64,"+base64Bytes(bytes)};
   const extracted=await proposedEvidence(part,
     {filename:file.name,source_sha256:version,known_referents:knownRefs||[]},
-    converted?.markdown||null);
+    converted?.markdown||null,
+    async(model:string,usage:any)=>{
+      const input=Number(usage.input_tokens)||0;
+      const output=Number(usage.output_tokens)||0;
+      const {error:usageError}=await sb.from("minds_ai_usage").insert({
+        user_id:file.user_id,feature:"work_source_extraction",model,
+        input_tokens:input,cached_input_tokens:Number(usage.input_tokens_details?.cached_tokens)||0,
+        output_tokens:output,total_tokens:Number(usage.total_tokens)||input+output,
+        metadata:{file_id:file.id,source_version:version,phase:"source_first_claims"}
+      });
+      if(usageError)throw new Error("work_source_usage_insert_failed");
+    });
   if(!extracted.claims.length)return structuredText.status==="materialized"
     ?{status:"completed",reason:"no_verifiable_propositions",version,file,claims:0,coverage:"source_text_only",structuredText}
     :{status:"skipped",reason:"no_verifiable_propositions",version,file};

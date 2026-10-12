@@ -4,7 +4,8 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
-import {isDoclingReady,configureDoclingRuntime} from "../_shared/work-docling.ts";
+import {isDoclingReady,isDoclingConfigured,configureDoclingRuntime} from "../_shared/work-docling.ts";
+import {hasDoclingWork,doclingTaskIsLost} from "../_shared/work-ingest-policy.mjs";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -21,13 +22,37 @@ Deno.serve(async(req:Request)=>{
   if(doclingSecretError)console.error("work_docling_config_unavailable");
   const credentials=new Map((doclingSecrets||[]).map((s:any)=>[s.key,s.value]));
   configureDoclingRuntime(credentials.get("docling_serve_url")||null,credentials.get("docling_serve_key")||null);
-  // One-time historical catch-up is incremental and gives newly uploaded files priority.
-  // Waiting documents are reactivated only after authenticated private Docling readiness.
-  const doclingReady=await isDoclingReady();
+  // Discover new originals without touching Railway. Readiness is expensive:
+  // an HTTP request can wake a sleeping 2-3 GB Docling container.
   const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
-    p_limit:1,p_docling_ready:doclingReady
+    p_limit:1,p_docling_ready:false
   });
   if(reconcileError)return json({error:"intake_reconciliation_failed"},500);
+  const now=new Date().toISOString();
+  const staleLock=new Date(Date.now()-8*60*1000).toISOString();
+  const probes=await Promise.all([
+    sb.from("minds_work_ingest_queue").select("id")
+      .in("status",["queued","docling_pending"]).lte("next_attempt_at",now).limit(1),
+    sb.from("minds_work_ingest_queue").select("id")
+      .eq("status","processing").lt("locked_at",staleLock).limit(1),
+    sb.from("minds_work_ingest_queue").select("id")
+      .eq("status","waiting_parser")
+      .in("last_error",["docling_required_large_source","needs_private_docling_image"]).limit(1),
+    sb.from("minds_work_ingest_queue").select("id")
+      .eq("status","completed").eq("parser_name","existing-provider-file-input").limit(1)
+  ]);
+  if(probes.some(p=>p.error))return json({error:"work_probe_unavailable"},500);
+  const hasWork=hasDoclingWork(probes);
+  const doclingReady=hasWork?await isDoclingReady():false;
+  if(doclingReady){
+    const {error:resumeError}=await sb.rpc("minds_reconcile_work_ingest",{
+      p_limit:1,p_docling_ready:true
+    });
+    if(resumeError)return json({error:"intake_resume_failed"},500);
+  }
+  // A cold boot or transient 502 must not consume a document's attempt budget.
+  if(hasWork&&isDoclingConfigured()&&!doclingReady)
+    return json({ok:true,claimed:0,deferred:"docling_not_ready"});
   // Enrich one historic, Claims-only PDF per cron run, without losing its
   // existing source ingestion/Claims or displacing newly queued originals.
   if(doclingReady){
@@ -103,7 +128,7 @@ Deno.serve(async(req:Request)=>{
         stack:String(e instanceof Error?e.stack||"": "").slice(0,900)
       }));
       const terminal=Number(job.attempts)>=4,now=new Date().toISOString();
-      const expired=lastError==="docling_result_expired";
+      const expired=doclingTaskIsLost(lastError);
       const recovery=expired?{docling_task_id:null,docling_started_at:null}:{};
       const {error:retryError}=await sb.from("minds_work_ingest_queue").update({
         status:terminal?(expired?"waiting_parser":"failed"):"queued",
@@ -119,5 +144,6 @@ Deno.serve(async(req:Request)=>{
       results.push({status:terminal?(expired?"waiting_parser":"failed"):"retry_scheduled"});
     }
   }
-  return json({ok:true,claimed:(jobs||[]).length,results});
+  return json({ok:true,claimed:(jobs||[]).length,results,
+    docling_probed:hasWork,docling_ready:doclingReady});
 });
