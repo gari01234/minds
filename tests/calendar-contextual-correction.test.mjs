@@ -39,7 +39,7 @@ test("link the original Monday user request to ONE existing task and calculate T
 test("the original message date, not the correction turn date, determines tomorrow",()=>{
  assert.equal(localDateAt("2026-10-12T19:02:58.887Z","Europe/Berlin"),"2026-10-12");
  assert.equal(localDateAt("2026-10-24T23:30:00Z","Europe/Berlin"),"2026-10-25");
- const later={...options,nowIso:"2026-10-13T21:00:00Z"};
+ const later={...options,nowIso:"2026-10-12T22:10:00Z"};
  assert.equal(findCalendarCorrection(conversation,[task],later).proposal.date,"2026-10-13");
 });
 test("fail-closed: no user error acknowledgment, completed, multiple or stale tasks",()=>{
