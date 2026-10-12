@@ -102,15 +102,36 @@ Deno.serve(async(req:Request)=>{
         results.push({status:"docling_pending"});
         continue;
       }
+      if(x.status==="page_batch_advance"){
+        // A checkpoint was committed. Advance to the next range without
+        // incrementing attempts or retaining a now-consumed task ID.
+        const {error:advanceError}=await sb.from("minds_work_ingest_queue")
+          .update({status:"docling_pending",docling_task_id:null,
+            docling_started_at:null,locked_at:null,
+            source_version:x.version||job.source_version,
+            next_attempt_at:new Date(Date.now()+120000).toISOString(),
+            updated_at:now})
+          .eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
+        if(advanceError)throw advanceError;
+        results.push({status:"page_batch_advance"});
+        continue;
+      }
       const indexed=x.status==="completed";
       const needsParser=x.status==="waiting_parser";
-      const metadata={...(x.file?.metadata||{}),knowledge_intake:{
-        ...(x.file?.metadata?.knowledge_intake||{}),
-        status:x.status,parser:x.parser||null,coverage:x.coverage||"none",
-        reason:x.reason||null,source_version:x.version||null,claim_count:x.claims||0,
-        structured_text:x.structuredText||{status:"not_supported"}}};
+      const preserveClaims=needsParser&&job.parser_name==="docling_enrichment";
+      const metadata=preserveClaims
+        ?{...(x.file?.metadata||{}),knowledge_intake:{
+          ...(x.file?.metadata?.knowledge_intake||{}),
+          structured_text:{status:"needs_review",reason:x.reason||"pdf_batch_review"}
+        }}
+        :{...(x.file?.metadata||{}),knowledge_intake:{
+          ...(x.file?.metadata?.knowledge_intake||{}),
+          status:x.status,parser:x.parser||null,coverage:x.coverage||"none",
+          reason:x.reason||null,source_version:x.version||null,claim_count:x.claims||0,
+          structured_text:x.structuredText||{status:"not_supported"}}};
       const {error:fileError}=await sb.from("minds_work_files")
-        .update({index_status:needsParser?"waiting_parser":indexed?"indexed":"failed",metadata,updated_at:now})
+        .update({index_status:preserveClaims?"indexed":needsParser?"waiting_parser":indexed?"indexed":"failed",
+          metadata,updated_at:now})
         .eq("id",job.file_id).eq("user_id",job.user_id);
       if(fileError)throw fileError;
       const {error:finishError}=await sb.from("minds_work_ingest_queue")

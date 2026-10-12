@@ -28,6 +28,16 @@ Knowledge Coverage 1.6 incorpora un único reintento de **consulta de estado** s
 
 Esta cuarentena **no implica que la imagen carezca de información**, ni que sea segura de reintentar automáticamente, ni que Docling esté apagado. La causa exacta de un 404 sigue siendo incierta sin telemetría completa del orquestador. Aceptar con pruebas de un documento no confidencial, un fallo controlado, y verificar las filas de la cola y Source-First en Supabase. La ingestión por páginas y la suspensión Serverless seguirán siendo cambios separados.
 
+## Lotes de páginas recuperables — Knowledge Coverage 1.7
+
+El worker puede usar `page_range` inclusivo de Docling Serve 1.36.0 en lotes **de cuatro páginas**. El procesamiento está **desactivado por defecto**: únicamente se activa con el secreto server-side `DOCLING_PAGE_BATCHES_ENABLED=true` y se aplica a PDF de al menos 16 MiB que no tengan ya una tarea de conversión integral. Una vez iniciado un plan, sus checkpoints deben reanudarse aun si se desactiva el flag, sin reconvertir lotes completados.
+
+La tabla privada `minds_work_docling_page_chunks` conserva progreso por **file_id, SHA-256 del original, rango de páginas y estado**. Solo cuando todos los rangos están completos y validados se emplea el RPC Source-First ya existente para publicar segmentos y una única receipt versionada. Las referencias verificadas a páginas deben ser **números absolutos del PDF original**: si Docling devuelve una numeración relativa/ambigua, el lote se detiene para revisión sin inventar localizadores. Los fragmentos sin localizador continúan sin número de página verificado. La cobertura final se marca prudentemente como `partial_text`, incluso cuando todos los lotes se completan.
+
+Cada lote reenvía el PDF original a Docling, lo que tiene coste de transferencia. Se aborta el plan si la proyección `ceil(pages/4) × tamaño_original` supera **512 MiB** o si hay más de **200 páginas**. No ampliar automáticamente límites de infraestructura. El conteo de páginas se hace desde el original usando `pdf-lib` en el worker, no desde un dato inventado.
+
+**Aceptación antes de activar:** probar primero un PDF sintético no confidencial con varias páginas y texto de localización inequívoca, comprobar que el JSON de Docling conserva página absoluta en los rangos posteriores, y validar un reinicio entre lotes y una conversión fallida. Confirmar registros privados, idempotencia, 0 Claims duplicados, coste estimado y localizadores reales; si hay dudas, mantener el flag apagado. El esquema, el código y los tests por sí solos no prueban la conversión en vivo. La extracción de planos con semántica arquitectónica requiere una aceptación posterior independiente.
+
 ## Habilitación segura en MINDS
 
 1. Confirmar por el endpoint HTTPS del hosting que `GET /ready` pasa a 200 tras cargar los modelos y que `GET /v1/convert/file/async` requiere `X-Api-Key`; probar primero un PDF no confidencial.

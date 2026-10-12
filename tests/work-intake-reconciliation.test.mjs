@@ -37,7 +37,7 @@ test('unsupported or oversized source waits for reader without burning retries o
   assert.match(core,/status:"waiting_parser",reason:"needs_format_reader"/);
   assert.match(core,/status:"waiting_parser",reason:"needs_larger_worker"/);
   assert.match(worker,/status:needsParser\?"waiting_parser":indexed\?"completed":"skipped"/);
-  assert.match(worker,/index_status:needsParser\?"waiting_parser":indexed\?"indexed":"failed"/);
+  assert.match(worker,/index_status:preserveClaims\?"indexed":needsParser\?"waiting_parser":indexed\?"indexed":"failed"/);
   assert.match(worker,/reason:x\.reason\|\|null/);
 });
 test('parser activation requeues only supported blocked files, not unprocessable oversized ones',()=>{
