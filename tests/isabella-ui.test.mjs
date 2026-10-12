@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {isSimpleAgendaMutation} from "../supabase/functions/_shared/calendar-temporal-fastpath.mjs";
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 
@@ -1146,12 +1147,8 @@ test('Build 64 gives light turns a lower-latency cognitive budget without weaken
 
 test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  const a=chat.indexOf('function simpleAgendaMutation');
-  const b=chat.indexOf('function readOnlyDailyAgendaIntent',a);
-  assert.ok(a>=0&&b>a);
-  const source=chat.slice(a,b);
-  const make=new Function('normalizeText',source+';return simpleAgendaMutation;');
-  const simple=make(value=>String(value||'').trim().replace(/\\s+/g,' ').toLowerCase());
+  assert.ok(chat.includes('function simpleAgendaMutation'));
+  const simple=isSimpleAgendaMutation;
   assert.equal(simple('Agrega para mañana una tarea: comprar una calculadora'),true);
   assert.equal(simple('Verschiebe die Aufgabe auf morgen'),true);
   assert.equal(simple('Investiga la arquitectura de Geoffrey Bawa'),false);
