@@ -6,6 +6,7 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
 import {isDoclingReady,isDoclingConfigured,configureDoclingRuntime} from "../_shared/work-docling.ts";
 import {hasDoclingWork,doclingTaskIsLost} from "../_shared/work-ingest-policy.mjs";
+import {costlyDocumentImage,decideDoclingFailure} from "../_shared/work-docling-failure-policy.mjs";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -127,21 +128,45 @@ Deno.serve(async(req:Request)=>{
         queue_id:job.id,error:lastError,
         stack:String(e instanceof Error?e.stack||"": "").slice(0,900)
       }));
-      const terminal=Number(job.attempts)>=4,now=new Date().toISOString();
+      // Inspect file type only on errors; never re-upload large images blindly
+      // after a task 404, an explicit failure, or an unreadable result.
+      const {data:source,error:sourceError}=await sb.from("minds_work_files")
+        .select("name,size_bytes").eq("id",job.file_id).eq("user_id",job.user_id).maybeSingle();
+      const now=new Date().toISOString();
+      const decision=sourceError||!source
+        ?{action:"hold",reason:"source_metadata_unavailable"}
+        :decideDoclingFailure({
+          reason:lastError,previousError:job.last_error,taskId:job.docling_task_id,
+          costlyImage:costlyDocumentImage(source.name,source.size_bytes),
+          attempts:job.attempts
+        });
+      if(decision.action==="repoll"){
+        // The registry may be momentarily inconsistent: recheck the SAME task
+        // once, without incrementing attempts or uploading the source again.
+        const {error:repollError}=await sb.from("minds_work_ingest_queue").update({
+          status:"docling_pending",last_error:decision.reason,locked_at:null,
+          next_attempt_at:new Date(Date.now()+120000).toISOString(),updated_at:now
+        }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
+        if(repollError)return json({error:"docling_repoll_state_failed"},500);
+        results.push({status:"docling_repoll_scheduled"});
+        continue;
+      }
       const expired=doclingTaskIsLost(lastError);
+      const terminal=decision.action==="hold"||Number(job.attempts)>=4;
+      const terminalStatus=decision.action==="hold"||expired?"waiting_parser":"failed";
       const recovery=expired?{docling_task_id:null,docling_started_at:null}:{};
       const {error:retryError}=await sb.from("minds_work_ingest_queue").update({
-        status:terminal?(expired?"waiting_parser":"failed"):"queued",
-        last_error:lastError,locked_at:null,...recovery,
+        status:terminal?terminalStatus:"queued",
+        last_error:decision.reason,locked_at:null,...recovery,
         next_attempt_at:new Date(Date.now()+Math.min(30,Math.pow(2,Number(job.attempts)))*60000).toISOString(),
         completed_at:terminal?now:null,updated_at:now
       }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
-      if(retryError)console.error("work_ingest_retry_state_failed",job.id);
-      // An enrichment failure must not erase the already-indexed Claims.
+      if(retryError)return json({error:"work_ingest_retry_state_failed"},500);
+      // Do not erase already indexed Claims when only enrichment failed.
       if(terminal&&job.parser_name!=="docling_enrichment")await sb.from("minds_work_files").update({
-        index_status:expired?"waiting_parser":"failed"
+        index_status:terminalStatus
       }).eq("id",job.file_id).eq("user_id",job.user_id);
-      results.push({status:terminal?(expired?"waiting_parser":"failed"):"retry_scheduled"});
+      results.push({status:terminal?terminalStatus:"retry_scheduled"});
     }
   }
   return json({ok:true,claimed:(jobs||[]).length,results,
