@@ -14,7 +14,8 @@ function parseObject(text:string){
 export function base64Bytes(bytes:Uint8Array){
   let s="";for(let i=0;i<bytes.length;i+=8192)s+=String.fromCharCode(...bytes.subarray(i,i+8192));return btoa(s);
 }
-export async function proposedEvidence(input:any,info:any,sourceMarkdown:string|null){
+export async function proposedEvidence(input:any,info:any,sourceMarkdown:string|null,
+  recordUsage?: (model:string,usage:any)=>Promise<void>){
   const key=Deno.env.get("OPENAI_API_KEY");
   if(!key)throw new Error("openai_not_configured");
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
@@ -35,6 +36,12 @@ export async function proposedEvidence(input:any,info:any,sourceMarkdown:string|
         ]}]})
     });
     response=await r.json().catch(()=>({}));
+    // Account for billable tokens even if parsing/validation subsequently fails.
+    // Never persist the source payload, provider key, or provider response text.
+    if(response?.usage&&recordUsage){
+      try{await recordUsage(String(response.model||model),response.usage)}
+      catch{console.error("work_source_usage_receipt_failed")}
+    }
     if(!r.ok)throw new Error("provider_http_"+r.status);
   }finally{clearTimeout(timeout)}
   if(response.status!=="completed")throw new Error("provider_not_completed");
