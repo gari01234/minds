@@ -29,7 +29,7 @@ test('Build 85.1 every new visible Isabella turn carries structural exposure sco
   assert.ok(sync.includes('const approved=(messages||[]).filter(scopedTurnReady)'));
   assert.ok(sync.includes('exposure_scope_version:1'));
   assert.ok(!sync.includes("exposure_scope_key:scope?.key||'legacy'"));
-  assert.ok(sync.includes("exposure_scope_key:scope?.key||'legacy'"));
+  assert.ok(sync.includes('exposure_scope_key:scope.key'));
 });
 
 test('Build 85.1 one visible chat uses separate OpenAI Conversations per scope',()=>{
