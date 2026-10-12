@@ -105,6 +105,11 @@ export async function processPdfPages(sb,file,job,{bytes=null,version=null}={}){
         segments:parsed.segments,markdown:parsed.markdown,reason:null},"submitted");
     }catch(error){
       const why=String(error instanceof Error?error.message:error);
+      if(why==="docling_task_lost"&&next.reason!=="docling_task_missing_once"){
+        // One extra poll of the SAME task, no fresh PDF transfer or retry cost.
+        await writeCheckpoint(sb,next,{reason:"docling_task_missing_once"},"submitted");
+        return {kind:"pending",taskId:next.docling_task_id,version:hash};
+      }
       if(isRecoverableTaskLoss(why))return await review(sb,next,why);
       throw error; // transient HTTP/network errors retain the same task ID
     }
