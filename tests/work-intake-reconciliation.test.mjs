@@ -17,8 +17,8 @@ test('new uploads automatically enqueued; historical originals discovered only i
   // proceeds to the second parser-ready reconciliation.
   assert.match(worker,/p_limit:1,p_docling_ready:false/);
   assert.match(worker,/p_limit:1,p_docling_ready:true/);
-  assert.match(worker,/const doclingReady=hasWork\\?await isDoclingReady\\(\\):false/);
-  assert.match(worker,/if\\(hasWork&&isDoclingConfigured\\(\\)&&!doclingReady\\)/);
+  assert.ok(worker.includes('const doclingReady=hasWork?await isDoclingReady():false;'));
+  assert.ok(worker.includes('if(hasWork&&isDoclingConfigured()&&!doclingReady)'));
 });
 test('new user files always outrank historical background backlog',()=>{
   assert.match(sql,/is_backfill boolean not null default false/);
