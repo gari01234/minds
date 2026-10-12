@@ -26,7 +26,9 @@ test('Build 85.1 every new visible Isabella turn carries structural exposure sco
   assert.ok(migration.includes('provenance_class'));
   assert.ok(app.includes('userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure}'));
   assert.ok(app.includes("metadata:{exposure_scope:exposure}"));
-  assert.ok(sync.includes('exposure_scope_version:scope?.version===1?1:0'));
+  assert.ok(sync.includes('const approved=(messages||[]).filter(scopedTurnReady)'));
+  assert.ok(sync.includes('exposure_scope_version:1'));
+  assert.ok(!sync.includes("exposure_scope_key:scope?.key||'legacy'"));
   assert.ok(sync.includes("exposure_scope_key:scope?.key||'legacy'"));
 });
 
