@@ -13,6 +13,7 @@ test("real Bernried phrase uses lightweight action lane without the noun tarea",
  assert.equal(isSimpleAgendaMutation("Analiza todos los planos de Bernried"),false);
  assert.equal(isSimpleAgendaMutation("Prepara un PDF del proyecto Bernried"),false);
  assert.equal(isSimpleAgendaMutation("Qué tal pinta mañana"),false);
+ assert.equal(isSimpleAgendaMutation("Mañana es martes , te has confundido"),true);
 });
 test("server-local Monday 12 October produces Tuesday 13, not Sunday 11",()=>{
  assert.deepEqual(resolveRelativeCalendarDate(original,"2026-10-12"),
@@ -38,6 +39,7 @@ test("conflicting explicit dates or weekdays cannot be silently overwritten",()=
  const guarded=guardCalendarProposal({action:"create",kind:"task",
   title:"Example",date:"2026-10-11"},"mañana domingo","2026-10-12");
  assert.equal(guarded.kind,"conflict");
+ assert.doesNotThrow(()=>calendarProposalReply({action:"create",kind:"task",title:"T",date:"2026-19-67"}));
 });
 test("date-free intentions and non-calendar proposals stay unchanged",()=>{
  const proposal={action:"create",kind:"task",title:"Llamar a Bernried",date:null};
