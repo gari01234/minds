@@ -5,6 +5,7 @@ import {checked,nextToolInput,userMessage,transientInstructions,memoryCheckpoint
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
+import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -81,13 +82,7 @@ function calendarAssessmentIntent(message:string){
   const question=/(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
   return period&&question;
 }
-function simpleAgendaMutation(message=""){
-  const t=normalizeText(message);
-  if(!t||t.length>320)return false;
-  const action=/\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|mueve|mover|cambia|cambiar|reprograma|reprogramar|borra|borrar|elimina|eliminar|completa|completar|archiva|archivar|add|create|move|change|delete|remove|complete|archive|erstelle|hinzufügen|verschiebe|ändern|lösche|erledige)\b/i.test(t);
-  const object=/\b(tarea|task|termin|cita|reunión|reunion|evento|event|recordatorio|reminder|aufgabe|besprechung|termin)\b/i.test(t);
-  return action&&object;
-}
+function simpleAgendaMutation(message=""){return isSimpleAgendaMutation(message);}
 
 function likelyMaterialDeliverable(message=""){
   const t=normalizeText(message);if(!t)return false;
@@ -2799,9 +2794,9 @@ Deno.serve(async (req: Request) => {
     return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
-  const fastAgenda=!background&&!attachments.length&&route.complexity==="light"&&simpleAgendaMutation(effectiveMessage);
+  const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
-  if(fastAgenda)budget={...budget,depth:"light",lexical:4,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
+  if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1000};
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const scheduleAssessment=calendarAssessmentIntent(effectiveMessage);
@@ -2809,7 +2804,7 @@ Deno.serve(async (req: Request) => {
   if(scheduleAssessment)budget={...budget,depth:"standard",rounds:Math.max(budget.rounds,5),reasoning:"medium",maxOutput:Math.max(budget.maxOutput,3600)};
   // The route model can call a substantive Work follow-up "light"; do not
   // starve its response. Continuations must not hit the same output ceiling.
-  if(!background&&(route.work||responseContinuation))budget={
+  if(!background&&!fastAgenda&&(route.work||responseContinuation))budget={
     ...budget,depth:budget.depth==="light"?"standard":budget.depth,
     reasoning:budget.reasoning==="low"?"medium":budget.reasoning,
     maxOutput:Math.max(budget.maxOutput,responseContinuation?6200:4400)
@@ -3076,6 +3071,27 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     locale:context.locale||"es-ES"
   });
 
+
+  // Same governed action tools, with narrow server-authoritative context.
+  // Do not replay the historical provider conversation for simple mutations.
+  const fastCalendarInstructions=`Eres Isabella, la asistente personal de Gari.
+Resuelve una operación concreta de tareas o calendario con brevedad.
+Usa solo el día local del servidor, nunca adivines fechas desde el historial.
+Usa una herramienta de propuesta cuando el usuario pida crear o modificar
+una tarea o evento. Los cambios requieren confirmación en la interfaz:
+no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
+Mantén el proyecto explícito; no inventes horas ni fechas.
+Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.`;
+  const fastCalendarContext={
+    timezone:temporal.timezone,current_date:temporal.current_date,
+    tomorrow_date:new Date(Date.parse(temporal.current_date+"T12:00:00Z")+86400000).toISOString().slice(0,10),
+    current_weekday:temporal.weekday,project:route.project||null,
+    today_tasks:(canonicalAgenda.today_tasks||[]).slice(0,12),
+    tomorrow_tasks:(canonicalAgenda.tomorrow_tasks||[]).slice(0,12),
+    upcoming:(canonicalAgenda.upcoming||[]).slice(0,12),
+    undated_tasks:(canonicalAgenda.undated_tasks||[]).slice(0,8),
+    agenda_context_source:canonicalAgenda.status==="ok"?"server_canonical":"unavailable"
+  };
 
   const seed = recent;
   let conversationInfo:any={id:null,created:false};
@@ -3459,7 +3475,11 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   let roundsUsed=0;
   const attachmentInputs=background?[]:await loadChatAttachments(req,attachments);
   const turnText=effectiveMessage;
-  let input:any = [{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
+  let input:any = fastAgenda
+    ?[...recent.slice(-4).map((x:any)=>({role:x.role==="assistant"?"assistant":"user",
+        content:[{type:"input_text",text:String(x.content||"").slice(0,900)}]})),
+      {role:"user",content:[{type:"input_text",text:turnText}]}]
+    :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
@@ -3471,12 +3491,12 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
       body:JSON.stringify({
         model,
-        ...(conversationInfo.id?{conversation:conversationInfo.id}:{}),
-        instructions:transientInstructions(system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),JSON.parse(dynamicContext)),
+        ...(!fastAgenda&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
+        instructions:transientInstructions(fastAgenda?fastCalendarInstructions:system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),fastAgenda?fastCalendarContext:JSON.parse(dynamicContext)),
         reasoning:{effort:reasoningEffort},
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
-        ...(conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
+        ...(!fastAgenda&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
         ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
@@ -3519,7 +3539,15 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
         continue;
       }
-      const proposal:any=proposalFromTool(call.name,args);
+      const rawProposal:any=proposalFromTool(call.name,args);
+      const dateGuard=guardCalendarProposal(rawProposal,effectiveMessage,temporal.current_date);
+      if(dateGuard.kind==="conflict"){
+        outputs.push({type:"function_call_output",call_id:call.call_id,
+          output:JSON.stringify({status:"temporal_conflict_requires_clarification",
+            reason:dateGuard.reason,server_expected_date:dateGuard.expected})});
+        continue;
+      }
+      const proposal:any=dateGuard.proposal;
       if(mode==="confirm"&&!proposal){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"confirmation_required_but_no_proposal"})});
         continue;
@@ -3732,11 +3760,17 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"ignored"})});
       }
     }
-    input=nextToolInput(input,payload.output,outputs,!!conversationInfo.id);
+    input=nextToolInput(input,payload.output,outputs,!!conversationInfo.id&&!fastAgenda);
   }
 
   let reply=String(extractText(payload)||"").trim() ||
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
+  if(fastAgenda&&toolProposals.length===1){
+    reply=calendarProposalReply(toolProposals[0])||reply;
+  }else if(fastAgenda&&!toolProposals.length&&
+    /\\b(he agregado|qued[oó] agregado|ya qued[oó] agregado|lo correg[ií]|ya lo cambi[eé])\\b/i.test(reply)){
+    reply="No he preparado todavía un cambio verificable en el calendario. Puedo intentarlo de nuevo.";
+  }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
   if(persistPresence&&conversationInfo?.dbId){
