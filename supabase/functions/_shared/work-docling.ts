@@ -37,7 +37,8 @@ export function doclingSupportedExtension(ext:string){
   return ["pdf","docx","pptx","png","jpg","jpeg"].includes(ext);
 }
 export async function convertWithDocling(
- file:{name:string;mime_type:string},bytes:Uint8Array,taskId:string|null=null
+ file:{name:string;mime_type:string},bytes:Uint8Array,taskId:string|null=null,
+ options:{page_range?:[number,number]}={}
 ){
   const conf=settings();if(!conf)return null;
   if(taskId){
@@ -74,6 +75,17 @@ export async function convertWithDocling(
   data.append("image_export_mode","placeholder");
   data.append("do_ocr","true");
   data.append("abort_on_error","false");
+  // Docling Serve v1.36.0 (examples/split_processing.py) accepts a
+  // 1-based inclusive page_range tuple via repeated form fields.
+  if(options.page_range){
+    const [start,end]=options.page_range;
+    if(!Number.isSafeInteger(start)||!Number.isSafeInteger(end)||
+       start<1||end<start||end>200)throw Error("docling_page_range_invalid");
+    if(!file.name.toLowerCase().endsWith(".pdf"))
+      throw Error("docling_page_range_pdf_only");
+    data.append("page_range",String(start));
+    data.append("page_range",String(end));
+  }
   const started=doclingTaskState(await secureFetch(
     conf.origin+"/v1/convert/file/async",conf.key,{method:"POST",body:data},60000));
   return {pending:true,taskId:started.taskId};
