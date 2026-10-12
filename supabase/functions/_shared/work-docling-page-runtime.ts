@@ -38,7 +38,7 @@ export async function readPdfPageCount(bytes:Uint8Array):Promise<number>{
     const doc=await module.PDFDocument.load(bytes,
       {ignoreEncryption:false,updateMetadata:false});
     return doc.getPageCount();
-  }catch{err("pdf_page_count_unavailable")}
+  }catch{throw new Error("pdf_page_count_unavailable")}
 }
 async function checkpoints(sb:any,file:any,version:string):Promise<any[]>{
   const r=await sb.from("minds_work_docling_page_chunks")
