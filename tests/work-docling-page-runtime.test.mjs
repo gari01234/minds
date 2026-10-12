@@ -29,7 +29,7 @@ test("the original is hashed before source receipts or final Claim promotion",()
 test("checkpoints are persisted without duplicate reupload of finished batches",()=>{
   assert.match(runtime,/ignoreDuplicates:true/);
   assert.match(runtime,/status:"completed",docling_task_id:null/);
-  assert.match(runtime,/rows\.every\(r=>r\.status==="completed"\)/);
+  assert.match(runtime,/rows\.every\(\(r:any\)=>r\.status==="completed"\)/);
   assert.match(runtime,/pdf_page_transfer_budget_exceeded/);
   assert.match(runtime,/EGRESS_BUDGET_BYTES=512\*1024\*1024/);
 });
