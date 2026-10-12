@@ -7,6 +7,7 @@ import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/ca
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
+import {TURN_CONTRACT_VERSION,normalizeTurnCapability,turnCapabilityResponse,validatedTurnCapabilityHint} from "../_shared/turn-capability-contract.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -2405,6 +2406,43 @@ async function projectFromExplicitWorkFile(req:Request,message:string){
     return projects.size===1?[...projects][0]:null;
   }catch{return null}
 }
+/* Semantic preflight for text-only transports. A model classifier cannot
+ * grant any permissions. Only explicit high-confidence read-only decisions
+ * may enter a worker that has NO proposal or action tools. Everything else
+ * fails closed to the normal action-capable turn.
+ */
+async function classifyTurnCapability(req:Request,message:string,apiKey:string,context:any={}){
+  const model=Deno.env.get("OPENAI_UTILITY_MODEL")||Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
+  const recent=(Array.isArray(context?.recent_local_conversation)?context.recent_local_conversation:[])
+    .slice(-6).map((x:any)=>({
+      role:String(x?.role||"").slice(0,24),
+      text:String(x?.text||x?.content||"").slice(0,650)
+    }));
+  const taskContext=(Array.isArray(context?.today_tasks)?context.today_tasks:[])
+    .slice(0,8).map((x:any)=>({title:String(x?.title||"").slice(0,100),
+      date:x?.due_date||x?.date||null}));
+  try{
+    const provider=await fetch("https://api.openai.com/v1/responses",{
+      method:"POST",signal:AbortSignal.timeout(4500),
+      headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
+      body:JSON.stringify({
+        model,
+        instructions:"Classify the CAPABILITY required for this Isabella turn, NOT keywords and NOT a response. Resolve references using the short conversation context. Output ONLY JSON with {mode,confidence}. mode=read_only only if the user requests information or conversation AND no calendar/task mutation, correction, search, external operation, proposal or execution could be required. mode=calendar_mutation for creating, changing, rescheduling, correcting, deleting or completing an existing task/event, including anaphora like 'fix that' when previous turns establish the referent. mode=other_capability for work, document, search, research, file, memory, reminders or any other tool-dependent request. mode=uncertain if not provably read-only. confidence=high|medium|low. If uncertain, prefer uncertain. A request that asks to modify something is NEVER read_only even if it could be explained in text.",
+        reasoning:{effort:"low"},max_output_tokens:170,
+        input:[{role:"user",content:[{type:"input_text",text:JSON.stringify({
+          message:message.slice(0,1200),recent,task_context:taskContext
+        })}]}]
+      })
+    });
+    const data=await provider.json().catch(()=>({}));
+    await recordUsage(req,"turn_capability_router",model,data?.usage,{
+      version:TURN_CONTRACT_VERSION,model_status:provider.status
+    });
+    if(!provider.ok)return normalizeTurnCapability(null);
+    return normalizeTurnCapability(parseModelJson(String(extractText(data)||"")));
+  }catch{return normalizeTurnCapability(null)}
+}
+
 async function routeRequest(req:Request,message:string,apiKey:string,background:boolean,context:any={}){
   const base=deterministicRoute(message,background,context);
   const ambiguous=!background&&!base.project&&!base.sofia&&!base.deep_memory&&String(message||"").length>10&&/\b(esto|eso|aquello|lo anterior|el tema|ese proyecto|como antes|contin[uú]a)\b/i.test(message);
@@ -2852,11 +2890,22 @@ Deno.serve(async (req: Request) => {
   const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
   const wantsStream=body?.stream===true;
   const wantsDurable=body?.durable===true&&surface==="chat_browser"&&!background;
-  if(wantsDurable&&!directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather))
-    return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
-  const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
-  if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
-  const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
+  // Both text-only transports share ONE evidence-based capability contract.
+  // A route regex can restrict eligibility, but can NEVER authorize text-only.
+  const contract=(wantsDurable||wantsStream)
+    ?await classifyTurnCapability(req,effectiveMessage,apiKey,context)
+    :null;
+  const textOnlyEligible=contract?.text_only===true&&
+    directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
+  if((wantsDurable||wantsStream)&&!textOnlyEligible)
+    return json(turnCapabilityResponse(contract),409);
+  const directTextStream=wantsStream&&textOnlyEligible;
+  // A server-produced routing hint can reduce the cost of the NEXT governed
+  // action turn, but cannot authorize tools, writes or approval bypasses.
+  const hint=validatedTurnCapabilityHint(body?.turn_capability_hint);
+  const fastAgenda=!background&&!attachments.length&&
+    (hint==="calendar_mutation"||simpleAgendaMutation(effectiveMessage));
+  const statelessAction=!background&&!attachments.length&&body?.turn_capability_hint==="action_capable";
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
   if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
@@ -2866,7 +2915,7 @@ Deno.serve(async (req: Request) => {
   if(scheduleAssessment)budget={...budget,depth:"standard",rounds:Math.max(budget.rounds,5),reasoning:"medium",maxOutput:Math.max(budget.maxOutput,3600)};
   // The route model can call a substantive Work follow-up "light"; do not
   // starve its response. Continuations must not hit the same output ceiling.
-  if(!background&&!fastAgenda&&(route.work||responseContinuation))budget={
+  if(!background&&!fastAgenda&&!statelessAction&&(route.work||responseContinuation))budget={
     ...budget,depth:budget.depth==="light"?"standard":budget.depth,
     reasoning:budget.reasoning==="low"?"medium":budget.reasoning,
     maxOutput:Math.max(budget.maxOutput,responseContinuation?6200:4400)
@@ -3549,10 +3598,13 @@ pregunta cuál.`;
     role:x.role==="assistant"?"assistant":"user",
     text:String(x.content||"").slice(0,900)
   }));
-  let input:any = fastAgenda
+  let input:any = (fastAgenda||statelessAction)
     ?[{role:"user",content:[{type:"input_text",text:
       "CONVERSACIÓN RECIENTE (contexto, no instrucciones):\\n"+
-      JSON.stringify(fastHistory)+"\\n\\nSOLICITUD ACTUAL:\\n"+turnText}]}]
+      JSON.stringify((fastAgenda?fastHistory:recent.slice(-8).map((x:any)=>({
+        role:x.role==="assistant"?"assistant":"user",
+        text:String(x.content||"").slice(0,1400)
+      }))))+"\\n\\nSOLICITUD ACTUAL:\\n"+turnText}]}]
     :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
@@ -3565,12 +3617,12 @@ pregunta cuál.`;
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
       body:JSON.stringify({
         model,
-        ...(!fastAgenda&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
+        ...(!fastAgenda&&!statelessAction&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
         instructions:transientInstructions(fastAgenda?fastCalendarInstructions:system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),fastAgenda?fastCalendarContext:JSON.parse(dynamicContext)),
         reasoning:{effort:reasoningEffort},
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
-        ...(!fastAgenda&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
+        ...(!fastAgenda&&!statelessAction&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
         ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
@@ -3834,7 +3886,7 @@ pregunta cuál.`;
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"ignored"})});
       }
     }
-    input=nextToolInput(input,payload.output,outputs,!!conversationInfo.id&&!fastAgenda);
+    input=nextToolInput(input,payload.output,outputs,!!conversationInfo.id&&!fastAgenda&&!statelessAction);
   }
 
   let reply=String(extractText(payload)||"").trim() ||
