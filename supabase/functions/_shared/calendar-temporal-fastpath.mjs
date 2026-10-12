@@ -9,7 +9,7 @@ export function isSimpleAgendaMutation(message){
  const t=clean(message);
  if(!t||t.length>320)return false;
  // A direct correction of a recent calendar date also needs an action path.
- if(dateRef.test(t)&&/\\b(te has confundido|te confundiste|fecha incorrecta|fecha est[aá] mal|corrige la fecha|día equivocado|dia equivocado)\\b/i.test(t))
+ if(dateRef.test(t)&&/\b(te has confundido|te confundiste|fecha incorrecta|fecha est[aá] mal|corrige la fecha|día equivocado|dia equivocado)\b/i.test(t))
    return true;
  if(!action.test(t))return false;
  // Natural speech: "agrega para mañana proyecto Bernried hacer un
@@ -18,7 +18,7 @@ export function isSimpleAgendaMutation(message){
    /\b(proyecto|projekt|para|hacer|terminar|revisar|preparar|calendario|agenda)\b/i.test(t);
 }
 const isoDay=s=>{
- if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(s))return false;
+ if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
  const d=new Date(s+"T12:00:00Z");
  return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;
 };
