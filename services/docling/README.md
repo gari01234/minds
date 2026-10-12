@@ -14,6 +14,14 @@ El Dockerfile utiliza **Docling Serve CPU v1.36.0** de la distribución oficial.
 
 Mantener una sola réplica mientras se use el orquestador local: sus IDs de tareas no se comparten entre contenedores. El scratch debe tratarse como temporal, con política explícita de reinicio/limpieza y sin almacenamiento público. `DOCLING_SERVE_SINGLE_USE_RESULTS=true` y `DOCLING_SERVE_RESULT_REMOVAL_DELAY=300` limitan la retención de resultados consumidos, sin prometer limpieza de los resultados jamás recuperados o los ficheros de scratch abandonados. **Gate obligatorio antes de conectar Work a Docling:** el worker debe recuperar explícitamente la ausencia/caducidad de resultados tras reinicios y fallos posteriores a la primera lectura, reencolando desde el original versionado sin perder la trazabilidad ni generar Claims duplicados. El modo single-use mejora la exposición temporal, pero sin esa recuperación todavía no se acepta la ingesta automática confidencial.
 
+## Mitigación OOM de octubre 2026 — recursos sin aumento de plan
+
+El 12/10/2026 se confirmó la ejecución real en Railway Hobby a **4 GB RAM / 2 vCPU**, pero también un reinicio por agotamiento de memoria con pérdida de un resultado asíncrono (404). Los límites de recursos son topes, no una garantía de que cualquier PDF cabrá. La configuración del contenedor restringe el motor local a un trabajador, un convertidor cacheado, dos hilos CPU y lotes de una página en las etapas de OCR/layout/tablas. Se conserva la versión v1.36.0, la autenticación, los archivos originales y el esquema de extracción.
+
+**Esto es una mitigación, no una solución completa para documentos largos o imágenes complejas.** Un único documento puede agotar 4 GB de RAM incluso con concurrencia uno. No subir la cuota ni activar Serverless sin aceptación real. Las tareas asíncronas de Docling viven en el proceso: el reinicio puede invalidar su identificador; la recuperación y la repetición idempotente del worker (Knowledge Coverage 1.4) deben probarse. Antes de aceptar los PDF grandes de 20–48 MiB, implementar paginación verificable con persistencia incremental y control de número de páginas, sin perder citas a páginas originales ni reabrir los Claims aprobados.
+
+El despliegue debe probarse con una fuente no confidencial, luego una representativa con permiso de procesamiento, observando picos de RAM, errores 404/5xx, segmentos completos o marcados como parciales, y diferencias entre versiones. La aceptación exige evidencia en Supabase y en los logs de Railway; un CI verde solo confirma el contrato de configuración. El ahorro de memoria no implica que el servicio pueda dormirse: se requiere otra prueba antes de habilitar suspensión automática.
+
 ## Habilitación segura en MINDS
 
 1. Confirmar por el endpoint HTTPS del hosting que `GET /ready` pasa a 200 tras cargar los modelos y que `GET /v1/convert/file/async` requiere `X-Api-Key`; probar primero un PDF no confidencial.
