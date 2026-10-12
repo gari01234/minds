@@ -208,15 +208,13 @@ async function ask(message,state,options={}){
       options.onTextReset?.();throw e;
     }
   }
-  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&(!needsCalendarAssessment(message)||readOnlyDailyAgendaIntent(message))){
-    const durable=await askDurableChat(message,state,options,replyContext);
-    if(durable)return durable;
-  }
-  if(!options.workThread&&!options.background&&!attachments.length&&!needsCalendarAssessment(message)){
-    const streamed=await askDirectStream(message,state,options,replyContext);
-    if(streamed)return streamed;
-  }
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null}});
+  // P0 turn-capability contract: an unclassified conversational turn must
+  // retain access to the governed tools, proposals, and approval receipts.
+  // Durable text-only and direct text streaming lack those capabilities.
+  // Do not infer read-only intent from the absence of a known action phrase.
+  // They remain available to a future server-verified read-only contract,
+  // never as the browser's default for an ordinary conversation.
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};

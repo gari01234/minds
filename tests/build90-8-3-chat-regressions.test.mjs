@@ -43,7 +43,11 @@ test('90.8.3: read-only daily agenda can use durable lane but mutations cannot',
   assert.match(server,/tomorrow_events:tomorrowEvents\.slice\(0,50\)/);
   assert.match(server,/readOnlyDailyAgendaIntent\(effectiveMessage\)&&canonicalAgenda\.status!=="ok"/);
   assert.match(server,/usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events/);
-  assert.match(ai,/\(!needsCalendarAssessment\(message\)\|\|readOnlyDailyAgendaIntent\(message\)\)/);
+  // Read-only agenda *data* remains canonical, but conversational transport
+  // must no longer infer text-only execution from a phrase.
+  assert.match(ai,/sb\.functions\.invoke\('isabella-chat'/);
+  assert.doesNotMatch(ai.slice(ai.indexOf('async function ask(message,state,options={})'),
+    ai.indexOf('async function brief(state)')),/askDurableChat\(/);
   assert.doesNotThrow(()=>new Script(ai));
 });
 
@@ -51,9 +55,9 @@ test('90.8.3: menu reports current release and PWA pins all changed assets',()=>
   const html=read('apps/isabella/index.html');
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
-  assert.match(shell,/Build 2026\.10\.11\.90\.8\.4/);
-  for(const asset of ['app.js?v=115','ai.js?v=53','shell.js?v=102','sync.js?v=pwa33']){
+  assert.match(shell,/Build 2026\.10\.12\.138\.1/);
+  for(const asset of ['app.js?v=115','ai.js?v=54','shell.js?v=103','sync.js?v=pwa33']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
-  assert.ok(sw.includes('isabella-shell-v139'));
+  assert.ok(sw.includes('isabella-shell-v140'));
 });

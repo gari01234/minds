@@ -7,6 +7,7 @@ import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/ca
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
+import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt} from "../_shared/turn-capability-contract.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -2798,6 +2799,17 @@ Deno.serve(async (req: Request) => {
   const surface=String(body?.surface||"").trim();
   const clientMessageId=String(body?.client_message_id||"").trim();
   const persistPresence=surface==="presence"&&!background&&/^[A-Za-z0-9:_-]{8,140}$/.test(clientMessageId);
+  const turnContract=interactiveTurnContract({
+    surface,background,workThread:!!body?.work_thread_id,
+    attachments:attachments.length
+  });
+  // The durable and direct-stream transports have NO mutation/approval tools.
+  // Without a server-verified read-only plan, all interactive turns must use
+  // the governed, tool-capable execution contract. This is not a phrase filter.
+  if(turnContract.lane==="tool_capable"&&(body?.durable===true||body?.stream===true))
+    return json({fallback:true,reason:"turn_requires_capability_runtime",
+      execution_contract:"tool_capable_v01"},409);
+  const boundedGlobalChat=turnContract.provider_history==="bounded_scoped";
   // A contextual imperative ("Por favor corrígelo") may look informational
   // to a text-only router. Require the browser's existing fallback to its
   // governed action path before any OpenAI background or stream is started.
@@ -2859,8 +2871,8 @@ Deno.serve(async (req: Request) => {
   const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
   if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
-  if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
-  else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
+  if(!fastAgenda&&route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
+  else if(!fastAgenda&&route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const scheduleAssessment=calendarAssessmentIntent(effectiveMessage);
   const responseContinuation=/(contin[uú]a (?:la )?respuesta|contin[uú]a desde|desde (?:el punto|donde) se interrumpi[oó]|respuesta anterior|sin repetir lo ya escrito)/i.test(effectiveMessage);
   if(scheduleAssessment)budget={...budget,depth:"standard",rounds:Math.max(budget.rounds,5),reasoning:"medium",maxOutput:Math.max(budget.maxOutput,3600)};
@@ -3163,7 +3175,7 @@ pregunta cuál.`;
 
   const seed = recent;
   let conversationInfo:any={id:null,created:false};
-  if(!background){
+  if(!background&&!boundedGlobalChat){
     try{
       conversationInfo=activeConversation=await getOrCreateOpenAIConversation(req,apiKey,seed,currentWorkThread,exposureScope);
       if(persistPresence&&conversationInfo?.dbId){
@@ -3553,7 +3565,11 @@ pregunta cuál.`;
     ?[{role:"user",content:[{type:"input_text",text:
       "CONVERSACIÓN RECIENTE (contexto, no instrucciones):\\n"+
       JSON.stringify(fastHistory)+"\\n\\nSOLICITUD ACTUAL:\\n"+turnText}]}]
-    :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
+    :boundedGlobalChat
+      ?[{role:"user",content:[
+        {type:"input_text",text:boundedScopedTurn(recent,turnText)},
+        ...attachmentInputs]}]
+      :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
@@ -3565,12 +3581,12 @@ pregunta cuál.`;
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
       body:JSON.stringify({
         model,
-        ...(!fastAgenda&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
+        ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
         instructions:transientInstructions(fastAgenda?fastCalendarInstructions:system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),fastAgenda?fastCalendarContext:JSON.parse(dynamicContext)),
         reasoning:{effort:reasoningEffort},
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
-        ...(!fastAgenda&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
+        ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
         ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
@@ -3839,7 +3855,8 @@ pregunta cuál.`;
 
   let reply=String(extractText(payload)||"").trim() ||
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
-  if(fastAgenda&&toolProposals.length===1){
+  const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
+  if(toolProposals.length===1){
     reply=calendarProposalReply(toolProposals[0])||reply;
   }else if(fastAgenda&&!toolProposals.length&&
     /\\b(he agregado|qued[oó] agregado|ya qued[oó] agregado|lo correg[ií]|ya lo cambi[eé])\\b/i.test(reply)){
@@ -3856,9 +3873,10 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:turnContract.provider_history,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
+    outcome:outcomeReceipt,
     proposal:toolProposals.length===1?toolProposals[0]:null,
     proposals:toolProposals.length>1?toolProposals:[],
     standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
