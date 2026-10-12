@@ -13,7 +13,12 @@ test('new uploads automatically enqueued; historical originals discovered only i
   assert.match(sql,/for update of f skip locked/i);
   assert.match(sql,/v_limit integer:=greatest\(1,least\(coalesce\(p_limit,1\),2\)\)/);
   assert.match(sql,/true,deferred_reason from classified/);
-  assert.match(worker,/p_limit:1,p_docling_ready:doclingReady/);
+  // First pass discovers new work without waking Railway; only eligible work
+  // proceeds to the second parser-ready reconciliation.
+  assert.match(worker,/p_limit:1,p_docling_ready:false/);
+  assert.match(worker,/p_limit:1,p_docling_ready:true/);
+  assert.match(worker,/const doclingReady=hasWork\\?await isDoclingReady\\(\\):false/);
+  assert.match(worker,/if\\(hasWork&&isDoclingConfigured\\(\\)&&!doclingReady\\)/);
 });
 test('new user files always outrank historical background backlog',()=>{
   assert.match(sql,/is_backfill boolean not null default false/);
