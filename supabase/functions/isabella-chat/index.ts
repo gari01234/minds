@@ -2796,7 +2796,7 @@ Deno.serve(async (req: Request) => {
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
   const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
-  if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1000};
+  if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
   else if(route.complexity==="standard"&&budget.depth==="light")budget={...budget,depth:"standard",rounds:5,compact:150000,reasoning:"medium",maxOutput:2800};
   const scheduleAssessment=calendarAssessmentIntent(effectiveMessage);
