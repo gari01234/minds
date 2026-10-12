@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt}
+import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady}
   from "../supabase/functions/_shared/turn-capability-contract.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const client=read("apps/isabella/ai.js");
@@ -89,4 +89,19 @@ test("typed proposal counts use canonical registered proposals and UI still rend
  assert.match(ui,/else if\(result\?\.proposal\)/);
  assert.match(ui,/confirmProposal\(result\.proposal\)/);
  assert.match(ui,/proposalFeedback\('accepted',p\)/);
+});
+
+test("source-first conversation boundary: do not drop history when scoped messages are absent",()=>{
+ const now="2026-10-12T21:50:00Z";
+ assert.equal(scopedHistoryReady([],{now}),false); // real legacy-only history
+ assert.equal(scopedHistoryReady([{role:"user",content:"corrige",created_at:now}],{now}),false);
+ const rows=Array.from({length:6},(_,i)=>({
+   role:i%2?"assistant":"user",content:"Turn "+i,
+   created_at:"2026-10-12T21:"+(40+i)+":00Z"
+ }));
+ assert.equal(scopedHistoryReady(rows,{now}),true);
+ assert.equal(scopedHistoryReady(rows,{now:"2026-10-13T09:00:00Z"}),false);
+ assert.match(server,/if\(boundedGlobalChat&&!scopedHistoryReady\(recent\)\)/);
+ assert.match(server,/provider_legacy_continuity/);
+ assert.match(server,/if\(!background&&!boundedGlobalChat\)/);
 });
