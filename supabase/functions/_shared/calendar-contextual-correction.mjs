@@ -22,7 +22,7 @@ function dateComplaint(text){
  return /\b(mañana|manana|fecha|d[ií]a|martes|lunes|miércoles|miercoles|jueves|viernes|sábado|sabado|domingo)\b/i.test(t)&&
   /\b(te has confundido|te confundiste|equivocad[oa]|incorrect[oa]|no es|est[aá] mal|corrige|corregir)\b/i.test(t);
 }
-export function findCalendarCorrection(messages,tasks,{timezone="Europe/Berlin",nowIso}={}){
+export function findCalendarCorrection(messages,tasks,{timezone="Europe/Berlin",nowIso=""}={}){
  const now=new Date(nowIso||Date.now()).getTime();
  if(!Number.isFinite(now))throw Error("invalid_clock");
  const history=(Array.isArray(messages)?messages:[])
