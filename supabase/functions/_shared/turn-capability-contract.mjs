@@ -40,3 +40,16 @@ export function turnOutcomeReceipt({proposals=[],applied=[],error=null}={}){
     applied_count:0};
   return {outcome:"answered",proposal_count:0,applied_count:0};
 }
+
+/** @param {Array<{role:string,content:string,created_at?:string|null}>} messages
+ * @param {{now?:string,minMessages?:number}} options */
+export function scopedHistoryReady(messages,{now="",minMessages=4}={}){
+ const time=Date.parse(now||new Date().toISOString());
+ const recent=(Array.isArray(messages)?messages:[]).slice(-12).filter(x=>
+   ["user","assistant"].includes(x?.role)&&typeof x.content==="string"&&x.content.trim()&&
+   Number.isFinite(Date.parse(String(x.created_at||""))));
+ if(!Number.isFinite(time)||recent.length<minMessages)return false;
+ const last=Date.parse(recent[recent.length-1].created_at);
+ return last<=time+60000&&time-last<=60*60000&&
+   recent.some(x=>x.role==="user")&&recent.some(x=>x.role==="assistant");
+}
