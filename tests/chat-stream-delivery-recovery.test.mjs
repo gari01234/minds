@@ -84,7 +84,7 @@ test('Server stores completion before terminal SSE result, never promoting parti
 
 test('Continuation and Work cannot inherit the tiny light-response budget',()=>{
   assert.match(server,/const responseContinuation=\/\(/);
-  assert.ok(server.includes('if(!background&&(route.work||responseContinuation))budget='));
+  assert.ok(server.includes('if(!background&&!fastAgenda&&(route.work||responseContinuation))budget='));
   assert.ok(server.includes('responseContinuation?6200:4400'));
   assert.ok(server.includes('if(scheduleAssessment)budget='));
   assert.ok(server.includes('maxOutput:1500'));
