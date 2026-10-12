@@ -44,7 +44,7 @@ export async function processWorkFile(sb:any,job:any){
     (isDoclingConfigured()&&pageModeEnabled()&&!job.docling_task_id&&
       file.size_bytes>=16*1024*1024));
   if(usePages){
-    let page=await processPdfPages(sb,file,job,{version});
+    let page:any=await processPdfPages(sb,file,job,{version});
     if(page.kind==="needs_source"){
       const original=await loadOriginal();
       const actual=await sha256(original);
