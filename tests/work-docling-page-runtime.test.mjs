@@ -30,7 +30,7 @@ test("checkpoints are persisted without duplicate reupload of finished batches",
   assert.match(runtime,/ignoreDuplicates:true/);
   assert.match(runtime,/status:"completed",docling_task_id:null/);
   assert.match(runtime,/rows\.every\(r=>r\.status==="completed"\)/);
-  assert.match(runtime,/pdf_batch_transfer_budget_exceeded/);
+  assert.match(runtime,/pdf_page_transfer_budget_exceeded/);
   assert.match(runtime,/EGRESS_BUDGET_BYTES=512\*1024\*1024/);
 });
 test("worker advances page checkpoints without extra attempts or overwriting Claims",()=>{
