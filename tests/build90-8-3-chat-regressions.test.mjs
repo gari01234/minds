@@ -43,7 +43,11 @@ test('90.8.3: read-only daily agenda can use durable lane but mutations cannot',
   assert.match(server,/tomorrow_events:tomorrowEvents\.slice\(0,50\)/);
   assert.match(server,/readOnlyDailyAgendaIntent\(effectiveMessage\)&&canonicalAgenda\.status!=="ok"/);
   assert.match(server,/usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events/);
-  assert.match(ai,/\(!needsCalendarAssessment\(message\)\|\|readOnlyDailyAgendaIntent\(message\)\)/);
+  // Read-only agenda *data* remains canonical, but conversational transport
+  // must no longer infer text-only execution from a phrase.
+  assert.match(ai,/governed, tool-capable execution contract/);
+  assert.doesNotMatch(ai.slice(ai.indexOf('async function ask(message,state,options={})'),
+    ai.indexOf('async function brief(state)')),/askDurableChat\\(/);
   assert.doesNotThrow(()=>new Script(ai));
 });
 
