@@ -47,7 +47,7 @@ test('90.8.3: read-only daily agenda can use durable lane but mutations cannot',
   // must no longer infer text-only execution from a phrase.
   assert.match(ai,/governed, tool-capable execution contract/);
   assert.doesNotMatch(ai.slice(ai.indexOf('async function ask(message,state,options={})'),
-    ai.indexOf('async function brief(state)')),/askDurableChat\\(/);
+    ai.indexOf('async function brief(state)')),/askDurableChat\(/);
   assert.doesNotThrow(()=>new Script(ai));
 });
 
