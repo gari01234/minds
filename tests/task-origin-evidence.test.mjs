@@ -1,0 +1,40 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
+const migration=read("supabase/migrations/20261012215000_minds_task_origin_evidence_v01.sql");
+const chat=read("supabase/functions/isabella-chat/index.ts");
+test("legacy dialogue stays scoped: no migration, no broad memory query",()=>{
+  assert.match(migration,/security invoker/i);
+  assert.match(migration,/t\.user_id=auth\.uid\(\)/);
+  assert.match(migration,/m\.user_id=auth\.uid\(\)/);
+  assert.match(migration,/c\.user_id=auth\.uid\(\)/);
+  assert.match(migration,/c\.app_scope='isabella'/);
+  assert.match(migration,/m\.conversation_id=c\.id/);
+  assert.match(migration,/m\.role='user'/);
+  assert.match(migration,/m\.created_at between t\.created_at-interval '10 minutes'/);
+  assert.match(migration,/strpos\(lower\(m\.content\),lower\(t\.title\)\)>0/);
+  assert.match(migration,/candidate_count=1/);
+  assert.match(migration,/m\.exposure_scope_version=0 and m\.exposure_scope_key='legacy'/);
+  assert.match(migration,/m\.exposure_scope_version=1/);
+  assert.doesNotMatch(migration,/security definer/i);
+  assert.doesNotMatch(migration,/alter table public\.conversation_messages|update public\.conversation_messages/i);
+});
+test("origin is historical inferred evidence, not an accepted memory or present instruction",()=>{
+  assert.match(migration,/inferred_origin_candidate/);
+  assert.match(chat,/read_task_origin:"allow"/);
+  assert.match(chat,/name:"read_task_origin"/);
+  assert.match(chat,/read_task_origin"\]\);/);
+  assert.match(chat,/sourceTainted=true;\s*const sb=supabaseClient\(req\)/);
+  assert.match(chat,/sb\.rpc\("minds_read_task_origin_v01"/);
+  assert.match(chat,/status:"unavailable_or_ambiguous"/);
+  assert.match(chat,/instruction_authority:"historical_quote_only"/);
+  assert.match(chat,/source_promoted:false/);
+  assert.doesNotMatch(migration,/grant execute on function public\.minds_read_task_origin_v01\(text\) to anon/);
+});
+test("task-origin lookup does not add any write permission",()=>{
+  assert.match(migration,/revoke all on function public\.minds_read_task_origin_v01\(text\) from public,anon/);
+  assert.match(migration,/grant execute on function public\.minds_read_task_origin_v01\(text\) to authenticated/);
+  assert.match(chat,/create_task:"confirm",update_task:"confirm"/);
+  assert.match(chat,/const outcomeReceipt=turnOutcomeReceipt\(\{proposals:toolProposals\}\)/);
+});
