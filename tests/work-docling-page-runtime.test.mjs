@@ -10,7 +10,7 @@ const worker=read("isabella-work-ingest-runner/index.ts");
 test("page path is explicit opt-in and defaults to disabled",()=>{
   assert.match(runtime,/DOCLING_PAGE_BATCHES_ENABLED"\)=== "true"|DOCLING_PAGE_BATCHES_ENABLED"\)==="true"/);
   assert.match(core,/pageModeEnabled\(\)/);
-  assert.match(core,/!job\.docling_task_id&&file\.size_bytes>=16\*1024\*1024/);
+  assert.match(core,/!job\.docling_task_id&&\s*file\.size_bytes>=16\*1024\*1024/);
   assert.match(core,/pageCheckpointExists\(sb,file,version\)/);
 });
 test("Docling multipart sends 1-based inclusive page ranges explicitly",()=>{
