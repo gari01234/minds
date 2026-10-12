@@ -253,18 +253,33 @@ async function conversationId(){
   const {data:created,error:ie}=await sb.from('conversations').insert({user_id:user.id,app_scope:APP_SCOPE,origin_kind:'global',origin_anchor:{type:'assistant',id:'isabella',label:'Isabella'},title:'Isabella',mode:'memory',metadata:{app:APP_SCOPE}}).select('id').single();
   if(ie)throw ie;return created.id;
 }
+/* A client-side chat message is not eligible for the canonical scoped
+ * conversation ledger until the server has resolved its exposure scope.
+ * Keep pending turns locally; do NOT insert them as permanent legacy rows.
+ * Existing legacy history stays untouched and is never silently promoted.
+ */
+function scopedTurnReady(message){
+  const s=message?.metadata?.exposure_scope;
+  if(!s||s.version!==1||typeof s.kind!=='string'||
+    typeof s.key!=='string'||!s.key.trim()||s.key==='legacy')return false;
+  if(s.kind==='global'&&s.key!=='global')return false;
+  if(s.kind!=='global'&&(!s.ref||!String(s.ref).trim()))return false;
+  return ['user','assistant'].includes(message.role)&&
+    typeof message.text==='string'&&!!message.text.trim();
+}
 async function pushConversation(messages){
-  if(!messages.length)return;
+  const approved=(messages||[]).filter(scopedTurnReady);
+  if(!approved.length)return; // no provisional, scope-unknown rows in Supabase
   const cid=await conversationId(),now=new Date().toISOString();
-  const rows=messages.map((m,i)=>{
+  const rows=approved.map((m,i)=>{
     const scope=m?.metadata?.exposure_scope&&typeof m.metadata.exposure_scope==='object'?m.metadata.exposure_scope:null;
     return {
       user_id:user.id,conversation_id:cid,client_key:m.id||String(i).padStart(6,'0'),
       role:['assistant','system'].includes(m.role)?m.role:'user',content:m.text||'',provisional:false,citations:[],
-      exposure_scope_version:scope?.version===1?1:0,
-      exposure_scope_kind:scope?.kind||'global',
-      exposure_scope_ref:scope?.ref?String(scope.ref):null,
-      exposure_scope_key:scope?.key||'legacy',
+      exposure_scope_version:1,
+      exposure_scope_kind:scope.kind,
+      exposure_scope_ref:scope.ref?String(scope.ref):null,
+      exposure_scope_key:scope.key,
       metadata:{...(m.metadata&&typeof m.metadata==='object'?m.metadata:{}),app:APP_SCOPE,reaction:m.reaction||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',text:String(m.replyTo.text||'')}:null,sources:Array.isArray(m.sources)?m.sources.slice(0,8):[],attachments:Array.isArray(m.attachments)?m.attachments.slice(0,3):[],artifacts:Array.isArray(m.artifacts)?m.artifacts.slice(0,8):[]},
       created_at:m.at||now
     };
