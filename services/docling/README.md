@@ -22,6 +22,12 @@ El 12/10/2026 se confirmó la ejecución real en Railway Hobby a **4 GB RAM / 2 
 
 El despliegue debe probarse con una fuente no confidencial, luego una representativa con permiso de procesamiento, observando picos de RAM, errores 404/5xx, segmentos completos o marcados como parciales, y diferencias entre versiones. La aceptación exige evidencia en Supabase y en los logs de Railway; un CI verde solo confirma el contrato de configuración. El ahorro de memoria no implica que el servicio pueda dormirse: se requiere otra prueba antes de habilitar suspensión automática.
 
+## Tratamiento de imágenes complejas y fallos de tareas asíncronas
+
+Knowledge Coverage 1.6 incorpora un único reintento de **consulta de estado** sobre el mismo identificador cuando Docling devuelve 404: no reenvía el archivo en ese primer momento. Si un PNG/JPG/JPEG de más de 8 MiB sigue sin tarea accesible, o informa `failure`, conversión fallida o ausencia de texto legible, pasa a `waiting_parser` con motivo explícito para revisión. El archivo original permanece en Storage de Supabase. No se generan Claims ni segmentos sin evidencia, y el fallo de enriquecimiento no borra Claims existentes. Los documentos normales mantienen recuperación limitada y los reintentos de red transitorios existentes.
+
+Esta cuarentena **no implica que la imagen carezca de información**, ni que sea segura de reintentar automáticamente, ni que Docling esté apagado. La causa exacta de un 404 sigue siendo incierta sin telemetría completa del orquestador. Aceptar con pruebas de un documento no confidencial, un fallo controlado, y verificar las filas de la cola y Source-First en Supabase. La ingestión por páginas y la suspensión Serverless seguirán siendo cambios separados.
+
 ## Habilitación segura en MINDS
 
 1. Confirmar por el endpoint HTTPS del hosting que `GET /ready` pasa a 200 tras cargar los modelos y que `GET /v1/convert/file/async` requiere `X-Api-Key`; probar primero un PDF no confidencial.
