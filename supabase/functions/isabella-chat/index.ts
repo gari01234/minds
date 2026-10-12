@@ -3081,12 +3081,18 @@ Usa una herramienta de propuesta cuando el usuario pida crear o modificar
 una tarea o evento. Los cambios requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
 Mantén el proyecto explícito; no inventes horas ni fechas.
-Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.`;
+Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.
+Si el usuario señala que una fecha de una tarea recién propuesta o creada
+está equivocada, identifica la tarea en los mensajes recientes y la agenda.
+Si hay una única coincidencia, usa update_task como propuesta de corrección;
+nunca afirmes haber corregido la base sin confirmación. Si hay varias,
+pregunta cuál.`;
   const fastCalendarContext={
     timezone:temporal.timezone,current_date:temporal.current_date,
     tomorrow_date:new Date(Date.parse(temporal.current_date+"T12:00:00Z")+86400000).toISOString().slice(0,10),
     current_weekday:temporal.weekday,project:route.project||null,
     today_tasks:(canonicalAgenda.today_tasks||[]).slice(0,12),
+    overdue_tasks:(canonicalAgenda.overdue_tasks||[]).slice(0,16),
     tomorrow_tasks:(canonicalAgenda.tomorrow_tasks||[]).slice(0,12),
     upcoming:(canonicalAgenda.upcoming||[]).slice(0,12),
     undated_tasks:(canonicalAgenda.undated_tasks||[]).slice(0,8),
