@@ -30,6 +30,7 @@ test("same capability contract for EVERY conversational formulation, without lex
  }
 });
 test("attachments and project threads do not silently downgrade to text-only",()=>{
+ assert.equal(interactiveTurnContract({}).lane,"tool_capable"); // cached mobile client
  assert.equal(interactiveTurnContract({surface:"chat_browser",attachments:2}).lane,"tool_capable");
  const t=interactiveTurnContract({surface:"chat_browser",workThread:true});
  assert.equal(t.lane,"tool_capable");
