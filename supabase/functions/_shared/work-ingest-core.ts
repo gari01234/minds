@@ -35,8 +35,14 @@ export async function processWorkFile(sb:any,job:any){
   // if the feature gate is later disabled; never mix with whole-file conversion.
   const existingPlan=ext==="pdf"&&!!version&&
     await pageCheckpointExists(sb,file,version);
-  const usePages=ext==="pdf"&&isDoclingConfigured()&&
-    (existingPlan||(pageModeEnabled()&&!job.docling_task_id&&file.size_bytes>=16*1024*1024));
+  // Existing checkpoints must never fall back to whole-file parsing when
+  // the private converter is temporarily unconfigured or the gate is off.
+  if(existingPlan&&!isDoclingConfigured())
+    return {status:"waiting_parser",reason:"docling_checkpoint_requires_service",
+      version:version||null,file};
+  const usePages=ext==="pdf"&&(existingPlan||
+    (isDoclingConfigured()&&pageModeEnabled()&&!job.docling_task_id&&
+      file.size_bytes>=16*1024*1024));
   if(usePages){
     let page=await processPdfPages(sb,file,job,{version});
     if(page.kind==="needs_source"){
