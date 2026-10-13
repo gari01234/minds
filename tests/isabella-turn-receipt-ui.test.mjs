@@ -37,7 +37,7 @@ test("receipt mismatch fails closed and never gives the UI a proposal to apply",
  ]){
   const y=validate(x);
   assert.equal(y.ok,false,JSON.stringify(x));
-  assert.deepEqual(y.proposals,[]);
+  assert.equal(y.proposals.length,0);
   assert.match(summary(y),/No pude verificar/);
  }
 });
