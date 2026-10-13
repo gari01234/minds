@@ -9,6 +9,7 @@ import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
+import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -286,6 +287,47 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
     .eq("id",conversationId).eq("user_id",user.id).eq("app_scope","isabella");
   if(updated.error)throw updated.error;
   return {conversationId,created:true};
+}
+
+async function recordBrowserClarification(req:Request,sourceTurnId:string,question:string,capability:string){
+  if(!browserTurnId(sourceTurnId))throw Error("clarification_source_id_required");
+  const sb=supabaseClient(req);if(!sb)throw Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw Error("unauthorized");
+  const {data:rows,error:readError}=await sb.from("conversation_messages")
+    .select("id,client_key,role,metadata,conversation_id,exposure_scope_version,provenance_class")
+    .eq("user_id",user.id).eq("client_key",sourceTurnId).eq("role","user").limit(2);
+  if(readError||rows?.length!==1||rows[0].exposure_scope_version!==1||rows[0].provenance_class!=="owner")
+    throw Error("clarification_source_not_canonical");
+  const receipt=makeClarification({sourceTurnId,receiptId:crypto.randomUUID(),
+    question,capability,issuedAt:new Date().toISOString()});
+  const {error:writeError}=await sb.from("conversation_messages")
+    .update({metadata:{...(rows[0].metadata||{}),pending_clarification:receipt}})
+    .eq("id",rows[0].id).eq("user_id",user.id);
+  if(writeError)throw writeError;
+  return receipt;
+}
+async function resolveBrowserContinuation(req:Request,requested:any,currentTurnId:string){
+  if(!validContinuationToken(requested))throw Error("invalid_continuation_token");
+  if(!browserTurnId(currentTurnId))throw Error("invalid_continuation_current_turn");
+  const sb=supabaseClient(req);if(!sb)throw Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw Error("unauthorized");
+  const {data:rows,error}=await sb.from("conversation_messages")
+    .select("id,client_key,role,content,metadata,conversation_id,exposure_scope_version,provenance_class")
+    .eq("user_id",user.id).eq("client_key",requested.source_turn_id).eq("role","user").limit(2);
+  if(error||rows?.length!==1)throw Error("continuation_source_unavailable");
+  const source=rows[0],stored=source.metadata?.pending_clarification;
+  const {data:lastRows,error:lastError}=await sb.from("conversation_messages")
+    .select("client_key").eq("user_id",user.id).eq("conversation_id",source.conversation_id)
+    .eq("role","user").order("created_at",{ascending:false}).limit(1);
+  if(lastError)throw Error("continuation_last_turn_unavailable");
+  if(!validStoredClarification({stored,
+    provided:{...requested,current_turn_id:currentTurnId},ownerTurn:source,
+    latestOwnerTurnId:lastRows?.[0]?.client_key||null}))
+    throw Error("stale_or_unverified_continuation");
+  return {source_message:String(source.content||""),question:String(stored.question),
+    capability:String(stored.capability),source_turn_id:source.client_key,receipt_id:stored.receipt_id};
 }
 
 function mergeRecentConversations(db: any[], local: any[], currentMessage: string) {
@@ -2902,6 +2944,12 @@ Deno.serve(async (req: Request) => {
     context.reply_context=binding.data.reply_context;
   }
 
+  let verifiedContinuation:any=null;
+  if(surface==="chat_browser"&&!background&&body?.continuation){
+    try{verifiedContinuation=await resolveBrowserContinuation(req,body.continuation,clientMessageId);}
+    catch(e){return json({error:"unverified_continuation",
+      message:"No pude verificar a qué solicitud estás respondiendo. No he preparado ni cambiado ninguna tarea."},409);}
+  }
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
