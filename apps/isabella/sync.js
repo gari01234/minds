@@ -284,8 +284,20 @@ async function pushConversation(messages){
       created_at:m.at||now
     };
   });
-  const {error}=await sb.from('conversation_messages').upsert(rows,{onConflict:'user_id,conversation_id,client_key'});
-  if(error)throw error;
+  // Browser owner turns are canonical server records. A later client echo must
+  // never overwrite server-owned metadata such as pending clarification receipts.
+  const ownerRows=rows.filter(r=>r.role==='user');
+  const assistantRows=rows.filter(r=>r.role!=='user');
+  if(ownerRows.length){
+    const {error}=await sb.from('conversation_messages')
+      .upsert(ownerRows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true});
+    if(error)throw error;
+  }
+  if(assistantRows.length){
+    const {error}=await sb.from('conversation_messages')
+      .upsert(assistantRows,{onConflict:'user_id,conversation_id,client_key'});
+    if(error)throw error;
+  }
   await sb.from('conversations').update({updated_at:now}).eq('id',cid).eq('user_id',user.id).eq('app_scope',APP_SCOPE);
 }
 async function pullState(local,maps){
