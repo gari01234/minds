@@ -1072,7 +1072,7 @@ function clearAssistantStream(){
 }
 function say(role,text,meta={}){
   const message={
-    id:uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
+    id:meta.id||uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
     metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
     sources:Array.isArray(meta.sources)?meta.sources:[],
@@ -1976,7 +1976,7 @@ async function handle(text,attachments=[],replyTo=null){
   // Persist the binding atomically with the first user turn; syncing between
   // say() and a later metadata patch previously produced duplicate user turns.
   const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
-  const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,
+  const userTurn=say('user',text||'📷 Foto',{id:durableRequestId||undefined,attachments:copy,replyTo,
     metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
@@ -1997,8 +1997,10 @@ async function handle(text,attachments=[],replyTo=null){
         return;
       }
       if(durableRequestId){delete userTurn.metadata.durable_request_id;save()}
-      const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
-        ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
+      // Missing server provenance is NOT permission to relabel a turn global.
+      // Keep it local, including an otherwise reviewable proposal.
+      const exposure=result?.exposure_scope?.version===1&&typeof result.exposure_scope.key==='string'
+        ?result.exposure_scope:null;
       userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
       const integrity=window.MINDS_TURN_INTEGRITY?.validate(result);
       if(!integrity?.ok){
