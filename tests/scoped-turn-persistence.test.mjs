@@ -32,7 +32,7 @@ test("only verified scope-shaped turns are persisted, preserving project isolati
 test("user scope is recorded after the server response before client sync",()=>{
  assert.match(app,/const userTurn=say\('user'/);
  assert.match(app,/userTurn\.metadata=\{\.\.\.\(userTurn\.metadata\|\|\{\}\),exposure_scope:exposure\}/);
- assert.match(app,/if\(result\?\.reply\|\|result\?\.artifacts\?\.length\)say\('assistant'/);
+ assert.match(app,/review_proposals:integrity\.proposals/);
  assert.match(sync,/exposure_scope_version:1/);
  assert.match(sync,/exposure_scope_kind:scope\.kind/);
  assert.match(sync,/exposure_scope_key:scope\.key/);
