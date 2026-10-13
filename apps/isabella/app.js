@@ -1976,13 +1976,19 @@ async function handle(text,attachments=[],replyTo=null){
   // Persist the binding atomically with the first user turn; syncing between
   // say() and a later metadata patch previously produced duplicate user turns.
   const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
+  const lastAssistant=state.messages.slice().reverse().find(m=>m.role==='assistant'&&String(m.text||'').trim());
+  const pending=lastAssistant?.metadata?.pending_clarification;
+  const candidate=pending?.version===1&&pending?.source_turn_id&&pending?.receipt_id&&
+    Date.now()-Date.parse(pending.issued_at||'')<=45*60*1000&&
+    Date.now()>=Date.parse(pending.issued_at||'')
+    ?{source_turn_id:pending.source_turn_id,receipt_id:pending.receipt_id}:null;
   const userTurn=say('user',text||'Te envío esta imagen.',{id:durableRequestId||undefined,attachments:copy,replyTo,
     metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
       setChatActivity('Isabella está preparando la respuesta…');
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,continuation:candidate,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
       if(result?.durable){
@@ -2011,7 +2017,8 @@ async function handle(text,attachments=[],replyTo=null){
       if(verifiedReply||result?.artifacts?.length)say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
         metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
           incomplete_reason:result?.incomplete_reason||null,
-          review_proposals:integrity.proposals,turn_outcome:integrity.outcome},
+          review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
+          ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
         sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
