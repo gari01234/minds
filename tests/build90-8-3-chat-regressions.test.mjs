@@ -56,8 +56,8 @@ test('90.8.3: menu reports current release and PWA pins all changed assets',()=>
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
   assert.match(shell,/Build 2026\.10\.12\.138\.2/);
-  for(const asset of ['app.js?v=117','ai.js?v=54','shell.js?v=104','sync.js?v=pwa34']){
+  for(const asset of ['app.js?v=118','ai.js?v=55','shell.js?v=104','sync.js?v=pwa34']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
-  assert.ok(sw.includes('isabella-shell-v143'));
+  assert.ok(sw.includes('isabella-shell-v144'));
 });
