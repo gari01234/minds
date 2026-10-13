@@ -130,7 +130,7 @@ BEGIN
     IF (p_reviewed->>'date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
        THEN RAISE EXCEPTION 'invalid_reviewed_date'; END IF;
     v_due_date:=(p_reviewed->>'date')::date;
-    IF to_char(v_due_date,'YYYY-MM-DD')<>p_reviewed->>'date'
+    IF to_char(v_due_date,'YYYY-MM-DD')<>(p_reviewed->>'date')
        THEN RAISE EXCEPTION 'invalid_reviewed_date'; END IF;
   END IF;
   v_title:=coalesce(nullif(btrim(p_reviewed->>'title'),''),v_target.title);
@@ -179,77 +179,6 @@ BEGIN
     user_id,request_id,action,entity_kind,entity_id,entity_client_key,before_state,after_state,reviewed_candidate
   ) VALUES (v_user,p_request_id,'update_task','task',v_target.id,v_target.client_key,
             v_before,v_after,p_reviewed) RETURNING id INTO v_receipt;
-  v_edited:=p_reviewed-'_review' IS DISTINCT FROM v_original-'_review';
-  v_status:=CASE WHEN v_edited THEN 'edited' ELSE 'accepted' END;
-  UPDATE public.minds_shadow_decisions
-    SET status=v_status,reviewed_candidate=p_reviewed,
-        resolved_at=coalesce(resolved_at,now()),updated_at=now()
-    WHERE id=v_decision.id;
-  INSERT INTO public.isabella_activity_log
-    (user_id,entity_type,entity_key,action,source,before_state,after_state)
-    VALUES (v_user,'task',v_target.client_key,'update','assistant',
-            v_before,v_after);
-  RETURN jsonb_build_object('status','applied','receipt_id',v_receipt,
-    'request_id',p_request_id,'entity_id',v_target.id,
-    'entity_client_key',v_target.client_key,'after',v_after);
-END;
-$function$;
-REVOKE ALL ON FUNCTION public.minds_commit_reviewed_task_update_v01(uuid,jsonb) FROM PUBLIC,anon;
-GRANT EXECUTE ON FUNCTION public.minds_commit_reviewed_task_update_v01(uuid,jsonb) TO authenticated;
-COMMENT ON FUNCTION public.minds_commit_reviewed_task_update_v01(uuid,jsonb) IS
- 'Owner-authenticated atomic reviewed update_task commit, with immutable idempotent receipt and canonical read-back. No model prose can serve as execution evidence.';
-
-       THEN RAISE EXCEPTION 'invalid_reviewed_date'; END IF;
-    v_due_date:=(p_reviewed->>'date')::date;
-    IF to_char(v_due_date,'YYYY-MM-DD')<>p_reviewed->>'date'
-       THEN RAISE EXCEPTION 'invalid_reviewed_date'; END IF;
-  END IF;
-  v_title:=coalesce(nullif(btrim(p_reviewed->>'title'),''),v_target.title);
-  IF length(v_title)>500 THEN RAISE EXCEPTION 'invalid_reviewed_title'; END IF;
-  -- Project and category must match an owned canonical object if specified.
-  v_project_id:=v_target.project_id;
-  v_project:=nullif(btrim(p_reviewed->>'project'),'');
-  IF v_project IS NOT NULL THEN
-    SELECT id INTO v_project_id FROM public.isabella_projects
-     WHERE user_id=v_user AND lower(name)=lower(v_project) LIMIT 1;
-    IF NOT FOUND THEN RAISE EXCEPTION 'project_not_found'; END IF;
-  END IF;
-  v_category_id:=v_target.category_id;
-  v_category:=nullif(btrim(p_reviewed->>'category'),'');
-  IF v_category IS NOT NULL THEN
-    SELECT id INTO v_category_id FROM public.isabella_categories
-     WHERE user_id=v_user AND lower(name)=lower(v_category) LIMIT 1;
-    IF NOT FOUND THEN RAISE EXCEPTION 'category_not_found'; END IF;
-  END IF;
-  -- No implicit recurrence rewrite in v0.1; nonempty changes fail closed.
-  IF p_reviewed->'recurrence' IS NOT NULL AND
-     p_reviewed->'recurrence'<>'null'::jsonb AND
-     p_reviewed->'recurrence' NOT IN (v_original->'recurrence','{}'::jsonb) THEN
-    RAISE EXCEPTION 'recurrence_requires_separate_executor';
-  END IF;
-  v_before:=jsonb_build_object('id',v_target.id,'client_key',v_target.client_key,
-    'title',v_target.title,'date',v_target.due_date,'updated_at',v_target.updated_at);
-  UPDATE public.isabella_tasks
-    SET title=v_title,due_date=v_due_date,project_id=v_project_id,category_id=v_category_id,
-      notes=CASE WHEN p_reviewed->>'notes' IS NULL THEN v_target.notes
-                 ELSE left(p_reviewed->>'notes',12000) END,
-      reminder_time=CASE WHEN v_due_date IS NULL THEN NULL
-                         WHEN p_reviewed->>'reminder_time' IS NULL THEN v_target.reminder_time
-                         WHEN p_reviewed->>'reminder_time'='' THEN NULL
-                         ELSE (p_reviewed->>'reminder_time')::time END,
-      updated_at=now()
-    WHERE id=v_target.id AND user_id=v_user
-    RETURNING * INTO v_target;
-  IF NOT FOUND THEN RAISE EXCEPTION 'canonical_write_failed'; END IF;
-  v_after:=jsonb_build_object('id',v_target.id,'client_key',v_target.client_key,
-    'title',v_target.title,'date',v_target.due_date,
-    'project_id',v_target.project_id,'category_id',v_target.category_id,
-    'notes',v_target.notes,'reminder_time',v_target.reminder_time,
-    'updated_at',v_target.updated_at);
-  INSERT INTO public.minds_calendar_action_receipts(
-    user_id,request_id,action,entity_kind,entity_id,entity_client_key,before_state,after_state
-  ) VALUES (v_user,p_request_id,'update_task','task',v_target.id,v_target.client_key,
-            v_before,v_after) RETURNING id INTO v_receipt;
   v_edited:=p_reviewed-'_review' IS DISTINCT FROM v_original-'_review';
   v_status:=CASE WHEN v_edited THEN 'edited' ELSE 'accepted' END;
   UPDATE public.minds_shadow_decisions
