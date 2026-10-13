@@ -65,9 +65,9 @@ test('Browser stream uses an opaque authenticated receipt ID and only falls back
   assert.ok(!client.includes('await askDirectStream(message,state,options,replyContext);await askDirectStream'));
   assert.doesNotThrow(()=>new Script(client,{filename:'ai.js'}));
   assert.doesNotThrow(()=>new Script(recovery,{filename:'chat-stream-recovery.js'}));
-  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=54'));
+  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=55'));
   assert.ok(sw.includes("'./chat-stream-recovery.js?v=1'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v143'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v145'"));
 });
 
 test('Server stores completion before terminal SSE result, never promoting partial to complete',()=>{

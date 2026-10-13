@@ -196,9 +196,9 @@ async function ask(message,state,options={}){
   if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
   const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
-  if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
+  if(!options.continuation&&!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
     try{
-      const fast=await askFastStream(message,state,options);
+      const fast=await askFastStream(message,state,{...options,fastRequestId:options.durableRequestId||options.fastRequestId});
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
     }catch(e){
@@ -214,7 +214,8 @@ async function ask(message,state,options={}){
   // Do not infer read-only intent from the absence of a known action phrase.
   // They remain available to a future server-verified read-only contract,
   // never as the browser's default for an ordinary conversation.
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null}});
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null,
+    continuation:options.continuation||null}});
   if(error)throw error;
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};

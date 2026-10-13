@@ -26,6 +26,13 @@
         return {ok:false,reason:'unknown_outcome',proposals:[]};
       if(!Number.isSafeInteger(outcome.proposal_count)||outcome.proposal_count!==proposals.length)
         return {ok:false,reason:'proposal_count_mismatch',proposals:[]};
+      if(name==='needs_clarification'){
+        const p=result.pending_clarification;
+        if(proposals.length||!p||p.version!==1||typeof p.source_turn_id!=='string'||
+          typeof p.receipt_id!=='string'||!p.question||
+          String(p.question).trim()!==String(result.reply||'').trim())
+          return {ok:false,reason:'missing_or_mismatched_clarification_receipt',proposals:[]};
+      }
       if(name==='proposal_created'&&proposals.length===0)
         return {ok:false,reason:'missing_review_candidate',proposals:[]};
       if(name!=='proposal_created'&&proposals.length>0)

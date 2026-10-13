@@ -69,7 +69,7 @@ test("browser uses the capability endpoint directly, no heuristic durable/stream
  assert.doesNotMatch(entry,/askDirectStream\(/);
  assert.match(entry,/sb\.functions\.invoke\('isabella-chat'/);
  assert.match(entry,/surface:options\.background\?'background':'chat_browser'/);
- assert.match(client,/if\(!options\.workThread&&!options\.background&&!attachments\.length/);
+ assert.match(client,/if\(!options\.continuation&&!options\.workThread&&!options\.background&&!attachments\.length/);
 });
 test("server rejects BOTH text-only transports before any route or model call",()=>{
  const gate=server.indexOf('turnContract.lane==="tool_capable"');
@@ -101,7 +101,7 @@ test("source-first conversation boundary: do not drop history when scoped messag
  }));
  assert.equal(scopedHistoryReady(rows,{now}),true);
  assert.equal(scopedHistoryReady(rows,{now:"2026-10-13T09:00:00Z"}),false);
- assert.match(server,/if\(boundedGlobalChat&&!scopedHistoryReady\(recent\)\)/);
- assert.match(server,/provider_legacy_continuity/);
+ assert.match(server,/const scopedWindowReady=scopedHistoryReady\(recent\)/);
+ assert.doesNotMatch(server,/provider_legacy_continuity/);
  assert.match(server,/if\(!background&&!boundedGlobalChat\)/);
 });

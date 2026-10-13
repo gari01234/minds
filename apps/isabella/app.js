@@ -1072,7 +1072,7 @@ function clearAssistantStream(){
 }
 function say(role,text,meta={}){
   const message={
-    id:uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
+    id:meta.id||uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
     metadata:meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{},
     sources:Array.isArray(meta.sources)?meta.sources:[],
@@ -1538,7 +1538,7 @@ function confirmProposal(p){
   $('#proposalConfirm').onclick=()=>{
     const b=$('#proposalConfirm');if(b.disabled)return;
     b.disabled=true;b.textContent='Guardando…';
-    const verified=p.kind==='task'&&(p.action||'create')==='update';
+    const verified=p.kind==='task'&&['update','create'].includes(p.action||'create');
     // For a verified calendar mutation, accepting a proposal cannot precede
     // its canonical write receipt. The legacy feedback remains unchanged for
     // other kinds until each gains the same reviewed executor.
@@ -1560,7 +1560,7 @@ function confirmProposals(list){
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){
-      const verified=p.kind==='task'&&(p.action||'create')==='update';
+      const verified=p.kind==='task'&&['update','create'].includes(p.action||'create');
       if(!verified)proposalFeedback('accepted',p);
       await Promise.resolve().then(()=>applyProposal(p));
       if(verified)proposalFeedback('accepted',p);
@@ -1828,9 +1828,59 @@ async function applyVerifiedTaskUpdate(p){
     '” quedó actualizada'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
   return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
 }
+/* Reviewed create_task is an owned atomic database action, not a local
+ * optimistic mutation. Exactly one immutable receipt per request is required.
+ */
+async function applyVerifiedTaskCreate(p){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!p?.request_id||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.request_id))
+    throw new Error('Falta una propuesta registrada para confirmar.');
+  const {data:sessionData,error:authError}=await sb.auth.getSession();
+  const owner=sessionData?.session?.user?.id;
+  if(authError||!owner)throw new Error('La sesión debe estar conectada.');
+  const {data:receipt,error:writeError}=await sb.rpc('minds_commit_reviewed_task_create_v01',{
+    p_request_id:p.request_id,p_reviewed:p
+  });
+  if(writeError)throw new Error(writeError.message||'Escritura rechazada.');
+  if(!['applied','already_applied'].includes(receipt?.status)||
+      !receipt?.receipt_id||!receipt?.entity_client_key||!receipt?.after)
+    throw new Error('No se recibió un comprobante de creación válido.');
+  const {data:canonical,error:readError}=await sb.from('isabella_tasks')
+    .select('id,client_key,title,due_date,notes,reminder_time,project_id,category_id,updated_at')
+    .eq('user_id',owner).eq('client_key',receipt.entity_client_key).single();
+  if(readError||!canonical)throw new Error('El servidor no confirmó la tarea creada.');
+  const expected=receipt.after;
+  if(canonical.id!==receipt.entity_id||
+    canonical.title!==expected.title||
+    canonical.due_date!==(expected.date||null)||
+    canonical.project_id!==(expected.project_id||null)||
+    Date.parse(canonical.updated_at)!==Date.parse(expected.updated_at))
+    throw new Error('La tarea guardada no coincide con su comprobante.');
+  const maps={
+    categoryId:state.categories.find(c=>c.name?.toLowerCase()===String(p.category||'').toLowerCase())?.id||'personal',
+    projectId:state.projects.find(c=>c.name?.toLowerCase()===String(p.project||'').toLowerCase())?.id||null
+  };
+  const original=state.tasks.find(t=>t.id===canonical.client_key);
+  const item={
+    id:canonical.client_key,title:canonical.title,date:canonical.due_date,
+    done:false,completedAt:null,archivedAt:null,
+    categoryId:maps.categoryId,projectId:maps.projectId,
+    notes:canonical.notes||'',reminderTime:canonical.reminder_time?String(canonical.reminder_time).slice(0,5):null,
+    recurrence:{},metadata:{source:'isabella',receipt_id:receipt.receipt_id},
+    updatedAt:canonical.updated_at,sortOrder:0
+  };
+  if(original)Object.assign(original,item);
+  else state.tasks.push(item);
+  save();renderCalendar();closeModal();
+  say('assistant','Confirmé en Supabase que la tarea “'+canonical.title+
+    '” se creó'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
+  return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
+}
 function applyProposal(p){
   if(p.kind==='task'&&(p.action||'create')==='update')
     return applyVerifiedTaskUpdate(p);
+  if(p.kind==='task'&&(p.action||'create')==='create')
+    return applyVerifiedTaskCreate(p);
   if(p.kind==='routine')return createRoutineProposal(p)
   if(p.kind==='standing_intent')return createStandingIntentProposal(p)
   if(p.kind==='expectation')return createExpectationProposal(p)
@@ -1976,13 +2026,19 @@ async function handle(text,attachments=[],replyTo=null){
   // Persist the binding atomically with the first user turn; syncing between
   // say() and a later metadata patch previously produced duplicate user turns.
   const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
-  const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,
+  const lastAssistant=state.messages.slice().reverse().find(m=>m.role==='assistant'&&String(m.text||'').trim());
+  const pending=lastAssistant?.metadata?.pending_clarification;
+  const candidate=pending?.version===1&&pending?.source_turn_id&&pending?.receipt_id&&
+    Date.now()-Date.parse(pending.issued_at||'')<=45*60*1000&&
+    Date.now()>=Date.parse(pending.issued_at||'')
+    ?{source_turn_id:pending.source_turn_id,receipt_id:pending.receipt_id}:null;
+  const userTurn=say('user',text||'Te envío esta imagen.',{id:durableRequestId||undefined,attachments:copy,replyTo,
     metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
       setChatActivity('Isabella está preparando la respuesta…');
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,continuation:candidate,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
       if(result?.durable){
@@ -1997,8 +2053,10 @@ async function handle(text,attachments=[],replyTo=null){
         return;
       }
       if(durableRequestId){delete userTurn.metadata.durable_request_id;save()}
-      const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
-        ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
+      // Missing server provenance is NOT permission to relabel a turn global.
+      // Keep it local, including an otherwise reviewable proposal.
+      const exposure=result?.exposure_scope?.version===1&&typeof result.exposure_scope.key==='string'
+        ?result.exposure_scope:null;
       userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
       const integrity=window.MINDS_TURN_INTEGRITY?.validate(result);
       if(!integrity?.ok){
@@ -2009,7 +2067,8 @@ async function handle(text,attachments=[],replyTo=null){
       if(verifiedReply||result?.artifacts?.length)say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
         metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
           incomplete_reason:result?.incomplete_reason||null,
-          review_proposals:integrity.proposals,turn_outcome:integrity.outcome},
+          review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
+          ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
         sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});

@@ -12,7 +12,8 @@ const ai=read('apps/isabella/ai.js');
 const server=read('supabase/functions/isabella-chat/index.ts');
 
 test('90.8.3: user request binding exists before the first save/sync',()=>{
-  assert.match(app,/const durableRequestId=globalThis\.crypto\?\.randomUUID\?\.\(\)\|\|null;\s*const userTurn=say\('user',text\|\|'📷 Foto',\{attachments:copy,replyTo,\s*metadata:durableRequestId\?\{durable_request_id:durableRequestId\}:\{\}/);
+  assert.match(app,/const durableRequestId=globalThis\.crypto\?\.randomUUID\?\.\(\)\|\|null;/);
+  assert.match(app,/const userTurn=say\('user',text\|\|'Te envío esta imagen\.',\{id:durableRequestId\|\|undefined,attachments:copy,replyTo,/);
   assert.match(app,/candidates\.length===1/);
   assert.match(app,/Math\.abs\(Date\.parse\(m\.at\|\|''\)-started\)<=90000/);
   assert.match(app,/at:job\.created_at/);
@@ -56,8 +57,8 @@ test('90.8.3: menu reports current release and PWA pins all changed assets',()=>
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
   assert.match(shell,/Build 2026\.10\.12\.138\.2/);
-  for(const asset of ['app.js?v=117','ai.js?v=54','shell.js?v=104','sync.js?v=pwa34']){
+  for(const asset of ['app.js?v=118','ai.js?v=55','shell.js?v=104','sync.js?v=pwa35']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
-  assert.ok(sw.includes('isabella-shell-v143'));
+  assert.ok(sw.includes('isabella-shell-v145'));
 });

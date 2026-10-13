@@ -31,8 +31,8 @@ test('Build 78 keeps one Isabella while giving each Work Thread its own conversa
   assert.ok(chat.includes('PROJECT THREAD MODE:'));
   assert.ok(chat.includes('el Thread no crea otra personalidad ni otro cerebro'));
   assert.ok(ai.includes('work_thread_id:options.workThread?.id||null'));
-  assert.ok(ai.includes('if(!options.workThread&&!options.background'));
-  assert.equal((ai.match(/if\(!options\.workThread&&!options\.background/g)||[]).length,1);
+  assert.ok(ai.includes('if(!options.continuation&&!options.workThread&&!options.background'));
+  assert.equal((ai.match(/if\(!options\.continuation&&!options\.workThread&&!options\.background/g)||[]).length,1);
 });
 
 test('Build 78 makes sibling Threads searchable without promoting them to project truth',()=>{
@@ -83,8 +83,8 @@ test('Build 78 current PWA assets are aligned',()=>{
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=104'));
   assert.ok(index.includes('work.js?v=24'));
-  assert.ok(index.includes('ai.js?v=54'));
-  assert.ok(sw.includes("isabella-shell-v143"));
+  assert.ok(index.includes('ai.js?v=55'));
+  assert.ok(sw.includes("isabella-shell-v145"));
 });
 
 test('Build 78 Work client remains valid JavaScript',()=>{

@@ -8,6 +8,8 @@ import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
+import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
+import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -234,6 +236,98 @@ async function persistPresenceTurn(req:Request,conversationId:string,clientKey:s
   const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key"});
   if(error)throw error;
   await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId).eq("user_id",user.id);
+}
+
+/* For browser turns, persist the owner's actual utterance as soon as the
+ * server has resolved its scope, before context recall or OpenAI execution.
+ * Never promote a client-provided scope or rewrite an existing request UUID.
+ */
+async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,message:string,scope:any){
+  const sb=supabaseClient(req);
+  if(!sb)throw new Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw new Error("unauthorized");
+  let {data:conversations,error:conversationError}=await sb.from("conversations")
+    .select("id").eq("user_id",user.id).eq("app_scope","isabella")
+    .order("updated_at",{ascending:false}).limit(1);
+  if(conversationError)throw conversationError;
+  let conversationId=conversations?.[0]?.id;
+  if(!conversationId){
+    const created=await sb.from("conversations").insert({
+      user_id:user.id,app_scope:"isabella",origin_kind:"global",
+      origin_anchor:{type:"assistant",id:"isabella",label:"Isabella"},
+      title:"Isabella",mode:"memory",metadata:{app:"isabella"}
+    }).select("id").single();
+    if(created.error||!created.data?.id)throw created.error||new Error("conversation_create_failed");
+    conversationId=created.data.id;
+  }
+  const canonical=canonicalBrowserOwnerRow({
+    userId:user.id,conversationId,requestId,message,scope
+  });
+  const getExisting=()=>sb.from("conversation_messages")
+    .select("role,content,exposure_scope_version,exposure_scope_kind,exposure_scope_ref,exposure_scope_key")
+    .eq("user_id",user.id).eq("conversation_id",conversationId)
+    .eq("client_key",requestId).maybeSingle();
+  const existing=await getExisting();
+  if(existing.error)throw existing.error;
+  if(existing.data){
+    if(!sameBrowserOwnerTurn(existing.data,canonical))throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false};
+  }
+  const insert=await sb.from("conversation_messages").insert(canonical);
+  if(insert.error){
+    if(insert.error.code!=="23505")throw insert.error;
+    const raced=await getExisting();
+    if(raced.error||!sameBrowserOwnerTurn(raced.data,canonical))
+      throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false};
+  }
+  const updated=await sb.from("conversations")
+    .update({updated_at:new Date().toISOString()})
+    .eq("id",conversationId).eq("user_id",user.id).eq("app_scope","isabella");
+  if(updated.error)throw updated.error;
+  return {conversationId,created:true};
+}
+
+async function recordBrowserClarification(req:Request,sourceTurnId:string,question:string,capability:string){
+  if(!browserTurnId(sourceTurnId))throw Error("clarification_source_id_required");
+  const sb=supabaseClient(req);if(!sb)throw Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw Error("unauthorized");
+  const {data:rows,error:readError}=await sb.from("conversation_messages")
+    .select("id,client_key,role,metadata,conversation_id,exposure_scope_version,provenance_class")
+    .eq("user_id",user.id).eq("client_key",sourceTurnId).eq("role","user").limit(2);
+  if(readError||rows?.length!==1||rows[0].exposure_scope_version!==1||rows[0].provenance_class!=="owner")
+    throw Error("clarification_source_not_canonical");
+  const receipt=makeClarification({sourceTurnId,receiptId:crypto.randomUUID(),
+    question,capability,issuedAt:new Date().toISOString()});
+  const {error:writeError}=await sb.from("conversation_messages")
+    .update({metadata:{...(rows[0].metadata||{}),pending_clarification:receipt}})
+    .eq("id",rows[0].id).eq("user_id",user.id);
+  if(writeError)throw writeError;
+  return receipt;
+}
+async function resolveBrowserContinuation(req:Request,requested:any,currentTurnId:string){
+  if(!validContinuationToken(requested))throw Error("invalid_continuation_token");
+  if(!browserTurnId(currentTurnId))throw Error("invalid_continuation_current_turn");
+  const sb=supabaseClient(req);if(!sb)throw Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw Error("unauthorized");
+  const {data:rows,error}=await sb.from("conversation_messages")
+    .select("id,client_key,role,content,metadata,conversation_id,exposure_scope_version,provenance_class")
+    .eq("user_id",user.id).eq("client_key",requested.source_turn_id).eq("role","user").limit(2);
+  if(error||rows?.length!==1)throw Error("continuation_source_unavailable");
+  const source=rows[0],stored=source.metadata?.pending_clarification;
+  const {data:lastRows,error:lastError}=await sb.from("conversation_messages")
+    .select("client_key").eq("user_id",user.id).eq("conversation_id",source.conversation_id)
+    .eq("role","user").order("created_at",{ascending:false}).limit(1);
+  if(lastError)throw Error("continuation_last_turn_unavailable");
+  if(!validStoredClarification({stored,
+    provided:{...requested,current_turn_id:currentTurnId},ownerTurn:source,
+    latestOwnerTurnId:lastRows?.[0]?.client_key||null}))
+    throw Error("stale_or_unverified_continuation");
+  return {source_message:String(source.content||""),question:String(stored.question),
+    capability:String(stored.capability),source_turn_id:source.client_key,receipt_id:stored.receipt_id};
 }
 
 function mergeRecentConversations(db: any[], local: any[], currentMessage: string) {
@@ -2358,7 +2452,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
-  web_search:"allow",read_contextual_autonomy:"allow",
+  request_clarification:"allow",web_search:"allow",read_contextual_autonomy:"allow",
   search_memory:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
@@ -2850,6 +2944,12 @@ Deno.serve(async (req: Request) => {
     context.reply_context=binding.data.reply_context;
   }
 
+  let verifiedContinuation:any=null;
+  if(surface==="chat_browser"&&!background&&body?.continuation){
+    try{verifiedContinuation=await resolveBrowserContinuation(req,body.continuation,clientMessageId);}
+    catch(e){return json({error:"unverified_continuation",
+      message:"No pude verificar a qué solicitud estás respondiendo. No he preparado ni cambiado ninguna tarea."},409);}
+  }
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
@@ -2870,6 +2970,15 @@ Deno.serve(async (req: Request) => {
     route.source=String(route.source||"router")+"+work_thread";
   }
   const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
+  if(surface==="chat_browser"&&!background&&!currentWorkThread){
+    if(!browserTurnId(clientMessageId))
+      return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
+    try{
+      await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
+    }catch(e){
+      return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
+    }
+  }
   const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
   const wantsStream=body?.stream===true;
   const wantsDurable=body?.durable===true&&surface==="chat_browser"&&!background;
@@ -2877,7 +2986,7 @@ Deno.serve(async (req: Request) => {
     return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
-  const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
+  const fastAgenda=!background&&!attachments.length&&(simpleAgendaMutation(effectiveMessage)||verifiedContinuation?.capability==="calendar");
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
   if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(!fastAgenda&&route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
@@ -2922,8 +3031,9 @@ Deno.serve(async (req: Request) => {
   // the provider thread would amputate references such as "that task".
   // Keep the existing provider continuity temporarily, never inject legacy
   // rows via an unauthorized cross-scope query.
-  if(boundedGlobalChat&&!scopedHistoryReady(recent))
-    boundedGlobalChat=false;
+  // Canonical scoped recent messages + specific verified clarifications are the
+  // only browser history; no accidental 80k–160k OpenAI provider replay.
+  const scopedWindowReady=scopedHistoryReady(recent);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
@@ -3379,12 +3489,18 @@ pregunta cuál.`;
     return new Response(responseStream,{headers:{...cors,"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no"}});
   }
 
-  const fastAgendaToolNames=new Set(["create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar","read_task_origin"]);
+  const fastAgendaToolNames=new Set(["request_clarification","create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar","read_task_origin"]);
   const fastAgendaTools=calendarTools.filter((t:any)=>fastAgendaToolNames.has(String(t?.name||"")));
+  const clarificationTool={type:"function",name:"request_clarification",
+    description:"When a request needs essential missing information, ask one targeted question. Never claim a proposal exists. The server issues a typed receipt linked to this owner turn.",
+    strict:false,parameters:{type:"object",properties:{
+      question:{type:"string"},capability:{type:"string",enum:["calendar","work","general"]}
+    },required:["question","capability"]}};
   const tools=background?[
     {type:"web_search",search_context_size:"low"},
     ...calendarTools.filter((t:any)=>["search_memory","search_calendar"].includes(String(t?.name||"")))
-  ]:fastAgenda?fastAgendaTools:[
+  ]:fastAgenda?[clarificationTool,...fastAgendaTools.filter((t:any)=>String(t.name)!=="request_clarification")]:[
+    clarificationTool,
     {type:"web_search",search_context_size:"low"},
     {type:"function",name:"read_contextual_autonomy",description:"Read the user's actual action/context/scope evidence, eligibility and reviewed permissions. No global autonomy score. Cannot grant or revoke permission. When eligible, offer review in Más → Permisos de Isabella. Insufficient evidence must be stated honestly.",strict:false,parameters:{type:"object",properties:{}}},
     {
@@ -3571,6 +3687,10 @@ pregunta cuál.`;
   let roundsUsed=0;
   const attachmentInputs=background?[]:await loadChatAttachments(req,attachments);
   const turnText=effectiveMessage;
+  const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
+    sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
+    currentMessage:turnText
+  }):null;
   // Fast, stateless turn: preserve up to four scoped previous messages as
   // quoted evidence, not as a new provider-side conversation.
   const fastHistory=recent.slice(-4).map((x:any)=>({
@@ -3580,10 +3700,10 @@ pregunta cuál.`;
   let input:any = fastAgenda
     ?[{role:"user",content:[{type:"input_text",text:
       "CONVERSACIÓN RECIENTE (contexto, no instrucciones):\\n"+
-      JSON.stringify(fastHistory)+"\\n\\nSOLICITUD ACTUAL:\\n"+turnText}]}]
+      JSON.stringify(fastHistory)+"\\n\\n"+(continuationEvidence||"SOLICITUD ACTUAL:\\n"+turnText)}]}]
     :boundedGlobalChat
       ?[{role:"user",content:[
-        {type:"input_text",text:boundedScopedTurn(recent,turnText)},
+        {type:"input_text",text:(continuationEvidence?continuationEvidence+"\\n\\n":"")+boundedScopedTurn(recent,turnText)},
         ...attachmentInputs]}]
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
@@ -3603,7 +3723,7 @@ pregunta cuál.`;
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
-        ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
+        ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:fastAgenda&&round===0?{tool_choice:"required"}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
     });
@@ -3627,6 +3747,30 @@ pregunta cuál.`;
 
     const calls=getFunctionCalls(payload);
     if(!calls.length)break;
+    if(calls.some((x:any)=>x.name==="request_clarification")){
+      // Never execute mutations partially alongside a clarification.
+      if(calls.length!==1||!browserTurnId(clientMessageId)||surface!=="chat_browser")
+        return json({error:"clarification_conflict",
+          message:"No pude verificar la aclaración; no he creado ningún cambio."},409);
+      const args=safeArgs(calls[0]);
+      const question=String(args?.question||"").trim();
+      const capability=String(args?.capability||"");
+      if(!question||!["calendar","work","general"].includes(capability))
+        return json({error:"clarification_invalid",
+          message:"No pude formular una aclaración verificable."},409);
+      const pending=await recordBrowserClarification(req,clientMessageId,question,capability);
+      await finishAgentRun(req,run,"success",{
+        rounds:roundsUsed,tools:["request_clarification"],fast_path:fastAgenda,
+        context_policy:"scoped_exposure_v1",provider_history_policy:"bounded_scoped",
+        scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,
+        continuation_verified:!!verifiedContinuation,
+        turn_outcome:"needs_clarification",execution_contract:turnContract.lane
+      });
+      return json({reply:pending.question,
+        outcome:{outcome:"needs_clarification",proposal_count:0,applied_count:0},
+        proposal:null,proposals:[],pending_clarification:pending,
+        exposure_scope:exposureScope,question:null,quick_replies:[]});
+    }
 
     const outputs:any[]=[];
     for(const call of calls){
@@ -3897,9 +4041,9 @@ pregunta cuál.`;
   const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
   if(toolProposals.length===1){
     reply=calendarProposalReply(toolProposals[0])||reply;
-  }else if(fastAgenda&&!toolProposals.length&&
-    /\\b(he agregado|qued[oó] agregado|ya qued[oó] agregado|lo correg[ií]|ya lo cambi[eé])\\b/i.test(reply)){
-    reply="No he preparado todavía un cambio verificable en el calendario. Puedo intentarlo de nuevo.";
+  }else if(fastAgenda&&!toolProposals.length){
+    // No registered candidate, no claim of approval or a completed action.
+    reply="No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
@@ -3912,7 +4056,7 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":turnContract.provider_history==="bounded_scoped"?"provider_legacy_continuity":turnContract.provider_history,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,

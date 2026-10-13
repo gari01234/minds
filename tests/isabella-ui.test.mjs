@@ -617,10 +617,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=104'));
-  assert.ok(index.includes('app.js?v=117'));
-  assert.ok(index.includes('sync.js?v=pwa34'));
-  assert.ok(index.includes('ai.js?v=54'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v143'"));
+  assert.ok(index.includes('app.js?v=118'));
+  assert.ok(index.includes('sync.js?v=pwa35'));
+  assert.ok(index.includes('ai.js?v=55'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v145'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -835,7 +835,7 @@ test('Build 49 persists reactions and reply references in conversation metadata'
   const sync=read('apps/isabella/sync.js');
   assert.ok(sync.includes('reaction:m.reaction||null'));
   assert.ok(sync.includes('reply_to:m.replyTo?.id'));
-  assert.ok(sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key'})"));
+  assert.ok(sync.includes("upsert(assistantRows,{onConflict:'user_id,conversation_id,client_key'})"));
   assert.ok(!sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true})"));
   assert.ok(sync.includes('metadata:m.metadata||{}'));
 });
@@ -845,7 +845,7 @@ test('Build 49 supports quoted replies that Isabella can resolve',()=>{
   assert.ok(shell.includes('id="chatReplyPreview"'));
   assert.ok(app.includes('function setReplyTarget(id)'));
   assert.ok(app.includes('message-reply-reference'));
-  assert.ok(app.includes("const userTurn=say('user',text||'📷 Foto',{attachments:copy,replyTo,"));
+  assert.ok(app.includes("const userTurn=say('user',text||'Te envío esta imagen.',{id:durableRequestId||undefined,attachments:copy,replyTo,"));
   assert.ok(app.includes('metadata:durableRequestId?{durable_request_id:durableRequestId}:{}'));
   assert.ok(ai.includes('Gari está respondiendo específicamente a este mensaje previo'));
   assert.ok(ai.includes('reply_to:m.replyTo?.id'));
@@ -1153,7 +1153,7 @@ test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   assert.equal(simple('Verschiebe die Aufgabe auf morgen'),true);
   assert.equal(simple('Investiga la arquitectura de Geoffrey Bawa'),false);
   assert.equal(simple('¿Qué tal?'),false);
-  assert.ok(chat.includes('fastAgenda?fastAgendaTools'));
+  assert.ok(chat.includes('fastAgenda?[clarificationTool,...fastAgendaTools'));
   assert.ok(chat.includes('background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req)'));
   assert.ok(chat.includes('!background&&!fastAgenda&&route.project?searchWork'));
   const setStart=chat.indexOf('const fastAgendaToolNames=new Set(');
