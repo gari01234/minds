@@ -57,6 +57,22 @@ function proposalFromCall(name:string,a:any){
   };
   return null;
 }
+/* A fast-path receipt must not be relabeled global in the browser.
+ * Resolve project names only from the authenticated owner's taxonomy.
+ */
+async function canonicalFastExposureScope(uc:any,proposal:any){
+  const projectName=String(proposal?.project||"").trim().toLowerCase();
+  if(!projectName)return {version:1,kind:"global",ref:null,key:"global",basis:"fast_server"};
+  const {data,error}=await uc.from("isabella_projects")
+    .select("id,name,client_key").eq("archived",false);
+  if(error)throw new Error("fast_project_scope_unavailable");
+  const matches=(data||[]).filter((p:any)=>
+    String(p.name||"").trim().toLowerCase()===projectName||
+    String(p.client_key||"").trim().toLowerCase()===projectName);
+  if(matches.length!==1)throw new Error("fast_project_scope_ambiguous");
+  const id=String(matches[0].id);
+  return {version:1,kind:"project",ref:id,key:"project:"+id,basis:"fast_server"};
+}
 function contextualFastContext(message:string,p:any,ctx:any){
   const words=(s:any)=>' '+normalize(s).replace(/[^\p{L}\p{N}]+/gu,' ').trim()+' ';
   // Literal user input must contain both the category and task, not only recent context.
@@ -203,6 +219,7 @@ REGLAS DE SEGURIDAD:
           await finishRun(service,runId,"skipped",started,{transport:"sse",fast_path:true,one_round:true,outcome:"invalid_proposal"});
           send("fallback",{reason:"invalid_proposal"});controller.close();return;
         }
+        const exposureScope=await canonicalFastExposureScope(uc,proposal);
         const permissionContext={...contextualFastContext(message,proposal,ctx),run_id:runId};
         if(body?.permission_protocol!=='contextual_v1')permissionContext.direct_request=false;
         const recorded=await service.rpc("minds_admit_shadow_decision",{
@@ -214,7 +231,7 @@ REGLAS DE SEGURIDAD:
           const text='Eso ya está en el estado que pediste; no hace falta otra confirmación.';
           const reply=(ackSent?'Entendido. ':'')+text;
           send('text_delta',{delta:text});
-          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,review_admission:recorded.data});
+          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,exposure_scope:exposureScope,review_admission:recorded.data});
           await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:'review_suppressed',reason:recorded.data?.reason||null});
           await finishRun(service,runId,'success',started,{transport:'sse',fast_path:true,one_round:true,tool:call.name,outcome:'review_suppressed'});
           controller.close();return;
@@ -227,7 +244,7 @@ REGLAS DE SEGURIDAD:
           const text=`Guardé “${canonicalProposal.title}”${canonicalProposal.date?` para ${canonicalProposal.date}`:' sin fecha'}${canonicalProposal.category?` en ${canonicalProposal.category}`:''}, con el permiso que autorizaste.`;
           const reply=(ackSent?'Entendido. ':'')+text;
           send('text_delta',{delta:text});
-          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,autonomy_execution:permission.receipt});
+          send('result',{reply,proposal:null,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,exposure_scope:exposureScope,autonomy_execution:permission.receipt});
           await logUsage(service,user.id,model,completed?.usage,{fast_path:true,one_round:true,outcome:'authorized_execution',permission_id:permission.receipt.permission_id});
           await finishRun(service,runId,'success',started,{transport:'sse',fast_path:true,one_round:true,tool:call.name,outcome:'authorized_execution',receipt_id:permission.receipt.id});
           controller.close();return;
@@ -236,7 +253,7 @@ REGLAS DE SEGURIDAD:
         const reply=(ackSent?"Entendido. ":"")+previewText(canonicalProposal);
         send("text_delta",{delta:previewText(canonicalProposal)});
         send("status",{phase:"ready",label:"Listo para revisar"});
-        send("result",{reply,proposal:canonicalProposal,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true});
+        send("result",{reply,proposal:canonicalProposal,proposals:[],memory_candidates:[],quick_replies:[],sources:[],artifacts:[],pending_intent:null,fast_path:true,one_round:true,streamed_reply:true,exposure_scope:exposureScope});
         await finishRun(service,runId,"success",started,{transport:"sse",fast_path:true,one_round:true,tool:call.name,outcome:"proposal"});
         controller.close();
       }catch(e){
