@@ -14,7 +14,7 @@ const canonical={id:"77777777-2222-4333-8444-888888888888",
  notes:"",reminder_time:null,project_id:null,category_id:null,updated_at:"2026-10-13T22:00:00Z"};
 const receipt={status:"applied",receipt_id:"88888888-bbbb-4ccc-8ddd-777777777777",
  entity_id:canonical.id,entity_client_key:canonical.client_key,
- after:{title:canonical.title,date:canonical.due_date,project_id:null,updated_at:"2026-10-13T22:00:00+00"}};
+ after:{title:canonical.title,date:canonical.due_date,project_id:null,updated_at:"2026-10-13T22:00:00+00:00"}};
 function harness({rpcError=null,reply=receipt,readError=null,row=canonical}={}){
  const calls=[],tasks=[],spoken=[];let saves=0,closed=0;
  const sb={auth:{getSession:async()=>({data:{session:{user:{id:owner}}},error:null})},
