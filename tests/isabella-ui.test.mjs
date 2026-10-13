@@ -1153,7 +1153,7 @@ test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   assert.equal(simple('Verschiebe die Aufgabe auf morgen'),true);
   assert.equal(simple('Investiga la arquitectura de Geoffrey Bawa'),false);
   assert.equal(simple('¿Qué tal?'),false);
-  assert.ok(chat.includes('fastAgenda?[clarificationTool,...fastAgendaTools'));
+  assert.ok(chat.includes('fastAgenda?[...clarificationTools,...fastAgendaTools'));
   assert.ok(chat.includes('background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req)'));
   assert.ok(chat.includes('!background&&!fastAgenda&&route.project?searchWork'));
   const setStart=chat.indexOf('const fastAgendaToolNames=new Set(');

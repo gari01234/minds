@@ -63,5 +63,5 @@ test("fast mutations do not replay huge provider conversation context",()=>{
  assert.match(source,/recent\.slice\(-4\)/);
  assert.match(source,/input=nextToolInput\(input,payload\.output,outputs,!!conversationInfo\.id&&!fastAgenda\)/);
  assert.match(source,/!background&&!fastAgenda&&\(route\.work\|\|responseContinuation\)/);
- assert.match(source,/fastAgenda\?\[clarificationTool/);
+ assert.match(source,/fastAgenda\?\[\.\.\.clarificationTools/);
 });

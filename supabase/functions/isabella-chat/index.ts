@@ -3496,11 +3496,15 @@ pregunta cuál.`;
     strict:false,parameters:{type:"object",properties:{
       question:{type:"string"},capability:{type:"string",enum:["calendar","work","general"]}
     },required:["question","capability"]}};
+  // Only the normal browser chat can persist a canonical pending owner turn.
+  // Presence and Work Threads use different conversation authority contracts.
+  const clarificationTools=surface==="chat_browser"&&!currentWorkThread
+    ?[clarificationTool]:[];
   const tools=background?[
     {type:"web_search",search_context_size:"low"},
     ...calendarTools.filter((t:any)=>["search_memory","search_calendar"].includes(String(t?.name||"")))
-  ]:fastAgenda?[clarificationTool,...fastAgendaTools.filter((t:any)=>String(t.name)!=="request_clarification")]:[
-    clarificationTool,
+  ]:fastAgenda?[...clarificationTools,...fastAgendaTools.filter((t:any)=>String(t.name)!=="request_clarification")]:[
+    ...clarificationTools,
     {type:"web_search",search_context_size:"low"},
     {type:"function",name:"read_contextual_autonomy",description:"Read the user's actual action/context/scope evidence, eligibility and reviewed permissions. No global autonomy score. Cannot grant or revoke permission. When eligible, offer review in Más → Permisos de Isabella. Insufficient evidence must be stated honestly.",strict:false,parameters:{type:"object",properties:{}}},
     {

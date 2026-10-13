@@ -94,3 +94,10 @@ test("turn-integrity UI rejects missing or inconsistent clarification claims",()
  assert.equal(root.MINDS_TURN_INTEGRITY.validate({...result,pending_clarification:null}).ok,false);
  assert.equal(root.MINDS_TURN_INTEGRITY.validate({...result,reply:"Listo, ya la guardé"}).ok,false);
 });
+
+test("pending clarification tool is unavailable in Presence and Work Thread authorities",()=>{
+ assert.match(server,/const clarificationTools=surface==="chat_browser"&&!currentWorkThread/);
+ assert.match(server,/fastAgenda\?\[\.\.\.clarificationTools/);
+ assert.match(server,/\.\.\.clarificationTools,\n    \{type:"web_search"/);
+ assert.doesNotMatch(server,/fastAgenda\?\[clarificationTool,/);
+});
