@@ -1976,7 +1976,7 @@ async function handle(text,attachments=[],replyTo=null){
   // Persist the binding atomically with the first user turn; syncing between
   // say() and a later metadata patch previously produced duplicate user turns.
   const durableRequestId=globalThis.crypto?.randomUUID?.()||null;
-  const userTurn=say('user',text||'📷 Foto',{id:durableRequestId||undefined,attachments:copy,replyTo,
+  const userTurn=say('user',text||'Te envío esta imagen.',{id:durableRequestId||undefined,attachments:copy,replyTo,
     metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
   clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
   try{
