@@ -101,7 +101,7 @@ test("source-first conversation boundary: do not drop history when scoped messag
  }));
  assert.equal(scopedHistoryReady(rows,{now}),true);
  assert.equal(scopedHistoryReady(rows,{now:"2026-10-13T09:00:00Z"}),false);
- assert.match(server,/if\(boundedGlobalChat&&!scopedHistoryReady\(recent\)\)/);
- assert.match(server,/provider_legacy_continuity/);
+ assert.match(server,/const scopedWindowReady=scopedHistoryReady\(recent\)/);
+ assert.doesNotMatch(server,/provider_legacy_continuity/);
  assert.match(server,/if\(!background&&!boundedGlobalChat\)/);
 });
