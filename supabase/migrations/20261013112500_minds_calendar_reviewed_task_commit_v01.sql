@@ -127,7 +127,7 @@ BEGIN
   v_due_date:=v_target.due_date;
   IF coalesce((p_reviewed->>'clear_date')::boolean,false) THEN v_due_date:=NULL;
   ELSIF nullif(p_reviewed->>'date','') IS NOT NULL THEN
-    IF (p_reviewed->>'date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}
+    IF (p_reviewed->>'date') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
        THEN RAISE EXCEPTION 'invalid_reviewed_date'; END IF;
     v_due_date:=(p_reviewed->>'date')::date;
     IF to_char(v_due_date,'YYYY-MM-DD')<>(p_reviewed->>'date')
