@@ -168,7 +168,8 @@ function normalizeMessages(items){
       greetingSeen=true;
     }
     const prev=out[out.length-1];
-    if(prev&&prev.role===m.role&&prev.text===text)continue;
+    if(prev&&prev.role===m.role&&prev.text===text&&
+       !(prev.metadata?.review_proposals?.length||m.metadata?.review_proposals?.length))continue;
     out.push({...m,text,artifacts});
   }
   return out;
