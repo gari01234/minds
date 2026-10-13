@@ -56,7 +56,7 @@ test("existing user-confirmation and source truth boundaries are unchanged",()=>
  assert.match(source,/calendarProposalReply\(toolProposals\[0\]\)/);
 });
 test("fast mutations do not replay huge provider conversation context",()=>{
- assert.match(source,/const fastAgenda=!background&&!attachments\.length&&simpleAgendaMutation/);
+ assert.match(source,/const fastAgenda=!background&&!attachments\.length&&\(simpleAgendaMutation/);
  assert.match(source,/!fastAgenda&&!boundedGlobalChat&&conversationInfo\.id\?\{conversation:conversationInfo\.id\}/);
  assert.match(source,/fastAgenda\?fastCalendarInstructions:system/);
  assert.match(source,/fastAgenda\?fastCalendarContext:JSON\.parse\(dynamicContext\)/);
