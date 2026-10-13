@@ -30,7 +30,11 @@
         return {ok:false,reason:'missing_review_candidate',proposals:[]};
       if(name!=='proposal_created'&&proposals.length>0)
         return {ok:false,reason:'unexpected_review_candidate',proposals:[]};
-      if(name==='action_applied'&&(!Number.isSafeInteger(outcome.applied_count)||outcome.applied_count<1))
+      if(name==='action_applied'&&(!Number.isSafeInteger(outcome.applied_count)||
+          outcome.applied_count<1||
+          !(result.autonomy_execution?.id||
+            (Array.isArray(result.action_receipts)&&
+              result.action_receipts.some(r=>r&&typeof r.receipt_id==='string'&&r.receipt_id)))))
         return {ok:false,reason:'missing_execution_receipt',proposals:[]};
     }
     // Older fast-action and contextual paths supply a canonical request_id
