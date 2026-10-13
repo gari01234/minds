@@ -24,7 +24,7 @@ test('Build 83.2 drag bindings use collection selectors, not querySelector resul
 test('Build 83.2 proposal confirmation catches synchronous render failures',()=>{
   assert.ok(app.includes("Promise.resolve().then(()=>applyProposal(p))"));
   assert.ok(app.includes("b.textContent='Guardando…'"));
-  assert.ok(app.includes("No pude aplicar el cambio:"));
+  assert.ok(app.includes("No pude verificar la actualización en Supabase."));
 });
 
 test('Build 83.2 sends chat documents to Responses API as MIME data URLs',()=>{
