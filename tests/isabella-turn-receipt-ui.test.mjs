@@ -67,3 +67,40 @@ test("receipt validation is independent of magic Spanish correction phrases",()=
  const file=read("apps/isabella/turn-integrity.js");
  assert.doesNotMatch(file,/corrígelo|corrige la tarea|Besprechungsnotiz/);
 });
+
+test("real message renderer restores the inline review button from saved message state",()=>{
+ const app=read("apps/isabella/app.js");
+ const begin=app.indexOf("function renderMessages(forceBottom=false){");
+ const end=app.indexOf("\nfunction ",begin+12);
+ assert.ok(begin>0&&end>begin);
+ const render=app.slice(begin,end);
+ const buttons=[],calls=[],container={innerHTML:""},scroller={dataset:{initialScroll:"1"}};
+ const messages=[{id:"assistant-review-1",role:"assistant",text:"Corrección propuesta",
+   metadata:{review_proposals:[proposal]},sources:[],attachments:[],artifacts:[]}];
+ const fakeDocument={querySelectorAll(selector){
+   if(selector==="[data-review-message]"){
+     const b={dataset:{reviewMessage:"assistant-review-1"},onclick:null};
+     buttons.push(b);return [b];
+   }
+   return [];
+ }};
+ const ctx={
+   state:{messages},document:fakeDocument,
+   $:selector=>selector==="#messages"?container:scroller,
+   normalizeMessages:x=>x,messageRenderKey:items=>JSON.stringify(items),
+   syncOrbCompact:()=>{},lastMessagesRenderKey:"",
+   captureAssistantScroll:()=>({nearBottom:true}),restoreAssistantScroll:()=>{},
+   requestAnimationFrame:fn=>fn(),hydrateChatImages:()=>{},
+   hydrateArtifactFiles:()=>{},bindMessageReactions:()=>{},
+   esc:x=>String(x),replyAuthor:()=>"",replySnippet:()=>"",
+   cleanGeneratedDeliverableText:x=>x,artifactSurfaceGroups:()=>({previews:[],deliverables:[]}),
+   formatMessageText:x=>String(x),confirmProposals:items=>calls.push(items),
+   console,Image:function(){},
+ };
+ runInNewContext(render+"\nrenderMessages();",ctx);
+ assert.match(container.innerHTML,/data-review-message="assistant-review-1"/);
+ assert.equal(buttons.length,1);
+ buttons[0].onclick();
+ assert.equal(calls.length,1);
+ assert.equal(calls[0][0].request_id,"review-1");
+});
