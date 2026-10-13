@@ -835,7 +835,7 @@ test('Build 49 persists reactions and reply references in conversation metadata'
   const sync=read('apps/isabella/sync.js');
   assert.ok(sync.includes('reaction:m.reaction||null'));
   assert.ok(sync.includes('reply_to:m.replyTo?.id'));
-  assert.ok(sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key'})"));
+  assert.ok(sync.includes("upsert(assistantRows,{onConflict:'user_id,conversation_id,client_key'})"));
   assert.ok(!sync.includes("upsert(rows,{onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true})"));
   assert.ok(sync.includes('metadata:m.metadata||{}'));
 });
@@ -1153,7 +1153,7 @@ test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   assert.equal(simple('Verschiebe die Aufgabe auf morgen'),true);
   assert.equal(simple('Investiga la arquitectura de Geoffrey Bawa'),false);
   assert.equal(simple('¿Qué tal?'),false);
-  assert.ok(chat.includes('fastAgenda?fastAgendaTools'));
+  assert.ok(chat.includes('fastAgenda?[clarificationTool,...fastAgendaTools'));
   assert.ok(chat.includes('background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req)'));
   assert.ok(chat.includes('!background&&!fastAgenda&&route.project?searchWork'));
   const setStart=chat.indexOf('const fastAgendaToolNames=new Set(');
