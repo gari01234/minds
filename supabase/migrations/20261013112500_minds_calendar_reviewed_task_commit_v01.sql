@@ -12,6 +12,7 @@ CREATE TABLE public.minds_calendar_action_receipts (
   entity_client_key text NOT NULL,
   before_state jsonb NOT NULL,
   after_state jsonb NOT NULL,
+  reviewed_candidate jsonb NOT NULL,
   created_at timestamptz NOT NULL DEFAULT now(),
   UNIQUE(user_id,request_id)
 );
@@ -58,6 +59,9 @@ BEGIN
   SELECT * INTO v_existing FROM public.minds_calendar_action_receipts
     WHERE user_id=v_user AND request_id=p_request_id;
   IF FOUND THEN
+    IF (p_reviewed-'_review') IS DISTINCT FROM (v_existing.reviewed_candidate-'_review') THEN
+      RAISE EXCEPTION 'receipt_replay_candidate_mismatch';
+    END IF;
     RETURN jsonb_build_object('status','already_applied','receipt_id',v_existing.id,
       'request_id',p_request_id,'entity_id',v_existing.entity_id,
       'entity_client_key',v_existing.entity_client_key,'after',v_existing.after_state);
@@ -172,9 +176,9 @@ BEGIN
     'notes',v_target.notes,'reminder_time',v_target.reminder_time,
     'updated_at',v_target.updated_at);
   INSERT INTO public.minds_calendar_action_receipts(
-    user_id,request_id,action,entity_kind,entity_id,entity_client_key,before_state,after_state
+    user_id,request_id,action,entity_kind,entity_id,entity_client_key,before_state,after_state,reviewed_candidate
   ) VALUES (v_user,p_request_id,'update_task','task',v_target.id,v_target.client_key,
-            v_before,v_after) RETURNING id INTO v_receipt;
+            v_before,v_after,p_reviewed) RETURNING id INTO v_receipt;
   v_edited:=p_reviewed-'_review' IS DISTINCT FROM v_original-'_review';
   v_status:=CASE WHEN v_edited THEN 'edited' ELSE 'accepted' END;
   UPDATE public.minds_shadow_decisions
