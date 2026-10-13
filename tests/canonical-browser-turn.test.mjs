@@ -71,3 +71,12 @@ test("client uses one stable ID and never promotes an unknown scope to global",(
   assert.doesNotMatch(app,/basis:'client_fallback'/);
   assert.match(read("apps/isabella/sync.js"),/const approved=\(messages\|\|\[\]\)\.filter\(scopedTurnReady\)/);
 });
+
+test("fast action results carry authenticated server provenance, not client fallback",()=>{
+  const fast=read("supabase/functions/isabella-fast-stream/index.ts");
+  assert.match(fast,/async function canonicalFastExposureScope\(uc:any,proposal:any\)/);
+  assert.match(fast,/\.from\("isabella_projects"\)/);
+  assert.match(fast,/if\(matches\.length!==1\)throw new Error\("fast_project_scope_ambiguous"\)/);
+  assert.equal((fast.match(/streamed_reply:true,exposure_scope:exposureScope/g)||[]).length,3);
+  assert.match(client,/fastRequestId:options\.durableRequestId\|\|options\.fastRequestId/);
+});
