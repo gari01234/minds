@@ -85,9 +85,9 @@ test("typed proposal counts use canonical registered proposals and UI still rend
  assert.match(server,/const outcomeReceipt=turnOutcomeReceipt\(\{proposals:toolProposals\}\)/);
  assert.match(server,/outcome:outcomeReceipt/);
  assert.match(server,/proposal:toolProposals\.length===1\?toolProposals\[0\]:null/);
- assert.match(ui,/if\(Array\.isArray\(result\?\.proposals\)&&result\.proposals\.length\)/);
- assert.match(ui,/else if\(result\?\.proposal\)/);
- assert.match(ui,/confirmProposal\(result\.proposal\)/);
+ assert.match(ui,/MINDS_TURN_INTEGRITY\?\.validate\(result\)/);
+ assert.match(ui,/if\(integrity\.proposals\.length\)/);
+ assert.match(ui,/confirmProposals\(integrity\.proposals\)/);
  assert.match(ui,/proposalFeedback\('accepted',p\)/);
 });
 

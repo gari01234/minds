@@ -47,6 +47,8 @@ function messageRenderKey(messages){
     (m.artifacts||[]).map(a=>[a.id,a.storage_path,a.kind,a.title]),
     (m.sources||[]).map(s=>[s.url,s.title]),
     !!m.metadata?.incomplete_response,
+    (m.metadata?.review_proposals||[]).map(p=>p.request_id),
+    m.metadata?.review_state||'',
     (m.quickReplies||[]).map(q=>[q.label,q.value])
   ]));
 }
@@ -166,7 +168,8 @@ function normalizeMessages(items){
       greetingSeen=true;
     }
     const prev=out[out.length-1];
-    if(prev&&prev.role===m.role&&prev.text===text)continue;
+    if(prev&&prev.role===m.role&&prev.text===text&&
+       !(prev.metadata?.review_proposals?.length||m.metadata?.review_proposals?.length))continue;
     out.push({...m,text,artifacts});
   }
   return out;
@@ -1129,11 +1132,18 @@ function renderMessages(forceBottom=false){
     const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
-    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
+      !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">Revisar propuesta pendiente</button></div>`:''}${m.role==='assistant'&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
+  document.querySelectorAll('[data-review-message]').forEach(b=>b.onclick=()=>{
+    const m=state.messages.find(x=>x.id===b.dataset.reviewMessage);
+    const items=Array.isArray(m?.metadata?.review_proposals)?m.metadata.review_proposals:[];
+    if(m?.role!=='assistant'||m.metadata?.review_state||!items.length)return;
+    confirmProposals(items);
+  });
   document.querySelectorAll('[data-continue-incomplete]').forEach(b=>b.onclick=()=>{
     const index=state.messages.findIndex(m=>m.id===b.dataset.continueIncomplete);
     if(index<0)return;
@@ -1504,13 +1514,28 @@ function proposalDetails(p){
   return '';
 }
 window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=>{if(q)confirmProposal(q);else closeModal()})};
+function finalizeInlineReview(proposals,status){
+  const ids=new Set((Array.isArray(proposals)?proposals:[proposals])
+    .map(p=>String(p?.request_id||'')).filter(Boolean));
+  if(!ids.size||!Array.isArray(state.messages))return;
+  let changed=false;
+  for(const m of state.messages){
+    const list=m?.metadata?.review_proposals;
+    if(m?.role!=='assistant'||!Array.isArray(list)||m.metadata.review_state)continue;
+    if(list.some(p=>ids.has(String(p.request_id||'')))){
+      m.metadata={...m.metadata,review_state:status};
+      changed=true;
+    }
+  }
+  if(changed){save();renderMessages()}
+}
 function confirmProposal(p){
   p={...p,request_id:p.request_id||crypto.randomUUID()};
   const reviewHint=p.kind==='routine'?'Puedes confirmar tal cual o corregir el contenido y el horario antes de guardarlo.':p.kind==='standing_intent'?'Se activará cuando el contexto reaparezca en la conversación. No es vigilancia externa.':p.kind==='expectation'?'Esto seguirá un hecho futuro del mundo; una fecha vencida sin evidencia no se tratará como fallo.':p.kind==='commitment'?'Esto mantendrá el objetivo vivo, pero no ejecutará acciones por sí solo.':p.kind==='work_claim'?'Revisa especialmente estado y procedencia: una fuente no equivale automáticamente a un hecho confirmado.':p.kind==='skill_proposal'?'Esta habilidad será personal y solo se activa al confirmar.':p.kind==='feed_preferences'?'Puedes revisar la constelación y los temas antes de modificar tu Feed.':p.kind==='assistant_preferences'?'Puedes revisar esta mejora antes de incorporarla al comportamiento de Isabella.':'Puedes confirmar tal cual o corregir nombre, fecha, hora, categoría o proyecto antes de guardarlo.';
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
-  $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
+  $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);finalizeInlineReview(p,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
-  $('#proposalConfirm').onclick=()=>{const b=$('#proposalConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();proposalFeedback('accepted',p);Promise.resolve().then(()=>applyProposal(p)).catch(e=>{say('assistant','No pude aplicar el cambio: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}}).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}})};
+  $('#proposalConfirm').onclick=()=>{const b=$('#proposalConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();proposalFeedback('accepted',p);Promise.resolve().then(()=>applyProposal(p)).then(()=>finalizeInlineReview(p,'reviewed_locally')).catch(e=>{say('assistant','No pude aplicar el cambio: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}}).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}})};
 }
 function confirmProposals(list){
   const items=(list||[]).filter(Boolean).map(p=>({...p,request_id:p.request_id||crypto.randomUUID()}));
@@ -1518,8 +1543,8 @@ function confirmProposals(list){
   if(items.length===1){confirmProposal(items[0]);return}
   modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}${proposalDetails(p)}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
-  $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){proposalFeedback('accepted',p);await Promise.resolve().then(()=>applyProposal(p))}closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
+  $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
+  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){proposalFeedback('accepted',p);await Promise.resolve().then(()=>applyProposal(p));finalizeInlineReview(p,'reviewed_locally')}closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
@@ -1910,13 +1935,22 @@ async function handle(text,attachments=[],replyTo=null){
       const exposure=result?.exposure_scope&&typeof result.exposure_scope==='object'
         ?result.exposure_scope:{version:1,kind:'global',ref:null,key:'global',basis:'client_fallback'};
       userTurn.metadata={...(userTurn.metadata||{}),exposure_scope:exposure};
-      if(result?.reply||result?.artifacts?.length)say('assistant',result.reply||'Listo.',{metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null},sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      const integrity=window.MINDS_TURN_INTEGRITY?.validate(result);
+      if(!integrity?.ok){
+        say('assistant','No pude verificar el resultado de esta operación. No he confirmado ningún cambio.',{metadata:{exposure_scope:exposure,turn_receipt_error:integrity?.reason||'validator_unavailable'}});
+        return;
+      }
+      const verifiedReply=window.MINDS_TURN_INTEGRITY.summary(integrity)||String(result?.reply||'');
+      if(verifiedReply||result?.artifacts?.length)say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+        metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
+          incomplete_reason:result?.incomplete_reason||null,
+          review_proposals:integrity.proposals,turn_outcome:integrity.outcome},
+        sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
       if(result?.autonomy_execution)await window.ISABELLA_SYNC_PULL_NOW?.();
-      if(Array.isArray(result?.proposals)&&result.proposals.length){state.pendingIntent=null;save();confirmProposals(result.proposals)}
-      else if(result?.proposal){state.pendingIntent=null;save();confirmProposal(result.proposal)}
+      if(integrity.proposals.length){state.pendingIntent=null;save();confirmProposals(integrity.proposals)}
       else save();
     }else say('assistant',localFallback(text));
   }catch(e){
