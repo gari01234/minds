@@ -1535,7 +1535,22 @@ function confirmProposal(p){
   modal('Confirmar',`<div class="row"><div class="row-main"><b>${esc(proposalLabel(p))}</b><div class="small" style="margin-top:7px">${esc(reviewHint)}</div>${proposalDetails(p)}</div></div><div class="proposal-actions"><button id="proposalCancel" class="secondary">Cancelar</button><button id="proposalEdit" class="secondary">Corregir</button><button id="proposalConfirm" class="primary">Confirmar</button></div>`);
   $('#proposalCancel').onclick=()=>{state.pendingIntent=null;save();proposalFeedback('rejected',p);finalizeInlineReview(p,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalEdit').onclick=()=>proposalEditor(p,q=>{if(q)confirmProposal(reviewedProposal(p,q));else confirmProposal(p)});
-  $('#proposalConfirm').onclick=()=>{const b=$('#proposalConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();proposalFeedback('accepted',p);Promise.resolve().then(()=>applyProposal(p)).then(()=>finalizeInlineReview(p,'reviewed_locally')).catch(e=>{say('assistant','No pude aplicar el cambio: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}}).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}})};
+  $('#proposalConfirm').onclick=()=>{
+    const b=$('#proposalConfirm');if(b.disabled)return;
+    b.disabled=true;b.textContent='Guardando…';
+    const verified=p.kind==='task'&&(p.action||'create')==='update';
+    // For a verified calendar mutation, accepting a proposal cannot precede
+    // its canonical write receipt. The legacy feedback remains unchanged for
+    // other kinds until each gains the same reviewed executor.
+    if(!verified){state.pendingIntent=null;save();proposalFeedback('accepted',p);}
+    Promise.resolve().then(()=>applyProposal(p)).then(()=>{
+      if(verified){state.pendingIntent=null;save();proposalFeedback('accepted',p);}
+      finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
+    }).catch(e=>{
+      say('assistant','No pude verificar la actualización en Supabase. No la marcaré como realizada: '+(e?.message||String(e)));
+      if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}
+    }).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}});
+  };
 }
 function confirmProposals(list){
   const items=(list||[]).filter(Boolean).map(p=>({...p,request_id:p.request_id||crypto.randomUUID()}));
@@ -1544,7 +1559,13 @@ function confirmProposals(list){
   modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}${proposalDetails(p)}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){proposalFeedback('accepted',p);await Promise.resolve().then(()=>applyProposal(p));finalizeInlineReview(p,'reviewed_locally')}closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
+  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){
+      const verified=p.kind==='task'&&(p.action||'create')==='update';
+      if(!verified)proposalFeedback('accepted',p);
+      await Promise.resolve().then(()=>applyProposal(p));
+      if(verified)proposalFeedback('accepted',p);
+      finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
+    }closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
@@ -1765,7 +1786,51 @@ function applyAssistantPreferencesProposal(p){
   save();closeModal();
   say('assistant','Listo. Adopté esta mejora como una preferencia de comportamiento. Puedes revisarla o quitarla desde Proactividad de Isabella.');
 }
+/* Canonical, reviewed task UPDATE: no optimistic local mutation.
+ * The RPC owns the transaction, shadow decision and idempotent receipt.
+ * A second database read proves that the requested state was actually stored.
+ */
+async function applyVerifiedTaskUpdate(p){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!p?.request_id||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.request_id))
+    throw new Error('Falta una propuesta registrada para confirmar.');
+  const {data:sessionData,error:authError}=await sb.auth.getSession();
+  const owner=sessionData?.session?.user?.id;
+  if(authError||!owner)throw new Error('La sesión debe estar conectada.');
+  const {data:receipt,error:writeError}=await sb.rpc('minds_commit_reviewed_task_update_v01',{
+    p_request_id:p.request_id,p_reviewed:p
+  });
+  if(writeError)throw new Error(writeError.message||'Escritura rechazada.');
+  if(!['applied','already_applied'].includes(receipt?.status)||
+     !receipt?.receipt_id||!receipt?.entity_client_key||!receipt?.after)
+    throw new Error('No se recibió un comprobante de ejecución válido.');
+  const {data:canonical,error:readError}=await sb.from('isabella_tasks')
+    .select('id,client_key,title,due_date,notes,reminder_time,project_id,category_id,updated_at')
+    .eq('user_id',owner).eq('client_key',receipt.entity_client_key).single();
+  if(readError||!canonical)throw new Error('El servidor no confirmó el estado de la tarea.');
+  const expected=receipt.after;
+  if(canonical.id!==receipt.entity_id||
+     canonical.title!==expected.title||
+     canonical.due_date!==(expected.date||null)||
+     Date.parse(canonical.updated_at)!==Date.parse(expected.updated_at))
+    throw new Error('El estado guardado no coincide con el comprobante.');
+  // Update the UI only after the server result is verified. The regular
+  // Sync Pull can reconcile other devices, but is not the success criterion.
+  const item=state.tasks.find(t=>t.id===canonical.client_key);
+  if(item){
+    item.title=canonical.title;item.date=canonical.due_date;
+    item.notes=canonical.notes||'';item.reminderTime=canonical.reminder_time||null;
+    item.projectId=canonical.project_id||null;item.categoryId=canonical.category_id||null;
+    item.updatedAt=canonical.updated_at;
+  }
+  save();renderCalendar();closeModal();
+  say('assistant','Listo. Confirmé en Supabase que “'+canonical.title+
+    '” quedó actualizada'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
+  return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
+}
 function applyProposal(p){
+  if(p.kind==='task'&&(p.action||'create')==='update')
+    return applyVerifiedTaskUpdate(p);
   if(p.kind==='routine')return createRoutineProposal(p)
   if(p.kind==='standing_intent')return createStandingIntentProposal(p)
   if(p.kind==='expectation')return createExpectationProposal(p)
