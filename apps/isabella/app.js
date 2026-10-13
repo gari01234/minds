@@ -1517,7 +1517,7 @@ window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=
 function finalizeInlineReview(proposals,status){
   const ids=new Set((Array.isArray(proposals)?proposals:[proposals])
     .map(p=>String(p?.request_id||'')).filter(Boolean));
-  if(!ids.size)return;
+  if(!ids.size||!Array.isArray(state.messages))return;
   let changed=false;
   for(const m of state.messages){
     const list=m?.metadata?.review_proposals;
