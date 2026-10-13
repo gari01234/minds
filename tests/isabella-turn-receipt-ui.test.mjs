@@ -61,7 +61,7 @@ test("full browser chat shows and persists review actions from typed result",()=
  assert.match(app,/finalizeInlineReview\(/);
  assert.ok(html.indexOf("turn-integrity.js?v=2")<html.indexOf("app.js?v=118"));
  assert.match(sw,/isabella-shell-v145/);
- assert.match(sw,/turn-integrity\.js\?v=1/);
+ assert.match(sw,/turn-integrity\.js\?v=2/);
 });
 test("receipt validation is independent of magic Spanish correction phrases",()=>{
  const file=read("apps/isabella/turn-integrity.js");
