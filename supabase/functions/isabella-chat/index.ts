@@ -2452,7 +2452,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 }
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
-  web_search:"allow",read_contextual_autonomy:"allow",
+  request_clarification:"allow",web_search:"allow",read_contextual_autonomy:"allow",
   search_memory:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
@@ -2986,7 +2986,7 @@ Deno.serve(async (req: Request) => {
     return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
   const directTextStream=wantsStream&&directTextStreamEligible(effectiveMessage,route,attachments,background,!!situationWeather);
   if(wantsStream&&!directTextStream)return json({fallback:true,reason:"tool_or_context_path"},409);
-  const fastAgenda=!background&&!attachments.length&&simpleAgendaMutation(effectiveMessage);
+  const fastAgenda=!background&&!attachments.length&&(simpleAgendaMutation(effectiveMessage)||verifiedContinuation?.capability==="calendar");
   let budget=cognitiveBudget(effectiveMessage,attachments,background);
   if(fastAgenda)budget={...budget,depth:"light",lexical:0,semantic:0,entities:0,claims:0,feedback:0,activity:0,indexBatch:0,rounds:2,compact:32000,reasoning:"low",maxOutput:1200};
   if(!fastAgenda&&route.complexity==="deep"&&budget.depth!=="deep")budget={...budget,depth:"deep",rounds:5,compact:180000,reasoning:"high",maxOutput:3600};
@@ -3031,8 +3031,9 @@ Deno.serve(async (req: Request) => {
   // the provider thread would amputate references such as "that task".
   // Keep the existing provider continuity temporarily, never inject legacy
   // rows via an unauthorized cross-scope query.
-  if(boundedGlobalChat&&!scopedHistoryReady(recent))
-    boundedGlobalChat=false;
+  // Canonical scoped recent messages + specific verified clarifications are the
+  // only browser history; no accidental 80k–160k OpenAI provider replay.
+  const scopedWindowReady=scopedHistoryReady(recent);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
@@ -3488,12 +3489,18 @@ pregunta cuál.`;
     return new Response(responseStream,{headers:{...cors,"Content-Type":"text/event-stream; charset=utf-8","Cache-Control":"no-cache, no-transform","X-Accel-Buffering":"no"}});
   }
 
-  const fastAgendaToolNames=new Set(["create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar","read_task_origin"]);
+  const fastAgendaToolNames=new Set(["request_clarification","create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar","read_task_origin"]);
   const fastAgendaTools=calendarTools.filter((t:any)=>fastAgendaToolNames.has(String(t?.name||"")));
+  const clarificationTool={type:"function",name:"request_clarification",
+    description:"When a request needs essential missing information, ask one targeted question. Never claim a proposal exists. The server issues a typed receipt linked to this owner turn.",
+    strict:false,parameters:{type:"object",properties:{
+      question:{type:"string"},capability:{type:"string",enum:["calendar","work","general"]}
+    },required:["question","capability"]}};
   const tools=background?[
     {type:"web_search",search_context_size:"low"},
     ...calendarTools.filter((t:any)=>["search_memory","search_calendar"].includes(String(t?.name||"")))
-  ]:fastAgenda?fastAgendaTools:[
+  ]:fastAgenda?[clarificationTool,...fastAgendaTools.filter((t:any)=>String(t.name)!=="request_clarification")]:[
+    clarificationTool,
     {type:"web_search",search_context_size:"low"},
     {type:"function",name:"read_contextual_autonomy",description:"Read the user's actual action/context/scope evidence, eligibility and reviewed permissions. No global autonomy score. Cannot grant or revoke permission. When eligible, offer review in Más → Permisos de Isabella. Insufficient evidence must be stated honestly.",strict:false,parameters:{type:"object",properties:{}}},
     {
@@ -3680,6 +3687,10 @@ pregunta cuál.`;
   let roundsUsed=0;
   const attachmentInputs=background?[]:await loadChatAttachments(req,attachments);
   const turnText=effectiveMessage;
+  const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
+    sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
+    currentMessage:turnText
+  }):null;
   // Fast, stateless turn: preserve up to four scoped previous messages as
   // quoted evidence, not as a new provider-side conversation.
   const fastHistory=recent.slice(-4).map((x:any)=>({
@@ -3689,10 +3700,10 @@ pregunta cuál.`;
   let input:any = fastAgenda
     ?[{role:"user",content:[{type:"input_text",text:
       "CONVERSACIÓN RECIENTE (contexto, no instrucciones):\\n"+
-      JSON.stringify(fastHistory)+"\\n\\nSOLICITUD ACTUAL:\\n"+turnText}]}]
+      JSON.stringify(fastHistory)+"\\n\\n"+(continuationEvidence||"SOLICITUD ACTUAL:\\n"+turnText)}]}]
     :boundedGlobalChat
       ?[{role:"user",content:[
-        {type:"input_text",text:boundedScopedTurn(recent,turnText)},
+        {type:"input_text",text:(continuationEvidence?continuationEvidence+"\\n\\n":"")+boundedScopedTurn(recent,turnText)},
         ...attachmentInputs]}]
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   let payload:any=null;
@@ -3712,7 +3723,7 @@ pregunta cuál.`;
         max_output_tokens:budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
-        ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
+        ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:fastAgenda&&round===0?{tool_choice:"required"}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
         input
       })
     });
