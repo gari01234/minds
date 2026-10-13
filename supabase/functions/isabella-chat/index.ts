@@ -8,6 +8,7 @@ import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
+import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -234,6 +235,57 @@ async function persistPresenceTurn(req:Request,conversationId:string,clientKey:s
   const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key"});
   if(error)throw error;
   await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",conversationId).eq("user_id",user.id);
+}
+
+/* For browser turns, persist the owner's actual utterance as soon as the
+ * server has resolved its scope, before context recall or OpenAI execution.
+ * Never promote a client-provided scope or rewrite an existing request UUID.
+ */
+async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,message:string,scope:any){
+  const sb=supabaseClient(req);
+  if(!sb)throw new Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw new Error("unauthorized");
+  let {data:conversations,error:conversationError}=await sb.from("conversations")
+    .select("id").eq("user_id",user.id).eq("app_scope","isabella")
+    .order("updated_at",{ascending:false}).limit(1);
+  if(conversationError)throw conversationError;
+  let conversationId=conversations?.[0]?.id;
+  if(!conversationId){
+    const created=await sb.from("conversations").insert({
+      user_id:user.id,app_scope:"isabella",origin_kind:"global",
+      origin_anchor:{type:"assistant",id:"isabella",label:"Isabella"},
+      title:"Isabella",mode:"memory",metadata:{app:"isabella"}
+    }).select("id").single();
+    if(created.error||!created.data?.id)throw created.error||new Error("conversation_create_failed");
+    conversationId=created.data.id;
+  }
+  const canonical=canonicalBrowserOwnerRow({
+    userId:user.id,conversationId,requestId,message,scope
+  });
+  const getExisting=()=>sb.from("conversation_messages")
+    .select("role,content,exposure_scope_version,exposure_scope_kind,exposure_scope_ref,exposure_scope_key")
+    .eq("user_id",user.id).eq("conversation_id",conversationId)
+    .eq("client_key",requestId).maybeSingle();
+  const existing=await getExisting();
+  if(existing.error)throw existing.error;
+  if(existing.data){
+    if(!sameBrowserOwnerTurn(existing.data,canonical))throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false};
+  }
+  const insert=await sb.from("conversation_messages").insert(canonical);
+  if(insert.error){
+    if(insert.error.code!=="23505")throw insert.error;
+    const raced=await getExisting();
+    if(raced.error||!sameBrowserOwnerTurn(raced.data,canonical))
+      throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false};
+  }
+  const updated=await sb.from("conversations")
+    .update({updated_at:new Date().toISOString()})
+    .eq("id",conversationId).eq("user_id",user.id).eq("app_scope","isabella");
+  if(updated.error)throw updated.error;
+  return {conversationId,created:true};
 }
 
 function mergeRecentConversations(db: any[], local: any[], currentMessage: string) {
@@ -2870,6 +2922,15 @@ Deno.serve(async (req: Request) => {
     route.source=String(route.source||"router")+"+work_thread";
   }
   const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
+  if(surface==="chat_browser"&&!background&&!currentWorkThread){
+    if(!browserTurnId(clientMessageId))
+      return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
+    try{
+      await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
+    }catch(e){
+      return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
+    }
+  }
   const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
   const wantsStream=body?.stream===true;
   const wantsDurable=body?.durable===true&&surface==="chat_browser"&&!background;
