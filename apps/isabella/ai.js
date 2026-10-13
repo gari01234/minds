@@ -198,7 +198,7 @@ async function ask(message,state,options={}){
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
   if(!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
     try{
-      const fast=await askFastStream(message,state,options);
+      const fast=await askFastStream(message,state,{...options,fastRequestId:options.durableRequestId||options.fastRequestId});
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
     }catch(e){
