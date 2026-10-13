@@ -1559,7 +1559,13 @@ function confirmProposals(list){
   modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}${proposalDetails(p)}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){proposalFeedback('accepted',p);await Promise.resolve().then(()=>applyProposal(p));finalizeInlineReview(p,'reviewed_locally')}closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
+  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){
+      const verified=p.kind==='task'&&(p.action||'create')==='update';
+      if(!verified)proposalFeedback('accepted',p);
+      await Promise.resolve().then(()=>applyProposal(p));
+      if(verified)proposalFeedback('accepted',p);
+      finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
+    }closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
@@ -1786,7 +1792,7 @@ function applyAssistantPreferencesProposal(p){
  */
 async function applyVerifiedTaskUpdate(p){
   const sb=window.MINDS_SUPABASE;
-  if(!sb||!p?.request_id||!/^([0-9a-f]{8}-){4}[0-9a-f]{12}$/i.test(p.request_id))
+  if(!sb||!p?.request_id||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.request_id))
     throw new Error('Falta una propuesta registrada para confirmar.');
   const {data:sessionData,error:authError}=await sb.auth.getSession();
   const owner=sessionData?.session?.user?.id;
@@ -1806,7 +1812,7 @@ async function applyVerifiedTaskUpdate(p){
   if(canonical.id!==receipt.entity_id||
      canonical.title!==expected.title||
      canonical.due_date!==(expected.date||null)||
-     canonical.updated_at!==expected.updated_at)
+     Date.parse(canonical.updated_at)!==Date.parse(expected.updated_at))
     throw new Error('El estado guardado no coincide con el comprobante.');
   // Update the UI only after the server result is verified. The regular
   // Sync Pull can reconcile other devices, but is not the success criterion.
