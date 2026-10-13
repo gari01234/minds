@@ -3747,6 +3747,30 @@ pregunta cuál.`;
 
     const calls=getFunctionCalls(payload);
     if(!calls.length)break;
+    if(calls.some((x:any)=>x.name==="request_clarification")){
+      // Never execute mutations partially alongside a clarification.
+      if(calls.length!==1||!browserTurnId(clientMessageId)||surface!=="chat_browser")
+        return json({error:"clarification_conflict",
+          message:"No pude verificar la aclaración; no he creado ningún cambio."},409);
+      const args=safeArgs(calls[0]);
+      const question=String(args?.question||"").trim();
+      const capability=String(args?.capability||"");
+      if(!question||!["calendar","work","general"].includes(capability))
+        return json({error:"clarification_invalid",
+          message:"No pude formular una aclaración verificable."},409);
+      const pending=await recordBrowserClarification(req,clientMessageId,question,capability);
+      await finishAgentRun(req,run,"success",{
+        rounds:roundsUsed,tools:["request_clarification"],fast_path:fastAgenda,
+        context_policy:"scoped_exposure_v1",provider_history_policy:"bounded_scoped",
+        scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,
+        continuation_verified:!!verifiedContinuation,
+        turn_outcome:"needs_clarification",execution_contract:turnContract.lane
+      });
+      return json({reply:pending.question,
+        outcome:{outcome:"needs_clarification",proposal_count:0,applied_count:0},
+        proposal:null,proposals:[],pending_clarification:pending,
+        exposure_scope:exposureScope,question:null,quick_replies:[]});
+    }
 
     const outputs:any[]=[];
     for(const call of calls){
@@ -4017,9 +4041,9 @@ pregunta cuál.`;
   const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
   if(toolProposals.length===1){
     reply=calendarProposalReply(toolProposals[0])||reply;
-  }else if(fastAgenda&&!toolProposals.length&&
-    /\\b(he agregado|qued[oó] agregado|ya qued[oó] agregado|lo correg[ií]|ya lo cambi[eé])\\b/i.test(reply)){
-    reply="No he preparado todavía un cambio verificable en el calendario. Puedo intentarlo de nuevo.";
+  }else if(fastAgenda&&!toolProposals.length){
+    // No registered candidate, no claim of approval or a completed action.
+    reply="No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
@@ -4032,7 +4056,7 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":turnContract.provider_history==="bounded_scoped"?"provider_legacy_continuity":turnContract.provider_history,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
