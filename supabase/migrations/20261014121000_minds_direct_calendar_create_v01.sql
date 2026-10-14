@@ -26,6 +26,12 @@ ALTER TABLE public.minds_calendar_action_receipts
 ALTER TABLE public.minds_calendar_action_receipts
   ADD CONSTRAINT minds_calendar_action_receipts_action_check
     CHECK (action IN ('update_task','create_task','create_event'));
+ALTER TABLE public.minds_calendar_action_receipts
+  DROP CONSTRAINT minds_calendar_action_receipts_entity_kind_check;
+ALTER TABLE public.minds_calendar_action_receipts
+  ADD CONSTRAINT minds_calendar_action_receipts_entity_kind_check
+    CHECK (entity_kind IN ('task','event'));
+
 
 -- Function is accessible only to the authenticated owner; server-issued context is
 -- verified against an owner-authored scoped turn and an admitted shadow decision.
