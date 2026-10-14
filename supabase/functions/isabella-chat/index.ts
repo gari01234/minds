@@ -10,7 +10,7 @@ import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -528,7 +528,9 @@ const calendarTools = [
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
-      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
+      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
+      direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
+      direct_event_duration_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event duration, NOT a default."}
     }, required:["title","date","time","duration_minutes"] }
   },
   {
@@ -3286,7 +3288,10 @@ como cita literal de la orden de creación que dio el usuario si es explícita.
 Solo el servidor puede habilitar ejecución directa según permiso vigente.
 Las modificaciones y eliminaciones requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
-Mantén el proyecto explícito; no inventes horas ni fechas.
+Mantén el proyecto explícito; no inventes horas ni fechas. Una creación directa
+de evento exige fecha, hora y duración respaldadas explícitamente por la orden
+del usuario; usa direct_event_time_excerpt y direct_event_duration_excerpt
+como citas literales. Sin ellas, usa request_clarification o la revisión habitual.
 Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.
 Si el usuario señala que una fecha de una tarea recién propuesta o creada
 está equivocada, identifica la tarea en los mensajes recientes y la agenda.
@@ -3824,7 +3829,11 @@ pregunta cuál.`;
           const quoted=String(args?.direct_user_excerpt||"").trim();
           if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
              !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
-             exactOwnerExcerpt(sourceText,quoted)&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
+             exactOwnerExcerpt(sourceText,quoted)&&
+             (call.name!=="create_event"||(
+               exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt)&&
+               exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt)
+             ))&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
               .select("create_mode").eq("user_id",(await prefClient.auth.getUser()).data.user?.id||"").maybeSingle():null;
@@ -3836,7 +3845,11 @@ pregunta cuál.`;
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
                direct_authorization_turn_id:verifiedContinuation?.source_turn_id||clientMessageId,
-               direct_timezone:temporal.timezone}: {})
+               direct_timezone:temporal.timezone,
+               ...(call.name==="create_event"?{
+                 direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
+                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim()
+               }: {})}: {})
           });
           if(admission?.status==="suppressed"){
             outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
