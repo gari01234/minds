@@ -3164,7 +3164,18 @@ async function contextualAutonomyPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Permisos de Isabella','<div class="small">Conecta la memoria para consultar tus permisos.</div>');return}
   modal('Permisos de Isabella','<div class="surface-loading">Leyendo evidencia y permisos…</div>');
   try{
-    const {data,error}=await sb.rpc('minds_get_contextual_autonomy');if(error)throw error;
+    const [{data,error},{data:calendarPref,error:calendarError}]=await Promise.all([
+      sb.rpc('minds_get_contextual_autonomy'),
+      sb.from('minds_calendar_execution_preferences').select('create_mode').maybeSingle()
+    ]);
+    if(error||calendarError)throw error||calendarError;
+    const directCalendar=calendarPref?.create_mode==='direct';
+    const directCalendarHTML='<div class="human-permission-case"><div class="human-case-title">Crear tareas y eventos desde el chat</div>'+
+      '<div class="human-state tone-complete"><b>'+(directCalendar?'Ejecución directa activada':'Confirmación previa activada')+'</b>'+
+      '<p>'+(directCalendar?'Cuando tú pidas explícitamente crear algo, Isabella lo guardará y comprobará antes de informarte. Si falta información, la pedirá.':'Isabella seguirá mostrando propuestas para que las apruebes.')+
+      ' Los cambios y las eliminaciones siguen necesitando revisión.</p></div>'+
+      '<button type="button" id="calendarCreationMode" class="secondary">'+
+      (directCalendar?'Volver a confirmar antes de crear':'Permitir creación directa')+'</button></div>';
     const units=data?.units||[],permissions=data?.permissions||[];
     const candidates=data?.post_action_candidates||[],outcomeFeedback=data?.outcome_feedback||[];
     const pendingCorrections=candidates.filter(x=>x.status==='pending');
@@ -3181,7 +3192,25 @@ async function contextualAutonomyPanel(){
       return `<div class="doctor-log"><b>${causal?'Corrección confirmada':'Cambio posterior'} · ${esc(postActionCandidateTitle(r))}</b><span>${causal?'Volví a pedir confirmación para ese permiso.':'No lo utilicé como aprendizaje causal.'}${feedback?.changed_fields?.length?' · '+esc(feedback.changed_fields.map(postActionFieldLabel).join(', ')):''}</span><time>${new Date(r.reviewed_at||r.created_at).toLocaleString('es-ES')}</time></div>`;
     }).join('');
     const pendingHtml=pendingCorrections.map(postActionCandidateHTML).join('');
-    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal. Antes de autorizar una clase, puedes simular con tu historial qué habría ocurrido si ese permiso hubiera estado activo.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal. Antes de autorizar una clase, puedes simular con tu historial qué habría ocurrido si ese permiso hubiera estado activo.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Autorización de calendario</div>${directCalendarHTML}<div id="calendarModeError" class="small" role="status"></div><div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    const modeButton=$('#calendarCreationMode');
+    if(modeButton)modeButton.onclick=async()=>{
+      modeButton.disabled=true;
+      const desired=directCalendar?'review':'direct';
+      try{
+        const {data:{session}}=await sb.auth.getSession();
+        if(!session?.user?.id)throw new Error('Sesión no disponible');
+        const {error:modeError}=await sb.from('minds_calendar_execution_preferences')
+          .upsert({user_id:session.user.id,create_mode:desired,updated_at:new Date().toISOString()},
+            {onConflict:'user_id'});
+        if(modeError)throw modeError;
+        await contextualAutonomyPanel();
+      }catch(e){
+        const el=$('#calendarModeError');
+        if(el)el.textContent='No pude modificar la autorización: '+String(e?.message||e);
+        modeButton.disabled=false;
+      }
+    };
     document.querySelectorAll('[data-permission-counterfactual]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionCounterfactual)];void contextualCounterfactualPanel(e)});
     document.querySelectorAll('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
     $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
