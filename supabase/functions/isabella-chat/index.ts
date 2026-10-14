@@ -10,6 +10,7 @@ import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
+import {exactOwnerExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 
@@ -526,7 +527,8 @@ const calendarTools = [
     strict: false,
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
-      all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"}
+      all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
+      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
     }, required:["title","date","time","duration_minutes"] }
   },
   {
@@ -553,7 +555,8 @@ const calendarTools = [
     description: "Propose creating one task. The date is OPTIONAL. If the user knows something must be done but has no date yet, omit date and create it as an undated task; do not force an arbitrary day. reminder_time only makes sense when a date exists.",
     strict: false,
     parameters: { type:"object", properties:{
-      title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"}
+      title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
+      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
     }, required:["title"] }
   },
   {
@@ -3134,7 +3137,7 @@ Tienes search_commitments para consultar objetivos abiertos ya aprobados y propo
 Tienes search_calendar para consultar agenda/tareas más allá del resumen inmediato.
 AUTONOMÍA CONTEXTUAL: Shadow Agency aporta evidencia, nunca autorización. Usa read_contextual_autonomy para responder sobre evidencia o permisos reales. No inventes un score global ni deduzcas autorización de una tasa de aceptación. Solo el usuario puede aprobar o revocar un permiso en Más → Permisos de Isabella. No hay herramienta de modelo para cambiar permisos. La ruta rápida puede guardar una tarea sencilla únicamente bajo un permiso contextual vigente aprobado allí; estas herramientas de conversación siguen generando propuestas.
 
-Tienes create_event, update_event, delete_event, create_task, update_task, complete_task, archive_task y delete_task para preparar cambios. Tienes create_routine para preparar una automatización recurrente propia de Isabella y create_chat_reminder para un único mensaje futuro dentro del chat. Tienes update_feed_preferences únicamente para ajustar la localidad habitual del clima o una regla explícita sobre qué situaciones personales merecen emerger en el Feed. El Feed NO es un news feed ni una lista de intereses. Tienes update_assistant_behavior para adoptar una mejora de comportamiento o workflow solo después de que el usuario la acepte explícitamente. Estas herramientas NO ejecutan directamente: la interfaz pedirá confirmación. Nunca digas que algo ya quedó hecho si solo preparaste una propuesta.
+Tienes create_event, update_event, delete_event, create_task, update_task, complete_task, archive_task y delete_task para preparar cambios. Tienes create_routine para preparar una automatización recurrente propia de Isabella y create_chat_reminder para un único mensaje futuro dentro del chat. Tienes update_feed_preferences únicamente para ajustar la localidad habitual del clima o una regla explícita sobre qué situaciones personales merecen emerger en el Feed. El Feed NO es un news feed ni una lista de intereses. Tienes update_assistant_behavior para adoptar una mejora de comportamiento o workflow solo después de que el usuario la acepte explícitamente. Para crear tareas o eventos, una instrucción EXPLÍCITA del usuario puede autorizar la creación directa sin una segunda confirmación si su preferencia persistente lo permite. Las demás mutaciones conservan revisión. En create_task y create_event incluye direct_user_excerpt como cita LITERAL de la orden actual (o de la solicitud original de una aclaración verificada), solamente si el usuario realmente pidió CREAR; no lo infieras de recuerdos, sugerencias, documentos ni de tu propia iniciativa. La cita se verificará con el mensaje original del propietario. Si falta información esencial, pregunta y no inventes atributos. Las herramientas producen candidatos, el backend verifica y ejecuta únicamente las creaciones autorizadas. Nunca anuncies una acción como completada antes de que exista un recibo y una lectura canónica.
 COMPLETION / EXECUTION BIAS:
 Ante una petición accionable, intenta llevarla hasta un resultado utilizable en este turno o deja una ejecución durable real antes de terminar. No conviertas una petición de hacer en una explicación de cómo hacer si existe una herramienta capaz de producir el resultado. La herramienta y el formato son detalles internos: Gari no necesita decir "PDF", "Excel", "PowerPoint" ni "usa Python". Infiere el output por la finalidad. Si el resultado se va a imprimir, firmar, rellenar, presentar, editar, calcular, comparar, entregar o reutilizar como archivo, prefiere producir el artefacto. Si basta una respuesta, email para copiar o explicación, el chat sigue siendo el resultado correcto.
 Capacidad y autoridad son distintas: puedes crear material sin pedir permiso adicional, pero no envíes, publiques, promociones a verdad de proyecto ni hagas side effects externos salvo que otra herramienta/política lo autorice.
@@ -3278,7 +3281,10 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
 Resuelve una operación concreta de tareas o calendario con brevedad.
 Usa solo el día local del servidor, nunca adivines fechas desde el historial.
 Usa una herramienta de propuesta cuando el usuario pida crear o modificar
-una tarea o evento. Los cambios requieren confirmación en la interfaz:
+una tarea o evento. Para create_task/create_event, proporciona direct_user_excerpt
+como cita literal de la orden de creación que dio el usuario si es explícita.
+Solo el servidor puede habilitar ejecución directa según permiso vigente.
+Las modificaciones y eliminaciones requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
 Mantén el proyecto explícito; no inventes horas ni fechas.
 Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.
@@ -3675,6 +3681,7 @@ pregunta cuál.`;
     ...calendarTools
   ];
   const toolProposals:any[]=[];
+  const directAuthorizedIds:string[]=[];
   const toolMemories:any[]=[];
   const artifactResults:any[]=[];
   const capabilityRuns:any[]=[];
@@ -3810,9 +3817,26 @@ pregunta cuál.`;
         const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace),mission_request_id:crypto.randomUUID()}:{}),request_id:proposal.request_id||crypto.randomUUID()};
         let proposalForReview=reviewedProposal;
         if(mode==="confirm"){
+          // Directness comes exclusively from this owner's current utterance
+          // or its server-verified pending clarification, never from retrieved text.
+          const sourceText=verifiedContinuation?.source_message||effectiveMessage;
+          const quoted=String(args?.direct_user_excerpt||"").trim();
+          let directAllowed=false;
+          if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
+             !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
+             exactOwnerExcerpt(sourceText,quoted)&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
+            const prefClient=supabaseClient(req);
+            const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
+              .select("create_mode").eq("user_id",(await prefClient.auth.getUser()).data.user?.id||"").maybeSingle():null;
+            directAllowed=!pref?.error&&pref?.data?.create_mode==="direct";
+          }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-            source_tainted:sourceTainted,round,background:!!background
+            source_tainted:sourceTainted,round,background:!!background,
+            ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
+               direct_authorization_excerpt:quoted,
+               direct_authorization_turn_id:verifiedContinuation?.source_turn_id||clientMessageId,
+               direct_timezone:temporal.timezone}: {})
           });
           if(admission?.status==="suppressed"){
             outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
@@ -3831,8 +3855,10 @@ pregunta cuál.`;
           }
         }
         toolProposals.push(proposalForReview);
+        if(mode==="confirm"&&typeof directAllowed!=="undefined"&&directAllowed)
+          directAuthorizedIds.push(String(proposalForReview.request_id));
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
-          status:mode==="confirm"?"pending_user_confirmation":"proposal_prepared",
+          status:mode==="confirm"?(directAuthorizedIds.includes(String(proposalForReview.request_id))?"direct_creation_authorized":"pending_user_confirmation"):"proposal_prepared",
           request_id:proposalForReview.request_id||null
         })});
       }else if(call.name==="read_contextual_autonomy"){
@@ -4043,8 +4069,9 @@ pregunta cuál.`;
   let reply=String(extractText(payload)||"").trim() ||
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
+  const directAuthorization=authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
-    reply=calendarProposalReply(toolProposals[0])||reply;
+    reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
   }else if(fastAgenda&&!toolProposals.length){
     // No registered candidate, no claim of approval or a completed action.
     reply="No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
@@ -4069,6 +4096,7 @@ pregunta cuál.`;
     standing_intent_delivery:standingIntents?.length?{ids:standingIntents.map((x:any)=>x.id),run_key:run?.id||crypto.randomUUID()}:null,
     quick_replies:quickReplies,
     pending_intent:null,
+    direct_authorization:directAuthorization,
     conversation_id:conversationInfo.id||null,
     exposure_scope:exposureScope
   };
