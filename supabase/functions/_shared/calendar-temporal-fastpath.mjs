@@ -20,8 +20,8 @@ export function isSimpleAgendaMutation(message){
 // Classify Spanish morning dayparts separately from next-day references.
 export function calendarDateReferenceText(message){
  return clean(message)
-   .replace(/\b(?:de|por|en)\s+la\s+mañana\b/giu," ")
-   .replace(/\b(?:esta|esa|aquella)\s+mañana\b/giu," ");
+   .replace(/\b(?:de|por|en)\s+la\s+(?:mañana|manana)\b/giu," ")
+   .replace(/\b(?:esta|esa|aquella)\s+(?:mañana|manana)\b/giu," ");
 }
 const isoDay=s=>{
  if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
