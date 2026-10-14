@@ -14,8 +14,14 @@ export function isSimpleAgendaMutation(message){
  if(!action.test(t))return false;
  // Natural speech: "agrega para mañana proyecto Bernried hacer un
  // Besprechungsnotiz" is a calendar task despite lacking "tarea".
- return object.test(t)||dateRef.test(t)&&
+ return object.test(t)||dateRef.test(calendarDateReferenceText(t))&&
    /\b(proyecto|projekt|para|hacer|terminar|revisar|preparar|calendario|agenda)\b/i.test(t);
+}
+// Classify Spanish morning dayparts separately from next-day references.
+export function calendarDateReferenceText(message){
+ return clean(message)
+   .replace(/\b(?:de|por|en)\s+la\s+(?:mañana|manana)\b/giu," ")
+   .replace(/\b(?:esta|esa|aquella)\s+(?:mañana|manana)\b/giu," ");
 }
 const isoDay=s=>{
  if(!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
@@ -27,7 +33,7 @@ function shiftDay(day,offset){
  return new Date(Date.parse(day+"T12:00:00Z")+offset*86400000).toISOString().slice(0,10);
 }
 function relativeInMessage(message){
- const t=clean(message);
+ const t=calendarDateReferenceText(message);
  if(/\b(pasado\s+mañana|pasado\s+manana|übermorgen|day after tomorrow)\b/i.test(t))
    return {offset:2,token:"day_after_tomorrow"};
  if(/\b(mañana|manana|tomorrow|morgen)\b/i.test(t))
