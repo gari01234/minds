@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {isSimpleAgendaMutation,resolveRelativeCalendarDate,guardCalendarProposal,
-  calendarProposalReply} from "../supabase/functions/_shared/calendar-temporal-fastpath.mjs";
+  calendarDateReferenceText,calendarProposalReply} from "../supabase/functions/_shared/calendar-temporal-fastpath.mjs";
 
 const source=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
 const original="Agrega para mañana proyecto Bernried hacer un Besprechungsnotiz";
@@ -64,4 +64,39 @@ test("fast mutations do not replay huge provider conversation context",()=>{
  assert.match(source,/input=nextToolInput\(input,payload\.output,outputs,!!conversationInfo\.id&&!fastAgenda\)/);
  assert.match(source,/!background&&!fastAgenda&&\(route\.work\|\|responseContinuation\)/);
  assert.match(source,/fastAgenda\?\[\.\.\.clarificationTools/);
+});
+
+test("real failed Schwarz appointment keeps morning daypart distinct from tomorrow",()=>{
+ const phrase="Agrega un Termin proyecto Schwarz para el martes 27 a las 11 de la mañana, dos horas. Nombre del Termin es Abgabe LP2";
+ assert.equal(isSimpleAgendaMutation(phrase),true);
+ assert.equal(resolveRelativeCalendarDate(phrase,"2026-10-14").kind,"absent");
+ const event={kind:"event",action:"create",title:"Abgabe LP2",
+   project:"Schwarz",date:"2026-10-27",time:"11:00",duration_minutes:120};
+ const guard=guardCalendarProposal(event,phrase,"2026-10-14");
+ assert.equal(guard.kind,"unchanged");
+ assert.equal(guard.proposal,event);
+ assert.match(calendarProposalReply(event),/martes, 27 de octubre de 2026/);
+});
+test("grammar distinguishes morning dayparts and actual next-day references",()=>{
+ const date="2026-10-14";
+ for(const phrase of [
+   "cita el martes a las 11 de la mañana",
+   "agenda una reunión el 27 por la mañana",
+   "anota hoy a las 11 en la mañana",
+   "reunión esta mañana a las 11",
+   "Termin el día 27 a las 11 de la manana"
+ ])assert.equal(resolveRelativeCalendarDate(phrase,date).kind,
+   phrase.includes("hoy")?"resolved":"absent",phrase);
+ for(const phrase of [
+   "mañana a las 11 de la mañana",
+   "mañana martes a las 11 de la mañana",
+   "mañana por la mañana a las 11",
+   "para mañana a las 10"
+ ]){
+   const outcome=resolveRelativeCalendarDate(phrase,date);
+   assert.equal(outcome.kind,phrase.includes("martes")?"conflict":"resolved",phrase);
+   if(outcome.kind==="resolved")assert.equal(outcome.date,"2026-10-15");
+ }
+ assert.equal(resolveRelativeCalendarDate("pasado mañana por la mañana",date).date,"2026-10-16");
+ assert.ok(!calendarDateReferenceText("a las 11 de la mañana").includes("mañana"));
 });
