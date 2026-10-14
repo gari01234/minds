@@ -1876,6 +1876,65 @@ async function applyVerifiedTaskCreate(p){
     '” se creó'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
   return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
 }
+/* The prior user instruction authorizes only an already admitted create action.
+ * Never claim success on a model statement: owner RPC receipt + canonical row
+ * equality are mandatory, including on replay after a network interruption.
+ */
+async function applyDirectCalendarCreate(p){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!p||!['task','event'].includes(p.kind)||p.action!=='create'||
+     !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(p.request_id||'')))
+    throw new Error('No existe una creación autorizada y verificable.');
+  const {data:sessionData,error:authError}=await sb.auth.getSession();
+  const owner=sessionData?.session?.user?.id;
+  if(authError||!owner)throw new Error('La sesión ya no está autenticada.');
+  const {data:receipt,error:writeError}=await sb.rpc('minds_commit_direct_calendar_create_v01',{
+    p_request_id:p.request_id,p_candidate:p
+  });
+  if(writeError)throw new Error(writeError.message||'El servidor no autorizó la creación.');
+  if(!['applied','already_applied'].includes(receipt?.status)||
+     !receipt?.receipt_id||!receipt?.entity_id||!receipt?.entity_client_key||
+     !receipt?.after||receipt.entity_kind!==p.kind)
+    throw new Error('El recibo de creación no es verificable.');
+  const table=p.kind==='task'?'isabella_tasks':'isabella_events';
+  const columns=p.kind==='task'
+    ?'id,client_key,title,due_date,notes,reminder_time,project_id,category_id,updated_at'
+    :'id,client_key,title,starts_at,ends_at,all_day,project_id,category_id,updated_at';
+  const {data:row,error:readError}=await sb.from(table).select(columns)
+    .eq('user_id',owner).eq('client_key',receipt.entity_client_key).single();
+  if(readError||!row)throw new Error('La escritura no pudo comprobarse en el calendario.');
+  const after=receipt.after;
+  const common=row.id===receipt.entity_id&&row.client_key===receipt.entity_client_key&&
+    row.title===after.title&&Date.parse(row.updated_at)===Date.parse(after.updated_at)&&
+    row.project_id===(after.project_id||null)&&row.category_id===(after.category_id||null);
+  const matches=p.kind==='task'
+    ?common&&row.due_date===(after.date||null)
+    :common&&Date.parse(row.starts_at)===Date.parse(after.starts_at)&&
+      Date.parse(row.ends_at)===Date.parse(after.ends_at)&&row.all_day===after.all_day;
+  if(!matches)throw new Error('La lectura canónica no coincide con el recibo de ejecución.');
+  if(typeof window.ISABELLA_SYNC_PULL_NOW==='function'){
+    // Pull is presentation only. Verification above is the success criterion.
+    try{await window.ISABELLA_SYNC_PULL_NOW()}catch(e){console.warn('direct create sync pending',e)}
+  }
+  return {receipt_id:receipt.receipt_id,request_id:p.request_id,
+    kind:p.kind,title:row.title,
+    when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
+    entity_client_key:receipt.entity_client_key};
+}
+function directCreationBatch(result,integrity){
+  const direct=result?.direct_authorization;
+  if(!direct)return null;
+  const proposals=integrity?.proposals||[];
+  const ids=direct.request_ids;
+  if(!integrity?.ok||integrity.outcome!=='proposal_created'||
+     direct.version!==1||direct.mode!=='direct_create_v1'||
+     !Array.isArray(ids)||ids.length!==proposals.length||!ids.length||
+     new Set(ids).size!==ids.length||
+     !proposals.every(p=>(p.kind==='task'||p.kind==='event')&&p.action==='create'&&
+       ids.includes(p.request_id)))
+    throw new Error('La autorización directa no coincide con la propuesta registrada.');
+  return proposals;
+}
 function applyProposal(p){
   if(p.kind==='task'&&(p.action||'create')==='update')
     return applyVerifiedTaskUpdate(p);
@@ -2061,6 +2120,31 @@ async function handle(text,attachments=[],replyTo=null){
       const integrity=window.MINDS_TURN_INTEGRITY?.validate(result);
       if(!integrity?.ok){
         say('assistant','No pude verificar el resultado de esta operación. No he confirmado ningún cambio.',{metadata:{exposure_scope:exposure,turn_receipt_error:integrity?.reason||'validator_unavailable'}});
+        return;
+      }
+      const directBatch=directCreationBatch(result,integrity);
+      if(directBatch){
+        const committed=[],failed=[];
+        for(const p of directBatch){
+          try{committed.push(await applyDirectCalendarCreate(p))}
+          catch(e){failed.push({proposal:p,reason:String(e?.message||e)})}
+        }
+        const appliedNames=committed.map(x=>'“'+x.title+'” ('+x.when+')').join(', ');
+        const text=committed.length
+          ?'He guardado y verificado '+committed.length+
+            (committed.length===1?' elemento: ':' elementos: ')+appliedNames+'.'
+          :'No pude guardar ninguna creación verificable.';
+        const report=failed.length
+          ?text+' No pude confirmar '+failed.length+
+            (failed.length===1?' elemento. ':' elementos. ')+
+            'No los marcaré como realizados: '+failed.map(x=>x.reason).join('; ')
+          :text;
+        say('assistant',report,{metadata:{exposure_scope:exposure,
+          turn_outcome:failed.length?'partial_or_unverified':'action_applied',
+          action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
+            kind:x.kind,entity_client_key:x.entity_client_key})),
+          review_proposals:failed.map(x=>x.proposal)}});
+        save();
         return;
       }
       const verifiedReply=window.MINDS_TURN_INTEGRITY.summary(integrity)||String(result?.reply||'');
@@ -3080,7 +3164,18 @@ async function contextualAutonomyPanel(){
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Permisos de Isabella','<div class="small">Conecta la memoria para consultar tus permisos.</div>');return}
   modal('Permisos de Isabella','<div class="surface-loading">Leyendo evidencia y permisos…</div>');
   try{
-    const {data,error}=await sb.rpc('minds_get_contextual_autonomy');if(error)throw error;
+    const [{data,error},{data:calendarPref,error:calendarError}]=await Promise.all([
+      sb.rpc('minds_get_contextual_autonomy'),
+      sb.from('minds_calendar_execution_preferences').select('create_mode').maybeSingle()
+    ]);
+    if(error||calendarError)throw error||calendarError;
+    const directCalendar=calendarPref?.create_mode==='direct';
+    const directCalendarHTML='<div class="human-permission-case"><div class="human-case-title">Crear tareas y eventos desde el chat</div>'+
+      '<div class="human-state tone-complete"><b>'+(directCalendar?'Ejecución directa activada':'Confirmación previa activada')+'</b>'+
+      '<p>'+(directCalendar?'Cuando tú pidas explícitamente crear algo, Isabella lo guardará y comprobará antes de informarte. Si falta información, la pedirá.':'Isabella seguirá mostrando propuestas para que las apruebes.')+
+      ' Los cambios y las eliminaciones siguen necesitando revisión.</p></div>'+
+      '<button type="button" id="calendarCreationMode" class="secondary">'+
+      (directCalendar?'Volver a confirmar antes de crear':'Permitir creación directa')+'</button></div>';
     const units=data?.units||[],permissions=data?.permissions||[];
     const candidates=data?.post_action_candidates||[],outcomeFeedback=data?.outcome_feedback||[];
     const pendingCorrections=candidates.filter(x=>x.status==='pending');
@@ -3097,7 +3192,25 @@ async function contextualAutonomyPanel(){
       return `<div class="doctor-log"><b>${causal?'Corrección confirmada':'Cambio posterior'} · ${esc(postActionCandidateTitle(r))}</b><span>${causal?'Volví a pedir confirmación para ese permiso.':'No lo utilicé como aprendizaje causal.'}${feedback?.changed_fields?.length?' · '+esc(feedback.changed_fields.map(postActionFieldLabel).join(', ')):''}</span><time>${new Date(r.reviewed_at||r.created_at).toLocaleString('es-ES')}</time></div>`;
     }).join('');
     const pendingHtml=pendingCorrections.map(postActionCandidateHTML).join('');
-    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal. Antes de autorizar una clase, puedes simular con tu historial qué habría ocurrido si ese permiso hubiera estado activo.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    modal('Permisos de Isabella',`<div class="continuity-intro"><p>Isabella aprende de cómo revisas sus propuestas y, ahora, también puede preguntarte por una corrección después de una acción autónoma. Una edición posterior nunca se interpreta sola como feedback: primero solo crea una duda y tú decides si existe relación causal. Antes de autorizar una clase, puedes simular con tu historial qué habría ocurrido si ese permiso hubiera estado activo.</p><details class="human-tech"><summary>Cómo decide cuándo proponértelo</summary><p>Para permisos nuevos se exige evidencia por acción, contexto y alcance: al menos 12 revisiones sin cambios en 3 días distintos durante los últimos 30 días, ninguna corrección o rechazo y una revisión en los últimos 7 días. Después de una acción autónoma solo considero como posible corrección la primera edición manual relevante dentro de 48 horas. Confirmar causalidad reduce el permiso a “volver a preguntar”; nunca amplía autonomía.</p></details></div>${pendingHtml?`<div class="small section-label">Correcciones por revisar</div>${pendingHtml}<div id="postActionFeedbackError" class="small" role="status"></div>`:''}<div class="small section-label">Autorización de calendario</div>${directCalendarHTML}<div id="calendarModeError" class="small" role="status"></div><div class="small section-label">Lo que ya me permitiste hacer</div>${active||'<div class="empty-panel">Todavía no me has dado ningún permiso para actuar sin volver a preguntarte.</div>'}<div class="small section-label">Dónde sigo aprendiendo cómo prefieres trabajar</div>${evidence||'<div class="empty-panel">Todavía no tengo suficiente experiencia en estos casos. Seguiré preguntándote antes de actuar.</div>'}${correctionHistory?'<div class="small section-label">Revisiones posteriores a una acción</div>'+correctionHistory:''}${history?'<div class="small section-label">Tus decisiones de permiso</div>'+history:''}${executions?'<div class="small section-label">Últimas ejecuciones autorizadas</div>'+executions:''}`);
+    const modeButton=$('#calendarCreationMode');
+    if(modeButton)modeButton.onclick=async()=>{
+      modeButton.disabled=true;
+      const desired=directCalendar?'review':'direct';
+      try{
+        const {data:{session}}=await sb.auth.getSession();
+        if(!session?.user?.id)throw new Error('Sesión no disponible');
+        const {error:modeError}=await sb.from('minds_calendar_execution_preferences')
+          .upsert({user_id:session.user.id,create_mode:desired,updated_at:new Date().toISOString()},
+            {onConflict:'user_id'});
+        if(modeError)throw modeError;
+        await contextualAutonomyPanel();
+      }catch(e){
+        const el=$('#calendarModeError');
+        if(el)el.textContent='No pude modificar la autorización: '+String(e?.message||e);
+        modeButton.disabled=false;
+      }
+    };
     document.querySelectorAll('[data-permission-counterfactual]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionCounterfactual)];void contextualCounterfactualPanel(e)});
     document.querySelectorAll('[data-permission-review]').forEach(b=>b.onclick=()=>{const e=units[Number(b.dataset.permissionReview)];reviewContextualPermission(e,findPermission(e),'allow')});
     $$('[data-permission-revoke]').forEach(b=>b.onclick=()=>reviewContextualPermission(null,grants[Number(b.dataset.permissionRevoke)],'confirm'));
