@@ -3686,9 +3686,15 @@ pregunta cuál.`;
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
+  let semanticRepairRounds=0;
 
   for(let round=0;round<=budget.rounds;round++){
     roundsUsed=round+1;
+    // Only spend deeper reasoning AFTER a grounded semantic claim failed
+    // structural validation. Normal calls keep the established fast budget.
+    const repairingSemantics=round>0&&temporalGroundingIssues.length>0&&
+      !toolProposals.length;
+    if(repairingSemantics)semanticRepairRounds++;
     const response=await fetch("https://api.openai.com/v1/responses",{
       method:"POST",
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
@@ -3696,8 +3702,8 @@ pregunta cuál.`;
         model,
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
         instructions:transientInstructions(fastAgenda?fastCalendarInstructions:system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas, y no inventes ocupaciones. Si el calendario no devuelve datos suficientes, indica el límite.":""),fastAgenda?fastCalendarContext:JSON.parse(dynamicContext)),
-        reasoning:{effort:reasoningEffort},
-        max_output_tokens:budget.maxOutput,
+        reasoning:{effort:repairingSemantics?"medium":reasoningEffort},
+        max_output_tokens:repairingSemantics?Math.max(budget.maxOutput,2200):budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
         ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:fastAgenda&&round===0?{tool_choice:"required"}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
@@ -3705,7 +3711,7 @@ pregunta cuál.`;
       })
     });
     payload=await response.json();
-    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated});
+    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,conversation_rotated:!!conversationInfo.rotated});
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
@@ -4086,7 +4092,7 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
