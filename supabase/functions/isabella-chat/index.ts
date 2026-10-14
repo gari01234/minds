@@ -5,7 +5,8 @@ import {checked,nextToolInput,userMessage,transientInstructions,memoryCheckpoint
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/capability-registry.ts";
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
-import {isSimpleAgendaMutation,guardCalendarProposal,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
+import {isSimpleAgendaMutation,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
+import {verifyCalendarSemanticProposal,validatedCalendarClock} from "../_shared/calendar-semantic-boundary.mjs";
 import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
@@ -379,6 +380,7 @@ function safeArgs(call: any) {
 
 function proposalFromTool(name: string, a: any) {
   const base = {
+    temporal_grounding:a.temporal_grounding??null,
     target_id: a.target_id || null,
     target_title: a.target_title || null,
     target_date: a.target_date || null,
@@ -527,6 +529,7 @@ const calendarTools = [
     strict: false,
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request, offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
       direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
@@ -541,6 +544,7 @@ const calendarTools = [
     parameters: { type:"object", properties:{
       target_id:{type:"string"}, target_title:{type:"string"}, target_date:{type:"string"}, target_time:{type:"string"},
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request, offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"}
     }}
   },
@@ -557,7 +561,8 @@ const calendarTools = [
     description: "Propose creating one task. The date is OPTIONAL. If the user knows something must be done but has no date yet, omit date and create it as an undated task; do not force an arbitrary day. reminder_time only makes sense when a date exists.",
     strict: false,
     parameters: { type:"object", properties:{
-      title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
+      title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request, offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
     }, required:["title"] }
   },
@@ -568,7 +573,7 @@ const calendarTools = [
     strict: false,
     parameters: { type:"object", properties:{
       target_id:{type:"string"},target_title:{type:"string"},target_date:{type:"string"},
-      title:{type:"string"},date:{type:"string"},clear_date:{type:"boolean"},reminder_time:{type:"string"},category:{type:"string"},project:{type:"string"},recurrence:{type:"string"},notes:{type:"string"}
+      title:{type:"string"},date:{type:"string"},temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request, offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},clear_date:{type:"boolean"},reminder_time:{type:"string"},category:{type:"string"},project:{type:"string"},recurrence:{type:"string"},notes:{type:"string"}
     }}
   },
   {
@@ -3282,8 +3287,22 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
   const fastCalendarInstructions=`Eres Isabella, la asistente personal de Gari.
 Resuelve una operación concreta de tareas o calendario con brevedad.
 Usa solo el día local del servidor, nunca adivines fechas desde el historial.
+TÚ interpretas el lenguaje; el software verifica hechos estructurados.
+Para cada fecha propuesta en create_task, update_task, create_event o update_event, incluye
+temporal_grounding. Usa mode=absolute si el usuario expresa fecha absoluta o día concreto,
+mode=relative si expresa relación temporal, y source_excerpt como cita textual exacta de la
+instrucción propietaria actual (o de su aclaración verificada).
+En mode=relative indica offset_days entero: 0 para hoy, 1 mañana, 2 pasado mañana, -1 ayer.
+Si se menciona un día de la semana, incluye weekday (0=domingo, 1=lunes, 2=martes).
+Para eventos, distingue mañana como hora del día de mañana como fecha.
+La base de datos no reinterpreta frases ni modifica una fecha absoluta. Si dudas sobre
+el significado de una fecha, pide la aclaración concreta en request_clarification.
 Usa una herramienta de propuesta cuando el usuario pida crear o modificar
-una tarea o evento. Para create_task/create_event, proporciona direct_user_excerpt
+una tarea o evento. Para toda propuesta con fecha, incluye temporal_grounding con mode, source_excerpt
+literal y weekday si hay uno explícito. Tú interpretas el lenguaje, el servidor
+solo comprueba procedencia y consistencia matemática. Si no estás seguro,
+usa request_clarification; no inventes una fecha.
+Para create_task/create_event, proporciona direct_user_excerpt
 como cita literal de la orden de creación que dio el usuario si es explícita.
 Solo el servidor puede habilitar ejecución directa según permiso vigente.
 Las modificaciones y eliminaciones requieren confirmación en la interfaz:
@@ -3686,6 +3705,7 @@ pregunta cuál.`;
     ...calendarTools
   ];
   const toolProposals:any[]=[];
+  const temporalGroundingIssues:string[]=[];
   const directAuthorizedIds:string[]=[];
   const toolMemories:any[]=[];
   const artifactResults:any[]=[];
@@ -3806,14 +3826,27 @@ pregunta cuál.`;
         continue;
       }
       const rawProposal:any=proposalFromTool(call.name,args);
-      const dateGuard=guardCalendarProposal(rawProposal,effectiveMessage,temporal.current_date);
-      if(dateGuard.kind==="conflict"){
+      const temporalSource=verifiedContinuation?.source_message||effectiveMessage;
+      const calendarGrounding=verifyCalendarSemanticProposal(rawProposal,args?.temporal_grounding,
+        temporalSource,temporal.current_date);
+      if(calendarGrounding.kind==="needs_clarification"){
+        temporalGroundingIssues.push(String(calendarGrounding.reason));
         outputs.push({type:"function_call_output",call_id:call.call_id,
-          output:JSON.stringify({status:"temporal_conflict_requires_clarification",
-            reason:dateGuard.reason,server_expected_date:dateGuard.expected})});
+          output:JSON.stringify({status:"calendar_semantic_grounding_required",
+            reason:calendarGrounding.reason,
+            guidance:"Reconsider the date meaning from the owner's exact utterance; supply a source-backed temporal_grounding claim or request_clarification. No proposal or write was registered.",
+            server_local_date:temporal.current_date})});
         continue;
       }
-      const proposal:any=dateGuard.proposal;
+      const proposal:any=calendarGrounding.proposal;
+      const clock=validatedCalendarClock(proposal);
+      if(clock.kind==="needs_clarification"){
+        temporalGroundingIssues.push(String(clock.reason));
+        outputs.push({type:"function_call_output",call_id:call.call_id,
+          output:JSON.stringify({status:"calendar_structural_validation_failed",
+            reason:clock.reason,guidance:"Clarify essential clock/duration; no proposal was registered."})});
+        continue;
+      }
       if(mode==="confirm"&&!proposal){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"confirmation_required_but_no_proposal"})});
         continue;
@@ -3842,6 +3875,7 @@ pregunta cuál.`;
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
             source_tainted:sourceTainted,round,background:!!background,
+            ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
                direct_authorization_turn_id:verifiedContinuation?.source_turn_id||clientMessageId,
@@ -4086,8 +4120,13 @@ pregunta cuál.`;
   if(toolProposals.length===1){
     reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
   }else if(fastAgenda&&!toolProposals.length){
-    // No registered candidate, no claim of approval or a completed action.
-    reply="No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
+    // The model may re-interpret a rejected semantic claim; no action is
+    // registered until the claim passes validation. Do not fabricate approval.
+    reply=temporalGroundingIssues.length
+      ?"No pude verificar un dato temporal de la solicitud ("+
+        [...new Set(temporalGroundingIssues)].join(", ")+
+        "). No he realizado cambios. ¿Puedes aclarar la fecha u hora?"
+      :"No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
