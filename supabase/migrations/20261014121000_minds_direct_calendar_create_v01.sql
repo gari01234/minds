@@ -47,6 +47,8 @@ DECLARE
   v_decision public.minds_shadow_decisions%ROWTYPE;
   v_existing public.minds_calendar_action_receipts%ROWTYPE;
   v_evidence text;
+  v_event_time_quote text;
+  v_event_duration_quote text;
   v_owner_turn uuid;
   v_authorization_exists boolean;
   v_action text;
@@ -129,6 +131,19 @@ BEGIN
     RETURN public.minds_commit_reviewed_task_create_v01(p_request_id,p_candidate);
   END IF;
 
+  v_event_time_quote:=nullif(btrim(v_decision.context->>'direct_event_time_excerpt'),'');
+  v_event_duration_quote:=nullif(btrim(v_decision.context->>'direct_event_duration_excerpt'),'');
+  IF v_event_time_quote IS NULL OR v_event_duration_quote IS NULL OR
+     length(v_event_time_quote)<3 OR length(v_event_duration_quote)<3 OR
+     length(v_event_time_quote)>160 OR length(v_event_duration_quote)>160 OR
+     NOT EXISTS(
+       SELECT 1 FROM public.conversation_messages m
+       WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
+         AND m.provenance_class='owner' AND m.exposure_scope_version=1
+         AND position(lower(v_event_time_quote) in lower(m.content))>0
+         AND position(lower(v_event_duration_quote) in lower(m.content))>0
+     )
+  THEN RAISE EXCEPTION 'event_time_or_duration_not_explicit'; END IF;
   v_title:=nullif(btrim(p_candidate->>'title'),'');
   IF v_title IS NULL OR length(v_title)>500 THEN RAISE EXCEPTION 'invalid_event_title'; END IF;
   IF coalesce(p_candidate->>'date','') !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
