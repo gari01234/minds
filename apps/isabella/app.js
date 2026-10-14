@@ -2129,7 +2129,7 @@ async function handle(text,attachments=[],replyTo=null){
           try{committed.push(await applyDirectCalendarCreate(p))}
           catch(e){failed.push({proposal:p,reason:String(e?.message||e)})}
         }
-        const appliedNames=committed.map(x=>'“'+x.title+'”').join(', ');
+        const appliedNames=committed.map(x=>'“'+x.title+'” ('+x.when+')').join(', ');
         const text=committed.length
           ?'He guardado y verificado '+committed.length+
             (committed.length===1?' elemento: ':' elementos: ')+appliedNames+'.'
