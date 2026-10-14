@@ -51,7 +51,8 @@ test("existing user-confirmation and source truth boundaries are unchanged",()=>
  assert.match(source,/create_task:"confirm"/);
  assert.match(source,/update_task:"confirm"/);
  assert.match(source,/recordShadowDecision\(req/);
- assert.match(source,/guardCalendarProposal\(rawProposal,effectiveMessage,temporal\.current_date\)/);
+ assert.doesNotMatch(source,/guardCalendarProposal\(rawProposal,effectiveMessage,temporal\.current_date\)/);
+ assert.match(source,/verifyCalendarSemanticProposal\(rawProposal,args\?\.temporal_grounding/);
  assert.match(source,/dateGuard\.kind==="conflict"/);
  assert.match(source,/calendarProposalReply\(toolProposals\[0\]\)/);
 });
