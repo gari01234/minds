@@ -3646,6 +3646,7 @@ pregunta cuál.`;
   ];
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
+  let verifiedTemporalClaims=0;
   const directAuthorizedIds:string[]=[];
   const toolMemories:any[]=[];
   const artifactResults:any[]=[];
@@ -3787,6 +3788,8 @@ pregunta cuál.`;
             reason:clock.reason,guidance:"Clarify essential clock/duration; no proposal was registered."})});
         continue;
       }
+      if(calendarGrounding.kind==="verified"&&calendarGrounding.evidence)
+        verifiedTemporalClaims++;
       if(mode==="confirm"&&!proposal){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"confirmation_required_but_no_proposal"})});
         continue;
@@ -4079,7 +4082,7 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
