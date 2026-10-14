@@ -3767,9 +3767,13 @@ pregunta cuál.`;
         continue;
       }
       const rawProposal:any=proposalFromTool(call.name,args);
-      const temporalSource=verifiedContinuation?.source_message||effectiveMessage;
+      // Contextual continuation may include new date evidence in the owner's
+      // answer, so allow EITHER individually authenticated owner message.
+      // Do not concatenate them: a quote spanning messages is not evidence.
+      const temporalSources=verifiedContinuation
+        ?[verifiedContinuation.source_message,effectiveMessage]:[effectiveMessage];
       const calendarGrounding=verifyCalendarSemanticProposal(rawProposal,args?.temporal_grounding,
-        temporalSource,temporal.current_date);
+        temporalSources,temporal.current_date);
       if(calendarGrounding.kind==="needs_clarification"){
         temporalGroundingIssues.push(String(calendarGrounding.reason));
         outputs.push({type:"function_call_output",call_id:call.call_id,
