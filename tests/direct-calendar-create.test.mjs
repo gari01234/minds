@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
-import {exactOwnerExcerpt,authorizedDirectBatch}
+import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch}
  from "../supabase/functions/_shared/direct-calendar-contract.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const server=read("supabase/functions/isabella-chat/index.ts");
@@ -15,6 +15,13 @@ test("direct authority quotes an actual owner utterance rather than arbitrary re
  assert.equal(exactOwnerExcerpt("Agrega una tarea de enviar Angebot para hoy","Agrega una tarea de enviar Angebot"),true);
  assert.equal(exactOwnerExcerpt("Hoy revisamos ELT","Agrega una tarea"),false);
  assert.equal(exactOwnerExcerpt("Tarea","Tarea"),false);
+});
+test("a missing or inferred event duration cannot enter direct mode",()=>{
+ const source="Agrega una reunión mañana a las 10 por 45 minutos";
+ assert.equal(exactFieldExcerpt(source,"a las 10"),true);
+ assert.equal(exactFieldExcerpt(source,"45 minutos"),true);
+ assert.equal(exactFieldExcerpt(source,"60 minutos"),false);
+ assert.equal(exactFieldExcerpt(source,""),false);
 });
 test("only explicit create-only fully registered batches can execute",()=>{
  assert.deepEqual(authorizedDirectBatch([proposal],[uuid],["create_task"]),{
@@ -63,7 +70,7 @@ test("database enforces owner preference, canonical quote, candidate and receipt
   /direct_authorization_turn_id/,/position\(lower\(v_evidence\) in lower\(m\.content\)\)/,
   /minds_commit_reviewed_task_create_v01/,
   /INSERT INTO public\.isabella_events/,/INSERT INTO public\.minds_calendar_action_receipts/,
-  /event_overlap_requires_review/,
+  /event_overlap_requires_review/,/event_time_or_duration_not_explicit/,
   /GRANT EXECUTE ON FUNCTION public\.minds_commit_direct_calendar_create_v01\(uuid,jsonb\)\s+TO authenticated/
  ])assert.match(migration,regexp);
 });
