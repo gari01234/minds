@@ -4,6 +4,8 @@
  * consistency. It must not reinterpret the user's utterance with lexical
  * date/intent rules or silently invent/replace the semantic meaning.
  */
+/** @typedef {{kind:"verified"|"unchanged",proposal:any,basis?:string,evidence?:any} | {kind:"needs_clarification",reason:string,detail?:string|null}} CalendarSemanticResult */
+/** @typedef {{kind:"valid"|"unchanged"} | {kind:"needs_clarification",reason:string,detail?:string|null}} CalendarClockResult */
 const isoDay=s=>{
   if(typeof s!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
   const d=new Date(s+"T12:00:00Z");
@@ -14,8 +16,10 @@ const evidenceSpan=(source,quote)=>{
   const q=String(quote||"").toLocaleLowerCase("es").trim();
   return q.length>=2&&q.length<=240&&s.includes(q);
 };
+/** @returns {{kind:"needs_clarification",reason:string,detail:string|null}} */
 const failure=(reason,detail)=>({kind:"needs_clarification",reason,detail:detail||null});
 const weekday=day=>new Date(day+"T12:00:00Z").getUTCDay();
+/** @returns {CalendarSemanticResult} */
 export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,localDate){
   if(!proposal||!["task","event"].includes(proposal.kind)||
      !["create","update"].includes(proposal.action))
@@ -57,6 +61,7 @@ export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,
       weekday:grounding.weekday??null,
       ...(grounding.mode==="relative"?{offset_days:grounding.offset_days}:{})}};
 }
+/** @returns {CalendarClockResult} */
 export function validatedCalendarClock(proposal){
   if(!proposal||proposal.kind!=="event"||!["create","update"].includes(proposal.action))
     return {kind:"unchanged"};
