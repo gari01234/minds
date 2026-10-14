@@ -5,6 +5,11 @@ export function exactOwnerExcerpt(source, excerpt){
   const quote=String(excerpt||"").trim();
   return quote.length>=8&&quote.length<=900&&original.toLocaleLowerCase().includes(quote.toLocaleLowerCase());
 }
+export function exactFieldExcerpt(source,excerpt){
+  const quote=String(excerpt||"").trim();
+  return quote.length>=3&&quote.length<=160&&
+    String(source||"").toLocaleLowerCase().includes(quote.toLocaleLowerCase());
+}
 export function authorizedDirectBatch(proposals,ids,usedTools){
   if(!Array.isArray(proposals)||!proposals.length||!Array.isArray(ids)||ids.length!==proposals.length)return null;
   const all=proposals.every(p=>(p?.kind==="task"||p?.kind==="event")&&p.action==="create"&&
