@@ -7,7 +7,6 @@ import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/ca
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {verifyCalendarSemanticProposal,validatedCalendarClock} from "../_shared/calendar-semantic-boundary.mjs";
-import {isContextualCorrection,findCalendarCorrection} from "../_shared/calendar-contextual-correction.mjs";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
@@ -2812,58 +2811,6 @@ async function consultSofia(req:Request,args:any,userMessage:string){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
-/* Explicit, bounded follow-up corrections must not enter the text-only
- * durable lane. User-authenticated database evidence is matched to ONE task,
- * then the existing reviewed "update_task" decision is created. No write. */
-async function prepareContextualCalendarCorrection(req:Request,context:any={}){
-  const sb=supabaseClient(req);
-  if(!sb)return {reply:"No puedo comprobar la tarea ahora. No he cambiado nada.",proposal:null,proposals:[]};
-  const auth=await sb.auth.getUser();
-  const user=auth?.data?.user;
-  if(auth.error||!user?.id)return {reply:"Necesito una sesión válida para revisar esa tarea. No he cambiado nada.",proposal:null,proposals:[]};
-  const cutoff=new Date(Date.now()-12*3600000).toISOString();
-  const {data:conversation,error:convError}=await sb.from("conversations")
-    .select("id").eq("app_scope","isabella").eq("user_id",user.id)
-    .order("updated_at",{ascending:false}).limit(1).maybeSingle();
-  if(convError||!conversation?.id)return {reply:"No encuentro la conversación de la corrección. ¿Qué tarea debo modificar?",proposal:null,proposals:[]};
-  const [history,tasks]=await Promise.all([
-    sb.from("conversation_messages").select("role,content,created_at")
-      .eq("conversation_id",conversation.id).eq("user_id",user.id)
-      .gte("created_at",cutoff).order("created_at",{ascending:false}).limit(80),
-    sb.from("isabella_tasks")
-      .select("id,client_key,title,due_date,completed_at,archived_at,created_at,metadata")
-      .eq("user_id",user.id).gte("created_at",cutoff)
-      .order("created_at",{ascending:false}).limit(80)
-  ]);
-  if(history.error||tasks.error)
-    return {reply:"No pude verificar los datos necesarios para corregirla. No he cambiado nada.",proposal:null,proposals:[]};
-  const timezone=typeof context?.timezone==="string"&&context.timezone.length<80
-    ?context.timezone:"Europe/Berlin";
-  let resolved:any;
-  try{
-    resolved=findCalendarCorrection(history.data||[],tasks.data||[],
-      {timezone,nowIso:new Date().toISOString()});
-  }catch{
-    return {reply:"No pude comprobar con seguridad la fecha original. No he modificado nada.",proposal:null,proposals:[]};
-  }
-  if(resolved.kind!=="proposal")
-    return {reply:"Quiero corregir exactamente la tarea que señalaste, pero no puedo identificar una única corrección segura. ¿Me dices el nombre de la tarea y la fecha correcta?",proposal:null,proposals:[]};
-  const reviewed={...resolved.proposal,request_id:crypto.randomUUID()};
-  const admission=await recordShadowDecision(req,"update_task",reviewed,{
-    direct_request:true,conversation_id:conversation.id,source_tainted:false,
-    user_confirmation_required:true,origin:"contextual_calendar_correction",
-    source_user_turn_at:resolved.source_created_at
-  });
-  const accepted=["admitted","already_recorded","duplicate"].includes(String(admission?.status||""));
-  if(!accepted||!admission?.decision?.candidate)
-    return {reply:"Identifiqué la corrección, pero no pude registrarla para tu confirmación. No he cambiado la tarea.",proposal:null,proposals:[]};
-  const proposal={...admission.decision.candidate,
-    request_id:admission.decision.request_id||reviewed.request_id};
-  return {reply:calendarProposalReply(proposal)||
-    "He preparado una actualización para que la confirmes antes de aplicarla.",
-    proposal,proposals:[],memory_candidates:[],sources:[],artifacts:[]};
-}
-
 /* Browser-only read receipt for a completed streamed text answer (24h TTL).
  * Authentication comes exclusively from the signed request, never body.user_id.
  */
@@ -2923,16 +2870,9 @@ Deno.serve(async (req: Request) => {
     return json({fallback:true,reason:"turn_requires_capability_runtime",
       execution_contract:"tool_capable_v01"},409);
   let boundedGlobalChat=turnContract.provider_history==="bounded_scoped";
-  // A contextual imperative ("Por favor corrígelo") may look informational
-  // to a text-only router. Require the browser's existing fallback to its
-  // governed action path before any OpenAI background or stream is started.
-  if(!background&&surface==="chat_browser"&&!attachments.length&&
-     isContextualCorrection(effectiveMessage)){
-    if(body?.durable===true||body?.stream===true)
-      return json({fallback:true,reason:"contextual_action_requires_review"},409);
-    return json(await prepareContextualCalendarCorrection(req,context));
-  }
-
+  // All browser turns, including elliptical follow-ups such as "corrígelo",
+  // use the governed tool-capable interpreter. No lexical special-case may
+  // infer a referent or a date without the model and source-backed tools.
   if(surface==="presence"&&context?.reply_context){
     const attentionId=String(context.reply_context?.attention_id||"").trim();
     const requestRevision=Number(context.reply_context?.request_revision||0);
