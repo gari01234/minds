@@ -1876,6 +1876,65 @@ async function applyVerifiedTaskCreate(p){
     '” se creó'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
   return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
 }
+/* The prior user instruction authorizes only an already admitted create action.
+ * Never claim success on a model statement: owner RPC receipt + canonical row
+ * equality are mandatory, including on replay after a network interruption.
+ */
+async function applyDirectCalendarCreate(p){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!p||!['task','event'].includes(p.kind)||p.action!=='create'||
+     !/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(p.request_id||'')))
+    throw new Error('No existe una creación autorizada y verificable.');
+  const {data:sessionData,error:authError}=await sb.auth.getSession();
+  const owner=sessionData?.session?.user?.id;
+  if(authError||!owner)throw new Error('La sesión ya no está autenticada.');
+  const {data:receipt,error:writeError}=await sb.rpc('minds_commit_direct_calendar_create_v01',{
+    p_request_id:p.request_id,p_candidate:p
+  });
+  if(writeError)throw new Error(writeError.message||'El servidor no autorizó la creación.');
+  if(!['applied','already_applied'].includes(receipt?.status)||
+     !receipt?.receipt_id||!receipt?.entity_id||!receipt?.entity_client_key||
+     !receipt?.after||receipt.entity_kind!==p.kind)
+    throw new Error('El recibo de creación no es verificable.');
+  const table=p.kind==='task'?'isabella_tasks':'isabella_events';
+  const columns=p.kind==='task'
+    ?'id,client_key,title,due_date,notes,reminder_time,project_id,category_id,updated_at'
+    :'id,client_key,title,starts_at,ends_at,all_day,project_id,category_id,updated_at';
+  const {data:row,error:readError}=await sb.from(table).select(columns)
+    .eq('user_id',owner).eq('client_key',receipt.entity_client_key).single();
+  if(readError||!row)throw new Error('La escritura no pudo comprobarse en el calendario.');
+  const after=receipt.after;
+  const common=row.id===receipt.entity_id&&row.client_key===receipt.entity_client_key&&
+    row.title===after.title&&Date.parse(row.updated_at)===Date.parse(after.updated_at)&&
+    row.project_id===(after.project_id||null)&&row.category_id===(after.category_id||null);
+  const matches=p.kind==='task'
+    ?common&&row.due_date===(after.date||null)
+    :common&&Date.parse(row.starts_at)===Date.parse(after.starts_at)&&
+      Date.parse(row.ends_at)===Date.parse(after.ends_at)&&row.all_day===after.all_day;
+  if(!matches)throw new Error('La lectura canónica no coincide con el recibo de ejecución.');
+  if(typeof window.ISABELLA_SYNC_PULL_NOW==='function'){
+    // Pull is presentation only. Verification above is the success criterion.
+    try{await window.ISABELLA_SYNC_PULL_NOW()}catch(e){console.warn('direct create sync pending',e)}
+  }
+  return {receipt_id:receipt.receipt_id,request_id:p.request_id,
+    kind:p.kind,title:row.title,
+    when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
+    entity_client_key:receipt.entity_client_key};
+}
+function directCreationBatch(result,integrity){
+  const direct=result?.direct_authorization;
+  if(!direct)return null;
+  const proposals=integrity?.proposals||[];
+  const ids=direct.request_ids;
+  if(!integrity?.ok||integrity.outcome!=='proposal_created'||
+     direct.version!==1||direct.mode!=='direct_create_v1'||
+     !Array.isArray(ids)||ids.length!==proposals.length||!ids.length||
+     new Set(ids).size!==ids.length||
+     !proposals.every(p=>(p.kind==='task'||p.kind==='event')&&p.action==='create'&&
+       ids.includes(p.request_id)))
+    throw new Error('La autorización directa no coincide con la propuesta registrada.');
+  return proposals;
+}
 function applyProposal(p){
   if(p.kind==='task'&&(p.action||'create')==='update')
     return applyVerifiedTaskUpdate(p);
@@ -2061,6 +2120,31 @@ async function handle(text,attachments=[],replyTo=null){
       const integrity=window.MINDS_TURN_INTEGRITY?.validate(result);
       if(!integrity?.ok){
         say('assistant','No pude verificar el resultado de esta operación. No he confirmado ningún cambio.',{metadata:{exposure_scope:exposure,turn_receipt_error:integrity?.reason||'validator_unavailable'}});
+        return;
+      }
+      const directBatch=directCreationBatch(result,integrity);
+      if(directBatch){
+        const committed=[],failed=[];
+        for(const p of directBatch){
+          try{committed.push(await applyDirectCalendarCreate(p))}
+          catch(e){failed.push({proposal:p,reason:String(e?.message||e)})}
+        }
+        const appliedNames=committed.map(x=>'“'+x.title+'”').join(', ');
+        const text=committed.length
+          ?'He guardado y verificado '+committed.length+
+            (committed.length===1?' elemento: ':' elementos: ')+appliedNames+'.'
+          :'No pude guardar ninguna creación verificable.';
+        const report=failed.length
+          ?text+' No pude confirmar '+failed.length+
+            (failed.length===1?' elemento. ':' elementos. ')+
+            'No los marcaré como realizados: '+failed.map(x=>x.reason).join('; ')
+          :text;
+        say('assistant',report,{metadata:{exposure_scope:exposure,
+          turn_outcome:failed.length?'partial_or_unverified':'action_applied',
+          action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
+            kind:x.kind,entity_client_key:x.entity_client_key})),
+          review_proposals:failed.map(x=>x.proposal)}});
+        save();
         return;
       }
       const verifiedReply=window.MINDS_TURN_INTEGRITY.summary(integrity)||String(result?.reply||'');
