@@ -11,10 +11,13 @@ const isoDay=s=>{
   const d=new Date(s+"T12:00:00Z");
   return Number.isFinite(d.getTime())&&d.toISOString().slice(0,10)===s;
 };
-const evidenceSpan=(source,quote)=>{
-  const s=String(source||"").toLocaleLowerCase("es").trim();
+const evidenceSpan=(sources,quote)=>{
   const q=String(quote||"").toLocaleLowerCase("es").trim();
-  return q.length>=2&&q.length<=240&&s.includes(q);
+  if(q.length<2||q.length>240)return false;
+  // An explicit server-verified continuation has TWO owner turns. Evidence
+  // must occur wholly in one turn, never across a concatenation boundary.
+  const items=Array.isArray(sources)?sources:[sources];
+  return items.some(x=>String(x||"").toLocaleLowerCase("es").includes(q));
 };
 /** @returns {{kind:"needs_clarification",reason:string,detail:string|null}} */
 const failure=(reason,detail)=>({kind:"needs_clarification",reason,detail:detail||null});
