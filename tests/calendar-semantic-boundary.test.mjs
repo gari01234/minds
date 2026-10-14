@@ -92,3 +92,19 @@ test("the calendar writer keeps the original permission and receipt boundary",()
  assert.match(server,/calendar_semantic_grounding_required/);
  assert.match(server,/request_clarification/);
 });
+
+test("a verified follow-up can correct the date without borrowing unrelated context",()=>{
+ const sourceTurn="Crea una reunión de Schwarz para mañana";
+ const clarification="Mejor el martes 27 de octubre, de 11 a 13";
+ const event={kind:"event",action:"create",date:"2026-10-27",
+  time:"11:00",duration_minutes:120};
+ const accepted=verifyCalendarSemanticProposal(event,{
+   mode:"absolute",source_excerpt:"martes 27 de octubre",weekday:2},
+   [sourceTurn,clarification],date);
+ assert.equal(accepted.kind,"verified");
+ const forged=verifyCalendarSemanticProposal(event,{
+   mode:"absolute",source_excerpt:"mañanaMejor el martes",weekday:2},
+   [sourceTurn,clarification],date);
+ assert.equal(forged.kind,"needs_clarification");
+ assert.match(server,/const temporalSources=verifiedContinuation/);
+});
