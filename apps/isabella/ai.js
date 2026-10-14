@@ -197,7 +197,11 @@ async function ask(message,state,options={}){
   const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
   if(!options.continuation&&!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
-    try{
+    const {data:calendarMode,error:modeError}=await sb
+      .from('minds_calendar_execution_preferences')
+      .select('create_mode').maybeSingle();
+    if(modeError)throw modeError;
+    if(calendarMode?.create_mode!=='direct')try{
       const fast=await askFastStream(message,state,{...options,fastRequestId:options.durableRequestId||options.fastRequestId});
       if(fast)return fast;
       options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
