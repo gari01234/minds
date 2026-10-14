@@ -3816,12 +3816,12 @@ pregunta cuál.`;
       if(proposal){
         const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace),mission_request_id:crypto.randomUUID()}:{}),request_id:proposal.request_id||crypto.randomUUID()};
         let proposalForReview=reviewedProposal;
+        let directAllowed=false;
         if(mode==="confirm"){
           // Directness comes exclusively from this owner's current utterance
           // or its server-verified pending clarification, never from retrieved text.
           const sourceText=verifiedContinuation?.source_message||effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
-          let directAllowed=false;
           if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
              !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
              exactOwnerExcerpt(sourceText,quoted)&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
@@ -3855,7 +3855,7 @@ pregunta cuál.`;
           }
         }
         toolProposals.push(proposalForReview);
-        if(mode==="confirm"&&typeof directAllowed!=="undefined"&&directAllowed)
+        if(mode==="confirm"&&directAllowed)
           directAuthorizedIds.push(String(proposalForReview.request_id));
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
           status:mode==="confirm"?(directAuthorizedIds.includes(String(proposalForReview.request_id))?"direct_creation_authorized":"pending_user_confirmation"):"proposal_prepared",
