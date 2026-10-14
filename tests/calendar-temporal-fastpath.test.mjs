@@ -1,103 +1,70 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
-import {isSimpleAgendaMutation,resolveRelativeCalendarDate,guardCalendarProposal,
-  calendarDateReferenceText,calendarProposalReply} from "../supabase/functions/_shared/calendar-temporal-fastpath.mjs";
-
+import {isSimpleAgendaMutation,calendarDateReferenceText,calendarProposalReply}
+ from "../supabase/functions/_shared/calendar-temporal-fastpath.mjs";
+import {verifyCalendarSemanticProposal}
+ from "../supabase/functions/_shared/calendar-semantic-boundary.mjs";
 const source=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
-const original="Agrega para mañana proyecto Bernried hacer un Besprechungsnotiz";
-test("real Bernried phrase uses lightweight action lane without the noun tarea",()=>{
- assert.equal(isSimpleAgendaMutation(original),true);
- assert.equal(isSimpleAgendaMutation("Agrega para mañana revisar Fachplaner"),true);
- assert.equal(isSimpleAgendaMutation("Agrega una tarea para el martes"),true);
- assert.equal(isSimpleAgendaMutation("Analiza todos los planos de Bernried"),false);
- assert.equal(isSimpleAgendaMutation("Prepara un PDF del proyecto Bernried"),false);
- assert.equal(isSimpleAgendaMutation("Qué tal pinta mañana"),false);
- assert.equal(isSimpleAgendaMutation("Mañana es martes , te has confundido"),true);
+test("the fast hint preserves low-latency access for familiar calendar requests",()=>{
+ for(const s of [
+  "Agrega para mañana proyecto Bernried hacer un Besprechungsnotiz",
+  "Agrega para mañana revisar Fachplaner",
+  "Agrega una tarea para el martes",
+  "Agrega un Termin proyecto Schwarz para el martes 27 a las 11 de la mañana, dos horas",
+  "Mañana es martes, te has confundido"
+ ])assert.equal(isSimpleAgendaMutation(s),true,s);
+ for(const s of ["Analiza todos los planos de Bernried","Prepara un PDF del proyecto Bernried",
+  "Qué tal pinta mañana"])assert.equal(isSimpleAgendaMutation(s),false,s);
 });
-test("server-local Monday 12 October produces Tuesday 13, not Sunday 11",()=>{
- assert.deepEqual(resolveRelativeCalendarDate(original,"2026-10-12"),
-  {kind:"resolved",date:"2026-10-13",token:"tomorrow"});
- const result=guardCalendarProposal({action:"create",kind:"task",
-  title:"Besprechungsnotiz",project:"Bernried",date:"2026-10-11"},original,"2026-10-12");
- assert.equal(result.kind,"normalized");
- assert.equal(result.proposal.date,"2026-10-13");
- assert.match(calendarProposalReply(result.proposal),/martes, 13 de octubre de 2026/);
- assert.doesNotMatch(calendarProposalReply(result.proposal),/domingo|agregado/);
-});
-test("calendar dates are stable across leap days and Germany DST boundaries",()=>{
- assert.equal(resolveRelativeCalendarDate("añade para mañana","2028-02-28").date,"2028-02-29");
- assert.equal(resolveRelativeCalendarDate("añade para mañana","2026-10-24").date,"2026-10-25");
- assert.equal(resolveRelativeCalendarDate("añade pasado mañana","2026-10-24").date,"2026-10-26");
- assert.equal(resolveRelativeCalendarDate("añade hoy","2026-10-12").date,"2026-10-12");
-});
-test("conflicting explicit dates or weekdays cannot be silently overwritten",()=>{
- const d=resolveRelativeCalendarDate("mañana martes 2026-10-11","2026-10-12");
- assert.equal(d.kind,"conflict");
- const w=resolveRelativeCalendarDate("mañana domingo","2026-10-12");
- assert.equal(w.kind,"conflict");
- const guarded=guardCalendarProposal({action:"create",kind:"task",
-  title:"Example",date:"2026-10-11"},"mañana domingo","2026-10-12");
- assert.equal(guarded.kind,"conflict");
- assert.doesNotThrow(()=>calendarProposalReply({action:"create",kind:"task",title:"T",date:"2026-19-67"}));
-});
-test("date-free intentions and non-calendar proposals stay unchanged",()=>{
- const proposal={action:"create",kind:"task",title:"Llamar a Bernried",date:null};
- assert.equal(guardCalendarProposal(proposal,"anota tarea Bernried","2026-10-12").proposal,proposal);
- const memo={action:"create",kind:"commitment",date:"2026-10-11"};
- assert.equal(guardCalendarProposal(memo,original,"2026-10-12").proposal,memo);
-});
-test("existing user-confirmation and source truth boundaries are unchanged",()=>{
- assert.match(source,/create_task:"confirm"/);
- assert.match(source,/update_task:"confirm"/);
- assert.match(source,/recordShadowDecision\(req/);
- assert.doesNotMatch(source,/guardCalendarProposal\(rawProposal,effectiveMessage,temporal\.current_date\)/);
+test("fast hints must not determine a calendar date, permission, or acceptance",()=>{
+ assert.doesNotMatch(source,/guardCalendarProposal\(/);
+ assert.doesNotMatch(source,/resolveRelativeCalendarDate\(/);
  assert.match(source,/verifyCalendarSemanticProposal\(rawProposal,args\?\.temporal_grounding/);
- assert.match(source,/dateGuard\.kind==="conflict"/);
+ assert.match(source,/source_tainted:sourceTainted,round,background/);
+ assert.match(source,/recordShadowDecision\(req/);
+ assert.match(source,/create_event:"confirm"/);
+ assert.match(source,/update_task:"confirm"/);
  assert.match(source,/calendarProposalReply\(toolProposals\[0\]\)/);
 });
-test("fast mutations do not replay huge provider conversation context",()=>{
- assert.match(source,/const fastAgenda=!background&&!attachments\.length&&\(simpleAgendaMutation/);
- assert.match(source,/!fastAgenda&&!boundedGlobalChat&&conversationInfo\.id\?\{conversation:conversationInfo\.id\}/);
- assert.match(source,/fastAgenda\?fastCalendarInstructions:system/);
- assert.match(source,/fastAgenda\?fastCalendarContext:JSON\.parse\(dynamicContext\)/);
- assert.match(source,/recent\.slice\(-4\)/);
- assert.match(source,/input=nextToolInput\(input,payload\.output,outputs,!!conversationInfo\.id&&!fastAgenda\)/);
- assert.match(source,/!background&&!fastAgenda&&\(route\.work\|\|responseContinuation\)/);
- assert.match(source,/fastAgenda\?\[\.\.\.clarificationTools/);
+test("wrong date given by a model is derived from normalized semantic relative claim",()=>{
+ const p={kind:"task",action:"create",title:"Besprechungsnotiz",project:"Bernried",date:"2026-10-11"};
+ const phrase="Agrega para mañana proyecto Bernried hacer un Besprechungsnotiz";
+ const v=verifyCalendarSemanticProposal(p,{mode:"relative",source_excerpt:"mañana",offset_days:1},phrase,"2026-10-12");
+ assert.equal(v.kind,"verified");
+ assert.equal(v.proposal.date,"2026-10-13");
+ assert.equal(p.date,"2026-10-11");
+ assert.match(calendarProposalReply(v.proposal),/martes, 13 de octubre de 2026/);
 });
-
-test("real failed Schwarz appointment keeps morning daypart distinct from tomorrow",()=>{
- const phrase="Agrega un Termin proyecto Schwarz para el martes 27 a las 11 de la mañana, dos horas. Nombre del Termin es Abgabe LP2";
- assert.equal(isSimpleAgendaMutation(phrase),true);
- assert.equal(resolveRelativeCalendarDate(phrase,"2026-10-14").kind,"absent");
- const event={kind:"event",action:"create",title:"Abgabe LP2",
-   project:"Schwarz",date:"2026-10-27",time:"11:00",duration_minutes:120};
- const guard=guardCalendarProposal(event,phrase,"2026-10-14");
- assert.equal(guard.kind,"unchanged");
- assert.equal(guard.proposal,event);
- assert.match(calendarProposalReply(event),/martes, 27 de octubre de 2026/);
-});
-test("grammar distinguishes morning dayparts and actual next-day references",()=>{
- const date="2026-10-14";
- for(const phrase of [
-   "cita el martes a las 11 de la mañana",
-   "agenda una reunión el 27 por la mañana",
-   "anota hoy a las 11 en la mañana",
-   "reunión esta mañana a las 11",
-   "Termin el día 27 a las 11 de la manana"
- ])assert.equal(resolveRelativeCalendarDate(phrase,date).kind,
-   phrase.includes("hoy")?"resolved":"absent",phrase);
- for(const phrase of [
-   "mañana a las 11 de la mañana",
-   "mañana martes a las 11 de la mañana",
-   "mañana por la mañana a las 11",
-   "para mañana a las 10"
- ]){
-   const outcome=resolveRelativeCalendarDate(phrase,date);
-   assert.equal(outcome.kind,phrase.includes("martes")?"conflict":"resolved",phrase);
-   if(outcome.kind==="resolved")assert.equal(outcome.date,"2026-10-15");
+test("arithmetic is stable over leap days and DST when interpretation is already structured",()=>{
+ const cases=[
+  ["2028-02-28",1,"2028-02-29"],["2026-10-24",1,"2026-10-25"],
+  ["2026-10-24",2,"2026-10-26"],["2026-10-12",0,"2026-10-12"]];
+ for(const [today,days,expected] of cases){
+   const v=verifyCalendarSemanticProposal({kind:"task",action:"create",date:"2026-10-11"},
+     {mode:"relative",source_excerpt:"tomorrow",offset_days:days},
+     "please do this tomorrow",today);
+   assert.equal(v.kind,"verified");
+   assert.equal(v.proposal.date,expected);
  }
- assert.equal(resolveRelativeCalendarDate("pasado mañana por la mañana",date).date,"2026-10-16");
+});
+test("named weekday mismatch is a structured contradiction rather than a regex override",()=>{
+ const v=verifyCalendarSemanticProposal({kind:"event",action:"create",date:"2026-10-15"},
+   {mode:"relative",source_excerpt:"mañana",offset_days:1,weekday:2},
+   "mañana martes a las 11","2026-10-14");
+ assert.equal(v.kind,"needs_clarification");
+ assert.equal(v.reason,"claimed_weekday_disagrees_with_calendar");
+});
+test("proposal wording shows a proposal, never a premature claim of a database write",()=>{
+ const v={kind:"event",action:"create",title:"Abgabe LP2",date:"2026-10-27",project:"Schwarz"};
+ assert.match(calendarProposalReply(v),/martes, 27 de octubre de 2026/);
+ assert.match(calendarProposalReply(v),/pendiente de tu confirmación/);
+ assert.doesNotMatch(calendarProposalReply(v),/quedó creada|agregado/);
+ assert.doesNotThrow(()=>calendarProposalReply({...v,date:"2026-19-67"}));
+});
+test("legacy date-reparsing helpers no longer exist",()=>{
+ const helper=readFileSync(new URL("../supabase/functions/_shared/calendar-temporal-fastpath.mjs",import.meta.url),"utf8");
+ assert.doesNotMatch(helper,/export function guardCalendarProposal/);
+ assert.doesNotMatch(helper,/export function resolveRelativeCalendarDate/);
  assert.ok(!calendarDateReferenceText("a las 11 de la mañana").includes("mañana"));
 });
