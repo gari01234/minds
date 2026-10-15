@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v146';
+const CACHE_NAME = 'isabella-shell-v147';
 const SHELL = [
   './',
   './index.html',
