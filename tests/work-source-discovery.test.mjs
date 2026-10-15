@@ -8,11 +8,12 @@ const work=src.slice(start,end);
 test('Work search includes canonical document coverage rather than equating storage with knowledge',()=>{
   assert.ok(start>=0&&end>start,'Work retrieval must be present');
   assert.match(work,/index_status,metadata,created_at/);
-  assert.match(work,/stored_only:/);
-  assert.match(work,/indexed:/);
-  assert.match(work,/queued:/);
-  assert.match(work,/failed:/);
-  assert.match(work,/indexing_is_not_full_understanding:true/);
+  const coverage=readFileSync(new URL('../supabase/functions/_shared/work-source-coverage.mjs',import.meta.url),'utf8');
+  assert.match(work,/currentWorkTextCoverage\(sourceRows,textReceiptRows\|\|\[\]\)/);
+  for(const field of ['stored_only','indexed','queued','failed','text_materialized',
+    'indexed_without_current_text','indexing_is_not_full_understanding']){
+    assert.ok(coverage.includes(field+':'),field+' coverage is computed by shared contract');
+  }
   assert.match(work,/knowledge_coverage:knowledgeCoverage/);
 });
 test('Work claim lookup resolves original filename and partial coverage before relevance filtering',()=>{
