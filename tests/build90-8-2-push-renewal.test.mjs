@@ -22,6 +22,6 @@ test('diagnostics distinguish server push acceptance from visible iOS delivery',
   assert.ok(app.includes('para comprobar si iOS muestra realmente la notificación'));
   assert.ok(app.includes('env.ios&&!env.standalone'));
   assert.ok(app.includes('Notification.requestPermission()'));
-  assert.ok(read('apps/isabella/sw.js').includes("isabella-shell-v146"));
-  assert.ok(read('apps/isabella/index.html').includes("app.js?v=119"));
+  assert.ok(read('apps/isabella/sw.js').includes("isabella-shell-v147"));
+  assert.ok(read('apps/isabella/index.html').includes("app.js?v=120"));
 });
