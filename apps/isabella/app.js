@@ -1894,7 +1894,7 @@ async function applyDirectCalendarCreate(p){
   if(writeError)throw new Error(writeError.message||'El servidor no autorizó la creación.');
   if(!['applied','already_applied'].includes(receipt?.status)||
      !receipt?.receipt_id||!receipt?.entity_id||!receipt?.entity_client_key||
-     !receipt?.after||receipt.entity_kind!==p.kind)
+     !receipt?.after||(receipt.entity_kind!=null&&receipt.entity_kind!==p.kind))
     throw new Error('El recibo de creación no es verificable.');
   const table=p.kind==='task'?'isabella_tasks':'isabella_events';
   const columns=p.kind==='task'
@@ -2172,6 +2172,15 @@ async function handle(text,attachments=[],replyTo=null){
 }
 let pendingChatFiles=[];
 const pendingChatUrls=new Map();
+function clearSentChatFiles(){
+  // Sending transfers attachments into the message. Revoke only temporary
+  // composer previews, never the durable message attachments in storage.
+  for(const url of pendingChatUrls.values())URL.revokeObjectURL(url);
+  pendingChatUrls.clear();
+  pendingChatFiles=[];
+  const picker=$('#chatImageInput');if(picker)picker.value='';
+  renderPendingChatFiles();
+}
 const CHAT_UPLOAD_MAX_BYTES=12*1024*1024;
 const CHAT_UPLOAD_MAX_TOTAL_BYTES=24*1024*1024;
 const CHAT_UPLOAD_EXTENSIONS=new Set(['pdf','txt','md','csv','json','doc','docx','ppt','pptx','xls','xlsx','eml']);
@@ -2265,16 +2274,19 @@ function bind(){
  const autosize=()=>{i.style.height='auto';i.style.height=Math.min(i.scrollHeight,156)+'px'};
  attachButton.onclick=()=>imageInput.click();
  imageInput.onchange=()=>{const chosen=[...imageInput.files||[]],next=chosen.filter(chatUploadSupported);if(chosen.length&&!next.length)say('assistant','Ese formato todavía no es compatible. Puedes adjuntar PDF, documentos de Office, texto, CSV, JSON o imágenes.');pendingChatFiles=[...pendingChatFiles,...next].slice(0,3);imageInput.value='';renderPendingChatFiles()};
+ let chatSending=false;
  const send=async()=>{
+   if(chatSending)return;
    const t=i.value.trim();if(!t&&!pendingChatFiles.length)return;
+   chatSending=true;
    const replyTo=pendingReplyTo?{...pendingReplyTo}:null;
    const files=[...pendingChatFiles];$('#sendButton').disabled=true;attachButton.disabled=true;
    try{
      const attachments=files.length?await uploadChatFiles(files):[];
-     pendingChatFiles=[];renderPendingChatFiles();i.value='';autosize();
+     clearSentChatFiles();i.value='';autosize();
      await handle(t,attachments,replyTo);
    }catch(e){say('assistant',e?.message||'No pude enviar el archivo.')}
-   finally{$('#sendButton').disabled=false;attachButton.disabled=false}
+   finally{chatSending=false;$('#sendButton').disabled=false;attachButton.disabled=false}
  };
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
  document.querySelectorAll('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
