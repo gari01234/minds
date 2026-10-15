@@ -8,7 +8,7 @@ test('Desktop distinguishes stored originals, queued reading and proposed partia
   assert.match(work,/function workKnowledgeStatus\(file\)/);
   assert.match(work,/Solo almacenado · aún sin leer/);
   assert.match(work,/Lectura pendiente/);
-  assert.match(work,/Evidencia extraída · cobertura parcial/);
+  assert.match(work,/Claims propuestos · texto aún no extraído/);
   assert.match(work,/No se pudo leer · revisar/);
   assert.match(work,/index_status,metadata,storage_path/);
   assert.match(work,/esc\(workKnowledgeStatus\(f\)\)/);
@@ -18,5 +18,5 @@ test('PWA publishes visible knowledge statuses with coherent cache pins',()=>{
   assert.match(read('apps/isabella/index.html'),/work\.js\?v=24/);
   const sw=read('apps/isabella/sw.js');
   assert.match(sw,/work\.js\?v=24/);
-  assert.match(sw,/isabella-shell-v147/);
+  assert.match(sw,/isabella-shell-v148/);
 });
