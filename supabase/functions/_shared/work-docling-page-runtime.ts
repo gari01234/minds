@@ -21,7 +21,14 @@ const isRecoverableTaskLoss=(error:string)=>["docling_task_lost","docling_result
 const err=(message:string):never=>{throw Error(message)};
 const checks=(result:{error?:any},label:string)=>{if(result.error)err(label)};
 
-export const pageModeEnabled=()=>Deno.env.get("DOCLING_PAGE_BATCHES_ENABLED")==="true";
+// Runtime approval is loaded only by the authenticated ingest runner from
+// service-role-only settings. Missing approval defaults to off.
+let approvedPageBatches=false;
+export function configurePageBatchRuntime(value:string|null){
+  approvedPageBatches=value==="true";
+  return approvedPageBatches;
+}
+export const pageModeEnabled=()=>approvedPageBatches||Deno.env.get("DOCLING_PAGE_BATCHES_ENABLED")==="true";
 
 export async function pageCheckpointExists(sb:any,file:any,version:string|null){
   if(!version)return false;
