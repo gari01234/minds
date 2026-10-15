@@ -35,6 +35,12 @@ Current `isabella_embeddings` inventory: **59 records** (36 conversation, 23 mem
 
 A read-only approximation of the source-term matching stage returned **8 candidates for a German literal label** but **0 for three natural Spanish/English paraphrases of the same technical referent**. This is a **diagnostic probe**, not an end-to-end retrieval quality score: filename-based matches and other Work sources may still recover the answer. It demonstrates a concrete cross-language risk that a successful exact-word test can hide.
 
+### Readings/Sofía retrieval audit (same HEAD)
+
+A separate static inspection of `supabase/functions/sofia-chat/index.ts` confirms that the intellectual lane has a real but **independently bounded and mostly lexical** `theorySearch` path. It initially fetches up to 80 Reading documents, 160 document annotations, 60 living theory threads, 120 thread versions and 120 mind annotations. Document relevance is computed from title/author/content tokens, with only **6** ranked documents sent onward as excerpts; only **7** ranked theory threads and **12** ranked document annotations make the candidate window. A snapshot of titles is sent before the search. An explicit `search_theory_memory` tool can be called later, but there is no proven automatic cross-lane associative walk from arbitrary Work Claims to Readings and back.
+
+The production inventory currently includes **16 `documents` and 7 `mind_threads`**. Those totals are not completeness evidence for full Readings, not an independently tested answer outcome, and not a license to assume the user has no relevant notes. Sofía keeps an explicit exegesis firewall and a separate intellectual memory; retain those governance boundaries. Include this lexical limit and cross-lane recall in future owner-reviewed fixtures.
+
 ## External implementations and what to reuse (not vendor adoption)
 
 **Anthropic — Contextual Retrieval (Sep 2024).** Contextualized chunks before indexing, hybrid contextual embeddings + contextual BM25, optional reranking. Anthropic reports on its own evaluation a **49%** relative reduction in failed top-20 retrievals for hybrid contextual retrieval, **67%** with reranking. These are published vendor experiment results, **not predicted MINDS gains**. Reusable idea: store a short document-specific contextual header for search without replacing the original, mix exact and semantic retrieval, and rerank *before* evidence injection. https://www.anthropic.com/engineering/contextual-retrieval
