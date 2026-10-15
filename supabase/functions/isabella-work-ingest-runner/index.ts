@@ -5,7 +5,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {processWorkFile} from "../_shared/work-ingest-core.ts";
 import {isDoclingReady,isDoclingConfigured,configureDoclingRuntime} from "../_shared/work-docling.ts";
-import {hasDoclingWork,doclingTaskIsLost} from "../_shared/work-ingest-policy.mjs";
+import {hasDoclingWork,doclingTaskIsLost,heldPdfPageBatchEligible} from "../_shared/work-ingest-policy.mjs";
+import {configurePageBatchRuntime,pageModeEnabled} from "../_shared/work-docling-page-runtime.ts";
 import {costlyDocumentImage,decideDoclingFailure} from "../_shared/work-docling-failure-policy.mjs";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
@@ -19,10 +20,11 @@ Deno.serve(async(req:Request)=>{
   // Runtime secret lookup happens only after the private runner has authenticated.
   // The table permits service_role and postgres, never anon/authenticated.
   const {data:doclingSecrets,error:doclingSecretError}=await sb.from("isabella_runtime_secrets")
-    .select("key,value").in("key",["docling_serve_url","docling_serve_key"]);
+    .select("key,value").in("key",["docling_serve_url","docling_serve_key","docling_page_batches_enabled"]);
   if(doclingSecretError)console.error("work_docling_config_unavailable");
   const credentials=new Map((doclingSecrets||[]).map((s:any)=>[s.key,s.value]));
   configureDoclingRuntime(credentials.get("docling_serve_url")||null,credentials.get("docling_serve_key")||null);
+  configurePageBatchRuntime(credentials.get("docling_page_batches_enabled")||null);
   // Discover new originals without touching Railway. Readiness is expensive:
   // an HTTP request can wake a sleeping 2-3 GB Docling container.
   const {error:reconcileError}=await sb.rpc("minds_reconcile_work_ingest",{
@@ -38,7 +40,9 @@ Deno.serve(async(req:Request)=>{
       .eq("status","processing").lt("locked_at",staleLock).limit(1),
     sb.from("minds_work_ingest_queue").select("id")
       .eq("status","waiting_parser")
-      .in("last_error",["docling_required_large_source","needs_private_docling_image"]).limit(1),
+      .in("last_error",pageModeEnabled()
+        ?["docling_required_large_source","needs_private_docling_image","pdf_page_batch_acceptance_pending"]
+        :["docling_required_large_source","needs_private_docling_image"]).limit(1),
     sb.from("minds_work_ingest_queue").select("id")
       .eq("status","completed").eq("parser_name","existing-provider-file-input").limit(1)
   ]);
@@ -54,6 +58,41 @@ Deno.serve(async(req:Request)=>{
   // A cold boot or transient 502 must not consume a document's attempt budget.
   if(hasWork&&isDoclingConfigured()&&!doclingReady)
     return json({ok:true,claimed:0,deferred:"docling_not_ready"});
+  // Explicit, bounded recovery of PDFs held for page-batch acceptance.
+  // The gate stays off without a service-role-only operator setting.
+  // Only one original per run; never requeue images or arbitrary failures.
+  if(doclingReady&&pageModeEnabled()){
+    const {data:held,error:heldError}=await sb.from("minds_work_ingest_queue")
+      .select("id,file_id,user_id,project_id,status,last_error")
+      .eq("status","waiting_parser")
+      .eq("last_error","pdf_page_batch_acceptance_pending")
+      .order("updated_at",{ascending:true}).limit(1);
+    if(heldError)return json({error:"pdf_batch_recovery_lookup_failed"},500);
+    if(held?.length){
+      const job=held[0];
+      const {data:file,error:fileError}=await sb.from("minds_work_files")
+        .select("id,user_id,project_id,name,size_bytes").eq("id",job.file_id)
+        .eq("user_id",job.user_id).eq("project_id",job.project_id).maybeSingle();
+      if(fileError)return json({error:"pdf_batch_original_lookup_failed"},500);
+      if(file&&heldPdfPageBatchEligible(job,file,pageModeEnabled())){
+        const now=new Date().toISOString();
+        const {data:resumed,error:resumeError}=await sb.from("minds_work_ingest_queue")
+          .update({status:"queued",attempts:0,last_error:null,locked_at:null,
+            completed_at:null,docling_task_id:null,docling_started_at:null,
+            next_attempt_at:now,updated_at:now})
+          .eq("id",job.id).eq("user_id",job.user_id)
+          .eq("status","waiting_parser")
+          .eq("last_error","pdf_page_batch_acceptance_pending").select("id");
+        if(resumeError)return json({error:"pdf_batch_resume_failed"},500);
+        if(resumed?.length===1){
+          const {error:displayError}=await sb.from("minds_work_files")
+            .update({index_status:"queued",updated_at:now})
+            .eq("id",file.id).eq("user_id",job.user_id);
+          if(displayError)console.error("pdf_batch_resume_display_pending");
+        }
+      }
+    }
+  }
   // Enrich one historic, Claims-only PDF per cron run, without losing its
   // existing source ingestion/Claims or displacing newly queued originals.
   if(doclingReady){
