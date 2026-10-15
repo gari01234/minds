@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v147';
+const CACHE_NAME = 'isabella-shell-v148';
 const SHELL = [
   './',
   './index.html',
@@ -9,7 +9,7 @@ const SHELL = [
   './situation.js?v=5',
   './turn-integrity.js?v=2',
   './app.js?v=120',
-  './work.js?v=24',
+  './work.js?v=25',
   './sync.js?v=pwa35',
   './chat-stream-recovery.js?v=1',
   './ai.js?v=56',

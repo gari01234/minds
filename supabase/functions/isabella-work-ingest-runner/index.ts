@@ -191,7 +191,7 @@ Deno.serve(async(req:Request)=>{
       // Inspect file type only on errors; never re-upload large images blindly
       // after a task 404, an explicit failure, or an unreadable result.
       const {data:source,error:sourceError}=await sb.from("minds_work_files")
-        .select("name,size_bytes").eq("id",job.file_id).eq("user_id",job.user_id).maybeSingle();
+        .select("name,size_bytes,metadata").eq("id",job.file_id).eq("user_id",job.user_id).maybeSingle();
       const now=new Date().toISOString();
       const decision=sourceError||!source
         ?{action:"hold",reason:"source_metadata_unavailable"}
@@ -222,10 +222,23 @@ Deno.serve(async(req:Request)=>{
         completed_at:terminal?now:null,updated_at:now
       }).eq("id",job.id).eq("status","processing").eq("attempts",job.attempts);
       if(retryError)return json({error:"work_ingest_retry_state_failed"},500);
-      // Do not erase already indexed Claims when only enrichment failed.
-      if(terminal&&job.parser_name!=="docling_enrichment")await sb.from("minds_work_files").update({
-        index_status:terminalStatus
-      }).eq("id",job.file_id).eq("user_id",job.user_id);
+      // Preserve the already indexed Claims, but expose a terminal extraction
+      // failure as a separate reading status. A failed enrichment does not
+      // establish that the original document was fully read.
+      if(terminal){
+        const enriched=job.parser_name==="docling_enrichment";
+        const patch=enriched?{
+          metadata:{...(source?.metadata||{}),knowledge_intake:{
+            ...(source?.metadata?.knowledge_intake||{}),
+            structured_text:{status:"needs_review",reason:decision.reason,
+              source:"docling_enrichment"}
+          }},
+          updated_at:now
+        }:{index_status:terminalStatus,updated_at:now};
+        const {error:displayError}=await sb.from("minds_work_files")
+          .update(patch).eq("id",job.file_id).eq("user_id",job.user_id);
+        if(displayError)console.error("work_intake_failure_status_sync_pending");
+      }
       results.push({status:terminal?terminalStatus:"retry_scheduled"});
     }
   }
