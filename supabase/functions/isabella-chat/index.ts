@@ -3252,7 +3252,7 @@ Mantén el proyecto explícito; no inventes horas ni fechas. Una creación direc
 de evento exige fecha, hora y duración respaldadas explícitamente por la orden
 del usuario; usa direct_event_time_excerpt y direct_event_duration_excerpt
 como citas literales. Sin ellas, usa request_clarification o la revisión habitual.
-Si falta un dato esencial, pide aclaración. No consultes otros ámbitos.
+Si falta un dato esencial, pide aclaración. Cuando título, fecha, hora y duración de un evento están expresos y coherentes, llama create_event: no preguntes si te refieres a esos mismos valores. El servidor comprobará temporal_grounding y permisos. No consultes otros ámbitos.
 Si el usuario señala que una fecha de una tarea recién propuesta o creada
 está equivocada, identifica la tarea en los mensajes recientes y la agenda.
 Si hay una única coincidencia, usa update_task como propuesta de corrección;
@@ -3463,7 +3463,7 @@ pregunta cuál.`;
   const fastAgendaToolNames=new Set(["request_clarification","create_event","update_event","delete_event","create_task","update_task","delete_task","complete_task","archive_task","create_routine","create_chat_reminder","search_calendar","read_task_origin"]);
   const fastAgendaTools=calendarTools.filter((t:any)=>fastAgendaToolNames.has(String(t?.name||"")));
   const clarificationTool={type:"function",name:"request_clarification",
-    description:"When a request needs essential missing information, ask one targeted question. Never claim a proposal exists. The server issues a typed receipt linked to this owner turn.",
+    description:"Ask only for an actually missing essential attribute or a genuine contradiction that prevents safe execution. Never repeat complete, consistent date/time/duration/title as a confirmation question. Use a create/update tool when sufficient attributes are already present; server verifies typed temporal grounding and permissions. Never claim a proposal exists. A typed pending receipt is linked to the owner turn.",
     strict:false,parameters:{type:"object",properties:{
       question:{type:"string"},capability:{type:"string",enum:["calendar","work","general"]}
     },required:["question","capability"]}};
