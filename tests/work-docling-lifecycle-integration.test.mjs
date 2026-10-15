@@ -10,7 +10,8 @@ test("worker checks existing task once before costly image resubmission",()=>{
   assert.match(worker,/status:"docling_pending",last_error:decision\.reason/);
   assert.match(worker,/docling_repoll_scheduled/);
   assert.match(worker,/decision\.action==="hold"/);
-  assert.match(worker,/job\.parser_name!=="docling_enrichment"/);
+  assert.match(worker,/const enriched=job\.parser_name==="docling_enrichment"/);
+  assert.match(worker,/structured_text:\{status:"needs_review"/);
 });
 test("failures and no text remain untrusted, not successful extraction",()=>{
   assert.match(contract,/state==="failure"\)throw Error\("docling_task_failed"\)/);
