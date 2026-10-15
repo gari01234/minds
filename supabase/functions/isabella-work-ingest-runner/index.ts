@@ -74,7 +74,7 @@ Deno.serve(async(req:Request)=>{
         .select("id,user_id,project_id,name,size_bytes").eq("id",job.file_id)
         .eq("user_id",job.user_id).eq("project_id",job.project_id).maybeSingle();
       if(fileError)return json({error:"pdf_batch_original_lookup_failed"},500);
-      if(heldPdfPageBatchEligible(job,file,pageModeEnabled())){
+      if(file&&heldPdfPageBatchEligible(job,file,pageModeEnabled())){
         const now=new Date().toISOString();
         const {data:resumed,error:resumeError}=await sb.from("minds_work_ingest_queue")
           .update({status:"queued",attempts:0,last_error:null,locked_at:null,
