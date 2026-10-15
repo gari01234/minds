@@ -14,6 +14,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_sha
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes} from "../_shared/light-conversation-context.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
+import {currentWorkTextCoverage} from "../_shared/work-source-coverage.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -1977,27 +1978,23 @@ async function searchWork(req:Request,args:any){
       sb.from("minds_work_claims").select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,supersedes_id,superseded_by,confirmed_at,valid_from,valid_to,learned_at,updated_at,minds_work_evidence(id,source_kind,source_file_id,source_message_id,locator,excerpt,stance,trust_level)").eq("project_id",project.id).in("status",["proposed","confirmed","disputed","resolved"]).order("updated_at",{ascending:false}).limit(180),
       searchWorkThreads(req,{project:project.name,query,current_thread_id:args?.current_thread_id}),
       sb.rpc("minds_project_model_snapshot",{p_project_id:project.id}),
-      sb.rpc("minds_search_work_source_segments",{p_project_id:project.id,p_query:query,p_limit:12})
+      sb.rpc("minds_search_work_source_segments",{p_project_id:project.id,p_query:query,p_limit:12}),
+      sb.from("minds_work_source_text_receipts").select("file_id,source_version,coverage,segment_count,content_chars,locator_class,created_at")
+        .eq("project_id",project.id).order("created_at",{ascending:false}).limit(120)
     ]);
-    const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel,sourceSegmentRows]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
+    const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel,sourceSegmentRows,textReceiptRows]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
     const rank=(a:any,b:any)=>terms.filter(t=>normalizeText(JSON.stringify(b)).includes(t)).length-terms.filter(t=>normalizeText(JSON.stringify(a)).includes(t)).length;
     const folders=folderRows||[],buckets=bucketRows||[];
     const folderName=(id:any)=>folders.find((x:any)=>x.id===id)?.name||null;
     const bucketName=(id:any)=>buckets.find((x:any)=>x.id===id)?.name||null;
     const sourceRows=fileRows||[];
     const sourceById=new Map(sourceRows.map((f:any)=>[String(f.id),f]));
-    const knowledgeCoverage={
-      files_seen:sourceRows.length,
-      files_total_at_least:sourceRows.length,
-      stored_only:sourceRows.filter((f:any)=>f.index_status==="stored").length,
-      queued:sourceRows.filter((f:any)=>f.index_status==="queued").length,
-      indexed:sourceRows.filter((f:any)=>f.index_status==="indexed").length,
-      failed:sourceRows.filter((f:any)=>f.index_status==="failed").length,
-      indexing_is_not_full_understanding:true
-    };
+    const textCoverage=currentWorkTextCoverage(sourceRows,textReceiptRows||[]);
+    const knowledgeCoverage=textCoverage.summary;
     const describeFile=(x:any)=>({
       id:x.id,name:x.name,index_status:x.index_status,
-      extraction_coverage:x.metadata?.knowledge_intake?.coverage||"none"
+      extraction_coverage:x.metadata?.knowledge_intake?.coverage||"none",
+      source_text:textCoverage.byFile.get(String(x.id))||null
     });
     const files=sourceRows.filter((x:any)=>workMatch({name:x.name,folder:folderName(x.folder_id)},terms))
       .sort(rank).slice(0,24).map((x:any)=>({...describeFile(x),folder:folderName(x.folder_id),mime_type:x.mime_type,size_bytes:x.size_bytes}));
