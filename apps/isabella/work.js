@@ -140,7 +140,9 @@ async function loadFolders(){const {data,error}=await sb.from('minds_work_folder
 function folderTrail(){const out=[];let id=folderId,guard=0;while(id&&guard++<30){const f=folders.find(x=>x.id===id);if(!f)break;out.unshift(f);id=f.parent_id}return out}
 function workKnowledgeStatus(file){
   const k=String(file?.index_status||'stored');
-  const coverage=String(file?.metadata?.knowledge_intake?.coverage||'');
+  const intake=file?.metadata?.knowledge_intake||{};
+  const coverage=String(intake.coverage||'');
+  const readable=intake.structured_text||{};
   if(k==='queued')return 'Lectura pendiente';
   if(k==='waiting_parser'){
     const reason=String(file?.metadata?.knowledge_intake?.reason||'');
@@ -148,7 +150,15 @@ function workKnowledgeStatus(file){
     if(reason==='needs_format_reader')return 'Pendiente · lector de formato';
     return 'Pendiente · lector especializado';
   }
-  if(k==='indexed')return coverage==='claims_only'?'Evidencia extraída · cobertura parcial':'Evidencia extraída · sin confirmar';
+  if(k==='indexed'){
+    if(readable.status==='needs_review')return 'Claims conservados · texto pendiente de revisión';
+    if(readable.status==='materialized'){
+      const type=String(readable.coverage||coverage);
+      return type==='complete_text'?'Texto recuperable · sin confirmar':'Texto parcial recuperable · sin confirmar';
+    }
+    if(coverage==='claims_only')return 'Claims propuestos · texto aún no extraído';
+    return 'Evidencia extraída · cobertura parcial';
+  }
   if(k==='failed')return 'No se pudo leer · revisar';
   return 'Solo almacenado · aún sin leer';
 }
