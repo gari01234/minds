@@ -21,12 +21,13 @@ test("segment browsing enforces a stable explicit file identity and source pin",
   assert.equal(workBrowseRequest({file_id,expected_version:"user text"}).status,"invalid");
   assert.equal(workBrowseRequest({file_id,offset:-1}).status,"invalid");
   assert.equal(workBrowseRequest({file_id,limit:999}).status,"invalid");
+  assert.equal(workBrowseRequest({file_id,offset:8}).reason,"expected_version_required_for_continuation");
   assert.equal(workBrowseRequest({segment_no:1}).status,"invalid");
 });
 test("segment text supports continuation, never silently truncates the original",()=>{
   const content="a".repeat(22005);
   const row={file_id,source_version,segment_no:12,segment_kind:"page_text",locator:{page:11,verified:true},extractor:"Docling",content};
-  const req=workBrowseRequest({file_id,segment_no:12,offset:12000});
+  const req=workBrowseRequest({file_id,segment_no:12,offset:12000,expected_version:source_version});
   assert.equal(req.mode,"segment_text");
   const first=workBrowseTextView(row,0);
   const rest=workBrowseTextView(row,first.next_text_offset);
