@@ -24,6 +24,7 @@ function version(value) {
   return /^[a-zA-Z0-9_:.\-]{1,128}$/.test(s) ? s : null;
 }
 function int(value) {
+  if(value===null||value===undefined||value==="")return null;
   const n=Number(value);
   return Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
@@ -46,11 +47,11 @@ export function workSourceAdmission(stage, rows) {
   };
 }
 const allowedTools = new Set(["read_work_file", "consult_sofia", "search_memory"]);
-export function toolAdmission(tool, result, fileId=null) {
+export function toolAdmission(tool, result, fileId=null, stage="explicit_tool") {
   const kind=allowedTools.has(tool)?tool:"unknown";
   const status=String(result?.status||"unknown");
   return {
-    stage:"explicit_tool",
+    stage:stage==="routed_context"?"routed_context":"explicit_tool",
     kind,
     status:/^[a-z_]{1,48}$/.test(status)?status:"unknown",
     // A file-read tool consults an original. It does not establish page-level support.
