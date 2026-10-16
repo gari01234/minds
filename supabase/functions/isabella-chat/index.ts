@@ -15,6 +15,7 @@ import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INST
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage} from "../_shared/work-source-coverage.mjs";
+import {workBrowseRequest,workBrowsePage,workBrowseSegmentView,workBrowseTextView} from "../_shared/work-source-browse.mjs";
 import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
 
 const cors = {
@@ -2036,6 +2037,85 @@ async function searchWork(req:Request,args:any){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
+async function browseWorkSources(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const {data:identity,error:authError}=await sb.auth.getUser();
+    const user=identity?.user;if(authError||!user)return {status:"unauthorized"};
+    const parsed=workBrowseRequest(args);if(parsed.status!=="ok")return parsed;
+    if(!String(args?.project||"").trim())return {status:"invalid",reason:"project_required"};
+    const project=await resolveWorkProject(req,String(args.project));
+    if(!project)return {status:"project_not_found"};
+    const projectView={id:project.id,name:project.name};
+    if(parsed.mode==="catalog"){
+      const {data:files,count,error}=await sb.from("minds_work_files")
+        .select("id,name,index_status,metadata",{count:"exact"})
+        .eq("project_id",project.id).eq("user_id",user.id)
+        .order("name",{ascending:true}).order("id",{ascending:true})
+        .range(parsed.offset,parsed.offset+parsed.limit-1);
+      if(error)return {status:"query_error",reason:"catalog_query_failed"};
+      const ids=(files||[]).map((f:any)=>f.id);
+      const receiptQuery=ids.length?await sb.from("minds_work_source_text_receipts")
+        .select("file_id,source_version,coverage,segment_count,locator_class")
+        .eq("project_id",project.id).eq("user_id",user.id).in("file_id",ids):{data:[],error:null};
+      if(receiptQuery.error)return {status:"query_error",reason:"catalog_receipt_query_failed"};
+      if(typeof count!=="number")return {status:"query_error",reason:"catalog_count_unavailable"};
+      const receipts=receiptQuery.data||[];
+      const receiptByKey=new Map(receipts.map((r:any)=>[String(r.file_id)+"|"+String(r.source_version),r]));
+      const views=(files||[]).map((file:any)=>{
+        const currentVersion=String(file?.metadata?.knowledge_intake?.source_version||"");
+        const receipt:any=receiptByKey.get(String(file.id)+"|"+currentVersion);
+        return {file_id:file.id,file_name:file.name,index_status:file.index_status,
+          source_version:currentVersion||null,source_text:receipt?{
+            coverage:receipt.coverage,segment_count:receipt.segment_count,locator_class:receipt.locator_class
+          }:{coverage:"no_current_receipt",segment_count:null,locator_class:null}};
+      });
+      return {status:"ok",mode:"catalog",project:projectView,files:views,
+        page:workBrowsePage(views,count??views.length,parsed.offset,parsed.limit),
+        scope:"authenticated_project_catalog",project_wide_content_examined:false};
+    }
+    const {data:file,error:fileError}=await sb.from("minds_work_files")
+      .select("id,project_id,name,index_status,metadata")
+      .eq("id",parsed.file_id).eq("project_id",project.id).eq("user_id",user.id).maybeSingle();
+    if(fileError||!file)return {status:"file_not_found"};
+    const currentVersion=String(file?.metadata?.knowledge_intake?.source_version||"");
+    if(!currentVersion)return {status:"no_current_text",file_id:file.id,index_status:file.index_status};
+    if(parsed.expected_version&&parsed.expected_version!==currentVersion)
+      return {status:"source_version_changed",file_id:file.id,current_source_version:currentVersion};
+    const {data:receipt,error:receiptError}=await sb.from("minds_work_source_text_receipts")
+      .select("coverage,segment_count,locator_class")
+      .eq("file_id",file.id).eq("user_id",user.id).eq("project_id",project.id)
+      .eq("source_version",currentVersion).maybeSingle();
+    if(receiptError)return {status:"query_error",reason:"source_receipt_query_failed"};
+    const base={project:projectView,file:{id:file.id,name:file.name,index_status:file.index_status},
+      source_version:currentVersion,source_text_receipt:receipt||null,
+      original_text_status:"extracted_current_version_not_confirmed"};
+    if(parsed.mode==="segment_text"){
+      const {data:segment,error:segmentError}=await sb.from("minds_work_source_segments")
+        .select("file_id,source_version,segment_no,segment_kind,locator,extractor,content")
+        .eq("project_id",project.id).eq("user_id",user.id)
+        .eq("file_id",file.id).eq("source_version",currentVersion)
+        .eq("segment_no",parsed.segment_no).maybeSingle();
+      if(segmentError||!segment)return {status:"segment_not_found",...base,segment_no:parsed.segment_no};
+      if(parsed.offset>String(segment.content||"").length)return {status:"invalid_text_offset",...base};
+      try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows([segment])}catch{/* optional telemetry */}
+      return {status:"ok",mode:"segment_text",...base,segment:workBrowseTextView(segment,parsed.offset)};
+    }
+    const {data:segments,count,error:segmentError}=await sb.from("minds_work_source_segments")
+      .select("file_id,source_version,segment_no,segment_kind,locator,extractor,content",{count:"exact"})
+      .eq("project_id",project.id).eq("user_id",user.id)
+      .eq("file_id",file.id).eq("source_version",currentVersion)
+      .order("segment_no",{ascending:true}).range(parsed.offset,parsed.offset+parsed.limit-1);
+    if(segmentError||typeof count!=="number")return {status:"query_error",reason:"segment_query_or_count_failed"};
+    try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows(segments||[])}catch{/* optional telemetry */}
+    const page=workBrowsePage(segments||[],count??0,parsed.offset,parsed.limit);
+    return {status:"ok",mode:"segments",...base,
+      segments:(segments||[]).map(workBrowseSegmentView),page,
+      all_current_extracted_text_exposed_in_one_page:(count??0)>0&&page.complete_single_page&&(segments||[]).every((x:any)=>String(x.content||"").length<=8000),
+      warning:page.has_more?"additional_segments_available":null};
+  }catch{return {status:"error",reason:"source_browse_failed"}}
+}
+
 async function compareProjectSource(req:Request,args:any,apiKey:string){
   try{
     const sb=supabaseClient(req),service=serviceClient();if(!sb||!service)return {status:"unavailable"};
@@ -3012,7 +3092,7 @@ Esta conversación visible puede contener muchos ámbitos, pero MINDS te entrega
 Ejemplo: "Agrega un Termin" → "el 15 de octubre a las 15:00" → "5 y no 15" → "con los Bauherren de Bernried" describe UN MISMO evento. "Termin", "Besprechung", reunión o cita significa event salvo indicación contraria.
 
 SEGMENTOS DOCUMENTALES DE WORK:
-Si search_work o routed_work_context incluye source_segments, son fragmentos extraídos del original, con versión y localizadores de hoja/fila o página. Puedes citarlos como contenido del archivo, pero NO son decisiones confirmadas ni prueban que se haya leído el documento completo. Si locator.page_verified es false, no inventes una página. Diferencia los fragmentos de Claims propuestos/confirmados y respeta knowledge_coverage.
+Si search_work o routed_work_context incluye source_segments, son fragmentos extraídos del original, con versión y localizadores de hoja/fila o página. Puedes citarlos como contenido del archivo, pero NO son decisiones confirmadas ni prueban que se haya leído el documento completo. Si locator.page_verified es false, no inventes una página. Diferencia los fragmentos de Claims propuestos/confirmados y respeta knowledge_coverage. Para comparar exhaustivamente documentos, valores, versiones o contradicciones, no concluyas que los primeros resultados son todo el corpus: usa browse_work_sources para recorrer el catálogo autorizado y los segmentos de cada archivo relevante hasta page.has_more=false; fija expected_version al continuar, y si un segmento está truncado consulta su texto completo por partes con segment_no y offset. Si quedan archivos no revisados o con extracción parcial, comunica expresamente ese límite. Distingue medidas de categorías distintas, por ejemplo superficies de un recinto frente a un vacío o superficie programática; no son necesariamente comparables.
 
 PROJECT THREAD MODE:
 Si CONTEXTO PRIVADO.current_work_thread existe, estás dentro de un Thread persistente de Work. La conversación persistente actual es la historia local de ese Thread. Mantén el foco temático del Thread, pero puedes consultar Desktop, Planner, Conocimiento y otros Threads del mismo proyecto cuando sean materialmente relevantes. Los mensajes de otros Threads son contexto conversacional con provenance, NO verdad confirmada del proyecto. No copies toda la historia de otros Threads al actual: recupera solo lo necesario. Un hecho compartido estable debe vivir en Conocimiento mediante las rutas normales de revisión, no por aparecer en un chat. Isabella sigue siendo la interlocutora; el Thread no crea otra personalidad ni otro cerebro.
@@ -3621,6 +3701,20 @@ pregunta cuál.`;
     },
     {
       type:"function",
+      name:"browse_work_sources",
+      description:"Read-only, owner-scoped and version-pinned traversal of the existing Work corpus. Use when a question requires comprehensive comparisons, conflicting versions, all occurrences, or search_work returned an incomplete top-k. Without file_id list the project catalog (page through has_more). With file_id browse that original's current text segments by offset, with exact has_more and page locators. With file_id plus segment_no read an entire long segment in 12000-character portions. Use expected_version on continuation; incomplete extraction is not negative evidence. Never claim an exhaustive comparison until pertinent sources have been traversed and any truncation resolved.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        project:{type:"string",description:"Owned Work project name or key."},
+        file_id:{type:"string",description:"Optional catalog-listed original file UUID."},
+        expected_version:{type:"string",description:"Optional exact 64-character source SHA to pin subsequent pages."},
+        segment_no:{type:"integer",description:"Optional segment index: retrieves full segment text by offset rather than previews."},
+        offset:{type:"integer",description:"0-based file/segment page offset; for segment_no this is character offset."},
+        limit:{type:"integer",description:"Page size: up to 50 files or 8 segments."}
+      },required:["project"]}
+    },
+    {
+      type:"function",
       name:"search_work_threads",
       description:"Search the user's Work Threads and their conversational history across one project or all projects. Use when Gari asks where something was discussed, what a specific Thread contains, or when another Thread may hold relevant project context. Thread messages are sourced conversation, not confirmed project truth.",
       strict:false,
@@ -3629,7 +3723,7 @@ pregunta cuál.`;
     {
       type:"function",
       name:"read_work_file",
-      description:"Read one specific supported file from Work-MINDS when its actual contents are necessary. Call search_work first to identify the relevant file. Supported common formats include PDF, Word, Excel, PowerPoint, text and EML.",
+      description:"Read one specific supported file from Work-MINDS when its actual contents are necessary. Call search_work first to identify the relevant file. Supported common formats include PDF, Word, Excel, PowerPoint, text and EML. If the file exceeds the 20 MB read limit but has extracted source text, use browse_work_sources to inspect its current-version segments by pages instead.",
       strict:false,
       parameters:{type:"object",properties:{file_id:{type:"string"},question:{type:"string"}},required:["file_id","question"]}
     },
@@ -3996,6 +4090,9 @@ pregunta cuál.`;
       }else if(call.name==="search_work"){
         const result=await searchWork(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_search_work",rows))});
         if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="browse_work_sources"){
+        const result=await browseWorkSources(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_browse_work_sources",rows))});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work_threads"){
         const result=await searchWorkThreads(req,args);
