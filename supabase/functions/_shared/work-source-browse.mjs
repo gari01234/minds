@@ -19,6 +19,7 @@ export function workBrowseRequest(args={}){
   const version=typeof args.expected_version==="string"?args.expected_version.trim():"";
   if(version&&!/^[a-f0-9]{64}$/i.test(version))return {status:"invalid",reason:"invalid_source_version"};
   if(size===null||size<1||offset===null||segmentSupplied&&segment_no===null)return {status:"invalid",reason:"invalid_pagination"};
+  if(file_id&&offset>0&&!version)return {status:"invalid",reason:"expected_version_required_for_continuation"};
   return {status:"ok",mode,file_id:file_id||null,segment_no,offset,limit:size,expected_version:version||null};
 }
 export function workBrowsePage(rows=[],total=0,offset=0,limit=8){
