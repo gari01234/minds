@@ -1963,7 +1963,7 @@ async function searchGeneratedArtifacts(req:Request,args:any){
   }catch(e){return {status:"error",detail:String(e),artifacts:[]}}
 }
 
-async function searchWork(req:Request,args:any,admitSourceRows?:((rows:any[])=>void)){
+async function searchWork(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
     const project=await resolveWorkProject(req,String(args?.project||""));if(!project)return {status:"project_not_found"};
@@ -1985,7 +1985,7 @@ async function searchWork(req:Request,args:any,admitSourceRows?:((rows:any[])=>v
     ]);
     const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel,sourceSegmentRows,textReceiptRows]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
     // Read-side provenance capture; never changes the evidence sent to Isabella.
-    try{admitSourceRows?.(sourceSegmentRows||[])}catch{/* Telemetry is non-authoritative. */}
+    try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows(sourceSegmentRows||[])}catch{/* Telemetry is non-authoritative. */}
     const rank=(a:any,b:any)=>terms.filter(t=>normalizeText(JSON.stringify(b)).includes(t)).length-terms.filter(t=>normalizeText(JSON.stringify(a)).includes(t)).length;
     const folders=folderRows||[],buckets=bucketRows||[];
     const folderName=(id:any)=>folders.find((x:any)=>x.id===id)?.name||null;
@@ -2970,7 +2970,7 @@ Deno.serve(async (req: Request) => {
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
     background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
-    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null},(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))):Promise.resolve(null),
+    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))}):Promise.resolve(null),
     !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background||fastAgenda||currentWorkThread?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
@@ -3699,9 +3699,9 @@ pregunta cuál.`;
         {type:"input_text",text:(continuationEvidence?continuationEvidence+"\\n\\n":"")+boundedScopedTurn(recent,turnText)},
         ...attachmentInputs]}]
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
-  const footprint={...promptComponentSizes({instructions:modelInstructions,
-    context:fastAgenda?fastCalendarContext:modelContext,input,tools}),
-    context_sections:contextSectionSizes(fastAgenda?fastCalendarContext:modelContext)};
+  const footprint=promptComponentSizes({instructions:modelInstructions,
+    context:fastAgenda?fastCalendarContext:modelContext,input,tools});
+  (footprint as any).context_sections=contextSectionSizes(fastAgenda?fastCalendarContext:modelContext);
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
@@ -3994,7 +3994,7 @@ pregunta cuál.`;
         const result=await searchGeneratedArtifacts(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work"){
-        const result=await searchWork(req,args,(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_search_work",rows)));
+        const result=await searchWork(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_search_work",rows))});
         if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work_threads"){
