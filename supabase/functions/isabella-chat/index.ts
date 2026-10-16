@@ -2043,7 +2043,8 @@ async function browseWorkSources(req:Request,args:any){
     const {data:identity,error:authError}=await sb.auth.getUser();
     const user=identity?.user;if(authError||!user)return {status:"unauthorized"};
     const parsed=workBrowseRequest(args);if(parsed.status!=="ok")return parsed;
-    const project=await resolveWorkProject(req,String(args?.project||""));
+    if(!String(args?.project||"").trim())return {status:"invalid",reason:"project_required"};
+    const project=await resolveWorkProject(req,String(args.project));
     if(!project)return {status:"project_not_found"};
     const projectView={id:project.id,name:project.name};
     if(parsed.mode==="catalog"){
@@ -2057,7 +2058,9 @@ async function browseWorkSources(req:Request,args:any){
       const receiptQuery=ids.length?await sb.from("minds_work_source_text_receipts")
         .select("file_id,source_version,coverage,segment_count,locator_class")
         .eq("project_id",project.id).eq("user_id",user.id).in("file_id",ids):{data:[],error:null};
-      const receipts=receiptQuery.error?[]:(receiptQuery.data||[]);
+      if(receiptQuery.error)return {status:"query_error",reason:"catalog_receipt_query_failed"};
+      if(typeof count!=="number")return {status:"query_error",reason:"catalog_count_unavailable"};
+      const receipts=receiptQuery.data||[];
       const receiptByKey=new Map(receipts.map((r:any)=>[String(r.file_id)+"|"+String(r.source_version),r]));
       const views=(files||[]).map((file:any)=>{
         const currentVersion=String(file?.metadata?.knowledge_intake?.source_version||"");
@@ -2079,8 +2082,14 @@ async function browseWorkSources(req:Request,args:any){
     if(!currentVersion)return {status:"no_current_text",file_id:file.id,index_status:file.index_status};
     if(parsed.expected_version&&parsed.expected_version!==currentVersion)
       return {status:"source_version_changed",file_id:file.id,current_source_version:currentVersion};
+    const {data:receipt,error:receiptError}=await sb.from("minds_work_source_text_receipts")
+      .select("coverage,segment_count,locator_class")
+      .eq("file_id",file.id).eq("user_id",user.id).eq("project_id",project.id)
+      .eq("source_version",currentVersion).maybeSingle();
+    if(receiptError)return {status:"query_error",reason:"source_receipt_query_failed"};
     const base={project:projectView,file:{id:file.id,name:file.name,index_status:file.index_status},
-      source_version:currentVersion,original_text_status:"extracted_current_version_not_confirmed"};
+      source_version:currentVersion,source_text_receipt:receipt||null,
+      original_text_status:"extracted_current_version_not_confirmed"};
     if(parsed.mode==="segment_text"){
       const {data:segment,error:segmentError}=await sb.from("minds_work_source_segments")
         .select("file_id,source_version,segment_no,segment_kind,locator,extractor,content")
@@ -2097,7 +2106,7 @@ async function browseWorkSources(req:Request,args:any){
       .eq("project_id",project.id).eq("user_id",user.id)
       .eq("file_id",file.id).eq("source_version",currentVersion)
       .order("segment_no",{ascending:true}).range(parsed.offset,parsed.offset+parsed.limit-1);
-    if(segmentError)return {status:"query_error",reason:"segment_query_failed"};
+    if(segmentError||typeof count!=="number")return {status:"query_error",reason:"segment_query_or_count_failed"};
     try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows(segments||[])}catch{/* optional telemetry */}
     const page=workBrowsePage(segments||[],count??0,parsed.offset,parsed.limit);
     return {status:"ok",mode:"segments",...base,
@@ -3714,7 +3723,7 @@ pregunta cuál.`;
     {
       type:"function",
       name:"read_work_file",
-      description:"Read one specific supported file from Work-MINDS when its actual contents are necessary. Call search_work first to identify the relevant file. Supported common formats include PDF, Word, Excel, PowerPoint, text and EML.",
+      description:"Read one specific supported file from Work-MINDS when its actual contents are necessary. Call search_work first to identify the relevant file. Supported common formats include PDF, Word, Excel, PowerPoint, text and EML. If the file exceeds the 20 MB read limit but has extracted source text, use browse_work_sources to inspect its current-version segments by pages instead.",
       strict:false,
       parameters:{type:"object",properties:{file_id:{type:"string"},question:{type:"string"}},required:["file_id","question"]}
     },
