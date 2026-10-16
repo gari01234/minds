@@ -2111,7 +2111,7 @@ async function browseWorkSources(req:Request,args:any){
     const page=workBrowsePage(segments||[],count??0,parsed.offset,parsed.limit);
     return {status:"ok",mode:"segments",...base,
       segments:(segments||[]).map(workBrowseSegmentView),page,
-      all_current_extracted_text_exposed_in_one_page:page.complete_single_page&&(segments||[]).every((x:any)=>String(x.content||"").length<=8000),
+      all_current_extracted_text_exposed_in_one_page:(count??0)>0&&page.complete_single_page&&(segments||[]).every((x:any)=>String(x.content||"").length<=8000),
       warning:page.has_more?"additional_segments_available":null};
   }catch{return {status:"error",reason:"source_browse_failed"}}
 }
