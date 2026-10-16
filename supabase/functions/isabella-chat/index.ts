@@ -15,6 +15,7 @@ import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INST
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage} from "../_shared/work-source-coverage.mjs";
+import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -1983,6 +1984,8 @@ async function searchWork(req:Request,args:any){
         .eq("project_id",project.id).order("created_at",{ascending:false}).limit(120)
     ]);
     const [folderRows,fileRows,bucketRows,taskRows,memoryRows,claimRows,threadRows,projectModel,sourceSegmentRows,textReceiptRows]=workQueries.map((q,i)=>i===6?q:checked(q,'work_query_'+i));
+    // Read-side provenance capture; never changes the evidence sent to Isabella.
+    try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows(sourceSegmentRows||[])}catch{/* Telemetry is non-authoritative. */}
     const rank=(a:any,b:any)=>terms.filter(t=>normalizeText(JSON.stringify(b)).includes(t)).length-terms.filter(t=>normalizeText(JSON.stringify(a)).includes(t)).length;
     const folders=folderRows||[],buckets=bucketRows||[];
     const folderName=(id:any)=>folders.find((x:any)=>x.id===id)?.name||null;
@@ -2952,6 +2955,7 @@ Deno.serve(async (req: Request) => {
   const initialSemantic=!background&&!!route.deep_memory;
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
+  const sourceAdmissions:any[]=[];
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
@@ -2966,10 +2970,13 @@ Deno.serve(async (req: Request) => {
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
     background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
-    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null}):Promise.resolve(null),
+    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))}):Promise.resolve(null),
     !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background||fastAgenda||currentWorkThread?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
+  if(routedWork&&routedWork.status!=="ok")sourceAdmissions.push({stage:"routed_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
+  if(routedSofia)sourceAdmissions.push(toolAdmission("consult_sofia",routedSofia,null,"routed_context"));
+  sourceAdmissions.push(toolAdmission("search_memory",{lexical:recalled,semantic,entities:entityMemory},null,"routed_context"));
   const missionWorkspaces=background||fastAgenda?[]:await commitmentWorkspaceContext(req,commitments||[]);
   const activeMissionRuns=background||fastAgenda?[]:await missionRunContext(req);
   // Build 85: the browser's mixed local history is never injected into the scoped working context.
@@ -3694,6 +3701,7 @@ pregunta cuál.`;
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   const footprint=promptComponentSizes({instructions:modelInstructions,
     context:fastAgenda?fastCalendarContext:modelContext,input,tools});
+  (footprint as any).context_sections=contextSectionSizes(fastAgenda?fastCalendarContext:modelContext);
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
@@ -3957,6 +3965,7 @@ pregunta cuál.`;
         })});
       }else if(call.name==="consult_sofia"){
         const result=await consultSofia(req,args,effectiveMessage);
+        sourceAdmissions.push(toolAdmission("consult_sofia",result));
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="open_commitment_workspace"){
         const result=await ensureCommitmentWorkspace(req,args);
@@ -3985,13 +3994,15 @@ pregunta cuál.`;
         const result=await searchGeneratedArtifacts(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work"){
-        const result=await searchWork(req,args);
+        const result=await searchWork(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_search_work",rows))});
+        if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_work_threads"){
         const result=await searchWorkThreads(req,args);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="read_work_file"){
         const result=await readWorkFile(req,args,apiKey);
+        sourceAdmissions.push(toolAdmission("read_work_file",result,args?.file_id));
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="analyze_project_source"){
         const result=await analyzeProjectSource(req,args,apiKey);
@@ -4009,6 +4020,7 @@ pregunta cuál.`;
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_memory"){
         const result=await searchMemoryTool(req,String(args.query||effectiveMessage),apiKey,exposureScope.key,explicitMemoryCrossScope(effectiveMessage),run?.id||null);
+        sourceAdmissions.push(toolAdmission("search_memory",result));
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="search_calendar"){
         const result=await searchCalendar(req,args);
@@ -4103,7 +4115,7 @@ pregunta cuál.`;
     });
   }
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
-  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,source_admission:sourceAdmissions,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
