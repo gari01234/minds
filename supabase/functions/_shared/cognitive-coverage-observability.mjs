@@ -42,7 +42,7 @@ export function workSourceAdmission(stage, rows) {
       source_version:version(row?.source_version),
       segment_no:int(row?.segment_no),
       page:int(row?.locator?.page),
-      page_verified:row?.locator?.page_verified===true
+      page_verified:int(row?.locator?.page)>0 && (row?.locator?.verified===true || (row?.locator?.verified==null && row?.locator?.page_verified===true))
     })).filter(row=>row.file_id!==null)
   };
 }
