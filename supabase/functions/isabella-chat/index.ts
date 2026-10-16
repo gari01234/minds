@@ -3811,7 +3811,7 @@ pregunta cuál.`;
     // Only the last round of a multi-tool Work answer gets a higher output ceiling.
     // This preserves the entire admitted evidence and the cost of ordinary turns.
     const finalWorkSynthesis=!background&&route.work&&round===budget.rounds&&usedTools.length>0;
-    const outputCap=finalWorkSynthesis?Math.max(budget.maxOutput,8000):budget.maxOutput;
+    if(finalWorkSynthesis)budget={...budget,maxOutput:Math.max(budget.maxOutput,8000)};
     const response=await fetch("https://api.openai.com/v1/responses",{
       method:"POST",
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
@@ -3820,7 +3820,7 @@ pregunta cuál.`;
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
         instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
         reasoning:{effort:repairingSemantics?"medium":reasoningEffort},
-        max_output_tokens:repairingSemantics?Math.max(outputCap,2200):outputCap,
+        max_output_tokens:repairingSemantics?Math.max(budget.maxOutput,2200):budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{context_management:[{type:"compaction",compact_threshold:budget.compact}]}:{}),
         ...(tools.length?{tools,...(scheduleAssessment&&round===0?{tool_choice:{type:"function",name:"search_calendar"}}:fastAgenda&&round===0?{tool_choice:"required"}:round===budget.rounds?{tool_choice:"none"}:{})}:{}),
@@ -3834,7 +3834,7 @@ pregunta cuál.`;
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
         tools:usedTools,source_admission:sourceAdmissions,prompt_components:footprint,
-        final_synthesis_output_cap:outputCap},"openai_incomplete:"+reason);
+        final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
       if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
       return json({error:"incomplete_response",message:"La respuesta se interrumpió antes de completarse.",incomplete:true},502);
     }
