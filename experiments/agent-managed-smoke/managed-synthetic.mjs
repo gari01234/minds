@@ -56,21 +56,28 @@ try{
  }
  const listed=await api(base+"/"+encodeURIComponent(sessionId)+"/items?order=asc&limit=100");
  items=Array.isArray(listed.data)?listed.data:Array.isArray(listed.items)?listed.items:[];
- output=items.filter(x=>x.role==="assistant"||x.type==="message")
+ const fragments=items.filter(x=>x.role==="assistant"||x.type==="message")
   .flatMap(x=>Array.isArray(x.content)?x.content:[])
   .filter(x=>x.type==="output_text"||x.type==="text")
-  .map(x=>x.text||"").join("\n");
+  .map(x=>String(x.text||""));
+ output=fragments.join("\n");
  if(output){
-  try{
+  for(const fragment of fragments.slice().reverse()){
+   let plain=fragment.trim();
    const fence=String.fromCharCode(96).repeat(3);
-   let plain=output.trim();
    if(plain.startsWith(fence))plain=plain.slice(3).replace(/^json\s*/,"").replace(/\s*.{3}$/,"");
-   score=gradeEvidence(corpus,"Sala Azul",JSON.parse(plain));
-  }catch{issue="not_machine_gradeable"}
+   try{score=gradeEvidence(corpus,"Sala Azul",JSON.parse(plain));break}catch{}
+   const startBrace=plain.indexOf("{"),endBrace=plain.lastIndexOf("}");
+   if(startBrace>=0&&endBrace>startBrace){
+    try{score=gradeEvidence(corpus,"Sala Azul",JSON.parse(plain.slice(startBrace,endBrace+1)));break}catch{}
+   }
+  }
+  if(!score)issue="not_machine_gradeable";
  }else issue="assistant_text_not_found";
  console.log(JSON.stringify({engine:"agents_api_managed",synthetic_only:true,
   model,session_started:true,tool_calls:toolCalls,final_status:status,
-  elapsed_ms:Date.now()-started,item_count:items.length,output_present:!!output,score,issue},null,2));
+  elapsed_ms:Date.now()-started,item_count:items.length,output_present:!!output,score,issue,
+  diagnostic:score?null:{item_types:items.map(x=>String(x.type||x.role||"unknown")).slice(0,10),text_prefix:output.slice(0,350)}},null,2));
  if(!score?.coverage_complete)process.exitCode=1;
 }catch(e){
  console.log(JSON.stringify({engine:"agents_api_managed",synthetic_only:true,model,
