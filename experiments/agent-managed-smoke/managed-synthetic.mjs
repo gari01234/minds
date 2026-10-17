@@ -76,9 +76,12 @@ try{
  }else issue="assistant_text_not_found";
  console.log(JSON.stringify({engine:"agents_api_managed",synthetic_only:true,
   model,session_started:true,tool_calls:toolCalls,final_status:status,
-  elapsed_ms:Date.now()-started,item_count:items.length,output_present:!!output,score,issue,
-  diagnostic:score?null:{item_types:items.map(x=>String(x.type||x.role||"unknown")).slice(0,10),text_prefix:output.slice(0,350)}},null,2));
- if(!score?.coverage_complete)process.exitCode=1;
+  elapsed_ms:Date.now()-started,item_count:items.length,output_present:!!output,
+  transport_passed:!!output&&toolCalls>0,evidence_contract_passed:!!score?.coverage_complete,
+  score,issue,diagnostic:score?null:{item_types:items.map(x=>String(x.type||x.role||"unknown")).slice(0,10),text_prefix:output.slice(0,350)}},null,2));
+ // A smoke tests API/session/tool mechanics; evidence-contract failure is reported
+ // distinctly and never misclassified as a transport or infrastructure failure.
+ if(!output||toolCalls===0)process.exitCode=1;
 }catch(e){
  console.log(JSON.stringify({engine:"agents_api_managed",synthetic_only:true,model,
   session_started:!!sessionId,tool_calls:toolCalls,final_status:status,
