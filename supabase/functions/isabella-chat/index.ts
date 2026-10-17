@@ -2895,6 +2895,10 @@ async function consultSofia(req:Request,args:any,userMessage:string){
 /* Browser-only read receipt for a completed streamed text answer (24h TTL).
  * Authentication comes exclusively from the signed request, never body.user_id.
  */
+const RECOVERABLE_READ_TOOLS=new Set(["load_skill","search_work","browse_work_sources","read_work_file","search_work_threads","search_memory","search_calendar","read_task_origin","search_commitments","search_generated_artifacts","read_commitment_workspace","read_mission_run","consult_sofia","web_search","delegate_specialist","orchestrate_specialists","check_watch_capability"]);
+function recoverableInformationalTurn(surface:string,background:boolean,tools:string[],proposals:any[],capabilityRuns:any[],artifacts:any[]){
+ return surface==="chat_browser"&&!background&&proposals.length===0&&capabilityRuns.length===0&&artifacts.length===0&&tools.every(t=>RECOVERABLE_READ_TOOLS.has(t));
+}
 async function saveBrowserChatStreamReceipt(req:Request,requestId:string,reply:string,completed:boolean,reason:string|null){
   if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(requestId))return false;
   const sb=supabaseClient(req),service=serviceClient();
