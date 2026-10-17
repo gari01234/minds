@@ -2020,6 +2020,40 @@ function setChatActivity(label=''){
  * local UI messages are just the current rendering. Reconcile after return,
  * refresh or a broken network connection. Never re-execute a pending request.
  */
+let browserReceiptSyncBusy=false;
+async function reconcileReadOnlyBrowserReceipts(){
+  if(browserReceiptSyncBusy||typeof window.MINDS_CHAT_STREAM_RECOVERY!=='function')return;
+  const now=Date.now();
+  const pending=state.messages.filter(m=>m.role==='user'&&m.metadata?.durable_request_id
+    &&m.metadata?.durable_status!=='completed'
+    &&Number.isFinite(Date.parse(m.at||''))
+    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<30*60000).slice(-3);
+  if(!pending.length)return;
+  browserReceiptSyncBusy=true;
+  try{
+    let changed=false;
+    for(const userTurn of pending){
+      const requestId=String(userTurn.metadata.durable_request_id);
+      const assistant=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===requestId);
+      if(assistant&&assistant.metadata?.durable_status!=='unconfirmed')continue;
+      const result=await window.MINDS_CHAT_STREAM_RECOVERY(requestId,{attempts:1});
+      if(!result?.reply)continue;
+      if(assistant){
+        assistant.text=result.reply;
+        assistant.metadata={...assistant.metadata,durable_status:result.incomplete?'incomplete':'completed',
+          incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true};
+      }else{
+        say('assistant',result.reply,{metadata:{durable_request_id:requestId,
+          durable_status:result.incomplete?'incomplete':'completed',
+          incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true}});
+      }
+      userTurn.metadata={...userTurn.metadata,durable_status:result.incomplete?'incomplete':'completed'};
+      changed=true;
+    }
+    if(changed){save();renderMessages()}
+  }catch(e){console.warn('informational reply recovery failed',e)}
+  finally{browserReceiptSyncBusy=false}
+}
 let durableChatSyncBusy=false;
 async function syncDurableChatJobs(){
   if(durableChatSyncBusy)return;
@@ -2076,7 +2110,7 @@ async function syncDurableChatJobs(){
       save();renderMessages();
     }
   }catch(e){console.warn('durable chat reconciliation failed',e)}
-  finally{durableChatSyncBusy=false}
+  finally{durableChatSyncBusy=false;void reconcileReadOnlyBrowserReceipts()}
 }
 
 async function handle(text,attachments=[],replyTo=null){
@@ -2148,12 +2182,23 @@ async function handle(text,attachments=[],replyTo=null){
         return;
       }
       const verifiedReply=window.MINDS_TURN_INTEGRITY.summary(integrity)||String(result?.reply||'');
-      if(verifiedReply||result?.artifacts?.length)say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
-        metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
-          incomplete_reason:result?.incomplete_reason||null,
-          review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
-          ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
-        sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      if(verifiedReply||result?.artifacts?.length){
+        const delivered=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===durableRequestId&&m.metadata?.delivery_recovered);
+        if(delivered){
+          // A receipt may have arrived while the original fetch was still pending.
+          // Never duplicate the same provider result in the conversation.
+          delivered.text=verifiedReply||delivered.text;
+          delivered.metadata={...delivered.metadata,exposure_scope:exposure,
+            incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null,
+            review_proposals:integrity.proposals,turn_outcome:integrity.outcome};
+          save();renderMessages();
+        }else say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+          metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
+            incomplete_reason:result?.incomplete_reason||null,
+            review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
+            ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
+          sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      }
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
