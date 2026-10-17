@@ -36,6 +36,12 @@ export function collectEvidence(corpus,term,limit=4){
   throw new Error("unbounded_cursor");
 }
 function identity(x){return [x.file_id,x.version,x.segment_no].join(":")}
+function canonicalJson(value){
+  if(Array.isArray(value))return value.map(canonicalJson);
+  if(value&&typeof value==="object")return Object.fromEntries(Object.keys(value).sort().map(k=>[k,canonicalJson(value[k])]));
+  return value;
+}
+function locatorEqual(a,b){return JSON.stringify(canonicalJson(a))===JSON.stringify(canonicalJson(b))}
 export function gradeEvidence(corpus,term,answer){
   const baseline=collectEvidence(corpus,term,4);
   const evidence=Array.isArray(answer?.evidence)?answer.evidence:[];
@@ -47,7 +53,7 @@ export function gradeEvidence(corpus,term,answer){
     seen.add(key);
     const original=byKey.get(key);
     if(!original){unsupported.push(key);continue;}
-    if(JSON.stringify(row.locator)!==JSON.stringify(original.locator))
+    if(!locatorEqual(row.locator,original.locator))
       provenance_errors.push(key);
   }
   for(const key of byKey.keys())if(!seen.has(key))missing.push(key);
@@ -55,7 +61,7 @@ export function gradeEvidence(corpus,term,answer){
   const acknowledged=new Set((answer?.unavailable||[]).map(x=>x.file_id));
   const unacknowledged=[...unavailableIds].filter(x=>!acknowledged.has(x));
   const coverage_complete=missing.length===0&&unsupported.length===0&&duplicates.length===0&&
-    provenance_errors.length===0&&unacknowledged.length===0&&answer?.extracted_text_traversed===true;
+    provenance_errors.length===0&&unacknowledged.length===0&&answer?.extracted_text_traversed===true&&answer?.full_originals_verified!==true;
   return {coverage_complete,full_originals_verified:false,all_accessible_occurrences:baseline.total,
     evidence_present:evidence.length,missing,unsupported,duplicates,provenance_errors,
     unacknowledged,overclaimed_absolute_completeness:answer?.full_originals_verified===true,

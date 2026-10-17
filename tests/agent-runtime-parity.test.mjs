@@ -53,3 +53,17 @@ test("reject nonadvancing and excessive cursors",()=>{
  assert.throws(()=>enumerateCorpus(corpus,"Sala Azul",{limit:1001}),/invalid_cursor/);
  assert.throws(()=>enumerateCorpus(corpus," ",{}),/missing_term/);
 });
+
+test("equivalent locators with reordered keys are not provenance errors",()=>{
+ const b=collectEvidence(corpus,"Sala Azul");
+ const reordered=b.records.map(x=>({...x,locator:Object.fromEntries(Object.entries(x.locator).reverse())}));
+ const result=gradeEvidence(corpus,"Sala Azul",{evidence:reordered,unavailable:b.unavailable,extracted_text_traversed:true});
+ assert.deepEqual(result.provenance_errors,[]);
+ assert.equal(result.coverage_complete,true);
+});
+test("absolute visual-completeness claim fails even with all extracted text",()=>{
+ const b=collectEvidence(corpus,"Sala Azul");
+ const result=gradeEvidence(corpus,"Sala Azul",{evidence:b.records,unavailable:b.unavailable,extracted_text_traversed:true,full_originals_verified:true});
+ assert.equal(result.coverage_complete,false);
+ assert.equal(result.overclaimed_absolute_completeness,true);
+});
