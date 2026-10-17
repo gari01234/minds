@@ -2037,6 +2037,42 @@ async function searchWork(req:Request,args:any){
   }catch(e){return {status:"error",detail:String(e)}}
 }
 
+async function findWorkOccurrences(req:Request,args:any){
+  try{
+    const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
+    const {data:identity,error:authError}=await sb.auth.getUser();
+    if(authError||!identity?.user)return {status:"unauthorized"};
+    if(!String(args?.project||"").trim())return {status:"invalid",reason:"project_required"};
+    const terms=args?.terms;
+    if(!Array.isArray(terms)||terms.length<1||terms.length>12||
+       terms.some((t:any)=>typeof t!=="string"||t.trim().length<2||t.trim().length>120))
+      return {status:"invalid",reason:"terms_required_1_to_12"};
+    const limit=args?.limit===undefined?25:Number(args.limit),offset=args?.offset===undefined?0:Number(args.offset);
+    const cursor=args?.expected_fingerprint===undefined?null:String(args.expected_fingerprint);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>50||
+       !Number.isSafeInteger(offset)||offset<0||offset>1000000||
+       (offset>0&&!cursor)||(cursor!==null&&!/^[a-f0-9]{32}$/.test(cursor)))
+      return {status:"invalid",reason:"pagination_or_fingerprint_invalid"};
+    const project=await resolveWorkProject(req,String(args.project));
+    if(!project)return {status:"project_not_found"};
+    const {data,error}=await sb.rpc("minds_find_work_source_occurrences",{
+      p_project_id:project.id,p_terms:terms,p_limit:limit,
+      p_offset:offset,p_expected_fingerprint:cursor
+    });
+    if(error)return {status:"query_error",reason:"occurrence_inventory_unavailable"};
+    const result=data&&typeof data==="object"?data:{status:"query_error"};
+    if(result.status==="ok"){
+      try{if(typeof args?._admitSourceRows==="function")args._admitSourceRows(
+        (result.matches||[]).map((row:any)=>({...row,content:row.match_excerpt||""}))
+      )}catch{/* telemetry is non-authoritative */}
+    }
+    return {...result,project:{id:project.id,name:project.name},
+      current_source_text_only:true,
+      not_inspected:"nonmatching_text_pages_and_originals_without_current_extraction",
+      next_step:"Use browse_work_sources for missing extraction catalog and to inspect page context for ambiguous occurrences."};
+  }catch{return {status:"error",reason:"occurrence_search_failed"}}
+}
+
 async function browseWorkSources(req:Request,args:any){
   try{
     const sb=supabaseClient(req);if(!sb)return {status:"unavailable"};
@@ -2543,7 +2579,7 @@ function cognitiveBudget(message:string,attachments:any[],background:boolean){
 
 const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   request_clarification:"allow",web_search:"allow",read_contextual_autonomy:"allow",
-  search_memory:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",browse_work_sources:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
+  search_memory:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",browse_work_sources:"allow",find_work_occurrences:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
   remember_relation:"allow",remember_information:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
@@ -2895,7 +2931,7 @@ async function consultSofia(req:Request,args:any,userMessage:string){
 /* Browser-only read receipt for a completed streamed text answer (24h TTL).
  * Authentication comes exclusively from the signed request, never body.user_id.
  */
-const RECOVERABLE_READ_TOOLS=new Set(["load_skill","search_work","browse_work_sources","read_work_file","search_work_threads","search_memory","search_calendar","read_task_origin","search_commitments","search_generated_artifacts","read_commitment_workspace","read_mission_run","consult_sofia","web_search","delegate_specialist","orchestrate_specialists","check_watch_capability"]);
+const RECOVERABLE_READ_TOOLS=new Set(["load_skill","search_work","browse_work_sources","find_work_occurrences","read_work_file","search_work_threads","search_memory","search_calendar","read_task_origin","search_commitments","search_generated_artifacts","read_commitment_workspace","read_mission_run","consult_sofia","web_search","delegate_specialist","orchestrate_specialists","check_watch_capability"]);
 function recoverableInformationalTurn(surface:string,background:boolean,tools:string[],proposals:any[],capabilityRuns:any[],artifacts:any[]){
  return surface==="chat_browser"&&!background&&proposals.length===0&&capabilityRuns.length===0&&artifacts.length===0&&tools.every(t=>RECOVERABLE_READ_TOOLS.has(t));
 }
@@ -3096,7 +3132,7 @@ Esta conversación visible puede contener muchos ámbitos, pero MINDS te entrega
 Ejemplo: "Agrega un Termin" → "el 15 de octubre a las 15:00" → "5 y no 15" → "con los Bauherren de Bernried" describe UN MISMO evento. "Termin", "Besprechung", reunión o cita significa event salvo indicación contraria.
 
 SEGMENTOS DOCUMENTALES DE WORK:
-Si search_work o routed_work_context incluye source_segments, son fragmentos extraídos del original, con versión y localizadores de hoja/fila o página. Puedes citarlos como contenido del archivo, pero NO son decisiones confirmadas ni prueban que se haya leído el documento completo. Si locator.page_verified es false, no inventes una página. Diferencia los fragmentos de Claims propuestos/confirmados y respeta knowledge_coverage. Para comparar exhaustivamente documentos, valores, versiones o contradicciones, no concluyas que los primeros resultados son todo el corpus: usa browse_work_sources para recorrer el catálogo autorizado y los segmentos de cada archivo relevante hasta page.has_more=false; fija expected_version al continuar, y si un segmento está truncado consulta su texto completo por partes con segment_no y offset. Si quedan archivos no revisados o con extracción parcial, comunica expresamente ese límite. Distingue medidas de categorías distintas, por ejemplo superficies de un recinto frente a un vacío o superficie programática; no son necesariamente comparables.
+Si search_work o routed_work_context incluye source_segments, son fragmentos extraídos del original, con versión y localizadores de hoja/fila o página. Puedes citarlos como contenido del archivo, pero NO son decisiones confirmadas ni prueban que se haya leído el documento completo. Si locator.page_verified es false, no inventes una página. Diferencia los fragmentos de Claims propuestos/confirmados y respeta knowledge_coverage. Para comparar exhaustivamente documentos, valores, versiones o contradicciones, no concluyas que los primeros resultados son todo el corpus: primero usa find_work_occurrences para un inventario completo de ocurrencias explícitas en el texto extraído con paginación y fingerprint de versión. Recorre todas las páginas del inventario, distingue cobertura textual de la visual y después consulta browse_work_sources para verificar el catálogo, las fuentes sin extracción, el contexto gráfico y los valores no rotulados con los términos buscados. Nunca confundas ausencia de coincidencias textuales con ausencia de información en un plano. Para navegar manualmente documentos usa browse_work_sources para recorrer el catálogo autorizado y los segmentos de cada archivo relevante hasta page.has_more=false; fija expected_version al continuar, y si un segmento está truncado consulta su texto completo por partes con segment_no y offset. Si quedan archivos no revisados o con extracción parcial, comunica expresamente ese límite. Distingue medidas de categorías distintas, por ejemplo superficies de un recinto frente a un vacío o superficie programática; no son necesariamente comparables.
 
 PROJECT THREAD MODE:
 Si CONTEXTO PRIVADO.current_work_thread existe, estás dentro de un Thread persistente de Work. La conversación persistente actual es la historia local de ese Thread. Mantén el foco temático del Thread, pero puedes consultar Desktop, Planner, Conocimiento y otros Threads del mismo proyecto cuando sean materialmente relevantes. Los mensajes de otros Threads son contexto conversacional con provenance, NO verdad confirmada del proyecto. No copies toda la historia de otros Threads al actual: recupera solo lo necesario. Un hecho compartido estable debe vivir en Conocimiento mediante las rutas normales de revisión, no por aparecer en un chat. Isabella sigue siendo la interlocutora; el Thread no crea otra personalidad ni otro cerebro.
@@ -3705,6 +3741,19 @@ pregunta cuál.`;
     },
     {
       type:"function",
+      name:"find_work_occurrences",
+      description:"Evidence-first exhaustive, owner-scoped explicit-term search over ALL current-version extracted Work text segments of the project, not relevance-ranked top-k. Returns exact count, version fingerprint, file UUIDs, segment locators and nearby excerpts. Page through has_more and next_offset, reusing expected_fingerprint; restart at offset 0 if version_changed. This does NOT inspect images, nonmatching pages or unparsed originals. Follow with browse_work_sources catalog and contextual source checks; distinguish room, Luftraum, program estimates and chronology.",
+      strict:false,
+      parameters:{type:"object",properties:{
+        project:{type:"string",description:"Owned project name."},
+        terms:{type:"array",items:{type:"string"},description:"1-12 explicit text variants to discover, e.g. Caféraum, Luftraum Caféraum."},
+        offset:{type:"integer",description:"0-based occurrence offset. For continuation supply expected_fingerprint."},
+        limit:{type:"integer",description:"1-50 occurrences per page, default 25."},
+        expected_fingerprint:{type:"string",description:"Exact 32-character corpus fingerprint returned by first page; required for later pages."}
+      },required:["project","terms"]}
+    },
+    {
+      type:"function",
       name:"browse_work_sources",
       description:"Read-only, owner-scoped and version-pinned traversal of the existing Work corpus. Use when a question requires comprehensive comparisons, conflicting versions, all occurrences, or search_work returned an incomplete top-k. Without file_id list the project catalog (page through has_more). With file_id browse that original's current text segments by offset, with exact has_more and page locators. With file_id plus segment_no read an entire long segment in 12000-character portions. Use expected_version on continuation; incomplete extraction is not negative evidence. Never claim an exhaustive comparison until pertinent sources have been traversed and any truncation resolved.",
       strict:false,
@@ -4103,6 +4152,9 @@ pregunta cuál.`;
       }else if(call.name==="search_work"){
         const result=await searchWork(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_search_work",rows))});
         if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="find_work_occurrences"){
+        const result=await findWorkOccurrences(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="browse_work_sources"){
         const result=await browseWorkSources(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_browse_work_sources",rows))});
