@@ -23,6 +23,25 @@ const records=kinds.map((kind,i)=>({
 }));
 const missing=["demo-no-parser"];
 const truth=new Map(records.map(r=>[r.id,r]));
+const zodResult=z.object({
+ evidence:z.array(z.object({id:z.string(),kind:z.enum(["room","void","program"])})),
+ unavailable:z.array(z.string()),
+ extracted_text_traversed:z.boolean(),
+ full_originals_verified:z.boolean(),
+ chronology_verified:z.boolean()
+});
+const jsonSchema={type:"object",additionalProperties:false,
+ properties:{
+  evidence:{type:"array",items:{type:"object",additionalProperties:false,
+   properties:{id:{type:"string"},kind:{type:"string",enum:["room","void","program"]}},
+   required:["id","kind"]}},
+  unavailable:{type:"array",items:{type:"string"}},
+  extracted_text_traversed:{type:"boolean"},
+  full_originals_verified:{type:"boolean"},
+  chronology_verified:{type:"boolean"}
+ },
+ required:["evidence","unavailable","extracted_text_traversed","full_originals_verified","chronology_verified"]
+};
 const pageSize=3;
 const requiredOffsets=Array.from({length:Math.ceil(records.length/pageSize)},(_,i)=>i*pageSize);
 const modelInstructions=[
@@ -50,9 +69,12 @@ function resultFor(mode,args){
 function score(text,mode,offsets){
  let answer;
  try{
+  if(text!==null&&typeof text==="object")answer=text;
+  else{
   let s=String(text||"").trim();
   if(s.startsWith(String.fromCharCode(96).repeat(3)))s=s.replace(/^.{3}(?:json)?\s*/i,"").replace(/\s*.{3}$/,"");
   answer=JSON.parse(s);
+  }
  }catch(e){return {parsed:false,issue:"non_json_final",excerpt_length:String(text||"").length}};
  const found=Array.isArray(answer.evidence)?answer.evidence:[];
  const ids=found.map(x=>x.id);
@@ -89,7 +111,8 @@ async function runNative(mode){
  const start=performance.now();
  for(let turn=0;turn<14;turn++){
   const r=await client.responses.create({model,store:false,instructions:modelInstructions,input,tools:[schema],
-    reasoning:{effort:"medium"},max_output_tokens:3800});
+    reasoning:{effort:"medium"},max_output_tokens:3800,
+    text:{format:{type:"json_schema",name:"synthetic_evidence_inventory",strict:true,schema:jsonSchema}}});
   calls++;inTokens+=r.usage?.input_tokens||0;outTokens+=r.usage?.output_tokens||0;
   if(r.status!=="completed")throw Error("provider_status_"+r.status);
   const functionCalls=(r.output||[]).filter(x=>x.type==="function_call");
@@ -115,7 +138,7 @@ async function runSdk(mode){
   parameters:mode==="paged"?z.object({term:z.string(),offset:z.number().int().nonnegative()}):z.object({term:z.string()}),
   async execute(args){offsets.push(mode==="paged"?args.offset:0);return JSON.stringify(resultFor(mode,args));}
  });
- const agent=new Agent({name:"Synthetic document researcher",instructions:modelInstructions,model,tools:[fn],
+ const agent=new Agent({name:"Synthetic document researcher",instructions:modelInstructions,model,tools:[fn],outputType:zodResult,
   modelSettings:{reasoning:{effort:"medium"}}});
  const start=performance.now();
  const result=await run(agent,prompt,{maxTurns:14});
