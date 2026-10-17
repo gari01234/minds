@@ -60,12 +60,17 @@ function score(text,mode,offsets){
  const missingRecords=records.filter(x=>!ids.includes(x.id)).map(x=>x.id);
  const unsupported=ids.filter(id=>!truth.has(id));
  const wrongKind=found.filter(x=>truth.has(x.id)&&truth.get(x.id).kind!==x.kind).map(x=>x.id);
+ const kindDiagnostics=wrongKind.length?found.slice(0,4).map(x=>({
+   id:x.id,fields:Object.keys(x).sort(),kind:typeof x.kind==="string"?x.kind:null,
+   type:typeof x.type==="string"?x.type:null,label:typeof x.label==="string"?x.label:null
+ })):[];
  const skipped=missing.filter(x=>!(answer.unavailable||[]).includes(x));
  const traversed=mode==="complete"?offsets.length>=1:requiredOffsets.every(x=>offsets.includes(x));
  const correct=missingRecords.length===0&&duplicates.length===0&&unsupported.length===0&&wrongKind.length===0&&
    skipped.length===0&&traversed&&answer.extracted_text_traversed===true&&answer.full_originals_verified!==true&&answer.chronology_verified!==true;
  return {parsed:true,complete:correct,expected:records.length,reported:found.length,missing_count:missingRecords.length,
    duplicate_count:duplicates.length,unsupported_count:unsupported.length,wrong_kind_count:wrongKind.length,
+   kind_diagnostics:kindDiagnostics,
    parser_gaps_unreported:skipped.length,all_pages_actually_traversed:traversed,
    claimed_text_complete:answer.extracted_text_traversed===true,
    false_visual_claim:answer.full_originals_verified===true,
