@@ -32,7 +32,7 @@ jobs:
           node --check live-synthetic.mjs
           node --check paged-synthetic.mjs
       - name: Detect dedicated parity project key (never print value)
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'test/factorial-runtime-parity-once-20261017' && github.event.pull_request.head.repo.full_name == github.repository)
         id: parity_key
         env:
           OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
@@ -52,7 +52,7 @@ jobs:
         timeout-minutes: 5
         run: node live-synthetic.mjs
       - name: Compare evidence-first completeness vs agent-directed pagination
-        if: steps.parity_key.outputs.ready == 'true' && github.event_name == 'workflow_dispatch'
+        if: steps.parity_key.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.head_ref == 'test/factorial-runtime-parity-once-20261017' && github.event.pull_request.head.repo.full_name == github.repository))
         env:
           OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
           OPENAI_AGENTS_DISABLE_TRACING: '1'
