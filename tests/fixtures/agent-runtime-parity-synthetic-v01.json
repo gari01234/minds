@@ -1,0 +1,213 @@
+{
+  "version": "synthetic-runtime-parity-0.1",
+  "classification": "public-synthetic-fixture-never-user-work",
+  "project": "ATENEA-DEMO",
+  "files": [
+    {
+      "id": "doc-a",
+      "name": "ATENEA plano de variantes",
+      "version": "test-source-a-1",
+      "status": "indexed",
+      "text_coverage": "partial_text",
+      "segments": [
+        {
+          "no": 0,
+          "locator": {
+            "page": 1,
+            "verified": true
+          },
+          "content": "Notas de diseño 1: circulación y almacenes."
+        },
+        {
+          "no": 1,
+          "locator": {
+            "page": 2,
+            "verified": true
+          },
+          "content": "Notas de diseño 2: circulación y almacenes."
+        },
+        {
+          "no": 2,
+          "locator": {
+            "page": 3,
+            "verified": true
+          },
+          "content": "Notas de diseño 3: circulación y almacenes."
+        },
+        {
+          "no": 3,
+          "locator": {
+            "page": 4,
+            "verified": true
+          },
+          "content": "Notas de diseño 4: circulación y almacenes."
+        },
+        {
+          "no": 4,
+          "locator": {
+            "page": 5,
+            "verified": true
+          },
+          "content": "Notas de diseño 5: circulación y almacenes."
+        },
+        {
+          "no": 5,
+          "locator": {
+            "page": 6,
+            "verified": true
+          },
+          "content": "Notas de diseño 6: circulación y almacenes."
+        },
+        {
+          "no": 6,
+          "locator": {
+            "page": 7,
+            "verified": true
+          },
+          "content": "Notas de diseño 7: circulación y almacenes."
+        },
+        {
+          "no": 7,
+          "locator": {
+            "page": 8,
+            "verified": true
+          },
+          "content": "Notas de diseño 8: circulación y almacenes."
+        },
+        {
+          "no": 8,
+          "locator": {
+            "page": 9,
+            "verified": true
+          },
+          "content": "Notas de diseño 9: circulación y almacenes."
+        },
+        {
+          "no": 9,
+          "locator": {
+            "page": 10,
+            "verified": true
+          },
+          "content": "Notas de diseño 10: circulación y almacenes."
+        },
+        {
+          "no": 10,
+          "locator": {
+            "page": 11,
+            "verified": true
+          },
+          "content": "Notas de diseño 11: circulación y almacenes."
+        },
+        {
+          "no": 11,
+          "locator": {
+            "page": 12,
+            "verified": true
+          },
+          "content": "Notas de diseño 12: circulación y almacenes."
+        },
+        {
+          "no": 12,
+          "locator": {
+            "page": 13,
+            "verified": true
+          },
+          "content": "Notas de diseño 13: circulación y almacenes."
+        },
+        {
+          "no": 13,
+          "locator": {
+            "page": 14,
+            "verified": true
+          },
+          "content": "Notas de diseño 14: circulación y almacenes."
+        },
+        {
+          "no": 14,
+          "locator": {
+            "page": 15,
+            "verified": true
+          },
+          "content": "Notas de diseño 15: circulación y almacenes."
+        },
+        {
+          "no": 15,
+          "locator": {
+            "page": 16,
+            "verified": true
+          },
+          "content": "Sala Azul 68,40 m² en el plano de la variante B"
+        }
+      ]
+    },
+    {
+      "id": "doc-b",
+      "name": "ATENEA vacío de doble altura",
+      "version": "test-source-b-1",
+      "status": "indexed",
+      "text_coverage": "partial_text",
+      "segments": [
+        {
+          "no": 0,
+          "locator": {
+            "page": 1,
+            "verified": true
+          },
+          "content": "Luftraum Sala Azul 53,20 m²"
+        },
+        {
+          "no": 1,
+          "locator": {
+            "page": 2,
+            "verified": true
+          },
+          "content": "Sala Azul 51,30 m² en otro estado; no deducir secuencia temporal"
+        }
+      ]
+    },
+    {
+      "id": "doc-c",
+      "name": "ATENEA Nachweis Fläche",
+      "version": "test-source-c-1",
+      "status": "indexed",
+      "text_coverage": "complete_text",
+      "segments": [
+        {
+          "no": 0,
+          "locator": {
+            "page": 1,
+            "verified": true
+          },
+          "content": "Sala Azul 53,20 m² en tabla de superficies."
+        }
+      ]
+    },
+    {
+      "id": "doc-d",
+      "name": "ATENEA Raumprogramm",
+      "version": "test-source-d-1",
+      "status": "indexed",
+      "text_coverage": "complete_text",
+      "segments": [
+        {
+          "no": 0,
+          "locator": {
+            "sheet": "Raumprogramm",
+            "row_start": 3,
+            "row_end": 3,
+            "verified": true
+          },
+          "content": "Sala Azul 61,10 m² existentes; 55 m² aproximadamente por coordinar"
+        }
+      ]
+    },
+    {
+      "id": "doc-e",
+      "name": "ATENEA modelo digital no extraído",
+      "version": null,
+      "status": "waiting_parser",
+      "text_coverage": "unavailable",
+      "segments": null
+    }
+  ]
+}
