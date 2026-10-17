@@ -3836,8 +3836,11 @@ pregunta cuál.`;
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
+      const browserReceiptSaved=!!partial&&recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
+        ?await saveBrowserChatStreamReceipt(req,clientMessageId,partial,false,reason):false;
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
         tools:usedTools,source_admission:sourceAdmissions,prompt_components:footprint,
+        browser_delivery_receipt_saved:browserReceiptSaved,
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
       if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
       return json({error:"incomplete_response",message:"La respuesta se interrumpió antes de completarse.",incomplete:true},502);
