@@ -8,7 +8,7 @@ import {collectEvidence,gradeEvidence} from "../../scripts/agent-runtime-parity-
 import {z} from "zod";
 
 process.env.OPENAI_AGENTS_DISABLE_TRACING="1";
-const {Agent,run,tool}=await import("@openai/agents");
+const {Agent,run,tool,Usage}=await import("@openai/agents");
 const corpus=JSON.parse(readFileSync(new URL("../../tests/fixtures/agent-runtime-parity-synthetic-v01.json",import.meta.url),"utf8"));
 
 class ScriptedEvidenceModel {
@@ -21,7 +21,7 @@ class ScriptedEvidenceModel {
       return {
         output:[{type:"function_call",name:"find_all_occurrences",
           callId:"call_synthetic_001",arguments:JSON.stringify({term:"Sala Azul"})}],
-        usage:{}
+        usage:new Usage()
       };
     }
     const text=JSON.stringify(request.input);
@@ -29,7 +29,7 @@ class ScriptedEvidenceModel {
     return {
       output:[{role:"assistant",content:[{type:"output_text",
         text:this.sawToolResult?"I received the full synthetic evidence set.":"NO_TOOL_RESULT"}]}],
-      usage:{}
+      usage:new Usage()
     };
   }
   async *getStreamedResponse(){throw Error("streaming_not_used_in_mock_test")}
