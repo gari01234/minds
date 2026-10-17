@@ -27,7 +27,7 @@ class ScriptedEvidenceModel {
     const text=JSON.stringify(request.input);
     this.sawToolResult=text.includes("doc-a")&&text.includes("doc-e")&&text.includes("segment_no");
     return {
-      output:[{role:"assistant",content:[{type:"output_text",
+      output:[{type:"message",status:"completed",role:"assistant",content:[{type:"output_text",
         text:this.sawToolResult?"I received the full synthetic evidence set.":"NO_TOOL_RESULT"}]}],
       usage:new Usage()
     };
