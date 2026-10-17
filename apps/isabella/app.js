@@ -2020,6 +2020,40 @@ function setChatActivity(label=''){
  * local UI messages are just the current rendering. Reconcile after return,
  * refresh or a broken network connection. Never re-execute a pending request.
  */
+let browserReceiptSyncBusy=false;
+async function reconcileReadOnlyBrowserReceipts(){
+  if(browserReceiptSyncBusy||typeof window.MINDS_CHAT_STREAM_RECOVERY!=='function')return;
+  const now=Date.now();
+  const pending=state.messages.filter(m=>m.role==='user'&&m.metadata?.durable_request_id
+    &&m.metadata?.durable_status!=='completed'
+    &&Number.isFinite(Date.parse(m.at||''))
+    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<30*60000).slice(-3);
+  if(!pending.length)return;
+  browserReceiptSyncBusy=true;
+  try{
+    let changed=false;
+    for(const userTurn of pending){
+      const requestId=String(userTurn.metadata.durable_request_id);
+      const assistant=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===requestId);
+      if(assistant&&assistant.metadata?.durable_status!=='unconfirmed')continue;
+      const result=await window.MINDS_CHAT_STREAM_RECOVERY(requestId,{attempts:1});
+      if(!result?.reply)continue;
+      if(assistant){
+        assistant.text=result.reply;
+        assistant.metadata={...assistant.metadata,durable_status:result.incomplete?'incomplete':'completed',
+          incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true};
+      }else{
+        say('assistant',result.reply,{metadata:{durable_request_id:requestId,
+          durable_status:result.incomplete?'incomplete':'completed',
+          incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true}});
+      }
+      userTurn.metadata={...userTurn.metadata,durable_status:result.incomplete?'incomplete':'completed'};
+      changed=true;
+    }
+    if(changed){save();renderMessages()}
+  }catch(e){console.warn('informational reply recovery failed',e)}
+  finally{browserReceiptSyncBusy=false}
+}
 let durableChatSyncBusy=false;
 async function syncDurableChatJobs(){
   if(durableChatSyncBusy)return;
@@ -2076,7 +2110,7 @@ async function syncDurableChatJobs(){
       save();renderMessages();
     }
   }catch(e){console.warn('durable chat reconciliation failed',e)}
-  finally{durableChatSyncBusy=false}
+  finally{durableChatSyncBusy=false;void reconcileReadOnlyBrowserReceipts()}
 }
 
 async function handle(text,attachments=[],replyTo=null){
