@@ -17,6 +17,7 @@ import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/p
 import {currentWorkTextCoverage} from "../_shared/work-source-coverage.mjs";
 import {workBrowseRequest,workBrowsePage,workBrowseSegmentView,workBrowseTextView} from "../_shared/work-source-browse.mjs";
 import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
+import {summarizeWorkOccurrenceCoverage} from "../_shared/work-occurrence-coverage-ledger.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -3076,6 +3077,7 @@ Deno.serve(async (req: Request) => {
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const sourceAdmissions:any[]=[];
+  const occurrenceCoverageEvents:any[]=[];
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
@@ -3888,7 +3890,7 @@ pregunta cuál.`;
       const browserReceiptSaved=!!partial&&recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
         ?await saveBrowserChatStreamReceipt(req,clientMessageId,partial,false,reason):false;
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
-        tools:usedTools,source_admission:sourceAdmissions,prompt_components:footprint,
+        tools:usedTools,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),prompt_components:footprint,
         browser_delivery_receipt_saved:browserReceiptSaved,
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
       if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
@@ -4155,6 +4157,11 @@ pregunta cuál.`;
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="find_work_occurrences"){
         const result=await findWorkOccurrences(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
+        if(occurrenceCoverageEvents.length<80)occurrenceCoverageEvents.push({
+          status:result?.status,project_id:result?.project?.id||null,fingerprint:result?.fingerprint,
+          offset:result?.offset??args?.offset??0,returned:result?.returned,total:result?.total,
+          has_more:result?.has_more,next_offset:result?.next_offset??null
+        });
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="browse_work_sources"){
         const result=await browseWorkSources(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_browse_work_sources",rows))});
@@ -4279,7 +4286,7 @@ pregunta cuál.`;
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
   const browserReceiptSaved=recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
     ?await saveBrowserChatStreamReceipt(req,clientMessageId,reply,true,null):false;
-  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,source_admission:sourceAdmissions,semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
