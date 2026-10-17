@@ -1,0 +1,40 @@
+name: Managed Agents API Synthetic Smoke
+on:
+  pull_request:
+    paths:
+      - 'experiments/agent-managed-smoke/**'
+      - '.github/workflows/agent-managed-smoke.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  managed-agents-synthetic:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Confirm only fictional fixture is used
+        run: |
+          test -f tests/fixtures/agent-runtime-parity-synthetic-v01.json
+          node --check experiments/agent-managed-smoke/managed-synthetic.mjs
+      - name: Check separate parity key without exposing value
+        id: key
+        env:
+          OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
+        run: |
+          if [ -n "$OPENAI_API_KEY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No dedicated test key. Managed synthetic smoke skipped."
+          fi
+      - name: Managed beta session with synthetic-only local function
+        if: steps.key.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+        timeout-minutes: 3
+        env:
+          OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
+          MANAGED_PARITY_MODEL: gpt-6-astra
+        run: node experiments/agent-managed-smoke/managed-synthetic.mjs
