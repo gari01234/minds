@@ -28,7 +28,7 @@ function int(value) {
   const n=Number(value);
   return Number.isSafeInteger(n) && n >= 0 ? n : null;
 }
-const allowedStages = new Set(["routed_work", "tool_search_work", "tool_browse_work_sources"]);
+const allowedStages = new Set(["routed_work", "tool_search_work", "tool_browse_work_sources","tool_find_work_occurrences"]);
 export function workSourceAdmission(stage, rows) {
   const passages=Array.isArray(rows)?rows:[];
   return {
