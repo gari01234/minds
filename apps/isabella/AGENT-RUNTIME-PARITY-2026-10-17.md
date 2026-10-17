@@ -71,4 +71,18 @@ Criterio de promoción: como mínimo igual cobertura, procedencia y honestidad d
 - https://developers.openai.com/api/docs/guides/your-data
 - Código de MINDS (Builds 79/79.2, `isabella-chat/index.ts`) y metadatos de producción consultados el mismo día.
 
-**Estado actual de este spike**: infraestructura y restricciones auditadas; fixture/scorer listos y sujetos a CI; **ningún modelo administrado ha sido invocado en paridad**, ninguna migración, ningún acceso al Work real, ningún despliegue de Isabella. La decisión final de runtime sigue abierta.
+## 17/10 — ejecución técnica del Agents SDK en aislamiento (PR #165)
+
+La versión real `@openai/agents@0.20.0` se instaló y ejecutó en GitHub Actions, sobre Node 24 y `zod@4.1.12`, **sin `OPENAI_API_KEY`** y sin ningún documento de usuario. Se utilizó un proveedor de modelo simulado y determinista, no un LLM remoto. El `Runner` real procesó una llamada a herramienta local de solo lectura, devolvió su resultado al proveedor simulado y completó el turno. La suite aislada pasó **2/2 tests**; la suite general Verify MINDS también pasó. La prueba demuestra que el SDK puede sustituir técnicamente una parte del bucle de herramientas sin tocar Supabase, NO que razone mejor o más rápido.
+
+Ruta: `experiments/agent-runtime-parity/sdk-synthetic.test.mjs`.
+CI: `.github/workflows/agent-runtime-parity.yml`.
+Fixture/scorer: `tests/fixtures/agent-runtime-parity-synthetic-v01.json` y `scripts/agent-runtime-parity-core.mjs`.
+
+**Prueba real A/B preparada, no ejecutada:** `experiments/agent-runtime-parity/live-synthetic.mjs` ejecuta Responses nativo frente a Agents SDK con el **mismo modelo configurable, un único fixture ficticio, herramientas de lectura idénticas y scoring de cobertura/procedencia**. Límites de 6 iteraciones y de salida, sin acceso a Work ni al navegador real y sin trazas externas del SDK. El CI busca únicamente un secreto específicamente autorizado `MINDS_PARITY_OPENAI_API_KEY`; al 17/10 se constató **no configurado** y la etapa real quedó correctamente `SKIPPED`. No reutilizar ni extraer en GitHub los secretos de Supabase para eludir ese aislamiento.
+
+Agents API gestionada **tampoco se ha ejecutado**; la limitación EEUU/no ZDR permanece. Necesitamos una credencial con scope permitido para prueba sintética y, después, un test comparable con herramientas equivalentes. No deducir equivalencia de calidad del simple hecho de ejecutar un `Runner`.
+
+Una ruta de ejecución que integre Agents SDK dentro de MINDS necesitaría seguir llamando herramientas filtradas por ownership y mantener la persistencia en Supabase, así como un ejecutor de larga duración ya existente cuando el trabajo exceda la ventana de Edge. El SDK gestiona el bucle, pero no reemplaza Evidence-First Investigation ni la autorización.
+
+**Estado del spike**: auditoría + benchmark determinista y ejecución de orquestación del SDK **superados**; A/B real de calidad, coste y latencia y Agents API gestionada **pendientes de credencial de prueba dedicada**; sin migración ni cambio de producción; decisión de runtime abierta.
