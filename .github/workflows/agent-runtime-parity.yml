@@ -12,7 +12,7 @@ permissions:
 jobs:
   synthetic-sdk:
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 14
     defaults:
       run:
         working-directory: experiments/agent-runtime-parity
@@ -28,7 +28,9 @@ jobs:
           OPENAI_AGENTS_DISABLE_TRACING: '1'
         run: npm test
       - name: Validate optional real-model A/B script syntax
-        run: node --check live-synthetic.mjs
+        run: |
+          node --check live-synthetic.mjs
+          node --check paged-synthetic.mjs
       - name: Detect dedicated parity project key (never print value)
         id: parity_key
         env:
@@ -48,3 +50,11 @@ jobs:
           PARITY_OPENAI_MODEL: gpt-5.6-luna
         timeout-minutes: 5
         run: node live-synthetic.mjs
+      - name: Compare evidence-first completeness vs agent-directed pagination
+        if: steps.parity_key.outputs.ready == 'true' && (github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository)
+        env:
+          OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
+          OPENAI_AGENTS_DISABLE_TRACING: '1'
+          PARITY_OPENAI_MODEL: gpt-5.6-luna
+        timeout-minutes: 7
+        run: node paged-synthetic.mjs
