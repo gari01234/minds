@@ -221,7 +221,18 @@ async function ask(message,state,options={}){
   // never as the browser's default for an ordinary conversation.
   const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null,
     continuation:options.continuation||null}});
-  if(error)throw error;
+  if(error){
+    // Network/proxy transport failure does not imply the server stopped working.
+    // Recover the same completed read-only request by its owner-scoped receipt;
+    // NEVER re-submit the model or replay any action/proposal.
+    const transportFailure=error.name==='FunctionsFetchError'||error.name==='FunctionsRelayError';
+    if(transportFailure&&options.durableRequestId&&typeof window.MINDS_CHAT_STREAM_RECOVERY==='function'){
+      options.onProgress?.({type:'status',phase:'recovering',label:'Isabella está terminando. Recuperando la respuesta sin repetir la consulta…'});
+      const recovered=await window.MINDS_CHAT_STREAM_RECOVERY(options.durableRequestId,{attempts:85,intervalMs:1400});
+      if(recovered?.reply)return {...recovered,proposal:null,proposals:[],question:null,memory_candidates:[]};
+    }
+    throw error;
+  }
   if(data?.error)throw new Error(data.message||data.detail||data.error);
   return data||{reply:'Te escucho.',proposal:null,question:null,memory_candidates:[]};
 }
