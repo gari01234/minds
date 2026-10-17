@@ -1,0 +1,29 @@
+name: Agent Runtime SDK Synthetic Parity
+on:
+  pull_request:
+    paths:
+      - 'experiments/agent-runtime-parity/**'
+      - 'scripts/agent-runtime-parity-core.mjs'
+      - 'tests/fixtures/agent-runtime-parity-synthetic-v01.json'
+      - '.github/workflows/agent-runtime-parity.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  synthetic-sdk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    defaults:
+      run:
+        working-directory: experiments/agent-runtime-parity
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned SDK only for isolated fixture
+        run: npm install --ignore-scripts --no-audit --no-fund --no-save
+      - name: Exercise SDK with deterministic mock provider
+        env:
+          OPENAI_AGENTS_DISABLE_TRACING: '1'
+        run: npm test
