@@ -2182,12 +2182,23 @@ async function handle(text,attachments=[],replyTo=null){
         return;
       }
       const verifiedReply=window.MINDS_TURN_INTEGRITY.summary(integrity)||String(result?.reply||'');
-      if(verifiedReply||result?.artifacts?.length)say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
-        metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
-          incomplete_reason:result?.incomplete_reason||null,
-          review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
-          ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
-        sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      if(verifiedReply||result?.artifacts?.length){
+        const delivered=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===durableRequestId&&m.metadata?.delivery_recovered);
+        if(delivered){
+          // A receipt may have arrived while the original fetch was still pending.
+          // Never duplicate the same provider result in the conversation.
+          delivered.text=verifiedReply||delivered.text;
+          delivered.metadata={...delivered.metadata,exposure_scope:exposure,
+            incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null,
+            review_proposals:integrity.proposals,turn_outcome:integrity.outcome};
+          save();renderMessages();
+        }else say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+          metadata:{exposure_scope:exposure,incomplete_response:!!result?.incomplete,
+            incomplete_reason:result?.incomplete_reason||null,
+            review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
+            ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
+          sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      }
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
       if(result?.memory_candidates?.length)rememberCandidates(result.memory_candidates);
