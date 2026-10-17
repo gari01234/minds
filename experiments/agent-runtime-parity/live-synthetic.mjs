@@ -23,7 +23,11 @@ const instructions=[
   "evidence objects {file_id,version,segment_no,locator}, unavailable objects {file_id,status,reason}.",
   "Include every tool occurrence, never claim complete visual inspection."
 ].join(" ");
-const prompt="Find all documented occurrences of "+term+" in this fictional project. Identify every file and page, interpret measurement types and disclose sources waiting for parsing.";
+const prompts=[
+ "Find all documented occurrences of "+term+" in this fictional project. Identify every file and page, interpret measurement types and disclose sources waiting for parsing.",
+ "Review the entire current-version extracted corpus for "+term+". Give the complete evidence inventory, including late pages, distinct voids, and documents that cannot be parsed.",
+ "The fictional room "+term+" appears in variants, void labels and a program table. Compile all source occurrences, keep their page/version provenance, and state extraction gaps; do not invent project chronology."
+];
 const schema={
   type:"function",name:"find_all_occurrences",
   description:"Deterministically enumerate all textual occurrences in a fictional corpus with version and source identity.",
@@ -37,7 +41,7 @@ const grade=(s)=>{
  if(t.startsWith(fence))t=t.replace(/^.{3}(?:json)?\s*/i,"").replace(/\s*.{3}$/,"");
  return gradeEvidence(corpus,term,JSON.parse(t));
 };
-async function sdkRun(){
+async function sdkRun(prompt){
  let toolsUsed=0;
  const fn=tool({name:"find_all_occurrences",description:schema.description,parameters:z.object({term:z.string()}),
    async execute({term}){toolsUsed++;return lookup(term)}});
@@ -48,7 +52,7 @@ async function sdkRun(){
  return {engine:"agents_sdk",model,elapsed_ms:Math.round(performance.now()-t),
    tool_calls:toolsUsed,score:grade(result.finalOutput)};
 }
-async function nativeRun(){
+async function nativeRun(prompt){
  const client=new OpenAI({apiKey:key,timeout:75000,maxRetries:0});
  const input=[{role:"user",content:prompt}];
  let toolCalls=0,modelCalls=0,final="";
@@ -76,9 +80,27 @@ async function nativeRun(){
    usage:{input_tokens:usageIn,output_tokens:usageOut},score:grade(final)};
 }
 const results=[];
-for(const entry of [{name:"responses_loop",fn:nativeRun},{name:"agents_sdk",fn:sdkRun}]){
- try{results.push(await entry.fn())}
- catch(e){results.push({engine:entry.name,model,error:String(e?.message||e).slice(0,180)})}
+const repetitions=2;
+for(let repetition=0;repetition<repetitions;repetition++){
+ for(let scenario=0;scenario<prompts.length;scenario++){
+  const prompt=prompts[scenario];
+  for(const entry of [{name:"responses_loop",fn:nativeRun},{name:"agents_sdk",fn:sdkRun}]){
+   try{results.push({scenario,repetition,...await entry.fn(prompt)})}
+   catch(e){results.push({scenario,repetition,engine:entry.name,model,error:String(e?.message||e).slice(0,180)})}
+  }
+ }
 }
-console.log(JSON.stringify({fixture:corpus.version,synthetic_only:true,model,sample_count:1,results},null,2));
+const summary={};
+for(const engine of ["responses_loop","agents_sdk"]){
+ const trials=results.filter(x=>x.engine===engine);
+ const times=trials.filter(x=>!x.error).map(x=>x.elapsed_ms).sort((a,b)=>a-b);
+ summary[engine]={
+   trials:trials.length,errors:trials.filter(x=>x.error).length,
+   coverage_passes:trials.filter(x=>x.score?.coverage_complete).length,
+   duplicate_runs:trials.filter(x=>x.score?.duplicates?.length>0).length,
+   provenance_error_runs:trials.filter(x=>x.score?.provenance_errors?.length>0).length,
+   median_latency_ms:times.length?Math.round((times[Math.floor((times.length-1)/2)]+times[Math.ceil((times.length-1)/2)])/2):null
+ };
+}
+console.log(JSON.stringify({fixture:corpus.version,synthetic_only:true,model,prompts:prompts.length,repetitions,sample_count:results.length,summary,results},null,2));
 if(results.some(r=>r.error))process.exitCode=1;
