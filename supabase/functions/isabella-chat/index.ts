@@ -14,7 +14,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_sha
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes} from "../_shared/light-conversation-context.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
-import {currentWorkTextCoverage} from "../_shared/work-source-coverage.mjs";
+import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
 import {workBrowseRequest,workBrowsePage,workBrowseSegmentView,workBrowseTextView} from "../_shared/work-source-browse.mjs";
 import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
 import {summarizeWorkOccurrenceCoverage} from "../_shared/work-occurrence-coverage-ledger.mjs";
@@ -2067,7 +2067,14 @@ async function findWorkOccurrences(req:Request,args:any){
         (result.matches||[]).map((row:any)=>({...row,content:row.match_excerpt||""}))
       )}catch{/* telemetry is non-authoritative */}
     }
+    // Once per search (offset 0), attach the owner-scoped extraction catalog.
+    // This does not alter the deterministic matches or require an extra model turn.
+    // Catalog failures cannot turn a valid occurrence inventory into an error.
+    const catalog=result.status==="ok"&&offset===0
+      ?await browseWorkSources(req,{project:project.name,limit:50}).catch(()=>null):null;
+    const extractionCatalog=result.status==="ok"&&offset===0?summarizeWorkExtractionGaps(catalog):null;
     return {...result,project:{id:project.id,name:project.name},
+      ...(extractionCatalog?{extraction_catalog:extractionCatalog}:{}),
       current_source_text_only:true,
       not_inspected:"nonmatching_text_pages_and_originals_without_current_extraction",
       next_step:"Use browse_work_sources for missing extraction catalog and to inspect page context for ambiguous occurrences."};
@@ -3744,7 +3751,7 @@ pregunta cuál.`;
     {
       type:"function",
       name:"find_work_occurrences",
-      description:"Evidence-first exhaustive, owner-scoped explicit-term search over ALL current-version extracted Work text segments of the project, not relevance-ranked top-k. Returns exact count, version fingerprint, file UUIDs, segment locators and nearby excerpts. Page through has_more and next_offset, reusing expected_fingerprint; restart at offset 0 if version_changed. This does NOT inspect images, nonmatching pages or unparsed originals. Follow with browse_work_sources catalog and contextual source checks; distinguish room, Luftraum, program estimates and chronology.",
+      description:"Evidence-first exhaustive, owner-scoped explicit-term search over ALL current-version extracted Work text segments, not top-k. Returns count, version fingerprint, file UUIDs, locators and excerpts. Page through has_more/next_offset with expected_fingerprint. First page includes an owner-scoped extraction catalog warning for unparsed and partial sources. Does NOT inspect images, nonmatching pages or original documents. Follow with browse_work_sources for context; distinguish room, Luftraum, program and chronology.",
       strict:false,
       parameters:{type:"object",properties:{
         project:{type:"string",description:"Owned project name."},
