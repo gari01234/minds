@@ -2070,9 +2070,9 @@ async function findWorkOccurrences(req:Request,args:any){
     // Once per search (offset 0), attach the owner-scoped extraction catalog.
     // This does not alter the deterministic matches or require an extra model turn.
     // Catalog failures cannot turn a valid occurrence inventory into an error.
-    const catalog=args?.offset===undefined||offset===0
+    const catalog=result.status==="ok"&&offset===0
       ?await browseWorkSources(req,{project:project.name,limit:50}).catch(()=>null):null;
-    const extractionCatalog=offset===0?summarizeWorkExtractionGaps(catalog):null;
+    const extractionCatalog=result.status==="ok"&&offset===0?summarizeWorkExtractionGaps(catalog):null;
     return {...result,project:{id:project.id,name:project.name},
       ...(extractionCatalog?{extraction_catalog:extractionCatalog}:{}),
       current_source_text_only:true,
