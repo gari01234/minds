@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "engines": {"node": ">=22"},
-  "scripts": {"test": "node --test sdk-synthetic.test.mjs"},
+  "scripts": {"test": "node --test *.test.mjs"},
   "dependencies": {
     "@openai/agents": "0.20.0",
     "zod": "4.1.12"
