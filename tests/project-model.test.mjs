@@ -76,7 +76,9 @@ test('Build 84 Source is a projection of canonical Work files and Thread message
 test('Build 84 exposes a bounded Project Model snapshot through search_work',()=>{
   assert.ok(migration.includes('function public.minds_project_model_snapshot'));
   assert.ok(chat.includes('minds_project_model_snapshot'));
-  assert.ok(chat.includes('project_model:projectModel||null'));
+  assert.ok(chat.includes('project_model:args?._deferProjectModel?deferredSourceFirstProjectModel():projectModel||null'));
+  assert.ok(chat.includes('args?._deferProjectModel?Promise.resolve({data:null,error:null}):sb.rpc("minds_project_model_snapshot"'));
+  assert.ok(chat.includes('sourceFirstWorkPrefetchEligible'));
   assert.ok(chat.includes("Project Model is Isabella's versioned interpretation"));
   assert.ok(chat.includes('Treat Isabella-authored Project Model elements as interpretation, not project truth.'));
 });

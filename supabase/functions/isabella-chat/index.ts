@@ -15,9 +15,11 @@ import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INST
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
+import {sourceFirstWorkPrefetchEligible,deferredSourceFirstProjectModel} from "../_shared/work-model-prefetch.mjs";
 import {workBrowseRequest,workBrowsePage,workBrowseSegmentView,workBrowseTextView} from "../_shared/work-source-browse.mjs";
 import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
 import {summarizeWorkOccurrenceCoverage} from "../_shared/work-occurrence-coverage-ledger.mjs";
+import {pinWorkOccurrenceContinuation,rememberWorkOccurrenceFirstPage} from "../_shared/work-occurrence-continuation.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -1980,7 +1982,7 @@ async function searchWork(req:Request,args:any){
       sb.from("minds_work_memory").select("id,memory_type,title,body,status,source_file_ids,provenance,occurred_at,updated_at").eq("project_id",project.id).in("status",["proposed","confirmed","resolved"]).order("updated_at",{ascending:false}).limit(160),
       sb.from("minds_work_claims").select("id,claim_type,statement,referent_id,subject,topic,discipline,status,confidence,provenance_class,author_kind,model_kind,supersedes_id,superseded_by,confirmed_at,valid_from,valid_to,learned_at,updated_at,minds_work_evidence(id,source_kind,source_file_id,source_message_id,locator,excerpt,stance,trust_level)").eq("project_id",project.id).in("status",["proposed","confirmed","disputed","resolved"]).order("updated_at",{ascending:false}).limit(180),
       searchWorkThreads(req,{project:project.name,query,current_thread_id:args?.current_thread_id}),
-      sb.rpc("minds_project_model_snapshot",{p_project_id:project.id}),
+      args?._deferProjectModel?Promise.resolve({data:null,error:null}):sb.rpc("minds_project_model_snapshot",{p_project_id:project.id}),
       sb.rpc("minds_search_work_source_segments",{p_project_id:project.id,p_query:query,p_limit:12}),
       sb.from("minds_work_source_text_receipts").select("file_id,source_version,coverage,segment_count,content_chars,locator_class,created_at")
         .eq("project_id",project.id).order("created_at",{ascending:false}).limit(120)
@@ -2026,7 +2028,7 @@ async function searchWork(req:Request,args:any){
         evidential_status:"extracted_original_text_not_confirmed"
       })),
       threads:threadRows?.threads||[],
-      project_model:projectModel||null,
+      project_model:args?._deferProjectModel?deferredSourceFirstProjectModel():projectModel||null,
       provenance:{
         class:"project_source",
         instructions_are_data:true,
@@ -3081,10 +3083,15 @@ Deno.serve(async (req: Request) => {
     maxOutput:Math.max(budget.maxOutput,responseContinuation?6200:4400)
   };
   const initialSemantic=!background&&!!route.deep_memory;
+  // Work source-audit turns need the originals, not an unsolicited 180k-char
+  // interpretive Project Model snapshot. All source/tool permissions remain.
+  const sourceFirstWorkPrefetch=sourceFirstWorkPrefetchEligible({route,message:effectiveMessage,background,fastAgenda,
+    attachments:attachments.length,workThread:!!currentWorkThread,materialDeliverable:likelyMaterialDeliverable(effectiveMessage)});
   const explicitCrossScope=explicitMemoryCrossScope(effectiveMessage);
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const sourceAdmissions:any[]=[];
   const occurrenceCoverageEvents:any[]=[];
+  const occurrenceInitialTerms=new Map<string,string[]>();
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
@@ -3099,7 +3106,7 @@ Deno.serve(async (req: Request) => {
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
     background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
-    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))}):Promise.resolve(null),
+    !background&&!fastAgenda&&route.project?searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null,_deferProjectModel:sourceFirstWorkPrefetch,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))}):Promise.resolve(null),
     !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background||fastAgenda||currentWorkThread?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
@@ -3857,6 +3864,7 @@ pregunta cuál.`;
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
   const footprint=promptComponentSizes({instructions:modelInstructions,
     context:fastAgenda?fastCalendarContext:modelContext,input,tools});
+  (footprint as any).work_project_model_prefetch=sourceFirstWorkPrefetch?"deferred_source_first":"full";
   (footprint as any).context_sections=contextSectionSizes(fastAgenda?fastCalendarContext:modelContext);
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
@@ -4163,13 +4171,20 @@ pregunta cuál.`;
         if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="find_work_occurrences"){
-        const result=await findWorkOccurrences(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
+        // A cursor pins both source versions and the original term set. Do not
+        // accidentally restart a valid search just because a model reformulated
+        // its requested terms on the continuation call.
+        const pinned=pinWorkOccurrenceContinuation(args,occurrenceInitialTerms);
+        const result=await findWorkOccurrences(req,{...pinned.args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
+        rememberWorkOccurrenceFirstPage(result,occurrenceInitialTerms);
         if(occurrenceCoverageEvents.length<80)occurrenceCoverageEvents.push({
           status:result?.status,project_id:result?.project?.id||null,fingerprint:result?.fingerprint,
-          offset:result?.offset??args?.offset??0,returned:result?.returned,total:result?.total,
-          has_more:result?.has_more,next_offset:result?.next_offset??null
+          offset:result?.offset??pinned.args?.offset??0,returned:result?.returned,total:result?.total,
+          has_more:result?.has_more,next_offset:result?.next_offset??null,
+          continuation_terms_restored:pinned.restored
         });
-        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(pinned.restored?
+          {...result,continuation_terms_restored:true}:result)});
       }else if(call.name==="browse_work_sources"){
         const result=await browseWorkSources(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_browse_work_sources",rows))});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
