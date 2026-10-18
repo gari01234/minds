@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import {z} from "zod";
 
 process.env.OPENAI_AGENTS_DISABLE_TRACING="1";
-const {Agent,run,tool,Usage,setTracingDisabled}=await import("@openai/agents");
+const {Agent,run,tool,RunState,Usage,setTracingDisabled}=await import("@openai/agents");
 setTracingDisabled(true);
 
 const REQUEST=Object.freeze({
@@ -116,4 +116,42 @@ test("approval for another scope must not authorize a write",async()=>{
   initial.state.approve(initial.interruptions[0]);
   await run(s.agent,initial.state,{maxTurns:4});
   assert.equal(s.canonicalWrites.size,0);
+});
+
+
+test("serialized SDK state can be rehydrated with a reconstructed agent and exact MINDS grant",async()=>{
+  const first=scenario();
+  const interrupted=await paused(first);
+  const saved=interrupted.state.toString();
+  assert.ok(typeof saved==="string"&&saved.length>50,"SDK must serialize an approval checkpoint");
+
+  // A separate process would reconstruct equivalent agent + tools. No shared
+  // state is used except the server-owned serialized snapshot. This test
+  // deliberately does NOT claim a real worker/process crash or database write.
+  const restoredScenario=scenario({...REQUEST,title:"Fictional review task"});
+  restoredScenario.model.calls=1; // scripted model is now at its resumed turn
+  const restored=await RunState.fromString(restoredScenario.agent,saved);
+  const pending=restored.getInterruptions();
+  assert.equal(pending.length,1);
+  assert.equal(restoredScenario.getAttempts(),0,"rehydration alone cannot execute tools");
+  restored.approve(pending[0]);
+  const finished=await run(restoredScenario.agent,restored,{maxTurns:4});
+  assert.equal(restoredScenario.getAttempts(),1);
+  assert.equal(restoredScenario.canonicalWrites.size,1);
+  assert.match(String(finished.finalOutput),/SDK resumed/);
+});
+
+test("rehydrated approval remains blocked when MINDS scope differs",async()=>{
+  const initialScenario=scenario();
+  const initial=await paused(initialScenario);
+  const saved=initial.state.toString();
+  const restoredScenario=scenario({...REQUEST,title:"Fictional review task",scope:"wrong-scope"});
+  restoredScenario.model.calls=1;
+  const restored=await RunState.fromString(restoredScenario.agent,saved);
+  const pending=restored.getInterruptions();
+  assert.equal(pending.length,1);
+  restored.approve(pending[0]);
+  await run(restoredScenario.agent,restored,{maxTurns:4});
+  assert.equal(restoredScenario.getAttempts(),1);
+  assert.equal(restoredScenario.canonicalWrites.size,0);
 });
