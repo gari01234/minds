@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
 import {mkdtempSync,readFileSync,writeFileSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
-import {join,fileURLToPath} from "node:url";
+import {fileURLToPath} from "node:url";
 import {resolve} from "node:path";
 
 const worker=fileURLToPath(new URL("./sdk-process-worker.mjs",import.meta.url));
