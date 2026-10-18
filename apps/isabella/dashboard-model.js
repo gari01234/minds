@@ -79,7 +79,7 @@
     const filtered = values => Array.isArray(values)
       ? [...new Set(values.filter(v => PANELS.includes(v)))] : [];
     const min = filtered(input.minimized), focus = PANELS.includes(input.focus) ? input.focus : 'chat';
-    const minimized = min.length === PANELS.length ? min.filter(v => v !== 'chat') : min.filter(v => v !== focus);
+    const minimized = min.filter(v => v !== focus);
     const width = Number(input.width);
     const order = filtered(input.order).filter(v => v !== 'chat');
     return {focus,order:[...order,...PANELS.filter(v => v !== 'chat' && !order.includes(v))],

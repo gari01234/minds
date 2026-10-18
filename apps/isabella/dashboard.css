@@ -1,42 +1,42 @@
 /* Build 95 — Isabella adaptive desktop instrument grid.
    Overrides only the Chat view; no mobile presentation or Work/Time changes. */
 @media (min-width:950px) {
-  body.desk-enabled .app {
+  body[data-section="assistant"].desk-enabled .app {
     display:grid;
     grid-template-columns:206px minmax(0,1fr);
     grid-template-rows:42px minmax(0,1fr);
     width:100%;max-width:none;height:100dvh;
   }
-  body.desk-enabled.minds-nav-collapsed .app {grid-template-columns:62px minmax(0,1fr)}
-  body.desk-enabled .topbar {
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed .app {grid-template-columns:62px minmax(0,1fr)}
+  body[data-section="assistant"].desk-enabled .topbar {
     grid-column:1/-1;grid-row:1;min-height:42px!important;
     height:42px;padding:0 19px!important;
     border-bottom:1px solid #ededed;background:#fff;
     z-index:20;
   }
-  body.desk-enabled .topbar-brand {visibility:hidden}
-  body.desk-enabled .orb-dock {height:32px;width:36px;transform:scale(.7)}
-  body.desk-enabled .top-actions .dots {font-size:18px}
-  body.desk-enabled #desktopLenses {
+  body[data-section="assistant"].desk-enabled .topbar-brand {visibility:hidden}
+  body[data-section="assistant"].desk-enabled .orb-dock {height:32px;width:36px;transform:scale(.7)}
+  body[data-section="assistant"].desk-enabled .top-actions .dots {font-size:18px}
+  body[data-section="assistant"].desk-enabled #desktopLenses {
     display:flex;grid-column:1;grid-row:2;
     flex-direction:column;align-items:stretch;min-height:0;
     overflow-y:auto;background:#fff;
     border-right:1px solid #ededed;padding:14px 10px 16px;
     min-width:0;
   }
-  body.desk-enabled #swipeArea {grid-column:2;grid-row:2;min-width:0;min-height:0;overflow:hidden}
-  body.desk-enabled #mainNav {display:none!important}
-  body.desk-enabled .lenses-heading {font-size:9px;color:#9c9ca1;letter-spacing:.17em;margin:3px 4px 11px;padding:0}
-  body.desk-enabled .lens-nav-item {min-height:50px;border-radius:9px;padding:9px 9px;gap:10px}
-  body.desk-enabled .lens-copy strong {font-size:12px}
-  body.desk-enabled .lens-copy small {font-size:10px}
-  body.desk-enabled .lens-glyph {flex-basis:20px}
-  body.desk-enabled .lenses-foot {font-size:9px;line-height:1.4;padding:14px 8px 0}
-  body.desk-enabled.minds-nav-collapsed #desktopLenses {padding:14px 7px}
-  body.desk-enabled.minds-nav-collapsed #desktopLenses .lenses-heading,
-  body.desk-enabled.minds-nav-collapsed #desktopLenses .lens-copy,
-  body.desk-enabled.minds-nav-collapsed #desktopLenses .lenses-foot {display:none}
-  body.desk-enabled.minds-nav-collapsed #desktopLenses .lens-nav-item {justify-content:center;padding:10px 5px}
+  body[data-section="assistant"].desk-enabled #swipeArea {grid-column:2;grid-row:2;min-width:0;min-height:0;overflow:hidden}
+  body[data-section="assistant"].desk-enabled #mainNav {display:none!important}
+  body[data-section="assistant"].desk-enabled .lenses-heading {font-size:9px;color:#9c9ca1;letter-spacing:.17em;margin:3px 4px 11px;padding:0}
+  body[data-section="assistant"].desk-enabled .lens-nav-item {min-height:50px;border-radius:9px;padding:9px 9px;gap:10px}
+  body[data-section="assistant"].desk-enabled .lens-copy strong {font-size:12px}
+  body[data-section="assistant"].desk-enabled .lens-copy small {font-size:10px}
+  body[data-section="assistant"].desk-enabled .lens-glyph {flex-basis:20px}
+  body[data-section="assistant"].desk-enabled .lenses-foot {font-size:9px;line-height:1.4;padding:14px 8px 0}
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed #desktopLenses {padding:14px 7px}
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed #desktopLenses .lenses-heading,
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed #desktopLenses .lens-copy,
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed #desktopLenses .lenses-foot {display:none}
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed #desktopLenses .lens-nav-item {justify-content:center;padding:10px 5px}
   .desk-nav-collapse {
     flex:none;border:0;background:transparent;
     width:30px;height:29px;margin:0 1px 13px auto;
@@ -44,9 +44,9 @@
     font-weight:300;line-height:1;cursor:pointer;
   }
   .desk-nav-collapse:hover {background:#f3f3f4;color:#161616}
-  body.desk-enabled.minds-nav-collapsed .desk-nav-collapse {margin-right:auto}
-  body.desk-enabled #assistantScreen {min-height:0}
-  body.desk-enabled .desk-shell {
+  body[data-section="assistant"].desk-enabled.minds-nav-collapsed .desk-nav-collapse {margin-right:auto}
+  body[data-section="assistant"].desk-enabled #assistantScreen {min-height:0}
+  body[data-section="assistant"].desk-enabled .desk-shell {
     height:100%;width:100%;min-height:0;min-width:0;
     display:flex;flex-direction:column;
     padding:14px 15px 11px;gap:8px;
@@ -108,35 +108,35 @@
   .desk-panel-content {min-height:0;overflow:auto;padding:13px 15px 14px}
   .desk-panel-primary .desk-panel-content {flex:1;min-height:0;padding:26px 33px}
   .desk-panel--chat {height:100%}
-  body.desk-enabled .desk-panel--chat .assistant-scroll {
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll {
     flex:1!important;min-height:0;overflow:auto!important;
     padding:9px 24px 16px!important;
     width:100%;
   }
-  body.desk-enabled .desk-panel--chat .orb-home,
-  body.desk-enabled .desk-panel--chat #todayCard {display:none!important}
-  body.desk-enabled .desk-panel--chat .messages {
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .orb-home,
+  body[data-section="assistant"].desk-enabled .desk-panel--chat #todayCard {display:none!important}
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .messages {
     max-width:850px!important;width:100%;
     margin:0 auto!important;
     padding:11px 0 24px!important;
     overflow:visible!important;
   }
-  body.desk-enabled .desk-panel--chat .message {line-height:1.52}
-  body.desk-enabled .desk-panel--chat .composer-wrap {
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .message {line-height:1.52}
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer-wrap {
     position:relative!important;bottom:auto!important;left:auto!important;right:auto!important;
     flex:none;padding:12px 19px 15px!important;
     background:#fff!important;border-top:1px solid #f1f1f2;
     min-width:0;
   }
-  body.desk-enabled .desk-panel--chat .composer {box-shadow:none;border-color:#e4e4e6;border-radius:24px}
-  body.desk-enabled .desk-panel--chat .composer textarea {font-size:14px}
-  body.desk-enabled .desk-rail .desk-panel--chat .assistant-scroll {padding:7px 13px!important}
-  body.desk-enabled .desk-rail .desk-panel--chat .message {font-size:12px}
-  body.desk-enabled .desk-rail .desk-panel--chat .composer-wrap {padding:7px 9px 9px!important}
-  body.desk-enabled .desk-rail .desk-panel--chat .composer textarea {font-size:12px;min-height:34px}
-  body.desk-enabled .desk-rail .desk-panel--chat .composer .mic {display:none}
-  body.desk-enabled .desk-rail .desk-panel--chat .composer .send,
-  body.desk-enabled .desk-rail .desk-panel--chat .composer .attach {height:35px;width:35px}
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer {box-shadow:none;border-color:#e4e4e6;border-radius:24px}
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer textarea {font-size:14px}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .assistant-scroll {padding:7px 13px!important}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .message {font-size:12px}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer-wrap {padding:7px 9px 9px!important}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer textarea {font-size:12px;min-height:34px}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer .mic {display:none}
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer .send,
+  body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer .attach {height:35px;width:35px}
   .desk-month-bar {display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 13px}
   .desk-month-bar strong {font-size:12px;letter-spacing:-.012em;font-weight:650;text-transform:capitalize}
   .desk-month-bar button {border:0;background:transparent;border-radius:8px;width:29px;height:29px;font-size:19px;color:#7f7f85;cursor:pointer}
@@ -206,10 +206,10 @@
   .desk-shell :is(button,[role="separator"]):focus-visible,
   #desktopLenses .desk-nav-collapse:focus-visible {outline:2px solid #5c5c61;outline-offset:2px}
   @media (max-width:1199px) {
-    body.desk-enabled .app {grid-template-columns:160px minmax(0,1fr)}
-    body.desk-enabled.minds-nav-collapsed .app {grid-template-columns:62px minmax(0,1fr)}
-    body.desk-enabled .desk-shell {padding:9px 8px 8px}
-    body.desk-enabled .desk-panel--chat .assistant-scroll {padding-left:13px!important;padding-right:13px!important}
+    body[data-section="assistant"].desk-enabled .app {grid-template-columns:160px minmax(0,1fr)}
+    body[data-section="assistant"].desk-enabled.minds-nav-collapsed .app {grid-template-columns:62px minmax(0,1fr)}
+    body[data-section="assistant"].desk-enabled .desk-shell {padding:9px 8px 8px}
+    body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll {padding-left:13px!important;padding-right:13px!important}
     .desk-panel-content {padding:12px}
     .desk-panel-head {padding:0 9px}
     .desk-month-day {height:27px}

@@ -33,8 +33,8 @@ test('timeline derives positions exclusively from real timed events',()=>{
   const blocks=model.timedEvents(state,'2026-10-19',7,21);
   assert.equal(blocks.length,1);
   assert.equal(blocks[0].id,'timed');
-  assert.equal(blocks[0].left,100*2/14);
-  assert.equal(blocks[0].width,100*2/14);
+  assert.ok(Math.abs(blocks[0].left-100*2/14)<1e-10);
+  assert.ok(Math.abs(blocks[0].width-100*2/14)<1e-10);
 });
 test('workspace preferences reject unrecognized panels and impossible dimensions',()=>{
   const p=model.sanitizePreferences({focus:'plan',order:['today','today','nonsense'],
