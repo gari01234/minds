@@ -3894,6 +3894,12 @@ window.ISABELLA_APP={
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},
   editTaskById:(id)=>editItem('task',id),
+  editEventById:(id)=>editItem('event',id),
+  toggleTaskById:(id)=>toggleTaskDone(id),
+  selectCalendarDate:(date)=>{
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date))||iso(fromIso(date))!==date)return false;
+    state.date=date;save();renderCalendar();return true;
+  },
   openCanonicalTaskById,
   formatMessageText,
   openNewItem:(date)=>newPanel(date),
