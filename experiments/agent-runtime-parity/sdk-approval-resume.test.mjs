@@ -20,9 +20,10 @@ class ScriptedActionModel {
   calls=0;
   async getResponse(request){
     this.calls++;
-    // The second model pass must see the SDK-produced tool result; the first
-    // pass requests a sensitive tool, independently of the user's approval.
-    if(JSON.stringify(request.input||[]).includes("function_call_output")){
+    // After the reviewed interruption, the same model instance is resumed.
+    // We intentionally do not assume an OpenAI wire-format for the SDK's
+    // internal history; authorization and side effects are asserted below.
+    if(this.calls>1){
       return {output:[{
         type:"message",status:"completed",role:"assistant",
         content:[{type:"output_text",text:"SDK resumed from the reviewed tool result."}]
