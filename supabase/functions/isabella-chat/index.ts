@@ -19,6 +19,7 @@ import {sourceFirstWorkPrefetchEligible,deferredSourceFirstProjectModel} from ".
 import {workBrowseRequest,workBrowsePage,workBrowseSegmentView,workBrowseTextView} from "../_shared/work-source-browse.mjs";
 import {contextSectionSizes,workSourceAdmission,toolAdmission} from "../_shared/cognitive-coverage-observability.mjs";
 import {summarizeWorkOccurrenceCoverage} from "../_shared/work-occurrence-coverage-ledger.mjs";
+import {pinWorkOccurrenceContinuation,rememberWorkOccurrenceFirstPage} from "../_shared/work-occurrence-continuation.mjs";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -3090,6 +3091,7 @@ Deno.serve(async (req: Request) => {
   const run=activeRun=await startAgentRun(req,background?"isabella_background":"isabella_chat",route);
   const sourceAdmissions:any[]=[];
   const occurrenceCoverageEvents:any[]=[];
+  const occurrenceInitialTerms=new Map<string,string[]>();
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
     recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
@@ -4169,13 +4171,20 @@ pregunta cuál.`;
         if(result?.status!=="ok")sourceAdmissions.push({stage:"tool_search_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="find_work_occurrences"){
-        const result=await findWorkOccurrences(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
+        // A cursor pins both source versions and the original term set. Do not
+        // accidentally restart a valid search just because a model reformulated
+        // its requested terms on the continuation call.
+        const pinned=pinWorkOccurrenceContinuation(args,occurrenceInitialTerms);
+        const result=await findWorkOccurrences(req,{...pinned.args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_find_work_occurrences",rows))});
+        rememberWorkOccurrenceFirstPage(result,occurrenceInitialTerms);
         if(occurrenceCoverageEvents.length<80)occurrenceCoverageEvents.push({
           status:result?.status,project_id:result?.project?.id||null,fingerprint:result?.fingerprint,
-          offset:result?.offset??args?.offset??0,returned:result?.returned,total:result?.total,
-          has_more:result?.has_more,next_offset:result?.next_offset??null
+          offset:result?.offset??pinned.args?.offset??0,returned:result?.returned,total:result?.total,
+          has_more:result?.has_more,next_offset:result?.next_offset??null,
+          continuation_terms_restored:pinned.restored
         });
-        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(pinned.restored?
+          {...result,continuation_terms_restored:true}:result)});
       }else if(call.name==="browse_work_sources"){
         const result=await browseWorkSources(req,{...args,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("tool_browse_work_sources",rows))});
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
