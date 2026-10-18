@@ -22,6 +22,7 @@ jobs:
         with:
           node-version: '24'
       - run: node --test tests/*.test.mjs
+      - run: node --check apps/isabella/dashboard.js
       - run: node scripts/build.mjs
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
