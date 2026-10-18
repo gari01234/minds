@@ -35,3 +35,24 @@ La función existente `find_work_occurrences`, al devolver la **primera página 
 4. **Pendiente decisivo:** Isabella debe responder al problema multi-documento de Bernried sin que Gari le tenga que enumerar documentos, citar todas las páginas pertinentes, distinguir `Caféraum` de `Luftraum` y `Raumprogramm`, declarar las fuentes sin texto y entregar una respuesta comprobable en navegador y móvil. Una herramienta correcta no sustituye esta prueba.
 
 **Política:** PR merge ≠ deploy ≠ aceptación E2E. Una comparación con Agents SDK solo merece hacerse si existe una brecha de ejecución real que el SDK pueda resolver con **menos complejidad total** que esta arquitectura nativa.
+
+
+---
+
+## Addendum 18/10 · Resultado del reintento y aceptación del despliegue
+
+**Docling reparado para el PDF puntual, no para todo el corpus.** El reintento conservador del fichero previamente `claims_only` finalizó con cola `completed`, un intento nuevo y un comprobante `partial_text` con **83 segmentos**, **340.661 caracteres** y `locator_class=pdf_page`, vinculados a la misma versión SHA del original. Sus 20 claims previos continúan intactos. El documento aporta 51 segmentos con localizador de página verificado (páginas 1–46) y otros con localizador secuencial no equivalente a página verificada. No se debe anunciar interpretación visual íntegra. Desde la extracción nueva, Bernried contiene **237 segmentos vigentes** y **25 comprobantes actuales**, de los que **22 son parciales y 3 completos**; los 3 originales restantes carecen de texto materializado.
+
+**Tres bloqueos diferenciados, no reintentados automáticamente:**
+- Dos PNG de unos 12 y 12,7 MiB tienen `waiting_parser`, tras cuatro intentos y `docling_task_lost`; ningún nuevo upload caro/privado fue iniciado en esta ronda.
+- Un PDF de unos 22 MiB tiene `waiting_parser`, motivo `pdf_page_batch_acceptance_pending`, cero intentos y sin checkpoints: no activar en silencio los lotes (posibles costes y transferencias múltiples) para presentar aceptación falsa.
+
+**Activación de Build 93.5 en producción:** el bundle `isabella-chat` v114 se comparó contra los contenidos de GitHub. El código principal coincidía *exactamente* con el commit previo al PR #178; el nuevo código de index.ts revierte byte por byte a la versión desplegada al retirar únicamente el delta de Build 93.5. El módulo `work-source-coverage.mjs` era un prefijo exacto de la nueva versión. Un tercer módulo tenía un cambio anterior sin desplegar; **se conservó el binario de producción**, igual que los demás módulos. Se subieron únicamente las dos fuentes modificadas y el resto del bundle original intacto. **Supabase Edge `isabella-chat v115` ACTIVE, `verify_jwt=true`**; lectura posterior confirmó que ambos archivos desplegados son exactamente los del PR. Este paso sí está desplegado; no se confunde con aceptación conversacional.
+
+**Regresión de RLS y paginación en SQL:** desde una transacción `READ ONLY` usando el rol real PostgreSQL `authenticated` y claim de propietario simulado controladamente, la RPC devolvió 35/35 coincidencias vigentes de `Caféraum` en 9 archivos en páginas de **12+12+11**, 35 entradas únicas y localizadores Kick-off **3/4/8/11/13/15**. Con el mismo rol y un claim de usuario ficticio distinto, el catálogo del proyecto dejó de estar visible y la RPC devolvió **cero filas**, sin filtrar contenido. Se comprobó que ninguno de los 237 segmentos tiene versión obsoleta. Esto verifica SQL/roles/RLS a ese nivel; **no es autenticación JWT real por HTTP ni ejecución del LLM**.
+
+**Costo SQL aislado:** un `EXPLAIN ANALYZE` bajo rol autenticado obtuvo aproximadamente 0,97 ms de ejecución para el catálogo (28 filas) y 0,31 ms para los comprobantes (25 filas) en una muestra de caché cálida. **No equivale a medir los dos viajes HTTP** adicionales ni el coste completo de Isabella. Pendiente comparación de latencia y llamadas del modelo en un turno real.
+
+**Puerta de aceptación aún abierta:** solicitar directamente a la Isabella autenticada, sin enumerar nombres de fuentes, una comparación del Caféraum de Bernried con todas las variantes disponibles. La respuesta debe contener los valores correctos con fuente/página/versión, separar `Caféraum`, `Luftraum` y cifras de `Raumprogramm`, explicar contradicciones cronológicas, recorrer y acreditar todas las páginas necesarias (no solo el primer top-k), revelar que 3 originales carecen de extracción y no adjudicar contenido no examinado. Verificar entrega visible en web e iPhone y el `work_occurrence_coverage` de la ejecución, no solo HTTP success. **Sin esa prueba no cerrar issue #113 ni promover un SDK de agentes**.
+
+**Decisión de arquitectura:** `native_minds` continúa primario. La ganancia comprobada aquí vino de robustecer la extracción y la evidencia, no de sustituir el bucle genérico. Un rival externo solo debería pasar si reduce complejidad total o mejora significativamente calidad/entrega, manteniendo estas garantías.
