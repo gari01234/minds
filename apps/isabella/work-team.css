@@ -1,0 +1,9 @@
+/* Build 96C: discreet private roster inside existing Work Planner. */
+.work-planner-actions{display:inline-flex;align-items:center;gap:8px}
+.work-planner-actions button{white-space:nowrap}
+.work-team-editor .work-team-list{display:flex;flex-direction:column;gap:7px}
+.work-team-editor .work-team-member{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:38px;border-bottom:1px solid #ececf0}
+.work-team-editor .work-team-member strong{font-size:13px;font-weight:600}
+.work-team-editor .work-team-member span{display:flex;gap:5px}
+.work-team-editor .work-team-member button{background:#f7f7f8;border:1px solid #e4e4e6;border-radius:7px;padding:6px 8px;color:#4f5157;cursor:pointer;font-size:11px}
+.work-team-editor #workTeamError{color:#99532f}

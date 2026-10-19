@@ -54,7 +54,7 @@ test('no shared frame bridge or authenticated state is sent to Thoughts',()=>{
   assert.ok(!/postMessage|localStorage|sessionStorage|MINDS_SUPABASE|auth\.|document\.cookie|allow-same-origin/.test(logic));
   assert.ok(shell.includes('id="thoughtsFrameError"'));
   assert.ok(shell.includes('rel="noopener noreferrer"'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v151'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v152'"));
   assert.doesNotThrow(()=>new Script(app,{filename:'app.js'}));
   assert.doesNotThrow(()=>new Script(shell,{filename:'shell.js'}));
 });

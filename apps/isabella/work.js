@@ -5,6 +5,7 @@ const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
 let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
 const workSignedCache=new Map();
+let team=[];
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
 function sourceKind(file){const n=String(file?.name||'').toLowerCase(),m=String(file?.type||'');if(n.endsWith('.eml')||n.endsWith('.msg')||m==='message/rfc822')return'email';if(m.startsWith('image/'))return'image';if(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$/i.test(n))return'document';return'file'}
@@ -213,11 +214,11 @@ async function loadPlanner(){
   let {data:b,error:be}=await sb.from('minds_work_buckets').select('id,name,sort_order,archived').eq('project_id',project.id).eq('archived',false).order('sort_order');if(be)throw be;
   if(!b?.length){const rows=DEFAULT_BUCKETS.map((name,i)=>({project_id:project.id,name,sort_order:i*10}));const ins=await sb.from('minds_work_buckets').insert(rows).select('id,name,sort_order,archived');if(ins.error)throw ins.error;b=ins.data||[]}
   buckets=b||[];
-  const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order').order('id');if(te)throw te;tasks=t||[];
+  const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order,assignee_person_id').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order').order('id');if(te)throw te;tasks=t||[];
 }
 function localIso(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function taskMeta(t){
-  const parts=[];if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');if(t.assignee)parts.push(t.assignee);
+  const parts=[];if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');const name=team.find(p=>p.id===t.assignee_person_id)?.name||t.assignee;if(name)parts.push(name);
   return parts.join(' · ')
 }
 function taskChecklist(t){return Array.isArray(t.checklist)?t.checklist:[]}
@@ -242,14 +243,15 @@ async function hydratePlannerImages(root=document){
   await Promise.all(imgs.map(async img=>{const path=img.dataset.workTaskImage||img.dataset.workEditImage;if(!path)return;const url=await workSignedUrl(path);if(url&&img.isConnected){img.src=url;img.dataset.loaded='1'}}));
 }
 async function renderPlanner(){
-  await loadPlanner();const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
-  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><button data-work-add-bucket>＋ Bucket</button></div>
+  await loadPlanner();team=await window.MINDS_WORK_TEAM.members(project.id);const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
+  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
     <div class="work-board">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header><strong>${esc(b.name)}</strong>${b.virtual?'':`<button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button>`}</header>
       <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
       ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
       ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
     </section>`}).join('')}</div>`;
+  $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
   $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
   $$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));
@@ -320,13 +322,15 @@ function renderAttachmentEditor(){
   void hydratePlannerImages(box);
 }
 function editTask(task,bucketId){
+  const assigneeOptions='<option value="">Nicht zugewiesen</option>'+team.map(p=>`<option value="${esc(p.id)}" ${p.id===task?.assignee_person_id?'selected':''}>${esc(p.name)}</option>`).join('')+
+    (task?.assignee&&!task.assignee_person_id?`<option value="__legacy__" selected>Aus Bestand: ${esc(task.assignee)}</option>`:'');
   pendingTaskFiles=[];editingAttachments=[...taskAttachments(task||{})];
   const t=task||{title:'',due_date:'',start_date:'',priority:'normal',work_status:'not_started',assignee:'',notes:'',labels:[],checklist:[]},bucket=t.work_bucket_id||bucketId||'';
   window.ISABELLA_APP?.openModal?.(task?'Aufgabe':'Neue Aufgabe',`<div class="form work-task-form">
     <label class="work-task-title-field">Titel<input id="workTaskTitle" value="${esc(t.title||'')}"></label>
     <div class="work-task-grid"><label>Bucket<select id="workTaskBucket"><option value="">Ohne Bucket</option>${buckets.map(b=>`<option value="${b.id}" ${b.id===bucket?'selected':''}>${esc(b.name)}</option>`).join('')}</select></label><label>Status<select id="workTaskStatus"><option value="not_started" ${t.work_status==='not_started'?'selected':''}>Nicht begonnen</option><option value="in_progress" ${t.work_status==='in_progress'?'selected':''}>In Bearbeitung</option><option value="waiting" ${t.work_status==='waiting'?'selected':''}>Warten</option><option value="completed" ${t.work_status==='completed'?'selected':''}>Erledigt</option></select></label></div>
     <div class="work-task-grid"><label>Start<input id="workTaskStart" type="date" value="${esc(t.start_date||'')}"></label><label>Fällig<input id="workTaskDue" type="date" value="${esc(t.due_date||'')}"></label></div>
-    <div class="work-task-grid"><label>Priorität<select id="workTaskPriority"><option value="low" ${t.priority==='low'?'selected':''}>Niedrig</option><option value="normal" ${t.priority==='normal'?'selected':''}>Normal</option><option value="important" ${t.priority==='important'?'selected':''}>Wichtig</option><option value="urgent" ${t.priority==='urgent'?'selected':''}>Dringend</option></select></label><label>Zuständig<input id="workTaskAssignee" value="${esc(t.assignee||'')}"></label></div>
+    <div class="work-task-grid"><label>Priorität<select id="workTaskPriority"><option value="low" ${t.priority==='low'?'selected':''}>Niedrig</option><option value="normal" ${t.priority==='normal'?'selected':''}>Normal</option><option value="important" ${t.priority==='important'?'selected':''}>Wichtig</option><option value="urgent" ${t.priority==='urgent'?'selected':''}>Dringend</option></select></label><label>Zuständig<select id="workTaskAssignee">${assigneeOptions}</select></label></div>
     <label>Labels<input id="workTaskLabels" value="${esc((Array.isArray(t.labels)?t.labels:[]).join(', '))}" placeholder="TGA, Bauherr, Freigabe"></label>
     <label>Notizen<textarea id="workTaskNotes" rows="4">${esc(t.notes||'')}</textarea></label>
     <div class="work-task-detail-section"><div class="work-check-head"><span>Checklist</span><button id="workAddCheck" type="button">＋ Punkt</button></div><div id="workChecklist">${checklistRows(t.checklist)}</div></div>
@@ -355,7 +359,10 @@ async function saveTask(existing){
   const workOrder=sameBucket&&Number(existing.work_sort_order||0)>0
     ?Number(existing.work_sort_order)
     :Math.max(0,...tasks.filter(x=>x.id!==existing?.id&&(x.work_bucket_id||null)===targetBucket).map(x=>Number(x.work_sort_order||0)))+10;
-  const row={title,project_id:project.id,work_bucket_id:targetBucket,work_sort_order:workOrder,work_status:status,priority:$('#workTaskPriority').value,start_date:$('#workTaskStart').value||null,due_date:$('#workTaskDue').value||null,assignee:$('#workTaskAssignee').value.trim()||null,labels:$('#workTaskLabels').value.split(',').map(x=>x.trim()).filter(Boolean),notes:$('#workTaskNotes').value,checklist,completed_at:status==='completed'?(existing?.completed_at||new Date().toISOString()):null,updated_at:new Date().toISOString()};
+  const selectedPerson=$('#workTaskAssignee').value;
+  const chosen=team.find(p=>p.id===selectedPerson)||null;
+  const oldAssignee=selectedPerson==='__legacy__'?existing?.assignee||null:null;
+  const row={title,project_id:project.id,work_bucket_id:targetBucket,work_sort_order:workOrder,work_status:status,priority:$('#workTaskPriority').value,start_date:$('#workTaskStart').value||null,due_date:$('#workTaskDue').value||null,assignee:chosen?.name||oldAssignee,assignee_person_id:chosen?.id||null,labels:$('#workTaskLabels').value.split(',').map(x=>x.trim()).filter(Boolean),notes:$('#workTaskNotes').value,checklist,completed_at:status==='completed'?(existing?.completed_at||new Date().toISOString()):null,updated_at:new Date().toISOString()};
   let savedId=existing?.id||null,error=null;
   if(existing)({error}=await sb.from('isabella_tasks').update(row).eq('id',existing.id));
   else{const res=await sb.from('isabella_tasks').insert({...row,sort_order:tasks.length*10}).select('id').single();error=res.error;savedId=res.data?.id||null}

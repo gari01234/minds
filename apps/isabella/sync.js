@@ -313,6 +313,7 @@ function projectTaskRow(t,catKey,projKey){
     projectId:projKey.get(t.project_id)||null,priority:t.priority||'normal',
     recurrence:t.recurrence||{},notes:t.notes||'',metadata:t.metadata||{},
     startDate:t.start_date||null,assignee:t.assignee||null,
+    assigneePersonId:t.assignee_person_id||null,
     workStatus:t.work_status||'not_started',
     workBucketId:t.work_bucket_id||null,workSortOrder:Number(t.work_sort_order||0),
     labels:Array.isArray(t.labels)?t.labels:[],
