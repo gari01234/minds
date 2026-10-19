@@ -2529,12 +2529,16 @@ function month(){
   h+='</div>';
   // The month action belongs between the month grid and the selected-day agenda.
   h+='<div class="calendar-create-row calendar-create-after-grid"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>';
-  const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start));
-  const ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
+  // Month groups linked reservations under their canonical task, even when
+  // the booking falls on a different day than the task's due date.
+  const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(state,state.date);
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
   if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
   for(const e of ev)h+=agendaRow('event',e);
-  for(const t of ta)h+=agendaRow('task',t);
+  for(const {task,sessions} of ta){
+    h+=agendaRow('task',task);
+    if(sessions.length)h+='<div class="month-session-links">'+sessions.map(e=>`<button type="button" class="calendar-entry month-session-link" data-kind="event" data-id="${esc(e.id)}" data-date="${esc(e.date)}" aria-label="Editar sesión de ${esc(task.title)}">${esc(e.start)} · ${Number(e.duration)||0} min reservados</button>`).join('')+'</div>';
+  }
   h+='</div>';
   $('#calendarContent').innerHTML=h;
   $$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()});

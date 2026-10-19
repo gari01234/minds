@@ -59,8 +59,8 @@ test("full browser chat shows and persists review actions from typed result",()=
  assert.match(app,/data-review-message/);
  assert.match(app,/confirmProposals\(items\)/);
  assert.match(app,/finalizeInlineReview\(/);
- assert.ok(html.indexOf("turn-integrity.js?v=2")<html.indexOf("app.js?v=121"));
- assert.match(sw,/isabella-shell-v149/);
+ assert.ok(html.indexOf("turn-integrity.js?v=2")<html.indexOf("app.js?v=122"));
+ assert.match(sw,/isabella-shell-v150/);
  assert.match(sw,/turn-integrity\.js\?v=2/);
 });
 test("receipt validation is independent of magic Spanish correction phrases",()=>{

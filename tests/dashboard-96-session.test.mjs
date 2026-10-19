@@ -37,9 +37,38 @@ test('Tiempo presentation distinguishes reservations and guards orphan navigatio
   assert.match(app,/mutation\(kind,'delete',before,null,'manual'\)/);
 });
 test('all modified PWA asset URLs match between HTML and SW and rotate the cache',()=>{
-  for(const asset of ['app.js?v=121','dashboard.js?v=3','dashboard-model.js?v=2','dashboard-95-2.css?v=2']){
+  for(const asset of ['app.js?v=122','dashboard.js?v=3','dashboard-model.js?v=3','dashboard-95-2.css?v=3']){
     assert.ok(html.includes(asset),'HTML missing '+asset);
     assert.ok(sw.includes(asset),'SW missing '+asset);
   }
-  assert.match(sw,/isabella-shell-v149/);
+  assert.match(sw,/isabella-shell-v150/);
+});
+
+test('month groups each task once while preserving every independently editable booking',()=>{
+  const task={id:'task',title:'Fachplaner actualizado',date:'2026-10-19'};
+  const reserve=(id,date,time)=>({id,title:'Nombre anterior',date,start:time,duration:30,metadata:{kind:'task_work_session_v1',task_client_key:'task'}});
+  const first=reserve('session1','2026-10-19','09:00'),second=reserve('session2','2026-10-19','14:00'),third=reserve('session3','2026-10-20','11:00');
+  const meeting={id:'meeting',title:'Reunión',date:'2026-10-19',start:'10:00',metadata:{kind:'meeting'}};
+  const orphan={id:'orphan',title:'Sesión sin tarea',date:'2026-10-19',start:'12:00',metadata:{kind:'task_work_session_v1',task_client_key:'missing'}};
+  const state={tasks:[task],events:[first,second,third,meeting,orphan]};
+  const due=model.monthAgendaGroups(state,'2026-10-19');
+  assert.equal(due.tasks.length,1);
+  assert.equal(due.tasks[0].task,task);
+  assert.deepEqual(due.tasks[0].sessions.map(e=>e.id),['session1','session2']);
+  assert.deepEqual(due.events.map(e=>e.id),['meeting','orphan']);
+  const other=model.monthAgendaGroups(state,'2026-10-20');
+  assert.equal(other.tasks.length,1);
+  assert.equal(other.tasks[0].task,task);
+  assert.deepEqual(other.tasks[0].sessions.map(e=>e.id),['session3']);
+  assert.equal(state.tasks.length,1);
+  assert.match(app,/MINDS_DESK_MODEL\.monthAgendaGroups\(state,state\.date\)/);
+  assert.match(app,/month-session-link/);
+  assert.match(app,/data-kind="event" data-id=/);
+});
+test('archived tasks never consume their former reservations',()=>{
+  const task={id:'task',date:'2026-10-19',archivedAt:'2026-10-18T00:00:00Z'};
+  const event={id:'session',date:'2026-10-19',metadata:{kind:'task_work_session_v1',task_client_key:'task'}};
+  const result=model.monthAgendaGroups({tasks:[task],events:[event]},'2026-10-19');
+  assert.equal(result.tasks.length,0);
+  assert.equal(result.events[0],event);
 });
