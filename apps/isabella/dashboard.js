@@ -234,6 +234,22 @@
         loadedPeopleKey=key;scheduleRender()}
     }).catch(()=>{}).finally(()=>{if(loadingPeopleKey===key)loadingPeopleKey=''});
   };
+  let projectRoster={key:'',people:[]},loadingRosterKey='';
+  const refreshProjectRoster = key => {
+    const sb=window.MINDS_SUPABASE;
+    if(!key||!sb||!window.MINDS_WORK_TEAM?.members||
+      projectRoster.key===key||loadingRosterKey===key)return;
+    loadingRosterKey=key;
+    void (async()=>{
+      const {data,error}=await sb.from('isabella_projects').select('id').eq('client_key',key).maybeSingle();
+      if(error)throw error;
+      const people=data?.id?await window.MINDS_WORK_TEAM.members(data.id):[];
+      if(prefs.planProject!==key)return;
+      projectRoster={key,people};
+      for(const person of people)knownPersonNames.set(person.id,person.name);
+      scheduleRender();
+    })().catch(()=>{}).finally(()=>{if(loadingRosterKey===key)loadingRosterKey=''});
+  };
   const personKey = task => task.assigneePersonId?'person:'+task.assigneePersonId:
     task.assignee?'legacy:'+task.assignee:'unassigned';
   const personName = task => (task.assigneePersonId&&knownPersonNames.get(task.assigneePersonId))||task.assignee||'Sin responsable';
@@ -242,7 +258,8 @@
     const projectId=projects.some(p=>p.id===prefs.planProject)?prefs.planProject:'';
     const week=M.weeklyPlan(state,prefs.selectedDate,projectId);
     const all=[...week.rows,...week.overdue,...week.unscheduled];
-    const people=new Map();
+    const roster=projectRoster.key===projectId?projectRoster.people:[];
+    const people=new Map(roster.map(person=>['person:'+person.id,person.name]));
     for(const entry of all)if(!people.has(personKey(entry.task)))
       people.set(personKey(entry.task),personName(entry.task));
     const choosePerson='<option value="">Todas las personas</option>'+[...people]
@@ -278,6 +295,23 @@
       (entry.due?' · Entrega '+E(entry.due):' · Sin entrega')+
       (entry.invalid?' · Fechas inconsistentes':'')+'</small></div>').join(''):
       '<p class="desk-empty">Ninguna.</p>';
+    const workload=M.weeklyWorkload(state,week,roster,projectId);
+    const fmtMinutes=value=>Math.floor(value/60)+' h'+(value%60?' '+Math.round(value%60)+' min':'');
+    const workGroups=workload.groups.filter(group=>!prefs.planPerson||group.key===prefs.planPerson);
+    const workloadHtml='<section class="desk-week-workload" aria-label="Carga registrada por responsable">'+
+      '<div class="desk-week-workload-intro"><strong>Carga registrada · '+workload.tasks+' tareas</strong>'+ 
+      '<small>'+workload.bookings+' sesiones · '+fmtMinutes(workload.reservedOwnMinutes)+
+      ' reservadas en tu calendario (no atribuidas al equipo)</small></div>'+ 
+      '<div class="desk-week-workload-scroll"><table><thead><tr><th>Responsable</th><th>Pendientes</th>'+ 
+      '<th>Entregas sem.</th><th>Vencidas</th><th>Estimación total¹</th><th>Sin estimar</th></tr></thead><tbody>'+ 
+      (workGroups.length?workGroups.map(group=>'<tr><th>'+E(group.name)+'</th>'+ 
+      '<td>'+group.tasks+'</td><td>'+group.dueThisWeek+'</td><td>'+group.overdue+'</td>'+ 
+      '<td>'+(group.estimatedMinutes?fmtMinutes(group.estimatedMinutes):'—')+'</td>'+ 
+      '<td>'+group.withoutEstimate+'</td></tr>').join(''):
+      '<tr><td colspan="6">No hay responsables en este filtro.</td></tr>')+'</tbody></table></div>'+ 
+      '<p>¹ Estimación de las tareas completas, no horas previstas por semana. '+ 
+      'Disponibilidad del equipo y tiempo realmente trabajado: sin datos. '+
+      'Se incluyen tareas de la semana, atrasadas y sin fecha.</p></section>';
     const groupHtml=()=>{
       if(prefs.planGrouping!=='person')return rows.map(taskRow).join('');
       const groups=new Map();
@@ -303,6 +337,7 @@
       '<button type="button" data-desk-week-group="date" aria-pressed="'+(prefs.planGrouping==='date')+'">Por fechas</button>'+ 
       '<button type="button" data-desk-week-group="person" aria-pressed="'+(prefs.planGrouping==='person')+'">Por responsable</button></div></div>'+ 
       '<p class="desk-week-explainer">Las franjas representan el intervalo previsto, no horas trabajadas. Las sesiones son reservas de tu calendario.</p>'+ 
+      workloadHtml+
       '<div class="desk-week-scroll"><div class="desk-week-table">'+gridHead+
       (rows.length?groupHtml():'<p class="desk-empty desk-week-empty">No hay tareas en esta semana con estos filtros.</p>')+
       independentEvents+'</div></div>'+ 
@@ -352,7 +387,10 @@
   const render = () => {
     if (!shell || !app()) return;
     const state = app().getState();
-    if(prefs.planMode==='week')refreshPersonNames(state);
+    if(prefs.planMode==='week'){
+      refreshPersonNames(state);
+      if(prefs.planProject)refreshProjectRoster(prefs.planProject);
+    }
     if (nativeTimeHost && state.date && state.date!==prefs.selectedDate) {
       prefs.selectedDate=state.date;remember();
     }
@@ -599,7 +637,7 @@
     }));
   });
   window.addEventListener('isabella:state',scheduleRender);
-  window.addEventListener('isabella:synced',()=>{loadedPeopleKey='';scheduleRender()});
+  window.addEventListener('isabella:synced',()=>{loadedPeopleKey='';projectRoster.key='';scheduleRender()});
   mq.addEventListener('change',reconcile);
   reconcile();
 })();

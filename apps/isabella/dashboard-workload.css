@@ -1,0 +1,37 @@
+/* Build 96E · Factual workload; never renders invented availability. */
+@media(min-width:950px) {
+ body.desk-enabled .desk-week-workload {
+   border:1px solid #e9eaee;border-radius:9px;background:#fcfcfd;margin:0 0 13px;
+   padding:12px 14px 10px;min-width:0;
+ }
+ body.desk-enabled .desk-week-workload-intro {
+   display:flex;align-items:flex-start;justify-content:space-between;gap:7px 16px;
+   flex-wrap:wrap;margin-bottom:9px;
+ }
+ body.desk-enabled .desk-week-workload-intro strong {
+   font-size:11px;color:#292b30;font-weight:650;
+ }
+ body.desk-enabled .desk-week-workload-intro small {
+   font-size:10px;color:#777980;line-height:1.5;
+ }
+ body.desk-enabled .desk-week-workload-scroll {
+   overflow-x:auto;max-width:100%;overscroll-behavior-x:contain;
+ }
+ body.desk-enabled .desk-week-workload table {
+   width:100%;min-width:585px;border-collapse:collapse;
+   font-size:10px;line-height:1.5;
+ }
+ body.desk-enabled .desk-week-workload th,body.desk-enabled .desk-week-workload td {
+   padding:7px 8px;text-align:left;white-space:nowrap;border-bottom:1px solid #ededf0;
+ }
+ body.desk-enabled .desk-week-workload thead th {
+   font-size:9px;color:#85878e;font-weight:650;
+ }
+ body.desk-enabled .desk-week-workload tbody th {
+   font-size:10px;color:#454951;font-weight:650;
+ }
+ body.desk-enabled .desk-week-workload tbody td {color:#555962;}
+ body.desk-enabled .desk-week-workload p {
+   margin:9px 0 0;color:#8a8c95;font-size:9px;line-height:1.55;
+ }
+}
