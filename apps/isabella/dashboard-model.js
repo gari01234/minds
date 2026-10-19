@@ -149,6 +149,44 @@
     const n = Number(item?.metadata?.planning?.estimated_minutes);
     return Number.isInteger(n) && n>0 && n<=43200 ? n : 0;
   };
+  // Loads are obligations, NOT free capacity. Estimates are for whole tasks, not
+  // hours automatically distributed over the visible seven-day interval.
+  const weeklyWorkload = (state,week,people=[],projectId='') => {
+    const entries=[...(week.rows||[]),...(week.overdue||[]),...(week.unscheduled||[])];
+    const unique=new Map(entries.map(entry=>[entry.task.id,entry.task]));
+    const groups=new Map();
+    const personNames=new Map((people||[]).filter(p=>p?.id).map(p=>[p.id,p.name]));
+    const ensure=(key,name)=>{
+      if(!groups.has(key))groups.set(key,{key,name,tasks:0,dueThisWeek:0,
+        overdue:0,estimatedMinutes:0,withoutEstimate:0});
+      return groups.get(key);
+    };
+    for (const p of people||[])if(p?.id)ensure('person:'+p.id,p.name);
+    for (const t of unique.values()) {
+      const key=t.assigneePersonId?'person:'+t.assigneePersonId:
+        t.assignee?'legacy:'+t.assignee:'unassigned';
+      const name=t.assigneePersonId?personNames.get(t.assigneePersonId)||t.assignee||'Responsable sin nombre':
+        t.assignee||'Sin responsable';
+      const group=ensure(key,name);
+      group.tasks++;
+      if(t.date>=week.start&&t.date<=week.end)group.dueThisWeek++;
+      if(t.date&&t.date<week.start)group.overdue++;
+      const estimate=estimatedMinutes(t);
+      if(estimate)group.estimatedMinutes+=estimate;
+      else group.withoutEstimate++;
+    }
+    let reservedOwnMinutes=0,bookings=0;
+    for (const e of state.events||[]) {
+      if(e.metadata?.kind!=='task_work_session_v1'||!(week.days||[]).includes(e.date))continue;
+      const source=taskForSession(state,e);
+      if(projectId&&(source?source.projectId:e.projectId)!==projectId)continue;
+      const duration=Number(e.duration);
+      if(!Number.isFinite(duration)||duration<=0)continue;
+      reservedOwnMinutes+=duration;bookings++;
+    }
+    return {tasks:unique.size,groups:[...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')),
+      reservedOwnMinutes,bookings,availabilityKnown:false,actualTimeKnown:false};
+  };
   const projectFor = (state,id) => (state.projects || []).find(p => p.id === id);
   const categoryFor = (state,id) => (state.categories || []).find(c => c.id === id);
   const colorFor = (state,item) =>
@@ -174,6 +212,6 @@
       planGrouping:input.planGrouping==='person'?'person':'date'};
   };
   return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
-    eventsForDay,timedEvents,taskForSession,monthAgendaGroups,weekStart,weeklyPlan,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
+    eventsForDay,timedEvents,taskForSession,monthAgendaGroups,weekStart,weeklyPlan,estimatedMinutes,weeklyWorkload,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });

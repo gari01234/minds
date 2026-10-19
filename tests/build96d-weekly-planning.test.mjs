@@ -98,9 +98,9 @@ test('view preserves stable person keys, filters and explicit booking actions',(
 });
 
 test('PWA updates model, interface and stylesheet as one cached release',()=>{
-  for(const asset of ['dashboard-model.js?v=4','dashboard.js?v=4','dashboard-week.css?v=1']){
+  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=5','dashboard-week.css?v=1']){
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v153/);
+  assert.match(sw,/isabella-shell-v154/);
 });
