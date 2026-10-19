@@ -1,0 +1,103 @@
+/* Build 96D · Weekly plan over canonical Work tasks + actual calendar sessions. */
+@media (min-width:950px) {
+  body.desk-enabled .desk-plan-view-switch {
+    display:inline-flex;gap:2px;background:#f4f4f6;border:1px solid #ececf0;
+    border-radius:9px;padding:3px;margin:0 0 13px;
+  }
+  body.desk-enabled .desk-plan-view-switch button {
+    border:0;background:transparent;color:#737680;border-radius:6px;padding:6px 15px;
+    font-size:11px;font-weight:600;cursor:pointer;
+  }
+  body.desk-enabled .desk-plan-view-switch button.is-selected {
+    background:#fff;color:#24262b;box-shadow:0 1px 4px rgba(0,0,0,.07);
+  }
+  body.desk-enabled .desk-week-toolbar {display:flex;flex-wrap:wrap;align-items:flex-end;gap:10px 18px;margin:0 0 10px;}
+  body.desk-enabled .desk-week-dates {display:flex;align-items:center;gap:11px;margin-right:auto;min-height:32px;}
+  body.desk-enabled .desk-week-dates strong {font-size:12px;font-weight:650;white-space:nowrap;}
+  body.desk-enabled .desk-week-dates button {
+    border:1px solid #e5e6e9;background:#fff;border-radius:7px;min-width:27px;
+    min-height:28px;color:#464952;font-size:17px;cursor:pointer;
+  }
+  body.desk-enabled .desk-week-filters {display:flex;flex-wrap:wrap;gap:9px;}
+  body.desk-enabled .desk-week-filters label {display:flex;flex-direction:column;gap:3px;color:#84858b;font-size:10px;}
+  body.desk-enabled .desk-week-filters select {
+    color:#32343b;background:#fff;border:1px solid #dcdee3;border-radius:7px;
+    min-height:30px;padding:3px 23px 3px 8px;font:inherit;font-size:11px;max-width:170px;
+  }
+  body.desk-enabled .desk-week-grouping {display:inline-flex;gap:2px;align-items:center;}
+  body.desk-enabled .desk-week-grouping button {
+    border:1px solid #e7e8eb;border-radius:7px;padding:6px 9px;background:#fff;
+    font-size:10px;color:#777980;cursor:pointer;white-space:nowrap;
+  }
+  body.desk-enabled .desk-week-grouping button[aria-pressed="true"] {background:#f0f1f4;color:#22252b;border-color:#c9cbd2;}
+  body.desk-enabled .desk-week-explainer {font-size:10px;color:#878990;margin:4px 0 12px;line-height:1.5;}
+  body.desk-enabled .desk-week-scroll {max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;padding-bottom:6px;}
+  body.desk-enabled .desk-week-table {min-width:835px;overflow:hidden;border:1px solid #ebecf0;border-radius:10px;}
+  body.desk-enabled .desk-week-head,body.desk-enabled .desk-week-row {
+    display:grid;grid-template-columns:minmax(205px,1.75fr) repeat(7,minmax(80px,1fr));
+  }
+  body.desk-enabled .desk-week-head {background:#f7f7f9;border-bottom:1px solid #e6e7eb;}
+  body.desk-enabled .desk-week-head>span {font-size:10px;color:#696b73;font-weight:650;padding:12px;}
+  body.desk-enabled .desk-week-head>button {
+    background:transparent;border:0;border-left:1px solid #ededf0;padding:11px 2px;
+    font-size:10px;font-weight:650;color:#555861;cursor:pointer;
+  }
+  body.desk-enabled .desk-week-head>button:hover {background:#eeeff3;}
+  body.desk-enabled .desk-week-row {border-bottom:1px solid #eff0f2;min-height:65px;}
+  body.desk-enabled .desk-week-row:last-of-type {border-bottom:0;}
+  body.desk-enabled .desk-week-task {
+    display:flex;flex-direction:column;justify-content:center;align-items:flex-start;
+    gap:4px;padding:10px 12px;min-width:0;
+  }
+  body.desk-enabled .desk-week-task button {
+    border:0;background:transparent;text-align:left;padding:0;cursor:pointer;
+    font:inherit;color:#23262c;font-size:11px;font-weight:650;max-width:100%;
+  }
+  body.desk-enabled .desk-week-task button:hover {text-decoration:underline;}
+  body.desk-enabled .desk-week-task small {color:#8b8c94;font-size:9px;line-height:1.4;}
+  body.desk-enabled .desk-week-cell {
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    padding:5px 2px;min-height:64px;gap:3px;border-left:1px solid #f0f0f3;
+  }
+  body.desk-enabled .desk-week-cell.is-window {background:#f3f5f8;box-shadow:inset 0 1px #dae0e8,inset 0 -1px #dae0e8;}
+  body.desk-enabled .desk-week-cell.is-start {border-left:2px solid #899ab3;}
+  body.desk-enabled .desk-week-cell.is-due {border-right:2px solid #b58d8d;}
+  body.desk-enabled .desk-week-label {font-size:9px;font-weight:650;color:#666c75;}
+  body.desk-enabled .desk-week-cell.is-due .desk-week-label {color:#926263;}
+  body.desk-enabled .desk-week-session {
+    background:#fff;border:1px dashed #bec4d1;color:#4d5d78;border-radius:6px;
+    padding:3px 5px;font-size:9px;cursor:pointer;max-width:100%;
+  }
+  body.desk-enabled .desk-week-book {
+    border:0;background:transparent;color:#8b94a4;font-size:15px;
+    line-height:1;padding:2px 7px;cursor:pointer;
+  }
+  body.desk-enabled .desk-week-book:hover,body.desk-enabled .desk-week-session:hover {background:#e6eaf1;color:#242b39;}
+  body.desk-enabled .desk-week-group {
+    padding:9px 12px;background:#fbfbfc;border-top:1px solid #e6e7ea;
+    font-size:10px;color:#61636b;
+  }
+  body.desk-enabled .desk-week-events-label {padding:10px 12px;font-size:10px;font-weight:650;border-top:1px solid #e4e6eb;}
+  body.desk-enabled .desk-week-events {
+    display:grid;grid-template-columns:repeat(7,minmax(80px,1fr));gap:0;
+    padding-left:205px;padding-bottom:10px;
+  }
+  body.desk-enabled .desk-week-events>div {min-width:0;padding:3px;border-left:1px solid #f1f1f2;}
+  body.desk-enabled .desk-week-events button {
+    display:block;max-width:100%;word-break:break-word;margin:3px 0;padding:4px;
+    border:1px solid #dedfe6;background:#fafafb;border-radius:5px;font-size:9px;
+    color:#5e606a;text-align:left;cursor:pointer;
+  }
+  body.desk-enabled .desk-week-empty {padding:14px;}
+  body.desk-enabled .desk-week-backlogs {display:grid;gap:8px;margin-top:12px;}
+  body.desk-enabled .desk-week-backlogs details {border:1px solid #ebecf0;border-radius:8px;padding:8px 11px;}
+  body.desk-enabled .desk-week-backlogs summary {font-size:11px;font-weight:650;color:#555963;cursor:pointer;}
+  body.desk-enabled .desk-week-backlog-item {display:flex;gap:8px;flex-wrap:wrap;align-items:baseline;margin-top:9px;}
+  body.desk-enabled .desk-week-backlog-item button {
+    border:0;background:transparent;color:#222832;font-size:11px;padding:0;cursor:pointer;text-align:left;
+  }
+  body.desk-enabled .desk-week-backlog-item button:hover {text-decoration:underline;}
+  body.desk-enabled .desk-week-backlog-item small {font-size:10px;color:#898b90;}
+  body.desk-enabled .desk-week-backlogs .desk-empty {font-size:10px;padding:8px 0;}
+  body.desk-enabled .desk-panel--plan[data-desk-layout="compact"] .desk-week-filters select {max-width:140px;}
+}

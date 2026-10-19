@@ -10,7 +10,7 @@
   const mq = window.matchMedia('(min-width: 950px)');
   if (!M || !screen || !sidebar) return;
   const KEY = 'isabella-adaptive-desk-v1';
-  const LABELS = {chat:'Isabella',calendar:'Calendario',today:'Hoy',plan:'Plan del día'};
+  const LABELS = {chat:'Isabella',calendar:'Calendario',today:'Hoy',plan:'Plan de trabajo'};
   const ICONS = {chat:'◇',calendar:'▦',today:'☷',plan:'▤'};
   const E = M.escapeHtml;
   const q = (parent,selector) => parent.querySelector(selector);
@@ -218,7 +218,101 @@
       '<span>' + items.filter(x=>!x.done).length + ' pendientes · ' + meetings.length + ' eventos</span>' +
       '<button type="button" data-desk-open-time>Ver en Tiempo →</button></div>';
   };
+  // One read-only weekly view inside the existing Plan, never another calendar.
+  const planToolbarHtml = () => '<div class="desk-plan-view-switch" role="group" aria-label="Vista del plan">'+
+    ['day','week'].map(mode=>'<button type="button" data-desk-plan-mode="'+mode+'" aria-pressed="'+(prefs.planMode===mode)+'"'+
+    ' class="'+(prefs.planMode===mode?'is-selected':'')+'">'+(mode==='day'?'Día':'Semana')+'</button>').join('')+'</div>';
+  // Resolve current person names by stable ID; Work renames never break assignment.
+  let knownPersonNames=new Map(),loadedPeopleKey='',loadingPeopleKey='';
+  const refreshPersonNames = state => {
+    const ids=[...new Set((state.tasks||[]).map(t=>t.assigneePersonId).filter(Boolean))].sort();
+    const key=ids.join('|'),sb=window.MINDS_SUPABASE;
+    if(!key||!sb||key===loadedPeopleKey||key===loadingPeopleKey)return;
+    loadingPeopleKey=key;
+    void sb.from('isabella_people').select('id,name').in('id',ids).then(({data,error})=>{
+      if(!error){knownPersonNames=new Map((data||[]).map(person=>[person.id,person.name]));
+        loadedPeopleKey=key;scheduleRender()}
+    }).catch(()=>{}).finally(()=>{if(loadingPeopleKey===key)loadingPeopleKey=''});
+  };
+  const personKey = task => task.assigneePersonId?'person:'+task.assigneePersonId:
+    task.assignee?'legacy:'+task.assignee:'unassigned';
+  const personName = task => (task.assigneePersonId&&knownPersonNames.get(task.assigneePersonId))||task.assignee||'Sin responsable';
+  const planWeekHtml = state => {
+    const projects=state.projects||[];
+    const projectId=projects.some(p=>p.id===prefs.planProject)?prefs.planProject:'';
+    const week=M.weeklyPlan(state,prefs.selectedDate,projectId);
+    const all=[...week.rows,...week.overdue,...week.unscheduled];
+    const people=new Map();
+    for(const entry of all)if(!people.has(personKey(entry.task)))
+      people.set(personKey(entry.task),personName(entry.task));
+    const choosePerson='<option value="">Todas las personas</option>'+[...people]
+      .sort((a,b)=>a[1].localeCompare(b[1],'es'))
+      .map(([key,name])=>'<option value="'+E(key)+'" '+(prefs.planPerson===key?'selected':'')+'>'+E(name)+'</option>').join('');
+    const byPerson=entry=>!prefs.planPerson||personKey(entry.task)===prefs.planPerson;
+    const rows=week.rows.filter(byPerson),overdue=week.overdue.filter(byPerson),
+      unscheduled=week.unscheduled.filter(byPerson);
+    const gridHead='<div class="desk-week-head"><span>Tarea / entrega</span>'+week.days.map(date=>
+      '<button type="button" data-desk-week-day="'+E(date)+'" aria-label="Abrir '+E(niceDate(date))+'">'+
+      E((M.dateFromKey(date)||new Date()).toLocaleDateString('es-ES',{weekday:'short',day:'numeric'}))+'</button>').join('')+'</div>';
+    const taskRow=entry=>{
+      const t=entry.task;
+      const project=M.projectFor(state,t.projectId)?.name||'';
+      const details=[project,personName(t),entry.began?'Inicio '+entry.began:'',
+        entry.due?'Entrega '+entry.due:'',entry.invalid?'Fechas inconsistentes':''].filter(Boolean).join(' · ');
+      const cells=entry.cells.map(cell=>'<div class="desk-week-cell'+
+        (cell.inWindow?' is-window':'')+(cell.begins?' is-start':'')+(cell.due?' is-due':'')+'">'+
+        (cell.begins?'<span class="desk-week-label">Inicio</span>':'')+
+        (cell.due?'<span class="desk-week-label">Entrega</span>':'')+
+        cell.sessions.map(e=>'<button type="button" class="desk-week-session" data-desk-event="'+E(e.id)+'"'+
+          ' title="Editar reserva · '+E(t.title)+'">'+E(e.start||'Sesión')+'</button>').join('')+
+        (cell.inWindow?'<button type="button" class="desk-week-book" data-desk-week-book="'+E(t.id)+
+          '" data-desk-week-date="'+E(cell.key)+'" aria-label="Reservar tiempo para '+E(t.title)+' el '+E(cell.key)+'">＋</button>':'')+
+        '</div>').join('');
+      return '<div class="desk-week-row"><div class="desk-week-task">'+
+        '<button type="button" data-desk-task="'+E(t.id)+'">'+E(t.title)+'</button>'+ 
+        '<small>'+E(details)+(entry.noDates?' · Sin fechas':'')+'</small></div>'+cells+'</div>';
+    };
+    const taskSet=entries=>entries.length?entries.map(entry=>'<div class="desk-week-backlog-item">'+
+      '<button type="button" data-desk-task="'+E(entry.task.id)+'">'+E(entry.task.title)+'</button>'+ 
+      '<small>'+E(personName(entry.task))+' · '+E(M.projectFor(state,entry.task.projectId)?.name||'')+
+      (entry.due?' · Entrega '+E(entry.due):' · Sin entrega')+
+      (entry.invalid?' · Fechas inconsistentes':'')+'</small></div>').join(''):
+      '<p class="desk-empty">Ninguna.</p>';
+    const groupHtml=()=>{
+      if(prefs.planGrouping!=='person')return rows.map(taskRow).join('');
+      const groups=new Map();
+      for(const entry of rows){const key=personKey(entry.task);
+        if(!groups.has(key))groups.set(key,{name:personName(entry.task),items:[]});
+        groups.get(key).items.push(entry);
+      }
+      return [...groups.values()].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(group=>
+        '<div class="desk-week-group"><strong>'+E(group.name)+' · '+group.items.length+'</strong></div>'+group.items.map(taskRow).join('')).join('');
+    };
+    const independentEvents=week.events.length?'<div class="desk-week-events-label">Eventos y sesiones sin tarea activa</div>'+ 
+      '<div class="desk-week-events">'+week.days.map(day=>'<div>'+week.events.filter(e=>e.date===day).map(e=>
+        '<button type="button" data-desk-event="'+E(e.id)+'">'+E(e.start||'Evento')+' · '+E(e.title)+'</button>').join('')+'</div>').join('')+'</div>':'';
+    return '<div class="desk-week-toolbar"><div class="desk-week-dates">'+
+      '<button type="button" data-desk-week-nav="-1" aria-label="Semana anterior">‹</button>'+ 
+      '<strong>'+E(week.start)+' – '+E(week.end)+'</strong>'+ 
+      '<button type="button" data-desk-week-nav="1" aria-label="Semana siguiente">›</button></div>'+ 
+      '<div class="desk-week-filters"><label>Proyecto<select data-desk-week-project>'+ 
+      '<option value="">Todos</option>'+projects.map(pr=>'<option value="'+E(pr.id)+'" '+
+      (projectId===pr.id?'selected':'')+'>'+E(pr.name)+'</option>').join('')+'</select></label>'+ 
+      '<label>Responsable<select data-desk-week-person>'+choosePerson+'</select></label></div>'+ 
+      '<div class="desk-week-grouping" role="group" aria-label="Organización semanal">'+ 
+      '<button type="button" data-desk-week-group="date" aria-pressed="'+(prefs.planGrouping==='date')+'">Por fechas</button>'+ 
+      '<button type="button" data-desk-week-group="person" aria-pressed="'+(prefs.planGrouping==='person')+'">Por responsable</button></div></div>'+ 
+      '<p class="desk-week-explainer">Las franjas representan el intervalo previsto, no horas trabajadas. Las sesiones son reservas de tu calendario.</p>'+ 
+      '<div class="desk-week-scroll"><div class="desk-week-table">'+gridHead+
+      (rows.length?groupHtml():'<p class="desk-empty desk-week-empty">No hay tareas en esta semana con estos filtros.</p>')+
+      independentEvents+'</div></div>'+ 
+      '<div class="desk-week-backlogs"><details open><summary>Vencidas anteriormente · '+overdue.length+'</summary>'+taskSet(overdue)+'</details>'+ 
+      '<details open><summary>Sin fechas completas · '+unscheduled.length+'</summary>'+taskSet(unscheduled)+'</details></div>'+ 
+      '<div class="desk-panel-footer"><span>Una tarea puede tener varias sesiones sin duplicarse.</span>'+ 
+      '<button type="button" data-desk-open-time>Tiempo →</button></div>';
+  };
   const planHtml = state => {
+    if(prefs.planMode==='week')return planToolbarHtml()+planWeekHtml(state);
     const date = prefs.selectedDate;
     const events = M.timedEvents(state,date,7,21);
     const sessions = M.eventsForDay(state,date).filter(e=>e.metadata?.kind==='task_work_session_v1');
@@ -243,7 +337,7 @@
     const rows=plannedTasks.slice(0,6).map(t=>'<div class="desk-plan-task-row"><span>'+E(t.title)+'</span>'+
       '<button type="button" data-desk-plan-task="'+E(t.id)+'" aria-label="Reservar tiempo para '+E(t.title)+'">Reservar →</button></div>').join('');
     const line=hours.map(h=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('');
-    return '<div class="desk-plan-date">' + E(niceDate(date)) + '</div>' +
+    return planToolbarHtml()+'<div class="desk-plan-date">' + E(niceDate(date)) + '</div>' +
       '<div class="desk-plan-metrics"><span><strong>'+hmins(scheduled)+'</strong> · eventos programados</span>'+
       '<span>'+hmins(effort)+' · sesiones de tareas</span>' +
       '<span>'+(totalEstimate?hmins(totalEstimate)+' · estimadas':'Sin estimaciones')+
@@ -258,6 +352,7 @@
   const render = () => {
     if (!shell || !app()) return;
     const state = app().getState();
+    if(prefs.planMode==='week')refreshPersonNames(state);
     if (nativeTimeHost && state.date && state.date!==prefs.selectedDate) {
       prefs.selectedDate=state.date;remember();
     }
@@ -294,6 +389,27 @@
       layout();return;
     }
     if (restore && parts[restore]) {prefs.minimized=prefs.minimized.filter(k=>k!==restore);layout();return;}
+    if (button.dataset.deskPlanMode) {
+      prefs.planMode=button.dataset.deskPlanMode==='week'?'week':'day';remember();render();return;
+    }
+    if (button.dataset.deskWeekNav) {
+      const next=M.addDays(prefs.selectedDate,7*Number(button.dataset.deskWeekNav));
+      if(next){prefs.selectedDate=next;remember();app()?.selectCalendarDate?.(next);render()}
+      return;
+    }
+    if (button.dataset.deskWeekGroup) {
+      prefs.planGrouping=button.dataset.deskWeekGroup==='person'?'person':'date';remember();render();return;
+    }
+    if (button.dataset.deskWeekDay) {
+      const day=button.dataset.deskWeekDay;
+      if(M.dateFromKey(day)){prefs.selectedDate=day;prefs.planMode='day';remember();app()?.selectCalendarDate?.(day);render()}
+      return;
+    }
+    if (button.dataset.deskWeekBook) {
+      const date=button.dataset.deskWeekDate;
+      if(M.dateFromKey(date))app()?.planTaskSession?.(button.dataset.deskWeekBook,date);
+      return;
+    }
     if (button.dataset.deskMonth) {
       const next = M.monthShift(prefs.selectedDate,Number(button.dataset.deskMonth));
       if (next) {prefs.selectedDate=next;remember();render();}
@@ -369,6 +485,14 @@
     navButton.addEventListener('click',()=>{prefs.navCollapsed=!prefs.navCollapsed;layout();});
     sidebar.prepend(navButton);
     shell.addEventListener('click',onClick);
+    shell.addEventListener('change',event=>{
+      const select=event.target;
+      if(select.matches?.('[data-desk-week-project]')){
+        prefs.planProject=select.value;prefs.planPerson='';remember();render();
+      }else if(select.matches?.('[data-desk-week-person]')){
+        prefs.planPerson=select.value;remember();render();
+      }
+    });
     shell.addEventListener('dragstart',event=>{
       const row=event.target.closest?.('[data-desk-drag-task]');
       if (!row) return;
@@ -475,7 +599,7 @@
     }));
   });
   window.addEventListener('isabella:state',scheduleRender);
-  window.addEventListener('isabella:synced',scheduleRender);
+  window.addEventListener('isabella:synced',()=>{loadedPeopleKey='';scheduleRender()});
   mq.addEventListener('change',reconcile);
   reconcile();
 })();
