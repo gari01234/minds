@@ -7,6 +7,7 @@ const SHELL = [
   './design-system.css?v=8',
   './dashboard.css?v=1',
   './dashboard-fixes.css?v=1',
+  './dashboard-95-2.css?v=1',
   './shell.js?v=104',
   './situation.js?v=5',
   './turn-integrity.js?v=2',

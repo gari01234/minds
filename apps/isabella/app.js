@@ -63,12 +63,12 @@ function orderedPendingTaskElements(container,date){
   if(!container)return[];
   return [...container.children].filter(x=>x.matches?.('.task-item[data-date]')&&!x.classList.contains('task-done')&&x.dataset.date===date);
 }
-function commitTaskOrderFromContainer(container,date,movedId=null){
-  const ids=orderedPendingTaskElements(container,date).map(x=>x.dataset.id).filter(Boolean);
-  if(movedId&&!ids.includes(movedId))ids.push(movedId);
+function commitTaskOrderByIds(ids,date,movedId=null){
+  const ordered=[...new Set(ids.filter(Boolean))];
+  if(movedId&&!ordered.includes(movedId))ordered.push(movedId);
   let changed=false;
-  ids.forEach((id,i)=>{
-    const t=state.tasks.find(x=>x.id===id);if(!t)return;
+  ordered.forEach((id,i)=>{
+    const t=state.tasks.find(x=>x.id===id&&!x.archivedAt&&!x.done);if(!t)return;
     const nextOrder=(i+1)*10,nextDate=date;
     if(t.date===nextDate&&Number(t.sortOrder||0)===nextOrder)return;
     const before=clone(t);t.date=nextDate;t.sortOrder=nextOrder;
@@ -76,6 +76,18 @@ function commitTaskOrderFromContainer(container,date,movedId=null){
   });
   if(changed)save();
   return changed;
+}
+function commitTaskOrderFromContainer(container,date,movedId=null){
+  const ids=orderedPendingTaskElements(container,date).map(x=>x.dataset.id).filter(Boolean);
+  return commitTaskOrderByIds(ids,date,movedId);
+}
+function reorderDeskTasks(date,requestedIds){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date))||!Array.isArray(requestedIds))return false;
+  const current=state.tasks.filter(x=>x.date===date&&!x.archivedAt&&!x.done).sort(taskOrder);
+  const allowed=new Set(current.map(x=>x.id));
+  const requested=[...new Set(requestedIds)].filter(id=>allowed.has(id));
+  if(!requested.length)return false;
+  return commitTaskOrderByIds([...requested,...current.map(t=>t.id).filter(id=>!requested.includes(id))],date);
 }
 function mutation(entityType,action,before,after,source='manual'){
   const entityKey=(after||before)?.id;
@@ -2726,7 +2738,7 @@ function initTaskDrag(){
   $$('.task-item[data-date]').forEach(row=>{
     if(row.dataset.dragBound)return;
     row.dataset.dragBound='1';
-    let timer=null,active=false,startY=0,lastY=0,beforeOrder=[];
+    let timer=null,active=false,startY=0,lastY=0,beforeOrder=[],sourceDate='';
     const taskSiblings=()=>$$('.task-item[data-date="'+row.dataset.date+'"]').filter(x=>x.parentNode===row.parentNode);
     const finish=()=>{
       clearTimeout(timer);timer=null;
@@ -2737,13 +2749,15 @@ function initTaskDrag(){
       row.dataset.justDragged='1';
       setTimeout(()=>{row.dataset.justDragged='0'},180);
       const ids=taskSiblings().map(x=>x.dataset.id);
-      if(ids.join('|')!==beforeOrder.join('|'))commitTaskOrderFromContainer(row.parentNode,row.dataset.date,row.dataset.id);
+      if(row.dataset.date!==sourceDate||ids.join('|')!==beforeOrder.join('|'))
+        commitTaskOrderFromContainer(row.parentNode,row.dataset.date,row.dataset.id);
       renderCalendar();
     };
     row.addEventListener('touchstart',ev=>{
       if(ev.touches.length!==1)return;
       if(ev.target.closest('input,select,textarea'))return;
       const t=ev.touches[0];startY=lastY=t.clientY;active=false;
+      sourceDate=row.dataset.date;
       beforeOrder=taskSiblings().map(x=>x.dataset.id);
       timer=setTimeout(()=>{
         active=true;row.dataset.dragActive='1';row.classList.add('dragging');
@@ -2758,6 +2772,19 @@ function initTaskDrag(){
         return;
       }
       ev.preventDefault();ev.stopPropagation();
+      // Reuse the canonical week grid for drag-to-another-day on iPad.
+      // The same handler runs in Tiempo and when Tiempo is docked in Chat.
+      if(state.view==='week'&&row.closest('.week')){
+        const target=document.elementFromPoint(t.clientX,t.clientY)?.closest('.wday[data-week-date]');
+        if(target){
+          const date=target.dataset.weekDate;
+          if(date&&date!==row.dataset.date){
+            target.querySelector('.week-free')?.remove();
+            row.dataset.date=date;
+            target.append(row);
+          }
+        }
+      }
       const siblings=taskSiblings().filter(x=>x!==row);
       let before=null;
       for(const el of siblings){const r=el.getBoundingClientRect();if(lastY<r.top+r.height/2){before=el;break}}
@@ -3110,12 +3137,15 @@ function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
   const current=state.events.filter(e=>e.metadata?.kind==='task_work_session_v1'&&e.metadata?.task_client_key===taskId);
   const subtotal=current.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
   const readable=mins=>Math.floor(mins/60)+' h '+String(mins%60).padStart(2,'0')+' min';
+  const estimate=Number(task.metadata?.planning?.estimated_minutes||0);
+  const remaining=estimate>0?Math.max(0,estimate-subtotal):0;
+  const initial=remaining>0?Math.min(720,Math.max(15,remaining)):60;
   modal('Reservar tiempo para la tarea',`<div class="form item-editor">
     <p class="small">Tarea original · ${esc(task.title)}</p>
-    <p class="small">Sesiones ya reservadas: ${esc(readable(subtotal))}. La tarea se mantiene en Work y Hoy sin duplicarse.</p>
+    <p class="small">Estimación: ${estimate?esc(readable(estimate)):'aún no indicada'}. Sesiones ya reservadas: ${esc(readable(subtotal))}. ${estimate?'Pendiente de reservar: '+esc(readable(remaining))+'.':''} La tarea sigue siendo una sola en Work.</p>
     <label>Fecha<input id="deskSessionDate" type="date" value="${esc(date)}"></label>
     <label>Comienzo<input id="deskSessionStart" type="time" value="${esc(proposedStart)}"></label>
-    <label>Tiempo de trabajo (minutos, elegido por ti)<input id="deskSessionDuration" type="number" min="15" max="720" step="15" value="60"></label>
+    <label>Tiempo de trabajo (minutos, elegido por ti)<input id="deskSessionDuration" type="number" min="15" max="720" step="15" value="${initial}"></label>
     <p class="small">Esto crea una sesión en el calendario vinculada a la tarea, no otra tarea. Elige y confirma una duración.</p>
     <button type="button" class="primary" id="deskSessionSave">Reservar sesión</button>
     <button type="button" class="secondary" id="deskSessionCancel">Cancelar</button>
@@ -3132,6 +3162,45 @@ function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
     state.events.push(item);
     mutation('event','create',null,item,'manual');
     save();renderCalendar();closeModal();
+  };
+  return true;
+}
+function setTaskEstimatedMinutes(taskId){
+  const task=state.tasks.find(t=>t.id===taskId&&!t.archivedAt);
+  if(!task)return false;
+  const existing=Number(task.metadata?.planning?.estimated_minutes||0);
+  const taken=state.events.filter(e=>e.metadata?.kind==='task_work_session_v1'&&e.metadata?.task_client_key===taskId)
+    .reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
+  modal('Estimar duración',`<div class="form item-editor">
+    <p class="small">${esc(task.title)} · misma tarea que aparece en Work</p>
+    <p class="small">Ya reservado en el calendario: ${Math.floor(taken/60)} h ${String(taken%60).padStart(2,'0')} min.</p>
+    <label>Duración total estimada (minutos)<input type="number" id="deskTaskEstimate" min="0" max="43200" step="15" value="${existing||''}" placeholder="Sin estimación"></label>
+    <div class="desk-estimate-presets">
+      <button type="button" data-estimate-preset="30">30 min</button>
+      <button type="button" data-estimate-preset="60">1 h</button>
+      <button type="button" data-estimate-preset="120">2 h</button>
+      <button type="button" data-estimate-preset="240">4 h</button>
+      <button type="button" data-estimate-preset="480">8 h</button>
+    </div>
+    <p class="small">La estimación no reserva automáticamente tiempo, ni equivale a tiempo trabajado. Puedes distribuirla en varios días.</p>
+    <button type="button" class="primary" id="deskEstimateSave">Guardar estimación</button>
+    <button type="button" class="secondary" id="deskEstimateCancel">Cancelar</button>
+  </div>`);
+  document.querySelectorAll('[data-estimate-preset]').forEach(b=>b.onclick=()=>{$('#deskTaskEstimate').value=b.dataset.estimatePreset});
+  $('#deskEstimateCancel').onclick=closeModal;
+  $('#deskEstimateSave').onclick=()=>{
+    const value=$('#deskTaskEstimate').value.trim();
+    const minutes=value===''?0:Number(value);
+    if(!Number.isInteger(minutes)||minutes<0||minutes>43200){alert('Indica una duración válida de 0 a 43.200 minutos.');return;}
+    const before=clone(task);
+    const metadata={...(task.metadata||{})},planning={...(metadata.planning||{})};
+    if(minutes>0)planning.estimated_minutes=minutes;
+    else delete planning.estimated_minutes;
+    if(Object.keys(planning).length)metadata.planning=planning;
+    else delete metadata.planning;
+    task.metadata=metadata;
+    mutation('task','update',before,task,'manual');
+    save();closeModal();renderCalendar();
   };
   return true;
 }
@@ -3934,6 +4003,8 @@ window.ISABELLA_APP={
   editEventById:(id)=>editItem('event',id),
   toggleTaskById:(id)=>toggleTaskDone(id),
   planTaskSession,
+  setTaskEstimatedMinutes,
+  reorderDeskTasks,
   scrollChatToLatest:()=>scrollAssistantToLatest(true),
   renderNativeCalendar:()=>renderCalendar(),
   setCalendarView:(view)=>{if(!['day','week','month'].includes(view))return false;state.view=view;save();renderCalendar();return true;},
