@@ -53,3 +53,8 @@
   }
   .desk-estimate-presets button:hover {background:#f0f0f3}
 }
+
+/* Reservations are not a second task or an ordinary meeting. */
+.calendar-entry.is-work-session {border-left-style:dashed}
+.agenda-item.is-work-session .adot {background:transparent;border:1px dashed var(--item-color,#999)}
+.desk-time-event.is-work-session {border-left-style:dashed}

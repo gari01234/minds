@@ -68,6 +68,12 @@
         width: (Math.min(end, at+length) - Math.max(start, at)) / (end-start) * 100}];
     });
   };
+  // A reservation is an event, not another task. Never match by title.
+  const taskForSession = (state,event) => {
+    const key = event?.metadata?.kind === 'task_work_session_v1' ? event.metadata.task_client_key : null;
+    return typeof key === 'string' && key
+      ? (state.tasks || []).find(task => task.id === key) || null : null;
+  };
   const estimatedMinutes = item => {
     const n = Number(item?.metadata?.planning?.estimated_minutes);
     return Number.isInteger(n) && n>0 && n<=43200 ? n : 0;
@@ -92,6 +98,6 @@
       selectedDate:dateFromKey(input.selectedDate) ? input.selectedDate : dayKey(new Date())};
   };
   return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
-    eventsForDay,timedEvents,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
+    eventsForDay,timedEvents,taskForSession,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });
