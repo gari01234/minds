@@ -97,7 +97,7 @@ test('re-evaluation detects changed slots, including a newly conflicting meeting
 });
 
 test('UI requires direct approval, checks remote schedule twice, writes one atomic batch',()=>{
-  assert.match(ui,/window\.confirm\('¿Reservar '/);
+  assert.doesNotMatch(ui,/window\.confirm\('¿Reservar '/);
   assert.match(ui,/const flushed=await window\.ISABELLA_SYNC_NOW\?\.\(\)/);
   assert.match(ui,/if\(\(events\|\|\[\]\)\.some\(e=>!M\.rangeMs\(e\)\)\)/);
   assert.match(ui,/const fresh=await readSnapshot\(ctx\.taskId\)/);
@@ -120,10 +120,10 @@ test('unified task editor routes to proposed blocks only after pending saves com
 });
 
 test('PWA includes model, UI, CSS and matching task-detail/cache version',()=>{
-  for(const asset of ['time-plan-model.js?v=2','time-plan.js?v=2','time-plan.css?v=1','task-detail.js?v=2']){
+  for(const asset of ['time-plan-model.js?v=2','time-plan.js?v=3','time-plan.css?v=1','task-detail.js?v=2']){
     assert.ok(html.includes(asset),'HTML misses '+asset);
     assert.ok(sw.includes(asset),'service worker misses '+asset);
   }
-  assert.ok(html.indexOf('time-plan-model.js?v=2')<html.indexOf('time-plan.js?v=2'));
-  assert.match(sw,/isabella-shell-v159/);
+  assert.ok(html.indexOf('time-plan-model.js?v=2')<html.indexOf('time-plan.js?v=3'));
+  assert.match(sw,/isabella-shell-v160/);
 });

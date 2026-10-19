@@ -1,0 +1,17 @@
+/* Build 99B: narrow non-overlapping lanes, direct resize, lightweight undo. */
+.hours .event{left:calc(58px + (100% - 62px)*var(--day-left,0));right:auto;
+  width:calc((100% - 62px)*var(--day-width,1) - 4px);box-sizing:border-box;min-width:0}
+.hours .event .day-resize-handle{position:absolute;bottom:0;left:0;right:0;height:9px;
+  cursor:ns-resize;touch-action:none;display:block;background:transparent}
+.hours .event:hover .day-resize-handle:after,.hours .event .day-resize-handle:focus-visible:after{
+  content:'';position:absolute;bottom:3px;width:24px;height:2px;border-radius:3px;
+  background:color-mix(in srgb,var(--item-color,#555) 60%,black);left:calc(50% - 12px)}
+.hours .event .day-resize-handle:focus-visible{outline:1px solid #656b79;outline-offset:-2px}
+.minds-calendar-toast{position:fixed;bottom:calc(18px + env(safe-area-inset-bottom,0px));left:50%;
+  transform:translateX(-50%);display:flex;align-items:center;gap:15px;flex-wrap:wrap;
+  background:#202126;color:#fff;border-radius:12px;padding:11px 13px;font:12px/1.4 inherit;
+  box-shadow:0 12px 35px #0003;z-index:200;max-width:min(95vw,630px)}
+.minds-calendar-toast span{min-width:0;flex:1}
+.minds-calendar-toast button{border:0;color:#dce6fb;background:transparent;cursor:pointer;
+  font:600 12px inherit;padding:3px 6px;white-space:nowrap}
+@media(max-width:700px){.minds-calendar-toast{width:min(92vw,500px)}}

@@ -98,8 +98,8 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
 });
 
 test('PWA caches matching native calendar assets and loads pure model before main script',()=>{
-  const assets=['calendar-plan.js?v=1','calendar-spans.css?v=1','app.js?v=124'];
+  const assets=['calendar-plan.js?v=1','calendar-spans.css?v=1','app.js?v=125'];
   for(const file of assets){assert.ok(html.includes(file),file+' absent HTML');assert.ok(sw.includes(file),file+' absent SW')}
-  assert.ok(html.indexOf('calendar-plan.js?v=1')<html.indexOf('app.js?v=124'));
-  assert.match(sw,/isabella-shell-v159/);
+  assert.ok(html.indexOf('calendar-plan.js?v=1')<html.indexOf('app.js?v=125'));
+  assert.match(sw,/isabella-shell-v160/);
 });
