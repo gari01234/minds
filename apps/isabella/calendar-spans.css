@@ -2,6 +2,7 @@
 .minds-plan-controls{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:7px 12px;padding:9px 17px 11px;border-bottom:1px solid #ededf0}
 .minds-plan-controls>span{font-size:10px;color:#888b94}
 .minds-plan-filter-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.minds-plan-controls [data-native-show-all]{border:0;background:transparent;color:#6b7381;cursor:pointer;font-size:10px;padding:3px}
 .minds-plan-filter-row select{border:1px solid #e5e6e9;border-radius:8px;background:#fff;padding:6px 25px 6px 9px;color:#494b53;font:inherit;font-size:11px;max-width:190px}
 .minds-native-plan-week{min-width:910px;padding:9px 14px 10px;border-bottom:1px solid #e8e9ed}
 .minds-native-plan-head{font-size:10px;color:#777982;font-weight:600;padding:0 0 7px;display:flex;justify-content:space-between;gap:12px}

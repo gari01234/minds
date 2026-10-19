@@ -77,6 +77,8 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
   assert.match(app,/nativePlanBand\(projection\.weeks\[0\]\)/);
   assert.match(app,/return P\.plan\(\{\.\.\.state,tasks:spanningTasks\},anchor,weeks,filters,rows\)/);
   assert.match(app,/data-native-filter="person"/);
+  assert.match(app,/state\.nativePlanShowAll=!state\.nativePlanShowAll/);
+  assert.match(app,/dayColors\(di,nativePlanFilters\(\)\)/);
   assert.match(app,/Single-day tasks retain native drag/);
   assert.match(app,/period\.start<period\.end/);
   for(const selector of ['data-native-filter','data-native-show-all','data-plan-open','data-plan-edge']){

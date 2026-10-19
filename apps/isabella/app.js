@@ -218,9 +218,11 @@ function itemColor(item){
   }
   return fallbackColor(item?.projectId||item?.categoryId||item?.id||'item');
 }
-function dayColors(date){
-  const items=[...state.events.filter(x=>x.date===date),...state.tasks.filter(x=>x.date===date&&!x.archivedAt)];
-  return [...new Set(items.map(itemColor).filter(Boolean))].slice(0,4);
+function dayColors(date,filters=null){
+  const P=window.MINDS_CALENDAR_PLAN;
+  const events=state.events.filter(e=>e.date===date&&(!filters?.projectId||e.projectId===filters.projectId)&&!filters?.personKey);
+  const tasks=state.tasks.filter(t=>t.date===date&&!t.archivedAt&&(!filters||!P||P.qualifies(t,filters)));
+  return [...new Set([...events,...tasks].map(itemColor).filter(Boolean))].slice(0,4);
 }
 function formatMessageText(text){
   // Shared, escaped presentation for Isabella and Work Threads.
@@ -2548,7 +2550,8 @@ function nativePlanToolbar(){
   return '<div class="minds-plan-controls"><div class="minds-plan-filter-row">'+
     '<select aria-label="Filtrar proyecto" data-native-filter="project">'+projects+'</select>'+
     '<select aria-label="Filtrar responsable" data-native-filter="person">'+people+'</select></div>'+
-    '<span>Las barras son períodos de tarea, no horas trabajadas</span></div>';
+    '<span>Las barras son períodos de tarea, no horas trabajadas</span>'+
+    (state.nativePlanShowAll?'<button type="button" data-native-show-all>Mostrar menos</button>':'')+'</div>';
 }
 function nativePlanBand(week,monthMode=false){
   if(!week)return '';
@@ -2592,7 +2595,7 @@ function bindNativePlanControls(){
     save();renderCalendar();
   });
   $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
-    state.nativePlanShowAll=true;save();renderCalendar();
+    state.nativePlanShowAll=!state.nativePlanShowAll;save();renderCalendar();
   });
   $('[data-plan-open]').forEach(button=>{
     button.onclick=()=>{
@@ -2699,7 +2702,7 @@ function month(){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
       const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
-      const colors=dayColors(di);
+      const colors=dayColors(di,nativePlanFilters());
       h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span></button>`;
     }
     h+=nativePlanBand(monthPlanning.weeks[r],true);
