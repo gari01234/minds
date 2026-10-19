@@ -68,6 +68,10 @@
         width: (Math.min(end, at+length) - Math.max(start, at)) / (end-start) * 100}];
     });
   };
+  const estimatedMinutes = item => {
+    const n = Number(item?.metadata?.planning?.estimated_minutes);
+    return Number.isInteger(n) && n>0 && n<=43200 ? n : 0;
+  };
   const projectFor = (state,id) => (state.projects || []).find(p => p.id === id);
   const categoryFor = (state,id) => (state.categories || []).find(c => c.id === id);
   const colorFor = (state,item) =>
@@ -88,6 +92,6 @@
       selectedDate:dateFromKey(input.selectedDate) ? input.selectedDate : dayKey(new Date())};
   };
   return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
-    eventsForDay,timedEvents,projectFor,categoryFor,colorFor,minutes,
+    eventsForDay,timedEvents,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });

@@ -36,6 +36,13 @@ test('timeline derives positions exclusively from real timed events',()=>{
   assert.ok(Math.abs(blocks[0].left-100*2/14)<1e-10);
   assert.ok(Math.abs(blocks[0].width-100*2/14)<1e-10);
 });
+test('task estimates belong to the original task and exclude invalid values',()=>{
+  assert.equal(model.estimatedMinutes({metadata:{planning:{estimated_minutes:180}}}),180);
+  assert.equal(model.estimatedMinutes({metadata:{planning:{estimated_minutes:-12}}}),0);
+  assert.equal(model.estimatedMinutes({metadata:{planning:{estimated_minutes:1.3}}}),0);
+  assert.equal(model.estimatedMinutes({metadata:{planning:{estimated_minutes:43201}}}),0);
+  assert.equal(model.estimatedMinutes({metadata:{}}),0);
+});
 test('workspace preferences reject unrecognized panels and impossible dimensions',()=>{
   const p=model.sanitizePreferences({focus:'plan',order:['today','today','nonsense'],
     minimized:['chat','calendar','plan','today'],width:9000,navCollapsed:true,selectedDate:'2026-02-31'});

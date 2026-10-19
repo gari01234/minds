@@ -23,6 +23,25 @@
   let prefs = load(),shell = null, stage = null, rail = null, parking = null, dock = null;
   let parts = {}, originalScroll = null, originalComposer = null, navButton = null;
   let previousFocus = 'chat', dragged = null, frame = 0;
+  let todayDragId = null, todayDragDate = null, touchSort = null;
+  const scrollChatAfterGridChange = () => {
+    // WebKit resets the scroll offset when an existing chat node is reparented.
+    // Restore at both animation frames and after the flex grid has settled.
+    requestAnimationFrame(()=>requestAnimationFrame(()=>app()?.scrollChatToLatest?.()));
+    setTimeout(()=>{if(shell)app()?.scrollChatToLatest?.();},90);
+  };
+  const commitTodayOrder = list => {
+    if (!list) return;
+    const ids=[...list.querySelectorAll(':scope > .desk-task-row:not(.is-done)')]
+      .map(row=>row.dataset.deskRowId).filter(Boolean);
+    app()?.reorderDeskTasks?.(prefs.selectedDate,ids);
+  };
+  const moveTodayRow = (row,target,y) => {
+    if (!row || !target || row===target || row.classList.contains('is-done')
+      || target.classList.contains('is-done') || row.parentNode!==target.parentNode) return;
+    const rect=target.getBoundingClientRect();
+    row.parentNode.insertBefore(row,y<rect.top+rect.height/2?target:target.nextSibling);
+  };
   const nativeTimeScreen = document.getElementById('calendarScreen');
   const nativeTimeParts = nativeTimeScreen
     ? ['.cal-toolbar','.cal-nav','#calendarContent'].map(selector=>nativeTimeScreen.querySelector(selector))
@@ -103,6 +122,7 @@
     if (!visible.length) {prefs.minimized=[];visible=[...M.PANELS];}
     if (!visible.includes(prefs.focus)) prefs.focus = visible.includes('chat') ? 'chat' : visible[0];
     const other = ['chat',...prefs.order].filter((key,i,arr) => key !== prefs.focus && visible.includes(key) && arr.indexOf(key) === i);
+    const chatParentBefore = parts.chat.parentElement;
     for (const key of M.PANELS) {
       const holder = key === prefs.focus ? stage : prefs.minimized.includes(key) ? parking : rail;
       if (parts[key].parentElement !== holder) holder.append(parts[key]);
@@ -132,6 +152,7 @@
     navButton.title = prefs.navCollapsed ? 'Mostrar vistas' : 'Minimizar vistas';
     navButton.textContent = prefs.navCollapsed ? '›' : '‹';
     remember();
+    if (chatParentBefore!==parts.chat.parentElement) scrollChatAfterGridChange();
   };
   const calendarHtml = state => {
     const date = M.dateFromKey(prefs.selectedDate) || new Date();
@@ -159,29 +180,40 @@
   const todayHtml = state => {
     const items = M.tasksForDay(state,prefs.selectedDate);
     const meetings = M.eventsForDay(state,prefs.selectedDate);
-    const dateName = prefs.selectedDate === M.dayKey(new Date()) ? 'Hoy · ' + niceDate(prefs.selectedDate) : niceDate(prefs.selectedDate);
-    const rows = items.slice(0,12).map(item => {
+    const dateName = prefs.selectedDate === M.dayKey(new Date()) ?
+      'Hoy · ' + niceDate(prefs.selectedDate) : niceDate(prefs.selectedDate);
+    const formatMinutes = n => Math.floor(n/60)+' h'+(n%60?' '+(n%60)+' min':'');
+    const rows = items.map(item => {
       const project = M.projectFor(state,item.projectId);
       const category = M.categoryFor(state,item.categoryId);
       const sessions = (state.events||[]).filter(e=>e.metadata?.kind==='task_work_session_v1'
         &&e.metadata?.task_client_key===item.id);
-      const planned = sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
-      return '<div class="desk-task-row' + (item.done?' is-done':'') + '" draggable="true" data-desk-drag-task="' + E(item.id) + '">' +
+      const reserved = sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
+      const estimate = M.estimatedMinutes(item);
+      return '<div class="desk-task-row' + (item.done?' is-done':'') +
+        '" draggable="' + (!item.done) + '" data-desk-row-id="' + E(item.id) +
+        '" data-desk-drag-task="' + E(item.id) + '">' +
         '<button class="desk-task-check" type="button" data-desk-complete="' + E(item.id) +
         '" aria-label="' + E(item.done?'Reabrir':'Completar') + ' ' + E(item.title) +
         '">' + (item.done?'✓':'') + '</button>' +
         '<button class="desk-task-detail" type="button" data-desk-task="' + E(item.id) + '">' +
         '<strong>' + E(item.title) + '</strong><small>' +
         E(project?.name || category?.name || '') +
-        (planned?' · '+Math.floor(planned/60)+' h '+(planned%60)+' min reservadas':'') +
+        (estimate?' · estimado '+formatMinutes(estimate):'') +
+        (reserved?' · reservado '+formatMinutes(reserved):'') +
         '</small></button>' +
-        (!item.done?'<button type="button" class="desk-plan-task" data-desk-plan-task="' + E(item.id) +
-        '" title="Reservar tiempo para esta tarea" aria-label="Reservar tiempo para ' + E(item.title) + '">＋</button>':'')+
+        (!item.done?'<button type="button" class="desk-task-estimate" data-desk-estimate="' + E(item.id) +
+        '" title="Estimar duración" aria-label="Estimar duración de ' + E(item.title) + '">◷</button>' +
+        '<button type="button" class="desk-plan-task" data-desk-plan-task="' + E(item.id) +
+        '" title="Reservar tiempo" aria-label="Reservar tiempo para ' + E(item.title) + '">＋</button>' +
+        '<button type="button" class="desk-task-handle" data-desk-sort-handle="' + E(item.id) +
+        '" title="Arrastrar para ordenar" aria-label="Arrastrar para ordenar ' + E(item.title) + '">⋮⋮</button>':'')+
         '</div>';
     }).join('');
-    return '<div class="desk-subtitle">' + E(dateName) + '</div>' +
-      (rows || '<p class="desk-empty">No hay tareas para esta fecha.</p>') +
-      (items.length > 12 ? '<p class="desk-small">'+(items.length-12)+' tareas más en Tiempo</p>' : '') +
+    return '<div class="desk-today-toolbar"><span class="desk-subtitle">' + E(dateName) + '</span>' +
+      '<button type="button" class="desk-add-task" data-desk-add-task>＋ Añadir tarea</button></div>' +
+      '<div class="desk-task-list" data-desk-task-list>' +
+      (rows || '<p class="desk-empty">No hay tareas para esta fecha.</p>') + '</div>' +
       '<div class="desk-panel-footer">' +
       '<span>' + items.filter(x=>!x.done).length + ' pendientes · ' + meetings.length + ' eventos</span>' +
       '<button type="button" data-desk-open-time>Ver en Tiempo →</button></div>';
@@ -203,12 +235,16 @@
     }).join('');
     const effort=Math.round(sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0));
     const plannedTasks=M.tasksForDay(state,date).filter(t=>!t.done);
+    const totalEstimate=plannedTasks.reduce((sum,t)=>sum+M.estimatedMinutes(t),0);
+    const unknown=plannedTasks.filter(t=>!M.estimatedMinutes(t)).length;
     const rows=plannedTasks.slice(0,6).map(t=>'<div class="desk-plan-task-row"><span>'+E(t.title)+'</span>'+
       '<button type="button" data-desk-plan-task="'+E(t.id)+'" aria-label="Reservar tiempo para '+E(t.title)+'">Reservar →</button></div>').join('');
     const line=hours.map(h=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('');
     return '<div class="desk-plan-date">' + E(niceDate(date)) + '</div>' +
       '<div class="desk-plan-metrics"><span><strong>'+hmins(scheduled)+'</strong> · eventos programados</span>'+
-      '<span>'+hmins(effort)+' · sesiones de tareas</span></div>' +
+      '<span>'+hmins(effort)+' · sesiones de tareas</span>' +
+      '<span>'+(totalEstimate?hmins(totalEstimate)+' · estimadas':'Sin estimaciones')+
+      (unknown?' · '+unknown+' por estimar':'')+'</span></div>' +
       '<div class="desk-plan-hours">'+line+'</div><div class="desk-time-track">'+bars+'</div>' +
       (!events.length?'<p class="desk-empty desk-plan-note">Sin eventos con horario. Elige una tarea para reservarle tiempo.</p>':'') +
       '<div class="desk-plan-tasks-head">Planificación consciente · tareas sin completar</div>' +
@@ -264,6 +300,8 @@
       prefs.selectedDate=button.dataset.deskDate;
       remember();app()?.selectCalendarDate?.(prefs.selectedDate);render();return;
     }
+    if (button.hasAttribute('data-desk-add-task')) {app()?.openNewItem?.(prefs.selectedDate);return;}
+    if (button.dataset.deskEstimate) {app()?.setTaskEstimatedMinutes?.(button.dataset.deskEstimate);return;}
     if (button.dataset.deskTask) {app()?.editTaskById?.(button.dataset.deskTask);return;}
     if (button.dataset.deskPlanTask) {app()?.planTaskSession?.(button.dataset.deskPlanTask,prefs.selectedDate);return;}
     if (button.dataset.deskComplete) {app()?.toggleTaskById?.(button.dataset.deskComplete);return;}
@@ -331,13 +369,30 @@
     shell.addEventListener('dragstart',event=>{
       const row=event.target.closest?.('[data-desk-drag-task]');
       if (!row) return;
+      if(row.closest('[data-desk-task-list]')) {
+        todayDragId=row.dataset.deskRowId;todayDragDate=prefs.selectedDate;
+        row.classList.add('desk-is-dragging');
+      }
       try {event.dataTransfer.setData('application/x-minds-task',row.dataset.deskDragTask);}
       catch {}
     });
     shell.addEventListener('dragover',event=>{
+      const target=event.target.closest?.('[data-desk-task-list] .desk-task-row');
+      if(todayDragId&&target&&todayDragDate===prefs.selectedDate){
+        event.preventDefault();event.stopPropagation();event.dataTransfer.dropEffect='move';
+        const source=q(shell,'[data-desk-row-id="'+todayDragId+'"]');
+        moveTodayRow(source,target,event.clientY);
+      }
       if (nativeTimeHost && event.target.closest?.('.hours')) event.preventDefault();
     });
     shell.addEventListener('drop',event=>{
+      const target=event.target.closest?.('[data-desk-task-list]');
+      if(target&&todayDragId){
+        event.preventDefault();event.stopPropagation();
+        const list=q(parts.today,'[data-desk-task-list]');
+        commitTodayOrder(list);
+        return;
+      }
       if (!nativeTimeHost || !event.target.closest?.('.hours')) return;
       const id=event.dataTransfer?.getData('application/x-minds-task');
       if (!id) return;
@@ -348,6 +403,47 @@
       const time=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
       app()?.planTaskSession?.(id,prefs.selectedDate,time);
     });
+    shell.addEventListener('dragend',()=> {
+      q(shell,'.desk-is-dragging')?.classList.remove('desk-is-dragging');
+      todayDragId=null;todayDragDate=null;
+    });
+    // iPad/touch: hold the familiar ⋮⋮ handle, move within the same canonical list,
+    // persist the order through the same task mutation operation as Tiempo.
+    shell.addEventListener('touchstart',event=>{
+      const handle=event.target.closest?.('[data-desk-sort-handle]');
+      if(!handle || event.touches.length!==1)return;
+      const row=handle.closest('[data-desk-row-id]');
+      if(!row || row.classList.contains('is-done'))return;
+      touchSort={row,sourceY:event.touches[0].clientY,active:false,timer:null};
+      touchSort.timer=setTimeout(()=>{
+        if(touchSort?.row===row){
+          touchSort.active=true;row.classList.add('desk-is-dragging');
+        }
+      },250);
+    },{passive:true});
+    shell.addEventListener('touchmove',event=>{
+      if(!touchSort || event.touches.length!==1)return;
+      const t=event.touches[0];
+      if(!touchSort.active) {
+        if(Math.abs(t.clientY-touchSort.sourceY)>9){
+          clearTimeout(touchSort.timer);touchSort=null;
+        }
+        return;
+      }
+      event.preventDefault();event.stopPropagation();
+      const target=document.elementFromPoint(t.clientX,t.clientY)
+        ?.closest?.('[data-desk-task-list] .desk-task-row');
+      if(target)moveTodayRow(touchSort.row,target,t.clientY);
+    },{passive:false});
+    const finishTouchSort=()=>{
+      if(!touchSort)return;
+      clearTimeout(touchSort.timer);
+      const row=touchSort.row,active=touchSort.active;
+      touchSort=null;row.classList.remove('desk-is-dragging');
+      if(active)commitTodayOrder(q(parts.today,'[data-desk-task-list]'));
+    };
+    shell.addEventListener('touchend',finishTouchSort,{passive:true});
+    shell.addEventListener('touchcancel',finishTouchSort,{passive:true});
     onSplitter(splitter);
     document.body.classList.add('desk-enabled');
     layout();
