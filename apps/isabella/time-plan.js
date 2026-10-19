@@ -35,10 +35,12 @@ async function readSnapshot(taskId){
   if(count>2000)throw new Error('Hay demasiados eventos para comprobar la agenda completa.');
   if((events||[]).some(e=>!M.rangeMs(e)))
     throw new Error('Hay un evento con un intervalo inválido. Revisa Tiempo antes de planificar.');
-  // Do not pretend that a recurring event is a single occurrence.
-  if((events||[]).some(e=>e.recurrence&&Object.keys(e.recurrence).length))
-    throw new Error('Hay eventos recurrentes que todavía no podemos expandir con seguridad. No reservaré huecos automáticamente.');
-  return {task,events:events||[]};
+  const today=M.dateKey(new Date()),limit=M.addDays(today,90);
+  const until=M.validDate(task.due_date)&&task.due_date<limit?task.due_date:limit;
+  const expanded=M.expandRecurrence(events||[],today,until);
+  if(expanded.unsupported)throw new Error(
+    'Hay una recurrencia que no podemos expandir con seguridad. Revisa esa agenda antes de proponer.');
+  return {task,events:expanded.events};
 }
 function formSettings(){
   return {from:$('#mindsPlanFrom')?.value,until:$('#mindsPlanUntil')?.value,
