@@ -354,7 +354,7 @@ async function deleteWorkTask(task){
 }
 async function saveTask(existing){
   const title=$('#workTaskTitle').value.trim();if(!title)return;const status=$('#workTaskStatus').value,targetBucket=$('#workTaskBucket').value||null;
-  const checklist=$('.work-check-row').map(r=>({id:r.dataset.checkId||Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
+  const checklist=$$('.work-check-row').map(r=>({id:r.dataset.checkId||Math.random().toString(36).slice(2),text:r.querySelector('[data-work-check-text]').value.trim(),done:r.querySelector('[data-work-check-done]').checked})).filter(x=>x.text);
   const sameBucket=!!existing&&(existing.work_bucket_id||null)===targetBucket;
   const workOrder=sameBucket&&Number(existing.work_sort_order||0)>0
     ?Number(existing.work_sort_order)
