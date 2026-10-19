@@ -93,6 +93,58 @@
     }
     return {tasks,events};
   };
+  // Weekly planning is a read-only projection of one canonical task and its events.
+  // A start/due interval describes a delivery window, never hours worked.
+  const weekStart = key => {
+    const date = dateFromKey(key);
+    return date ? addDays(key,-((date.getDay()+6)%7)) : '';
+  };
+  const weeklyPlan = (state,selectedDate,projectId='') => {
+    const start = weekStart(selectedDate);
+    if (!start) return {start:'',end:'',days:[],rows:[],unscheduled:[],overdue:[],events:[]};
+    const days = Array.from({length:7},(_,i)=>addDays(start,i));
+    const end = days[6], sessionsByTask = new Map(), events = [];
+    const eligible = (state.tasks||[]).filter(t=>!t.archivedAt&&!t.done &&
+      (!projectId||t.projectId===projectId));
+    const eligibleIds = new Set(eligible.map(t=>t.id));
+    for (const e of state.events||[]) {
+      if (!days.includes(e.date)) continue;
+      const isSession=e.metadata?.kind==='task_work_session_v1';
+      const linked=isSession?taskForSession(state,e):null;
+      if (linked && eligibleIds.has(linked.id)) {
+        if (!sessionsByTask.has(linked.id)) sessionsByTask.set(linked.id,[]);
+        sessionsByTask.get(linked.id).push(e);
+      } else if ((!linked||!isSession||!eligibleIds.has(linked.id))&&(!projectId||e.projectId===projectId)) {
+        // An orphan remains visible as an event, not an invented task.
+        events.push(e);
+      }
+    }
+    const rows=[],unscheduled=[],overdue=[];
+    for (const task of eligible) {
+      const began=dateFromKey(task.startDate)?task.startDate:'';
+      const due=dateFromKey(task.date)?task.date:'';
+      const invalid=!!(began&&due&&due<began);
+      const first=invalid?due:(began||due),last=invalid?due:(due||began);
+      const sessions=sessionsByTask.get(task.id)||[];
+      const cells=days.map(key=>({key,
+        inWindow:!!(first&&last&&first<=key&&key<=last),
+        begins:!!(began&&began===key),due:!!(due&&due===key),
+        sessions:sessions.filter(e=>e.date===key).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||'')))
+      }));
+      const entry={task,began,due,invalid,cells,
+        overdue:!!(due&&due<start),
+        noDates:!began&&!due};
+      if (cells.some(c=>c.inWindow||c.sessions.length)) rows.push(entry);
+      else if (entry.overdue) overdue.push(entry);
+      else if (!due||invalid) unscheduled.push(entry);
+    }
+    const order=(a,b)=>String(a.due||'9999-12-31').localeCompare(String(b.due||'9999-12-31'))
+      ||String(a.task.title||'').localeCompare(String(b.task.title||''),'es');
+    rows.sort(order);unscheduled.sort(order);overdue.sort(order);
+    events.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||''))
+      ||String(a.start||'').localeCompare(String(b.start||'')));
+    return {start,end,days,rows,unscheduled,overdue,events};
+  };
   const estimatedMinutes = item => {
     const n = Number(item?.metadata?.planning?.estimated_minutes);
     return Number.isInteger(n) && n>0 && n<=43200 ? n : 0;
@@ -102,7 +154,8 @@
   const colorFor = (state,item) =>
     projectFor(state,item.projectId)?.color || categoryFor(state,item.categoryId)?.color || '#7d8692';
   const defaultPreferences = () => ({focus:'chat',order:['calendar','today','plan'],
-    minimized:[],width:332,navCollapsed:true,selectedDate:dayKey(new Date())});
+    minimized:[],width:332,navCollapsed:true,selectedDate:dayKey(new Date()),
+    planMode:'day',planProject:'',planPerson:'',planGrouping:'date'});
   const sanitizePreferences = saved => {
     const input = saved && typeof saved === 'object' ? saved : {};
     const filtered = values => Array.isArray(values)
@@ -114,9 +167,13 @@
     return {focus,order:[...order,...PANELS.filter(v => v !== 'chat' && !order.includes(v))],
       minimized,width:Number.isFinite(width) ? Math.max(270,Math.min(460,width)) : 332,
       navCollapsed: input.navCollapsed === true,
-      selectedDate:dateFromKey(input.selectedDate) ? input.selectedDate : dayKey(new Date())};
+      selectedDate:dateFromKey(input.selectedDate) ? input.selectedDate : dayKey(new Date()),
+      planMode:input.planMode==='week'?'week':'day',
+      planProject:typeof input.planProject==='string'?input.planProject:'',
+      planPerson:typeof input.planPerson==='string'?input.planPerson:'',
+      planGrouping:input.planGrouping==='person'?'person':'date'};
   };
   return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
-    eventsForDay,timedEvents,taskForSession,monthAgendaGroups,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
+    eventsForDay,timedEvents,taskForSession,monthAgendaGroups,weekStart,weeklyPlan,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });
