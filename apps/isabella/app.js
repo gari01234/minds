@@ -3098,6 +3098,9 @@ function newPanel(presetDate=null){
     save();closeModal();renderCalendar();
   };
 }
+function autonomyContextLabel(key){
+  return ({fast_task_dated_v1:'Tarea sencilla con fecha · petición directa',fast_task_undated_v1:'Tarea sencilla sin fecha · petición directa',fast_unverified:'Ruta rápida · contexto sin verificar',interactive_review:'Conversación con revisión',source_derived:'Con fuentes de proyecto o externas',background:'Trabajo en segundo plano',unknown_context:'Contexto no verificado'})[key]||key;
+}
 /* Explicit Sunsama-inspired work session, linked to the existing canonical task.
  * No task duplication, no automatic calendar writes, no invented estimates. */
 function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
@@ -3131,9 +3134,6 @@ function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
     save();renderCalendar();closeModal();
   };
   return true;
-}
-function autonomyContextLabel(key){
-  return ({fast_task_dated_v1:'Tarea sencilla con fecha · petición directa',fast_task_undated_v1:'Tarea sencilla sin fecha · petición directa',fast_unverified:'Ruta rápida · contexto sin verificar',interactive_review:'Conversación con revisión',source_derived:'Con fuentes de proyecto o externas',background:'Trabajo en segundo plano',unknown_context:'Contexto no verificado'})[key]||key;
 }
 function autonomyEvidenceHTML(e){
   const fields=Object.entries(e.changed_fields||{}).map(([k,n])=>`${({date:'fecha',title:'título',category:'categoría',project:'proyecto',notes:'notas'})[k]||k}: ${n}`).join(' · ');
