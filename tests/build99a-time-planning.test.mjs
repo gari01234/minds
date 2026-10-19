@@ -107,7 +107,7 @@ test('UI requires direct approval, checks remote schedule twice, writes one atom
   assert.match(ui,/seen!==keys\.size/);
   assert.match(ui,/origin:'isabella_time_planning_v1',approval:'user_confirmed'/);
   assert.match(ui,/No se pudo confirmar/);
-  assert.match(ui,/recurrence&&Object\.keys\(e\.recurrence\)\.length/);
+  assert.match(ui,/M\.expandRecurrence\(events\|\|\[\],today,until\)/);
   assert.match(ui,/tu calendario personal/);
   assert.doesNotMatch(ui,/\.update\(\{.*assignee_person_id/);
 });
@@ -120,10 +120,10 @@ test('unified task editor routes to proposed blocks only after pending saves com
 });
 
 test('PWA includes model, UI, CSS and matching task-detail/cache version',()=>{
-  for(const asset of ['time-plan-model.js?v=1','time-plan.js?v=1','time-plan.css?v=1','task-detail.js?v=2']){
+  for(const asset of ['time-plan-model.js?v=2','time-plan.js?v=2','time-plan.css?v=1','task-detail.js?v=2']){
     assert.ok(html.includes(asset),'HTML misses '+asset);
     assert.ok(sw.includes(asset),'service worker misses '+asset);
   }
-  assert.ok(html.indexOf('time-plan-model.js?v=1')<html.indexOf('time-plan.js?v=1'));
-  assert.match(sw,/isabella-shell-v158/);
+  assert.ok(html.indexOf('time-plan-model.js?v=2')<html.indexOf('time-plan.js?v=2'));
+  assert.match(sw,/isabella-shell-v159/);
 });

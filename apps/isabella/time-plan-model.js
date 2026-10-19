@@ -30,6 +30,41 @@ const rangeMs=(e)=>{
   return Number.isFinite(a)&&Number.isFinite(b)&&b>a?{start:a,end:b}:null;
 };
 const defaults=()=>({from:'09:00',until:'18:00',block:90,dailyCap:180,skipWeekends:true});
+/* Support only the existing unambiguous annual all-day recurrence shape.
+ * Never treat an unknown recurrence as a one-off event or silently ignore it. */
+function expandRecurrence(events,from,to){
+  if(!validDate(from)||!validDate(to)||from>to)return {events:[],unsupported:true};
+  const out=[];
+  for(const event of events||[]){
+    const recurrence=event?.recurrence;
+    if(!recurrence||typeof recurrence!=='object'||!Object.keys(recurrence).length){
+      out.push(event);continue;
+    }
+    if(recurrence.text!=='annual'||Object.keys(recurrence).length!==1||!event.all_day)
+      return {events:[],unsupported:true};
+    const range=rangeMs(event);
+    if(!range)return {events:[],unsupported:true};
+    const first=new Date(range.start),last=new Date(range.end);
+    if(first.getHours()!==0||first.getMinutes()!==0||
+      last.getHours()!==0||last.getMinutes()!==0)return {events:[],unsupported:true};
+    const firstKey=dateKey(first),lastKey=dateKey(last);
+    const days=Math.round((new Date(lastKey+'T12:00:00')-new Date(firstKey+'T12:00:00'))/86400000);
+    if(days<1||days>14)return {events:[],unsupported:true};
+    for(let year=Number(from.slice(0,4))-1;year<=Number(to.slice(0,4))+1;year++){
+      if(year<first.getFullYear())continue;
+      const occurrence=new Date(year,first.getMonth(),first.getDate(),0,0,0);
+      if(occurrence.getFullYear()!==year||occurrence.getMonth()!==first.getMonth()||
+        occurrence.getDate()!==first.getDate())continue;
+      const end=new Date(occurrence);
+      end.setDate(occurrence.getDate()+days);
+      if(dateKey(end)<=from||dateKey(occurrence)>to)continue;
+      out.push({...event,starts_at:occurrence.toISOString(),ends_at:end.toISOString(),
+        recurrence:{},metadata:{...(event.metadata||{}),expanded_annual:true}});
+    }
+  }
+  return {events:out,unsupported:false};
+}
+
 function suggest({task,events=[],settings={},today=dateKey(new Date()),now=new Date()}={}){
   const cfg={...defaults(),...settings};
   const startHour=minuteOf(cfg.from),endHour=minuteOf(cfg.until);
@@ -89,5 +124,5 @@ function suggest({task,events=[],settings={},today=dateKey(new Date()),now=new D
 const sameSlots=(left,right)=>
   Array.isArray(left)&&Array.isArray(right)&&left.length===right.length&&
   left.every((x,i)=>x.date===right[i].date&&x.start===right[i].start&&x.duration===right[i].duration);
-return {defaults,validDate,addDays,minuteOf,clock,expectedMinutes,rangeMs,suggest,sameSlots};
+return {defaults,dateKey,validDate,addDays,minuteOf,clock,expectedMinutes,rangeMs,expandRecurrence,suggest,sameSlots};
 });
