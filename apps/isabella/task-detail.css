@@ -1,0 +1,40 @@
+/* Build 97B — One lightweight task detail for Work, Chat and Tiempo */
+.minds-task-detail{display:flex;flex-direction:column;gap:16px;font-family:inherit;color:#25262a}
+.minds-task-loading,.minds-task-detail-error{padding:24px 8px;color:#747780;font-size:13px}
+.minds-task-detail-top{display:flex;align-items:center;gap:12px;position:relative}
+.minds-task-detail-top>input{flex:1;min-width:0;padding:8px 1px;border:0!important;background:transparent!important;box-shadow:none!important;font:600 18px/1.4 inherit;color:#242529}
+.minds-task-detail-top>input:focus{outline:0;border-bottom:1px solid #dadde2!important}
+.minds-task-complete{border:1px solid #989ca5;background:white;border-radius:50%;width:26px;height:26px;display:grid;place-items:center;cursor:pointer;flex:none;color:#4a4c54}
+.minds-task-more{appearance:none;border:0;background:transparent;color:#888990;cursor:pointer;font-size:21px;letter-spacing:1px;padding:2px 7px}
+.minds-task-menu{align-self:flex-end;display:flex;flex-direction:column;gap:2px;padding:4px;border:1px solid #e5e5e7;background:#fff;border-radius:9px;box-shadow:0 8px 25px #00000014}
+.minds-task-menu.hidden{display:none}
+.minds-task-menu button{background:transparent;border:0;border-radius:6px;padding:8px 12px;text-align:left;font-size:12px;cursor:pointer}
+.minds-task-menu button:hover{background:#f2f2f4}
+.minds-task-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px 14px}
+.minds-task-fields label,.minds-task-long-field{display:flex;flex-direction:column;gap:5px;font-size:11px;color:#7b7d84;font-weight:500;min-width:0}
+.minds-task-fields input,.minds-task-fields select,.minds-task-long-field input,.minds-task-long-field textarea{width:100%;min-width:0;box-sizing:border-box;background:#fff;border:1px solid #e4e5e8;border-radius:8px;padding:9px 10px;font:12px/1.4 inherit;color:#303138;box-shadow:none}
+.minds-task-fields input:focus,.minds-task-fields select:focus,.minds-task-long-field input:focus,.minds-task-long-field textarea:focus{outline:2px solid #dddfe5;outline-offset:0}
+.minds-task-long-field textarea{min-height:70px;resize:vertical}
+.minds-task-section{display:flex;flex-direction:column;gap:8px;border-top:1px solid #ededf0;padding-top:13px}
+.minds-task-section-head{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.minds-task-section-head strong{font-size:12px;font-weight:600;color:#45474b}
+.minds-task-section-head>span{font-size:10px;color:#94959b}
+.minds-task-inline-add{font-size:11px;border:0;background:transparent;color:#777980;cursor:pointer;padding:3px;text-align:left}
+.minds-task-inline-add:hover{color:#282a30}
+.minds-task-check-row{display:flex;align-items:center;gap:8px;min-height:29px}
+.minds-task-check-row input[type=checkbox]{appearance:none;width:17px;height:17px;border:1px solid #adb1b9;border-radius:50%;flex:none;cursor:pointer}
+.minds-task-check-row input[type=checkbox]:checked{background:#26292f;border-color:#26292f}
+.minds-task-check-row input[type=checkbox]:checked:after{content:'✓';color:white;display:block;text-align:center;font-size:11px}
+.minds-task-check-row input[type=text]{flex:1;min-width:0;border:0;background:transparent;font-size:12px;padding:5px 3px;color:#303138}
+.minds-task-check-row input[type=text]:focus{outline:none;border-bottom:1px solid #d2d4d9}
+.minds-task-check-row button{border:0;background:transparent;color:#a5a5ab;cursor:pointer;font-size:16px}
+.minds-task-attachment,.minds-task-link,.minds-task-session{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:11px;padding:4px 1px}
+.minds-task-attachment button,.minds-task-session button,.minds-task-link button{color:#555861;border:0;background:transparent;text-align:left;cursor:pointer;font-size:11px}
+.minds-task-link a{color:#555861;text-decoration:underline;text-overflow:ellipsis;white-space:nowrap;overflow:hidden}
+.minds-task-muted{color:#9a9ba0;font-size:11px}
+.minds-task-footer{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:9px;padding-top:10px;border-top:1px solid #ededf0}
+.minds-task-footer span{font-size:10px;color:#8a8c92;flex:1}
+.minds-task-footer [data-error=true]{color:#aa5353}
+.minds-task-create{border:0;border-radius:9px;background:#151518;color:white;font:600 12px inherit;padding:9px 16px;cursor:pointer}
+.minds-task-reload{border:1px solid #e4e5e9;background:#fff;border-radius:8px;padding:7px 10px;font-size:11px;cursor:pointer}
+@media(max-width:560px){.minds-task-fields{grid-template-columns:1fr}.minds-task-detail-top>input{font-size:15px}}

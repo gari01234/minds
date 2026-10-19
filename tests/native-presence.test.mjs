@@ -91,6 +91,6 @@ test('Build 71 native presence remains wired into the current PWA',()=>{
   const sw=read('apps/isabella/sw.js');
   assert.ok(shell.includes('Build 2026.10.12.138.2'));
   assert.ok(index.includes('shell.js?v=104'));
-  assert.ok(index.includes('app.js?v=122'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v155'"));
+  assert.ok(index.includes('app.js?v=123'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v156'"));
 });

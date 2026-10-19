@@ -322,6 +322,10 @@ function renderAttachmentEditor(){
   void hydratePlannerImages(box);
 }
 function editTask(task,bucketId){
+  if(window.MINDS_TASK_DETAIL?.open){
+    void window.MINDS_TASK_DETAIL.open({taskId:task?.id||null,projectId:project.id,
+      bucketId:task?.work_bucket_id||bucketId||null,onUpdated:()=>renderPlanner()});return;
+  }
   const assigneeOptions='<option value="">Nicht zugewiesen</option>'+team.map(p=>`<option value="${esc(p.id)}" ${p.id===task?.assignee_person_id?'selected':''}>${esc(p.name)}</option>`).join('')+
     (task?.assignee&&!task.assignee_person_id?`<option value="__legacy__" selected>Aus Bestand: ${esc(task.assignee)}</option>`:'');
   pendingTaskFiles=[];editingAttachments=[...taskAttachments(task||{})];
