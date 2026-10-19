@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 const read=name=>readFileSync(new URL('../apps/isabella/'+name,import.meta.url),'utf8');
 const team=read('work-team.js'),work=read('work.js'),sync=read('sync.js');
 const html=read('index.html'),sw=read('sw.js');
-const sql=readFileSync(new URL('../supabase/migrations/20261019120000_minds_work_project_team_v01.sql',import.meta.url),'utf8');
+const sql=readFileSync(new URL('../supabase/migrations/20261019115157_minds_work_project_team_v01.sql',import.meta.url),'utf8');
 
 test('project team is owner-scoped and structurally linked, without coworker logins',()=>{
   assert.match(sql,/create table public\.minds_work_project_people/);
