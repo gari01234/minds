@@ -74,7 +74,7 @@ test('90.8: asset update is PWA-cache coherent',()=>{
   const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
   assert.ok(html.includes('app.js?v=122'));
   assert.ok(html.includes('ai.js?v=56'));
-  assert.ok(sw.includes('isabella-shell-v154'));
+  assert.ok(sw.includes('isabella-shell-v155'));
   assert.ok(sw.includes('app.js?v=122'));
   assert.ok(sw.includes('ai.js?v=56'));
 });
