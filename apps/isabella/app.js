@@ -2576,7 +2576,7 @@ function nativePlanBand(week,monthMode=false){
 }
 function nativePlanModel(anchor,weeks){
   const filters=nativePlanFilters();
-  const rows=state.nativePlanShowAll?150:(weeks>1?3:45);
+  const rows=state.nativePlanShowAll?150:(weeks>1?3:12);
   return window.MINDS_CALENDAR_PLAN.plan(state,anchor,weeks,filters,rows);
 }
 function bindNativePlanControls(){
@@ -2630,7 +2630,8 @@ async function nativePlanChangeDates(clientKey,edge,shift){
     if(edge==='start')nextStart=P.addDays(start,shift);
     else if(edge==='due')nextDue=P.addDays(due,shift);
     else return;
-    if(nextStart>nextDue)throw new Error('El inicio no puede quedar después de la entrega.');
+    if((edge==='start'||P.valid(row.start_date))&&nextStart>nextDue)
+      throw new Error('El inicio no puede quedar después de la entrega.');
     if(!window.confirm('¿Actualizar '+(edge==='start'?'el inicio':'la entrega')+
       ' a '+(edge==='start'?nextStart:nextDue)+'? Las sesiones ya reservadas no se moverán.'))return;
     const patch=edge==='start'?{start_date:nextStart}:{due_date:nextDue};
