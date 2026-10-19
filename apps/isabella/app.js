@@ -2594,9 +2594,29 @@ function bindNativePlanControls(){
   $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
     state.nativePlanShowAll=true;save();renderCalendar();
   });
-  $$('[data-plan-open]').forEach(button=>button.onclick=()=>{
-    if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
-    editItem('task',button.dataset.planOpen);
+  $('[data-plan-open]').forEach(button=>{
+    button.onclick=()=>{
+      if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
+      editItem('task',button.dataset.planOpen);
+    };
+    button.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;
+      const grid=button.closest('.minds-plan-span-grid');
+      if(!grid)return;
+      const origin=event.clientX;
+      button.setPointerCapture?.(event.pointerId);
+      const up=release=>{
+        button.removeEventListener('pointercancel',cancel);
+        const width=grid.getBoundingClientRect().width/7;
+        const shift=width>0?Math.round((release.clientX-origin)/width):0;
+        if(!shift)return;
+        button.dataset.nativeJustDragged='1';
+        void nativePlanChangeDates(button.dataset.planOpen,'move',shift);
+      };
+      const cancel=()=>button.removeEventListener('pointerup',up);
+      button.addEventListener('pointerup',up,{once:true});
+      button.addEventListener('pointercancel',cancel,{once:true});
+    });
   });
   $$('[data-plan-edge]').forEach(button=>{
     button.type='button';
@@ -2634,12 +2654,15 @@ async function nativePlanChangeDates(clientKey,edge,shift){
     let nextStart=start,nextDue=due;
     if(edge==='start')nextStart=P.addDays(start,shift);
     else if(edge==='due')nextDue=P.addDays(due,shift);
+    else if(edge==='move'){nextStart=P.addDays(start,shift);nextDue=P.addDays(due,shift)}
     else return;
     if((edge==='start'||P.valid(row.start_date))&&nextStart>nextDue)
       throw new Error('El inicio no puede quedar después de la entrega.');
-    if(!window.confirm('¿Actualizar '+(edge==='start'?'el inicio':'la entrega')+
-      ' a '+(edge==='start'?nextStart:nextDue)+'? Las sesiones ya reservadas no se moverán.'))return;
-    const patch=edge==='start'?{start_date:nextStart}:{due_date:nextDue};
+    const label=edge==='move'?'¿Desplazar el período a '+nextStart+' → '+nextDue+'?':
+      '¿Actualizar '+(edge==='start'?'el inicio':'la entrega')+' a '+(edge==='start'?nextStart:nextDue)+'?';
+    if(!window.confirm(label+' Las sesiones ya reservadas no se moverán.'))return;
+    const patch=edge==='move'?{start_date:nextStart,due_date:nextDue}:
+      edge==='start'?{start_date:nextStart}:{due_date:nextDue};
     const {data,error:writeError}=await sb.from('isabella_tasks')
       .update({...patch,updated_at:new Date().toISOString()}).eq('id',row.id).eq('updated_at',row.updated_at)
       .select('id').maybeSingle();
