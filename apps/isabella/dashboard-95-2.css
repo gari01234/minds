@@ -53,3 +53,13 @@
   }
   .desk-estimate-presets button:hover {background:#f0f0f3}
 }
+
+/* Reservations are not a second task or an ordinary meeting. */
+.calendar-entry.is-work-session {border-left-style:dashed}
+.agenda-item.is-work-session .adot {background:transparent;border:1px dashed var(--item-color,#999)}
+.desk-time-event.is-work-session {border-left-style:dashed}
+
+/* Native month agenda: one task row, separately editable booking times. */
+.month-session-links {display:flex;flex-wrap:wrap;gap:6px;padding:0 12px 10px 34px}
+.month-session-link {appearance:none;border:1px dashed #d4d5d9;border-radius:7px;background:#fafafa;color:#65666e;font:inherit;font-size:11px;line-height:1.4;padding:5px 9px;cursor:pointer}
+.month-session-link:hover,.month-session-link:focus-visible {background:#f2f2f4;border-color:#aeb0b8}

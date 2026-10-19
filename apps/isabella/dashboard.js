@@ -226,12 +226,15 @@
     const hmins = min => Math.floor(min/60)+' h '+String(min%60).padStart(2,'0');
     const hours=[7,9,11,13,15,17,19,21];
     const bars=events.map(item=>{
+      const isSession=item.metadata?.kind==='task_work_session_v1';
+      const sourceTask=M.taskForSession(state,item);
+      const eventTitle=isSession?'Sesión · '+(sourceTask?.title||item.title):item.title;
       const until=M.minutes(item.start)+Number(item.duration);
       const time=String(Math.floor(until/60)%24).padStart(2,'0')+':'+String(until%60).padStart(2,'0');
-      return '<button type="button" class="desk-time-event" data-desk-event="' + E(item.id) +
+      return '<button type="button" class="desk-time-event' + (isSession?' is-work-session':'') + '" data-desk-event="' + E(item.id) +
         '" style="left:' + item.left.toFixed(3) + '%;width:' + Math.max(1.7,item.width).toFixed(3) +
         '%;--desk-accent:' + safeColor(M.colorFor(state,item)) + '" title="' + E(item.title) + '">' +
-        '<strong>' + E(item.title) + '</strong><small>' + E(item.start) + '–' + time + '</small></button>';
+        '<strong>' + E(eventTitle) + '</strong><small>' + (isSession?'Tiempo reservado · ':'') + E(item.start) + '–' + time + '</small></button>';
     }).join('');
     const effort=Math.round(sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0));
     const plannedTasks=M.tasksForDay(state,date).filter(t=>!t.done);

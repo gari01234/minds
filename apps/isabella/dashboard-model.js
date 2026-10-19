@@ -68,6 +68,31 @@
         width: (Math.min(end, at+length) - Math.max(start, at)) / (end-start) * 100}];
     });
   };
+  // A reservation is an event, not another task. Never match by title.
+  const taskForSession = (state,event) => {
+    const key = event?.metadata?.kind === 'task_work_session_v1' ? event.metadata.task_client_key : null;
+    return typeof key === 'string' && key
+      ? (state.tasks || []).find(task => task.id === key) || null : null;
+  };
+  // One canonical task per calendar day; reservations stay individually editable events.
+  // A task may have sessions on days other than its due date, without cloning it.
+  const monthAgendaGroups = (state,key) => {
+    const tasks = tasksForDay(state,key).map(task => ({task,sessions:[]}));
+    const byId = new Map(tasks.map(group => [group.task.id,group]));
+    const events = [];
+    for (const event of eventsForDay(state,key)) {
+      const task = taskForSession(state,event);
+      if (!task || task.archivedAt) { events.push(event); continue; }
+      let group = byId.get(task.id);
+      if (!group) {
+        group = {task,sessions:[]};
+        byId.set(task.id,group);
+        tasks.push(group);
+      }
+      group.sessions.push(event);
+    }
+    return {tasks,events};
+  };
   const estimatedMinutes = item => {
     const n = Number(item?.metadata?.planning?.estimated_minutes);
     return Number.isInteger(n) && n>0 && n<=43200 ? n : 0;
@@ -92,6 +117,6 @@
       selectedDate:dateFromKey(input.selectedDate) ? input.selectedDate : dayKey(new Date())};
   };
   return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
-    eventsForDay,timedEvents,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
+    eventsForDay,timedEvents,taskForSession,monthAgendaGroups,estimatedMinutes,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });

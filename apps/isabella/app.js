@@ -2497,13 +2497,21 @@ function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus'
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
 function move(dir){let d=fromIso(state.date);if(state.view==='day')d=addDays(d,dir);else if(state.view==='week')d=addDays(d,dir*7);else d=new Date(d.getFullYear(),d.getMonth()+dir,1);state.date=iso(d);save();renderCalendar()}
 function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
+function workSessionPresentation(event){
+  if(event?.metadata?.kind!=='task_work_session_v1')
+    return {title:event?.title||'',isSession:false,task:null};
+  const key=event.metadata.task_client_key;
+  const task=typeof key==='string'&&key?state.tasks.find(t=>t.id===key)||null:null;
+  return {title:'Sesión · '+(task?.title||event.title),isSession:true,task};
+}
 function agendaRow(kind,item){
   const category=cat(item.categoryId),proj=item.projectId?' · '+project(item.projectId):'';
-  const time=kind==='event'?item.start:'Todo el día';
+  const presentation=kind==='event'?workSessionPresentation(item):null;
+  const time=kind==='event'?(presentation.isSession?item.start+' · '+item.duration+' min':item.start):'Todo el día';
   const color=itemColor(item),done=kind==='task'&&!!item.done;
-  return `<div class="agenda-item ${kind}-item ${kind==='task'?'task-item':''} ${done?'task-done':''}" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0" style="--item-color:${color}">
+  return `<div class="agenda-item ${kind}-item ${kind==='task'?'task-item':''} ${done?'task-done':''} ${presentation?.isSession?'is-work-session':''}" data-kind="${kind}" data-id="${item.id}" data-date="${item.date}" tabindex="0" style="--item-color:${color}">
     ${kind==='task'?`<button class="task-check ${done?'checked':''}" data-task-toggle="${item.id}" aria-label="${done?'Marcar pendiente':'Marcar hecha'}">${done?'✓':''}</button>`:'<span class="adot"></span>'}
-    <div class="agenda-main"><strong>${esc(item.title)}</strong><div class="meta">${esc(category)}${esc(proj)}</div></div>
+    <div class="agenda-main"><strong>${esc(presentation?.title||item.title)}</strong><div class="meta">${presentation?.isSession?'Tiempo reservado · ':''}${esc(category)}${esc(proj)}</div></div>
     <div class="agenda-tail"><div class="atime">${esc(time)}</div>${kind==='task'?'<button class="drag-handle" aria-label="Mantén y arrastra para reordenar">⋮⋮</button>':''}</div>
   </div>`;
 }
@@ -2521,12 +2529,16 @@ function month(){
   h+='</div>';
   // The month action belongs between the month grid and the selected-day agenda.
   h+='<div class="calendar-create-row calendar-create-after-grid"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>';
-  const ev=state.events.filter(x=>x.date===state.date).sort((a,b)=>a.start.localeCompare(b.start));
-  const ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
+  // Month groups linked reservations under their canonical task, even when
+  // the booking falls on a different day than the task's due date.
+  const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(state,state.date);
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
   if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
   for(const e of ev)h+=agendaRow('event',e);
-  for(const t of ta)h+=agendaRow('task',t);
+  for(const {task,sessions} of ta){
+    h+=agendaRow('task',task);
+    if(sessions.length)h+='<div class="month-session-links">'+sessions.map(e=>`<button type="button" class="calendar-entry month-session-link" data-kind="event" data-id="${esc(e.id)}" data-date="${esc(e.date)}" aria-label="Editar sesión de ${esc(task.title)}">${esc(e.start)} · ${Number(e.duration)||0} min reservados</button>`).join('')+'</div>';
+  }
   h+='</div>';
   $('#calendarContent').innerHTML=h;
   $$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()});
@@ -2536,7 +2548,7 @@ function week(){
   const s=startWeek(fromIso(state.date));let h='<div class="week">';
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
-    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>`<button class="witem calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(e.title)}</button>`).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
@@ -2544,7 +2556,7 @@ function day(){
   const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
   let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry task-item ${t.done?'task-done':''}" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓ ':'○ '}${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
   for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;
-  for(const e of ev){const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry event-item" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="top:${top}px;height:${height}px;--item-color:${itemColor(e)}"><b>${esc(e.start)} ${esc(e.title)}</b><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></button>`}
+  for(const e of ev){const presentation=workSessionPresentation(e);const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry event-item ${presentation.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="top:${top}px;height:${height}px;--item-color:${itemColor(e)}"><b>${esc(e.start)} ${esc(presentation.title)}</b><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></button>`}
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
 }
 function bindCalendarItems(){
@@ -2670,13 +2682,19 @@ function editItem(kind,id){
   const item=itemBy(kind,id);if(!item)return;
   const cats=state.categories.map(x=>`<option value="${x.id}" ${x.id===item.categoryId?'selected':''}>${esc(x.name)}</option>`).join('');
   const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${x.id}" ${x.id===item.projectId?'selected':''}>${esc(x.name)}</option>`).join('');
+  const session=kind==='event'?workSessionPresentation(item):null;
   const specific=kind==='event'
     ?`<label>Hora<input id="editTime" type="time" value="${esc(item.start||'09:00')}"></label><label>Duración (min)<input id="editDuration" type="number" min="5" step="5" value="${Number(item.duration||60)}"></label>`
     :`<label>Recordatorio<input id="editReminder" type="time" value="${esc(item.reminderTime||'')}"></label>`;
-  modal(kind==='event'?'Editar evento':'Editar tarea',`<div class="form item-editor">
+  const sessionDetails=session?.isSession
+    ?'<p class="small">Tiempo reservado, no una segunda tarea. '+(session.task?'Tarea original: '+esc(session.task.title):'La tarea vinculada no está disponible.')+'</p>'+
+      (session.task?'<button type="button" id="editLinkedTask" class="secondary">Abrir tarea original ↗</button>':'')
+    :'';
+  modal(kind==='event'?(session?.isSession?'Editar sesión':'Editar evento'):'Editar tarea',`<div class="form item-editor">
     <label>Título<input id="editTitle" value="${esc(item.title)}"></label>
     <label>${kind==='task'?'Fecha (opcional)':'Fecha'}<input id="editDate" type="date" value="${esc(item.date||'')}"></label>
     ${specific}
+    ${sessionDetails}
     <label>Categoría<select id="editCategory">${cats}</select></label>
     <label>Proyecto<select id="editProject">${projects}</select></label>
     <label>Notas<textarea id="editNotes" rows="3">${esc(item.notes||'')}</textarea></label>
@@ -2695,6 +2713,7 @@ function editItem(kind,id){
     mutation(kind,'update',before,item,'manual');save();renderCalendar();closeModal();
   };
   $('#editDelete').onclick=()=>deleteItem(kind,id);
+  if(session?.task)$('#editLinkedTask').onclick=()=>editItem('task',session.task.id);
 }
 function duplicateItem(kind,id){
   const item=itemBy(kind,id);if(!item)return;
