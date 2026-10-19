@@ -73,7 +73,7 @@
   const colorFor = (state,item) =>
     projectFor(state,item.projectId)?.color || categoryFor(state,item.categoryId)?.color || '#7d8692';
   const defaultPreferences = () => ({focus:'chat',order:['calendar','today','plan'],
-    minimized:[],width:332,navCollapsed:false,selectedDate:dayKey(new Date())});
+    minimized:[],width:332,navCollapsed:true,selectedDate:dayKey(new Date())});
   const sanitizePreferences = saved => {
     const input = saved && typeof saved === 'object' ? saved : {};
     const filtered = values => Array.isArray(values)

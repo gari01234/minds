@@ -455,6 +455,9 @@ function placeGlobalMenu(name){
 function show(name){
   const allowed=['assistant','feed','ideas','work','calendar','readings','thoughts'];
   if(!allowed.includes(name))name='assistant';
+  // The native Time controls may be temporarily docked inside Chat.
+  // Return them to their original screen BEFORE that screen becomes active.
+  window.dispatchEvent(new CustomEvent('isabella:before-screen-change',{detail:{next:name}}));
   const previous=state.screen;
   if(previous==='thoughts'&&name!=='thoughts')unmountThoughts();
   // Preserve the selected date when changing lenses; Hoy is an explicit action.
@@ -3095,6 +3098,40 @@ function newPanel(presetDate=null){
     save();closeModal();renderCalendar();
   };
 }
+/* Explicit Sunsama-inspired work session, linked to the existing canonical task.
+ * No task duplication, no automatic calendar writes, no invented estimates. */
+function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
+  const task=state.tasks.find(t=>t.id===taskId&&!t.archivedAt);
+  if(!task)return false;
+  const date=/^\d{4}-\d{2}-\d{2}$/.test(String(scheduledDate))?scheduledDate:(task.date||today());
+  const current=state.events.filter(e=>e.metadata?.kind==='task_work_session_v1'&&e.metadata?.task_client_key===taskId);
+  const subtotal=current.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
+  const readable=mins=>Math.floor(mins/60)+' h '+String(mins%60).padStart(2,'0')+' min';
+  modal('Reservar tiempo para la tarea',`<div class="form item-editor">
+    <p class="small">Tarea original · ${esc(task.title)}</p>
+    <p class="small">Sesiones ya reservadas: ${esc(readable(subtotal))}. La tarea se mantiene en Work y Hoy sin duplicarse.</p>
+    <label>Fecha<input id="deskSessionDate" type="date" value="${esc(date)}"></label>
+    <label>Comienzo<input id="deskSessionStart" type="time" value="${esc(proposedStart)}"></label>
+    <label>Tiempo de trabajo (minutos, elegido por ti)<input id="deskSessionDuration" type="number" min="15" max="720" step="15" value="60"></label>
+    <p class="small">Esto crea una sesión en el calendario vinculada a la tarea, no otra tarea. Elige y confirma una duración.</p>
+    <button type="button" class="primary" id="deskSessionSave">Reservar sesión</button>
+    <button type="button" class="secondary" id="deskSessionCancel">Cancelar</button>
+  </div>`);
+  $('#deskSessionCancel').onclick=closeModal;
+  $('#deskSessionSave').onclick=()=>{
+    const d=$('#deskSessionDate').value,start=$('#deskSessionStart').value,duration=Number($('#deskSessionDuration').value);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(d)||iso(fromIso(d))!==d||!/^([01]\d|2[0-3]):[0-5]\d$/.test(start)||!Number.isInteger(duration)||duration<15||duration>720){
+      alert('Comprueba la fecha, la hora y la duración (15–720 minutos).');return;
+    }
+    const item={id:uid(),title:task.title,date:d,start,duration,categoryId:task.categoryId,
+      projectId:task.projectId,allDay:false,
+      metadata:{kind:'task_work_session_v1',task_client_key:task.id}};
+    state.events.push(item);
+    mutation('event','create',null,item,'manual');
+    save();renderCalendar();closeModal();
+  };
+  return true;
+}
 function autonomyContextLabel(key){
   return ({fast_task_dated_v1:'Tarea sencilla con fecha · petición directa',fast_task_undated_v1:'Tarea sencilla sin fecha · petición directa',fast_unverified:'Ruta rápida · contexto sin verificar',interactive_review:'Conversación con revisión',source_derived:'Con fuentes de proyecto o externas',background:'Trabajo en segundo plano',unknown_context:'Contexto no verificado'})[key]||key;
 }
@@ -3896,6 +3933,10 @@ window.ISABELLA_APP={
   editTaskById:(id)=>editItem('task',id),
   editEventById:(id)=>editItem('event',id),
   toggleTaskById:(id)=>toggleTaskDone(id),
+  planTaskSession,
+  scrollChatToLatest:()=>scrollAssistantToLatest(true),
+  renderNativeCalendar:()=>renderCalendar(),
+  setCalendarView:(view)=>{if(!['day','week','month'].includes(view))return false;state.view=view;save();renderCalendar();return true;},
   selectCalendarDate:(date)=>{
     if(!/^\d{4}-\d{2}-\d{2}$/.test(String(date))||iso(fromIso(date))!==date)return false;
     state.date=date;save();renderCalendar();return true;

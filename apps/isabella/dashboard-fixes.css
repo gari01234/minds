@@ -1,0 +1,142 @@
+/* Build 95.1 — preserve original Time and Chat mechanics inside the grid.
+   Visual overrides are scoped to the already opted-in >=950px desk runtime. */
+@media (min-width:950px) {
+  /* Global navigation is one instrument for every section, not a chat-only copy. */
+  body.desk-enabled .app {
+    display:grid!important;grid-template-columns:206px minmax(0,1fr)!important;
+    grid-template-rows:42px minmax(0,1fr)!important;
+    width:100%!important;max-width:none!important;height:100dvh!important;
+  }
+  body.desk-enabled.minds-nav-collapsed .app {
+    grid-template-columns:62px minmax(0,1fr)!important;
+  }
+  body.desk-enabled .topbar {
+    grid-column:1/-1!important;grid-row:1!important;
+    min-height:42px!important;height:42px!important;
+    padding:0 19px!important;border-bottom:1px solid #ededed!important;
+    background:#fff;z-index:20;
+  }
+  body.desk-enabled .topbar-brand {visibility:hidden}
+  body.desk-enabled .orb-dock {height:32px;width:36px;transform:scale(.7)}
+  body.desk-enabled .top-actions .dots {font-size:18px}
+  body.desk-enabled #desktopLenses {
+    display:flex!important;grid-column:1!important;grid-row:2!important;
+    flex-direction:column;align-items:stretch;min-height:0;min-width:0;
+    overflow-y:auto;background:#fff;border-right:1px solid #ededed;
+    padding:14px 10px 16px;
+  }
+  body.desk-enabled #swipeArea {
+    grid-column:2!important;grid-row:2!important;
+    min-width:0;min-height:0;overflow:hidden;
+  }
+  body.desk-enabled #mainNav {display:none!important}
+  body.desk-enabled .lenses-heading {
+    font-size:9px;color:#9c9ca1;letter-spacing:.17em;margin:3px 4px 11px;padding:0;
+  }
+  body.desk-enabled .lens-nav-item {min-height:50px;border-radius:9px;padding:9px;gap:10px}
+  body.desk-enabled .lens-copy strong {font-size:12px}
+  body.desk-enabled .lens-copy small {font-size:10px}
+  body.desk-enabled .lens-glyph {flex-basis:20px}
+  body.desk-enabled .lenses-foot {font-size:9px;line-height:1.4;padding:14px 8px 0}
+  body.desk-enabled.minds-nav-collapsed #desktopLenses {padding:14px 7px}
+  body.desk-enabled.minds-nav-collapsed #desktopLenses .lenses-heading,
+  body.desk-enabled.minds-nav-collapsed #desktopLenses .lens-copy,
+  body.desk-enabled.minds-nav-collapsed #desktopLenses .lenses-foot {display:none!important}
+  body.desk-enabled.minds-nav-collapsed #desktopLenses .lens-nav-item {
+    justify-content:center;padding:10px 5px
+  }
+  body.desk-enabled.minds-nav-collapsed #desktopLenses .desk-nav-collapse {margin-right:auto}
+  /* Fix CSS inherited from full-screen composer: no centered transform, no invisible
+     width floor, flex child may shrink in the compact rail. */
+  body.desk-enabled .desk-panel--chat .composer-wrap {
+    left:auto!important;right:auto!important;bottom:auto!important;
+    width:100%!important;max-width:100%!important;min-width:0!important;
+    margin:0!important;transform:none!important;
+    box-sizing:border-box!important;position:relative!important;
+    padding:10px 15px 12px!important;
+  }
+  body.desk-enabled .desk-panel--chat .composer {
+    width:100%!important;max-width:100%!important;min-width:0!important;
+    display:flex;flex-wrap:nowrap;
+  }
+  body.desk-enabled .desk-panel--chat .composer textarea {
+    flex:1 1 0!important;min-width:0!important;width:0!important;
+    resize:none!important;
+  }
+  body.desk-enabled .desk-panel--chat .composer :is(.send,.mic,.attach) {
+    flex:0 0 38px;width:38px;height:38px;min-width:38px;min-height:38px;
+    padding:0;border-radius:50%!important;
+  }
+  body.desk-enabled .desk-panel--chat .composer .send {flex-basis:38px}
+  body.desk-enabled .desk-rail .desk-panel--chat .composer-wrap {padding:7px 8px 9px!important}
+  body.desk-enabled .desk-rail .desk-panel--chat .composer :is(.send,.attach) {
+    flex:0 0 30px;width:30px;min-width:30px;height:30px;min-height:30px;
+  }
+  body.desk-enabled .desk-rail .desk-panel--chat .composer {gap:3px;padding:4px}
+  body.desk-enabled .desk-rail .desk-panel--chat .composer textarea {font-size:12px}
+  body.desk-enabled .desk-panel--chat .assistant-scroll {
+    flex:1 1 0!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    scroll-behavior:auto!important;
+  }
+  body.desk-enabled .desk-panel--chat .messages {min-height:0!important}
+  /* Native Time is moved (not cloned) only when Calendar is enlarged.
+     All its original click, touch, sort and drag handlers stay attached. */
+  body.desk-enabled .desk-panel--calendar:has(>.desk-time-native) > .desk-panel-content {
+    display:none!important;
+  }
+  body.desk-enabled .desk-time-native {
+    display:flex;flex:1;flex-direction:column;
+    width:100%;min-width:0;min-height:0;overflow:hidden;
+    background:white;
+  }
+  body.desk-enabled .desk-time-native .calendar-content {
+    flex:1 1 0;min-height:0;min-width:0;overflow-y:auto;overflow-x:auto;
+    overscroll-behavior:contain;
+  }
+  body.desk-enabled .desk-time-native .cal-toolbar {flex:none;min-height:49px}
+  body.desk-enabled .desk-time-native .cal-nav {flex:none;min-height:60px}
+  body.desk-enabled .desk-time-native #backButton {display:none}
+  body.desk-enabled .desk-time-native .cal-title {font-size:25px}
+  body.desk-enabled .desk-time-native .month-grid {padding:0 12px}
+  body.desk-enabled .desk-time-native .week {min-width:910px}
+  body.desk-enabled .desk-time-native .month-weekdays {min-width:0}
+  /* A check is a circle, never a pill. */
+  body.desk-enabled .desk-task-check {
+    flex:0 0 19px!important;width:19px!important;height:19px!important;
+    min-width:19px!important;min-height:19px!important;
+    aspect-ratio:1/1!important;box-sizing:border-box!important;
+    padding:0!important;border-radius:50%!important;
+    -webkit-appearance:none;appearance:none;
+    line-height:17px!important;display:grid!important;place-items:center;
+  }
+  body.desk-enabled .desk-plan-task {
+    flex:0 0 25px;width:25px;min-width:25px;height:25px;min-height:25px;
+    padding:0;border:1px solid #e8e8eb;border-radius:50%;
+    background:#fff;color:#777;font-size:17px;cursor:pointer;
+  }
+  body.desk-enabled .desk-plan-task:hover {border-color:#777;color:#111}
+  body.desk-enabled .desk-plan-metrics {
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    flex-wrap:wrap;font-size:10px;color:#888;margin:0 0 14px;
+  }
+  body.desk-enabled .desk-plan-metrics strong {font-size:12px;font-weight:650;color:#242424}
+  body.desk-enabled .desk-plan-tasks-head {
+    border-top:1px solid #efeff0;margin-top:15px;padding-top:12px;
+    color:#7a7a80;font-size:10px;font-weight:650;
+  }
+  body.desk-enabled .desk-plan-task-row {
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:9px 0;border-bottom:1px solid #f1f1f2;min-width:0;
+  }
+  body.desk-enabled .desk-plan-task-row span {
+    flex:1;min-width:0;overflow-wrap:anywhere;font-size:11px;
+  }
+  body.desk-enabled .desk-plan-task-row button {
+    flex:none;border:0;background:transparent;color:#4d4d52;
+    cursor:pointer;font-size:10px;padding:6px 2px;
+  }
+  body.desk-enabled .desk-plan-task-row button:hover {text-decoration:underline}
+  body.desk-enabled .desk-task-row[draggable=true] {cursor:grab}
+  body.desk-enabled .desk-task-row[draggable=true]:active {cursor:grabbing}
+}

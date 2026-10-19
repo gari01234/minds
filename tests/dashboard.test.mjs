@@ -46,6 +46,9 @@ test('workspace preferences reject unrecognized panels and impossible dimensions
   assert.notEqual(p.selectedDate,'2026-02-31');
   assert.equal(p.navCollapsed,true);
 });
+test('closed navigation is the default on launch',()=>{
+ assert.equal(model.defaultPreferences().navCollapsed,true);
+});
 test('untrusted task labels are escaped before insertion as HTML',()=>{
   assert.equal(model.escapeHtml('<img src=x onerror="a">'),
     '&lt;img src=x onerror=&quot;a&quot;&gt;');

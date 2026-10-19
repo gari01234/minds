@@ -15,12 +15,32 @@
   const E = M.escapeHtml;
   const q = (parent,selector) => parent.querySelector(selector);
   const load = () => {
-    try { return M.sanitizePreferences(JSON.parse(localStorage.getItem(KEY) || 'null')); }
-    catch { return M.defaultPreferences(); }
+    // At each new launch the views rail starts collapsed; it stays toggleable
+    // across Chat, Time, Work, Lecturas, Situación and Thoughts in this session.
+    try { return {...M.sanitizePreferences(JSON.parse(localStorage.getItem(KEY) || 'null')),navCollapsed:true}; }
+    catch { return {...M.defaultPreferences(),navCollapsed:true}; }
   };
   let prefs = load(),shell = null, stage = null, rail = null, parking = null, dock = null;
   let parts = {}, originalScroll = null, originalComposer = null, navButton = null;
   let previousFocus = 'chat', dragged = null, frame = 0;
+  const nativeTimeScreen = document.getElementById('calendarScreen');
+  const nativeTimeParts = nativeTimeScreen
+    ? ['.cal-toolbar','.cal-nav','#calendarContent'].map(selector=>nativeTimeScreen.querySelector(selector))
+    : [];
+  let nativeTimeHost = null;
+  const releaseTime = () => {
+    if (!nativeTimeHost || !nativeTimeScreen) return;
+    for (const node of nativeTimeParts) if (node) nativeTimeScreen.append(node);
+    nativeTimeHost.remove();nativeTimeHost=null;
+  };
+  const mountTime = () => {
+    if (nativeTimeHost || !parts.calendar || nativeTimeParts.some(node=>!node)) return;
+    nativeTimeHost = elt('div','desk-time-native');
+    for (const node of nativeTimeParts) nativeTimeHost.append(node);
+    parts.calendar.append(nativeTimeHost);
+    if (app()?.getState()?.date !== prefs.selectedDate) app()?.selectCalendarDate?.(prefs.selectedDate);
+    else app()?.renderNativeCalendar?.();
+  };
   const remember = () => {
     try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch {}
   };
@@ -78,6 +98,7 @@
   };
   const layout = () => {
     if (!shell) return;
+    if (prefs.focus !== 'calendar' || prefs.minimized.includes('calendar')) releaseTime();
     let visible = M.PANELS.filter(k => !prefs.minimized.includes(k));
     if (!visible.length) {prefs.minimized=[];visible=[...M.PANELS];}
     if (!visible.includes(prefs.focus)) prefs.focus = visible.includes('chat') ? 'chat' : visible[0];
@@ -105,6 +126,7 @@
       '<span aria-hidden="true">' + ICONS[key] + '</span>' + LABELS[key] + ' <span aria-hidden="true">＋</span></button>').join('');
     dock.hidden = prefs.minimized.length === 0;
     rail.hidden = rail.children.length === 0;
+    if (prefs.focus === 'calendar' && app()?.getState()?.screen==='assistant') mountTime();
     document.body.classList.toggle('minds-nav-collapsed',prefs.navCollapsed);
     navButton.setAttribute('aria-expanded',String(!prefs.navCollapsed));
     navButton.title = prefs.navCollapsed ? 'Mostrar vistas' : 'Minimizar vistas';
@@ -141,13 +163,21 @@
     const rows = items.slice(0,12).map(item => {
       const project = M.projectFor(state,item.projectId);
       const category = M.categoryFor(state,item.categoryId);
-      return '<div class="desk-task-row' + (item.done?' is-done':'') + '">' +
+      const sessions = (state.events||[]).filter(e=>e.metadata?.kind==='task_work_session_v1'
+        &&e.metadata?.task_client_key===item.id);
+      const planned = sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
+      return '<div class="desk-task-row' + (item.done?' is-done':'') + '" draggable="true" data-desk-drag-task="' + E(item.id) + '">' +
         '<button class="desk-task-check" type="button" data-desk-complete="' + E(item.id) +
         '" aria-label="' + E(item.done?'Reabrir':'Completar') + ' ' + E(item.title) +
         '">' + (item.done?'✓':'') + '</button>' +
         '<button class="desk-task-detail" type="button" data-desk-task="' + E(item.id) + '">' +
         '<strong>' + E(item.title) + '</strong><small>' +
-        E(project?.name || category?.name || '') + '</small></button></div>';
+        E(project?.name || category?.name || '') +
+        (planned?' · '+Math.floor(planned/60)+' h '+(planned%60)+' min reservadas':'') +
+        '</small></button>' +
+        (!item.done?'<button type="button" class="desk-plan-task" data-desk-plan-task="' + E(item.id) +
+        '" title="Reservar tiempo para esta tarea" aria-label="Reservar tiempo para ' + E(item.title) + '">＋</button>':'')+
+        '</div>';
     }).join('');
     return '<div class="desk-subtitle">' + E(dateName) + '</div>' +
       (rows || '<p class="desk-empty">No hay tareas para esta fecha.</p>') +
@@ -159,30 +189,43 @@
   const planHtml = state => {
     const date = prefs.selectedDate;
     const events = M.timedEvents(state,date,7,21);
-    const hours = [7,9,11,13,15,17,19,21];
-    const bars = events.map(item => {
-      const start = E(item.start),end = M.minutes(item.start) + Number(item.duration);
-      const until = String(Math.floor(end/60)%24).padStart(2,'0')+':'+String(end%60).padStart(2,'0');
+    const sessions = M.eventsForDay(state,date).filter(e=>e.metadata?.kind==='task_work_session_v1');
+    const scheduled = events.reduce((sum,e)=>sum+Number(e.duration||0),0);
+    const hmins = min => Math.floor(min/60)+' h '+String(min%60).padStart(2,'0');
+    const hours=[7,9,11,13,15,17,19,21];
+    const bars=events.map(item=>{
+      const until=M.minutes(item.start)+Number(item.duration);
+      const time=String(Math.floor(until/60)%24).padStart(2,'0')+':'+String(until%60).padStart(2,'0');
       return '<button type="button" class="desk-time-event" data-desk-event="' + E(item.id) +
-        '" style="left:' + item.left.toFixed(3) + '%;width:' + Math.max(1.7,item.width).toFixed(3) + '%;--desk-accent:' +
-        safeColor(M.colorFor(state,item)) + '" title="' + E(item.title) + '">' +
-        '<strong>' + E(item.title) + '</strong><small>' + start + '–' + until + '</small></button>';
+        '" style="left:' + item.left.toFixed(3) + '%;width:' + Math.max(1.7,item.width).toFixed(3) +
+        '%;--desk-accent:' + safeColor(M.colorFor(state,item)) + '" title="' + E(item.title) + '">' +
+        '<strong>' + E(item.title) + '</strong><small>' + E(item.start) + '–' + time + '</small></button>';
     }).join('');
-    const lines = hours.map(h => '<span>' + String(h).padStart(2,'0') + ':00</span>').join('');
+    const effort=Math.round(sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0));
+    const plannedTasks=M.tasksForDay(state,date).filter(t=>!t.done);
+    const rows=plannedTasks.slice(0,6).map(t=>'<div class="desk-plan-task-row"><span>'+E(t.title)+'</span>'+
+      '<button type="button" data-desk-plan-task="'+E(t.id)+'" aria-label="Reservar tiempo para '+E(t.title)+'">Reservar →</button></div>').join('');
+    const line=hours.map(h=>'<span>'+String(h).padStart(2,'0')+':00</span>').join('');
     return '<div class="desk-plan-date">' + E(niceDate(date)) + '</div>' +
-      '<div class="desk-plan-hours">' + lines + '</div>' +
-      '<div class="desk-time-track">' + bars + '</div>' +
-      (!events.length?'<p class="desk-empty desk-plan-note">Sin eventos con hora. Las tareas sin horario permanecen en «Hoy».</p>':'') +
-      '<div class="desk-panel-footer"><span>Solo bloques horarios confirmados</span>' +
-      '<button type="button" data-desk-open-time>Abrir calendario →</button></div>';
+      '<div class="desk-plan-metrics"><span><strong>'+hmins(scheduled)+'</strong> · eventos programados</span>'+
+      '<span>'+hmins(effort)+' · sesiones de tareas</span></div>' +
+      '<div class="desk-plan-hours">'+line+'</div><div class="desk-time-track">'+bars+'</div>' +
+      (!events.length?'<p class="desk-empty desk-plan-note">Sin eventos con horario. Elige una tarea para reservarle tiempo.</p>':'') +
+      '<div class="desk-plan-tasks-head">Planificación consciente · tareas sin completar</div>' +
+      (rows||'<p class="desk-empty">No hay tareas pendientes para esta fecha.</p>')+
+      '<div class="desk-panel-footer"><span>Las sesiones están vinculadas a las tareas originales.</span>' +
+      '<button type="button" data-desk-open-time>Tiempo →</button></div>';
   };
   const render = () => {
     if (!shell || !app()) return;
     const state = app().getState();
-    const map = {calendar:calendarHtml(state),today:todayHtml(state),plan:planHtml(state)};
+    if (nativeTimeHost && state.date && state.date!==prefs.selectedDate) {
+      prefs.selectedDate=state.date;remember();
+    }
+    const map = {calendar:nativeTimeHost?null:calendarHtml(state),today:todayHtml(state),plan:planHtml(state)};
     for (const key of Object.keys(map)) {
       const container = q(parts[key],'.desk-panel-content');
-      if (container) container.innerHTML = map[key];
+      if (container && map[key] !== null) container.innerHTML = map[key];
     }
   };
   const scheduleRender = () => {
@@ -199,7 +242,12 @@
     const button = event.target.closest('button');
     if (!button || !shell) return;
     const focus = button.dataset.deskFocus,mini = button.dataset.deskMinimize,restore = button.dataset.deskRestore;
-    if (focus && parts[focus]) {previousFocus=prefs.focus;prefs.focus=focus;prefs.minimized=prefs.minimized.filter(k=>k!==focus);layout();return;}
+    if (focus && parts[focus]) {
+      previousFocus=prefs.focus;prefs.focus=focus;
+      prefs.minimized=prefs.minimized.filter(k=>k!==focus);layout();
+      if (focus==='chat') requestAnimationFrame(()=>requestAnimationFrame(()=>app()?.scrollChatToLatest?.()));
+      return;
+    }
     if (mini && parts[mini]) {
       if (M.PANELS.filter(k=>!prefs.minimized.includes(k)).length<=1) return;
       prefs.minimized=[...prefs.minimized,mini];
@@ -217,6 +265,7 @@
       remember();app()?.selectCalendarDate?.(prefs.selectedDate);render();return;
     }
     if (button.dataset.deskTask) {app()?.editTaskById?.(button.dataset.deskTask);return;}
+    if (button.dataset.deskPlanTask) {app()?.planTaskSession?.(button.dataset.deskPlanTask,prefs.selectedDate);return;}
     if (button.dataset.deskComplete) {app()?.toggleTaskById?.(button.dataset.deskComplete);return;}
     if (button.dataset.deskEvent) {app()?.editEventById?.(button.dataset.deskEvent);return;}
     if (button.hasAttribute('data-desk-open-time')) openTime();
@@ -279,14 +328,40 @@
     navButton.addEventListener('click',()=>{prefs.navCollapsed=!prefs.navCollapsed;layout();});
     sidebar.prepend(navButton);
     shell.addEventListener('click',onClick);
+    shell.addEventListener('dragstart',event=>{
+      const row=event.target.closest?.('[data-desk-drag-task]');
+      if (!row) return;
+      try {event.dataTransfer.setData('application/x-minds-task',row.dataset.deskDragTask);}
+      catch {}
+    });
+    shell.addEventListener('dragover',event=>{
+      if (nativeTimeHost && event.target.closest?.('.hours')) event.preventDefault();
+    });
+    shell.addEventListener('drop',event=>{
+      if (!nativeTimeHost || !event.target.closest?.('.hours')) return;
+      const id=event.dataTransfer?.getData('application/x-minds-task');
+      if (!id) return;
+      event.preventDefault();
+      const bounds=event.target.closest('.hours').getBoundingClientRect();
+      const y=Math.max(0,Math.min(945,event.clientY-bounds.top));
+      const mins=Math.round((420+y)/15)*15;
+      const time=String(Math.floor(mins/60)).padStart(2,'0')+':'+String(mins%60).padStart(2,'0');
+      app()?.planTaskSession?.(id,prefs.selectedDate,time);
+    });
     onSplitter(splitter);
     document.body.classList.add('desk-enabled');
     layout();
     render();
+    // The scroller was laid out while detached during application bootstrap.
+    // After docking it, restore the same bottom anchor as the original Chat.
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if (shell && prefs.focus==='chat') app()?.scrollChatToLatest?.();
+    }));
   };
   const deactivate = () => {
     if (!shell) return;
     if (frame) {cancelAnimationFrame(frame);frame=0;}
+    releaseTime();
     screen.append(originalScroll,originalComposer);
     shell.remove();shell=null;
     navButton?.remove();navButton=null;
@@ -294,6 +369,12 @@
     parts={};
   };
   const reconcile = () => mq.matches ? activate() : deactivate();
+  window.addEventListener('isabella:before-screen-change',event=>{
+    if (event.detail?.next!=='assistant') releaseTime();
+    if (event.detail?.next==='assistant') requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      if (shell) {layout();app()?.scrollChatToLatest?.();}
+    }));
+  });
   window.addEventListener('isabella:state',scheduleRender);
   window.addEventListener('isabella:synced',scheduleRender);
   mq.addEventListener('change',reconcile);
