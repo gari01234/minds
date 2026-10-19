@@ -2645,6 +2645,21 @@ function bindNativePlanControls(){
     });
   });
 }
+let nativeToastTimer=null;
+function nativePlanToast(message,undo=null){
+  document.querySelector('#mindsCalendarToast')?.remove();
+  clearTimeout(nativeToastTimer);
+  const area=document.createElement('div');area.id='mindsCalendarToast';
+  area.className='minds-calendar-toast';
+  const title=document.createElement('span');title.textContent=message;area.append(title);
+  if(undo){
+    const button=document.createElement('button');button.type='button';button.textContent='Deshacer';
+    button.onclick=()=>{area.remove();void undo()};area.append(button);
+  }
+  const close=document.createElement('button');close.type='button';close.textContent='×';close.setAttribute('aria-label','Cerrar');
+  close.onclick=()=>area.remove();area.append(close);document.body.append(area);
+  nativeToastTimer=setTimeout(()=>area.remove(),7000);
+}
 async function nativePlanChangeDates(clientKey,edge,shift){
   const sb=window.MINDS_SUPABASE,P=window.MINDS_CALENDAR_PLAN;
   if(!sb||!P||!Number.isInteger(shift)||shift===0||Math.abs(shift)>90)return;
@@ -2663,7 +2678,7 @@ async function nativePlanChangeDates(clientKey,edge,shift){
       throw new Error('El inicio no puede quedar después de la entrega.');
     const label=edge==='move'?'¿Desplazar el período a '+nextStart+' → '+nextDue+'?':
       '¿Actualizar '+(edge==='start'?'el inicio':'la entrega')+' a '+(edge==='start'?nextStart:nextDue)+'?';
-    if(!window.confirm(label+' Las sesiones ya reservadas no se moverán.'))return;
+    // The deliberate drag is the approval. Provide a reversible, non-blocking toast instead.
     const patch=edge==='move'?{start_date:nextStart,due_date:nextDue}:
       edge==='start'?{start_date:nextStart}:{due_date:nextDue};
     const {data,error:writeError}=await sb.from('isabella_tasks')
@@ -2673,7 +2688,25 @@ async function nativePlanChangeDates(clientKey,edge,shift){
     const updated=await window.ISABELLA_SYNC_PULL_NOW?.();
     if(updated!==true)throw new Error('Cambio guardado en MINDS. No se pudo refrescar la vista; recarga la aplicación.');
     renderCalendar();
-  }catch(error){window.alert('No se pudo cambiar el período: '+(error?.message||error))}
+    nativePlanToast(label+' Las sesiones reservadas no se han movido.',async()=>{
+      try{
+        const {data:latest,error:readError}=await sb.from('isabella_tasks')
+          .select('id,updated_at,start_date,due_date').eq('id',row.id).maybeSingle();
+        if(readError||!latest)throw readError||new Error('Tarea no encontrada.');
+        if(latest.start_date!==(patch.start_date??row.start_date)||
+          latest.due_date!==(patch.due_date??row.due_date))
+          throw new Error('La tarea cambió de nuevo. Abre su ficha antes de deshacer.');
+        const undoPatch=edge==='move'?{start_date:row.start_date,due_date:row.due_date}:
+          edge==='start'?{start_date:row.start_date}:{due_date:row.due_date};
+        const {data:undone,error:undoError}=await sb.from('isabella_tasks')
+          .update({...undoPatch,updated_at:new Date().toISOString()})
+          .eq('id',row.id).eq('updated_at',latest.updated_at).select('id').maybeSingle();
+        if(undoError||!undone)throw undoError||new Error('Conflicto al deshacer.');
+        await window.ISABELLA_SYNC_PULL_NOW?.();renderCalendar();
+        nativePlanToast('Movimiento deshecho.');
+      }catch(error){nativePlanToast('No se pudo deshacer: '+(error?.message||error))}
+    });
+  }catch(error){nativePlanToast('No se pudo cambiar el período: '+(error?.message||error))}
 }
 function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
 function workSessionPresentation(event){
@@ -2743,11 +2776,33 @@ function week(){
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();
 }
 function day(){
-  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
-  let h=`<div class="day-all"><b>Todo el día</b><div>${ta.length?ta.map(t=>`<button class="pill calendar-entry task-item ${t.done?'task-done':''}" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓ ':'○ '}${esc(t.title)}</button>`).join(''):'<span class="meta">Sin tareas</span>'}</div></div><div class="hours">`;
-  for(let hr=7;hr<=22;hr++)h+=`<div class="hrow"><div class="hlabel">${pad(hr)}:00</div><div></div></div>`;
-  for(const e of ev){const presentation=workSessionPresentation(e);const top=((minutes(e.start)-420)/60)*60,height=Math.max(34,(e.duration||60)-3);if(top>=0&&top<960)h+=`<button class="event calendar-entry event-item ${presentation.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="top:${top}px;height:${height}px;--item-color:${itemColor(e)}"><b>${esc(e.start)} ${esc(presentation.title)}</b><div class="meta">${esc(cat(e.categoryId))}${e.projectId?' · '+esc(project(e.projectId)):''}</div></button>`}
-  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
+  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt)
+    .sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
+  const lanes=window.MINDS_DAY_LAYOUT?.layout(ev)||new Map();
+  let h='<div class="day-all"><b>Todo el día</b><div>'+
+    (ta.length?ta.map(t=>'<button class="pill calendar-entry task-item '+(t.done?'task-done':'')+
+      '" data-kind="task" data-id="'+esc(t.id)+'" data-date="'+esc(t.date)+
+      '" style="--item-color:'+itemColor(t)+'">'+(t.done?'✓ ':'○ ')+esc(t.title)+'</button>').join(''):
+      '<span class="meta">Sin tareas</span>')+'</div></div><div class="hours">';
+  for(let hr=7;hr<=22;hr++)h+='<div class="hrow"><div class="hlabel">'+pad(hr)+':00</div><div></div></div>';
+  for(const e of ev){
+    const slot=lanes.get(e.id);
+    if(!slot||slot.top<0||slot.top>=960||e.allDay)continue;
+    const presentation=workSessionPresentation(e);
+    const width=1/slot.columns,left=slot.lane/slot.columns;
+    h+='<button type="button" class="event calendar-entry event-item '+
+      (presentation.isSession?'is-work-session':'')+'" data-kind="event" data-id="'+esc(e.id)+
+      '" data-date="'+esc(e.date)+'" style="top:'+slot.top+'px;height:'+Math.max(12,slot.height)+
+      'px;--day-left:'+left+';--day-width:'+width+';--item-color:'+itemColor(e)+'">'+
+      '<b>'+esc(e.start)+' '+esc(presentation.title)+'</b>'+
+      (slot.height>=40?'<div class="meta">'+esc(cat(e.categoryId))+
+        (e.projectId?' · '+esc(project(e.projectId)):'')+'</div>':'')+
+      '<span class="day-resize-handle" data-day-resize="'+esc(e.id)+
+      '" role="slider" tabindex="0" aria-label="Ajustar duración de '+esc(presentation.title)+
+      '" aria-valuemin="15" aria-valuemax="720" aria-valuenow="'+Number(e.duration||60)+
+      '" title="Arrastra para ajustar duración (15 minutos)"></span></button>';
+  }
+  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindDayResize();
 }
 function bindCalendarItems(){
   const calendarBody=$('#calendarContent');
@@ -3007,6 +3062,63 @@ function initTaskDrag(){
     row.addEventListener('touchend',finish,{passive:true});
     row.addEventListener('touchcancel',finish,{passive:true});
   });
+}
+function bindDayResize(){
+  $$('[data-day-resize]').forEach(handle=>{
+    const parent=handle.closest('.event-item'),id=handle.dataset.dayResize;
+    if(!parent||!id)return;
+    let startY=0,original=0,proposed=0,pointer=null;
+    handle.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;
+      event.preventDefault();event.stopPropagation();
+      pointer=event.pointerId;startY=event.clientY;
+      original=Number(itemBy('event',id)?.duration||0);proposed=original;
+      handle.setPointerCapture?.(event.pointerId);parent.dataset.dragActive='1';
+    });
+    handle.addEventListener('pointermove',event=>{
+      if(event.pointerId!==pointer)return;
+      event.preventDefault();event.stopPropagation();
+      const start=minutes(itemBy('event',id)?.start||'07:00');
+      proposed=Math.max(15,Math.min(720,Math.floor((23*60-start)/15)*15,
+        Math.round((original+event.clientY-startY)/15)*15));
+      parent.style.height=Math.max(12,proposed-2)+'px';
+      handle.setAttribute('aria-valuenow',String(proposed));
+      handle.title=proposed+' minutos';
+    });
+    handle.addEventListener('pointerup',event=>{
+      if(event.pointerId!==pointer)return;
+      event.stopPropagation();pointer=null;parent.dataset.dragActive='0';
+      parent.dataset.justDragged='1';
+      setTimeout(()=>{parent.dataset.justDragged='0'},220);
+      if(proposed!==original)void resizeDayEvent(id,proposed);
+    });
+    handle.addEventListener('pointercancel',()=>{pointer=null;parent.dataset.dragActive='0';renderCalendar()});
+    handle.addEventListener('keydown',event=>{
+      if(!['ArrowUp','ArrowDown'].includes(event.key))return;
+      event.preventDefault();event.stopPropagation();
+      const item=itemBy('event',id);if(!item)return;
+      const next=Math.max(15,Math.min(720,Number(item.duration)+(event.key==='ArrowDown'?15:-15)));
+      if(next!==item.duration)void resizeDayEvent(id,next);
+    });
+  });
+}
+async function resizeDayEvent(clientKey,duration){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!Number.isInteger(duration)||duration<15||duration>720)return;
+  try{
+    const {data:row,error}=await sb.from('isabella_events')
+      .select('id,starts_at,ends_at,updated_at').eq('client_key',clientKey).maybeSingle();
+    if(error||!row)throw error||new Error('Sesión no encontrada.');
+    const end=new Date(Date.parse(row.starts_at)+duration*60000);
+    if(!Number.isFinite(end.getTime()))throw new Error('Horario inválido.');
+    const {data:updated,error:writeError}=await sb.from('isabella_events')
+      .update({ends_at:end.toISOString(),updated_at:new Date().toISOString()})
+      .eq('id',row.id).eq('updated_at',row.updated_at).select('id').maybeSingle();
+    if(writeError||!updated)throw writeError||new Error('La sesión cambió. Recarga antes de ajustarla.');
+    const ok=await window.ISABELLA_SYNC_PULL_NOW?.();
+    if(ok!==true)throw new Error('El cambio está guardado. Recarga para actualizar la vista.');
+    renderCalendar();nativePlanToast('Duración actualizada · '+duration+' min');
+  }catch(error){renderCalendar();nativePlanToast('No se pudo ajustar la sesión: '+(error?.message||error))}
 }
 function initEventDrag(){
   $$('.hours .event-item[data-kind="event"]').forEach(row=>{

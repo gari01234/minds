@@ -87,7 +87,7 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
   assert.match(app,/window\.MINDS_WORK_TEAM\.members\(data\.id\)/);
   assert.match(app,/if\(edge==='start'\)nextStart=P\.addDays/);
   assert.match(app,/\.eq\('updated_at',row\.updated_at\)/);
-  assert.match(app,/Las sesiones ya reservadas no se moverán/);
+  assert.match(app,/Las sesiones reservadas no se han movido/);
   assert.match(app,/edge==='move'/);
   assert.match(app,/start_date:nextStart,due_date:nextDue/);
   assert.match(css,/touch-action:pan-y/);
@@ -98,8 +98,8 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
 });
 
 test('PWA caches matching native calendar assets and loads pure model before main script',()=>{
-  const assets=['calendar-plan.js?v=1','calendar-spans.css?v=1','app.js?v=124'];
+  const assets=['calendar-plan.js?v=1','calendar-spans.css?v=1','app.js?v=125'];
   for(const file of assets){assert.ok(html.includes(file),file+' absent HTML');assert.ok(sw.includes(file),file+' absent SW')}
-  assert.ok(html.indexOf('calendar-plan.js?v=1')<html.indexOf('app.js?v=124'));
-  assert.match(sw,/isabella-shell-v159/);
+  assert.ok(html.indexOf('calendar-plan.js?v=1')<html.indexOf('app.js?v=125'));
+  assert.match(sw,/isabella-shell-v160/);
 });

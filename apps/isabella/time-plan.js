@@ -110,7 +110,7 @@ async function open({taskId}={}){
 async function commit(ctx){
   if(submitting||ctx.ticket!==generation||!ctx.proposal?.slots?.length)return;
   const slots=ctx.proposal.slots,settings=ctx.settings;
-  if(!window.confirm('¿Reservar '+slots.length+' sesiones en TU calendario? No se moverán reuniones ni reservas existentes.'))return;
+  // The explicit 'Reservar N sesiones' button is the user's authorization.
   submitting=true;
   $('#mindsTimePlanConfirm').disabled=true;
   msg('Comprobando el calendario de nuevo…');
