@@ -2679,7 +2679,7 @@ function itemActions(kind,id){
   $('#quickDelete').onclick=()=>deleteItem(kind,id);
 }
 function editItem(kind,id){
-  if(kind==='task'&&window.MINDS_TASK_DETAIL?.open){void window.MINDS_TASK_DETAIL.open({clientKey:id});return;}
+  if(kind==='task'&&typeof window!=='undefined'&&window.MINDS_TASK_DETAIL?.open){void window.MINDS_TASK_DETAIL.open({clientKey:id});return;}
   const item=itemBy(kind,id);if(!item)return;
   const cats=state.categories.map(x=>`<option value="${x.id}" ${x.id===item.categoryId?'selected':''}>${esc(x.name)}</option>`).join('');
   const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${x.id}" ${x.id===item.projectId?'selected':''}>${esc(x.name)}</option>`).join('');
@@ -3134,7 +3134,7 @@ function newPanel(presetDate=null){
   $('#newSave').onclick=()=>{
     const title=$('#newTitle').value.trim();if(!title)return;
     const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value,projectId=$('#newProject').value||null;
-    if(kind==='task'&&window.MINDS_TASK_DETAIL?.open){
+    if(kind==='task'&&typeof window!=='undefined'&&window.MINDS_TASK_DETAIL?.open){
       void window.MINDS_TASK_DETAIL.open({title,date,categoryKey:categoryId,projectKey:projectId});return;
     }
     if(kind==='task'){

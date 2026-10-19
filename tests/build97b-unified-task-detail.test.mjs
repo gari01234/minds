@@ -9,7 +9,7 @@ const html=read('index.html'),sw=read('sw.js'),css=read('task-detail.css');
 test('Work and Tiempo route the same canonical task into the common editor',()=>{
   assert.match(work,/if\(window\.MINDS_TASK_DETAIL\?\.open\)/);
   assert.match(work,/taskId:task\?\.id\|\|null,projectId:project\.id/);
-  assert.match(app,/if\(kind==='task'&&window\.MINDS_TASK_DETAIL\?\.open\)/);
+  assert.match(app,/if\(kind==='task'&&typeof window!=='undefined'&&window\.MINDS_TASK_DETAIL\?\.open\)/);
   assert.match(app,/window\.MINDS_TASK_DETAIL\.open\(\{clientKey:id\}\)/);
   assert.match(app,/window\.MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
   assert.match(detail,/async function readTask\(opts\)/);
