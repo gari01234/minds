@@ -123,7 +123,8 @@ function render(ctx){
     '<button type="button" class="minds-task-inline-add" id="taskDetailAddLink">＋ Añadir enlace</button></div>'+
     '<div id="taskDetailLinks">'+linksHtml+'</div></div>'+
     '<div class="minds-task-section"><div class="minds-task-section-head"><strong>Sesiones de trabajo</strong>'+
-    '<button type="button" class="minds-task-inline-add" id="taskDetailBook">＋ Reservar tiempo</button></div>'+
+    '<div class="minds-task-session-actions"><button type="button" class="minds-task-inline-add" id="taskDetailPropose">◇ Proponer bloques</button>'+ 
+    '<button type="button" class="minds-task-inline-add" id="taskDetailBook">＋ Reservar tiempo</button></div></div>'+
     '<div id="taskDetailSessions"><span class="minds-task-muted">Las reservas están vinculadas a la misma tarea.</span></div></div>'+
     '<footer class="minds-task-footer"><span id="taskDetailStatus" role="status" aria-live="polite">'+
     (ctx.task?'Los cambios se guardan automáticamente':'Completa los campos y crea la tarea')+'</span>'+
@@ -199,6 +200,13 @@ function bind(ctx){
     const b=event.target.closest('[data-task-link-remove]');if(!b)return;
     void update(ctx,{links:yes(ctx.task?.links).filter((_,i)=>i!==Number(b.dataset.taskLinkRemove))},true);
   });
+  $('#taskDetailPropose').onclick=async()=>{
+    if(!ctx.task){status('Crea primero la tarea.',true);return}
+    await ctx.queue;
+    if(ctx.blocked){status('Hay cambios sin confirmar. Recarga la tarea antes de planificar.',true);return}
+    if(!window.MINDS_TIME_PLANNING?.open){status('La planificación no está disponible.',true);return}
+    await window.MINDS_TIME_PLANNING.open({taskId:ctx.task.id});
+  };
   $('#taskDetailBook').onclick=()=>{
     if(!ctx.task){status('Crea primero la tarea.',true);return}
     const key=ctx.task.client_key||ctx.task.id;
