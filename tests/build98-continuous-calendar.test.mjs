@@ -82,7 +82,7 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
   assert.match(app,/Single-day tasks retain native drag/);
   assert.match(app,/period\.start<period\.end/);
   for(const selector of ['data-native-filter','data-native-show-all','data-plan-open','data-plan-edge']){
-    assert.ok(app.includes("$('["+selector+"]').forEach"),'collection selector must use $ '+selector);
+    assert.ok(app.includes(`$('[${selector}]').forEach`),'collection selector must use $ '+selector);
   }
   assert.match(app,/window\.MINDS_WORK_TEAM\.members\(data\.id\)/);
   assert.match(app,/if\(edge==='start'\)nextStart=P\.addDays/);

@@ -2597,7 +2597,7 @@ function bindNativePlanControls(){
   $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
     state.nativePlanShowAll=!state.nativePlanShowAll;save();renderCalendar();
   });
-  $('[data-plan-open]').forEach(button=>{
+  $$('[data-plan-open]').forEach(button=>{
     button.onclick=()=>{
       if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
       editItem('task',button.dataset.planOpen);
