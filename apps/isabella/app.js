@@ -2580,20 +2580,20 @@ function nativePlanModel(anchor,weeks){
   return window.MINDS_CALENDAR_PLAN.plan(state,anchor,weeks,filters,rows);
 }
 function bindNativePlanControls(){
-  $('[data-native-filter]').forEach(node=>node.onchange=()=>{
+  $$('[data-native-filter]').forEach(node=>node.onchange=()=>{
     const prev=nativePlanFilters();
     state.nativePlanFilters=node.dataset.nativeFilter==='project'
       ?{projectId:node.value,personKey:''}:{projectId:prev.projectId,personKey:node.value};
     save();renderCalendar();
   });
-  $('[data-native-show-all]').forEach(button=>button.onclick=()=>{
+  $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
     state.nativePlanShowAll=true;save();renderCalendar();
   });
-  $('[data-plan-open]').forEach(button=>button.onclick=()=>{
+  $$('[data-plan-open]').forEach(button=>button.onclick=()=>{
     if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
     editItem('task',button.dataset.planOpen);
   });
-  $('[data-plan-edge]').forEach(button=>{
+  $$('[data-plan-edge]').forEach(button=>{
     button.type='button';
     button.addEventListener('pointerdown',event=>{
       if(event.button!==0)return;

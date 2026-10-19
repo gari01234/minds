@@ -77,6 +77,9 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
   assert.match(app,/nativePlanBand\(projection\.weeks\[0\]\)/);
   assert.match(app,/window\.MINDS_CALENDAR_PLAN\.plan\(state,anchor,weeks,filters,rows\)/);
   assert.match(app,/data-native-filter="person"/);
+  for(const selector of ['data-native-filter','data-native-show-all','data-plan-open','data-plan-edge']){
+    assert.ok(app.includes("$('["+selector+"]').forEach"),'collection selector must use $ '+selector);
+  }
   assert.match(app,/window\.MINDS_WORK_TEAM\.members\(data\.id\)/);
   assert.match(app,/if\(edge==='start'\)nextStart=P\.addDays/);
   assert.match(app,/\.eq\('updated_at',row\.updated_at\)/);

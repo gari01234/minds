@@ -61,7 +61,8 @@ test('month groups each task once while preserving every independently editable 
   assert.equal(other.tasks[0].task,task);
   assert.deepEqual(other.tasks[0].sessions.map(e=>e.id),['session3']);
   assert.equal(state.tasks.length,1);
-  assert.match(app,/MINDS_DESK_MODEL\.monthAgendaGroups\(state,state\.date\)/);
+  assert.match(app,/MINDS_DESK_MODEL\.monthAgendaGroups\(visibleState,state\.date\)/);
+  assert.match(app,/MINDS_CALENDAR_PLAN/);
   assert.match(app,/month-session-link/);
   assert.match(app,/data-kind="event" data-id=/);
 });
