@@ -617,10 +617,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=104'));
-  assert.ok(index.includes('app.js?v=125'));
-  assert.ok(index.includes('sync.js?v=pwa37'));
+  assert.ok(index.includes('app.js?v=126'));
+  assert.ok(index.includes('sync.js?v=pwa38'));
   assert.ok(index.includes('ai.js?v=56'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v160'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v161'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -730,7 +730,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=28'));
+  assert.ok(index.includes('work.js?v=29'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));

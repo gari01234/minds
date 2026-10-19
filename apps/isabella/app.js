@@ -2512,18 +2512,31 @@ function nativePlanSelectedPeople(projectId){
   }
   for(const task of state.tasks){
     if(task.archivedAt||(projectId&&task.projectId!==projectId))continue;
-    const key=window.MINDS_CALENDAR_PLAN.personKey(task);
-    if(key==='unassigned')continue;
-    if(!people.has(key))people.set(key,task.assignee||'Responsable');
+    const ids=task.assigneePersonIds?.length?task.assigneePersonIds:(task.assigneePersonId?[task.assigneePersonId]:[]);
+    for(const id of ids){
+      const key='person:'+id;
+      if(!people.has(key))people.set(key,state.teamPeople?.find(x=>x.id===id)?.name||'Responsable');
+    }
+    if(!ids.length&&task.assignee)people.set('legacy:'+task.assignee,task.assignee);
   }
   return [...people].sort((a,b)=>a[1].localeCompare(b[1],'es'));
 }
 function nativePlanTeamName(task){
-  if(task.assigneePersonId){
-    const person=nativePlanRoster.people.find(p=>p.id===task.assigneePersonId);
-    if(person)return person.name;
-  }
+  const ids=task.assigneePersonIds?.length?task.assigneePersonIds:(task.assigneePersonId?[task.assigneePersonId]:[]);
+  if(ids.length)return ids.map(id=>state.teamPeople?.find(p=>p.id===id)?.name||
+    nativePlanRoster.people.find(p=>p.id===id)?.name||'Responsable').join(', ');
   return task.assignee||'Sin responsable';
+}
+function nativePlanTeamAllocations(date,filters){
+  const tasks=new Map(state.tasks.map(t=>[t.id,t]));
+  return (state.teamAllocations||[]).filter(a=>{
+    const t=tasks.get(a.taskId);
+    return a.date===date&&t&&!t.archivedAt&&window.MINDS_CALENDAR_PLAN.qualifies(t,filters)&&
+      (!filters.personKey||filters.personKey==='person:'+a.personId);
+  }).map(a=>{
+    const t=tasks.get(a.taskId),person=state.teamPeople?.find(p=>p.id===a.personId)?.name||'Equipo';
+    return {task:t,person,minutes:a.plannedMinutes};
+  });
 }
 function nativePlanLoadRoster(projectId){
   if(!projectId||nativePlanRoster.projectId===projectId||nativePlanFetching===projectId)return;
@@ -2597,7 +2610,8 @@ function bindNativePlanControls(){
   $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
     state.nativePlanShowAll=!state.nativePlanShowAll;save();renderCalendar();
   });
-  $$('[data-plan-open]').forEach(button=>{
+  $('[data-team-task]').forEach(button=>button.onclick=()=>editItem('task',button.dataset.teamTask));
+  $('[data-plan-open]').forEach(button=>{
     button.onclick=()=>{
       if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
       editItem('task',button.dataset.planOpen);
@@ -2736,7 +2750,8 @@ function month(){
     for(let col=0;col<7;col++){
       const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
       const colors=dayColors(di,nativePlanFilters());
-      h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span></button>`;
+      const teammateMinutes=nativePlanTeamAllocations(di,nativePlanFilters()).reduce((n,a)=>n+Number(a.minutes||0),0);
+      h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span>${teammateMinutes?`<span class="minds-team-month-time">${Math.round(teammateMinutes/60*10)/10} h equipo</span>`:''}</button>`;
     }
     h+=nativePlanBand(monthPlanning.weeks[r],true);
   }
@@ -2768,10 +2783,11 @@ function week(){
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),
       ev=filters.personKey?[]:state.events.filter(x=>x.date===di&&(!filters.projectId||x.projectId===filters.projectId)).sort((a,b)=>a.start.localeCompare(b.start)),
+      teamPlan=nativePlanTeamAllocations(di,filters),
       ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt&&window.MINDS_CALENDAR_PLAN.qualifies(x,filters)&&
         (!window.MINDS_CALENDAR_PLAN.interval(x)||window.MINDS_CALENDAR_PLAN.interval(x).start===window.MINDS_CALENDAR_PLAN.interval(x).end))
         .sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b)); // Single-day tasks retain native drag.
-    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Sin sesiones</div>':''}</div>`;
+    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${teamPlan.map(a=>`<button type="button" class="witem minds-team-day-entry" data-team-task="${esc(a.task.id)}" title="Horas previstas, no calendario confirmado">${esc(a.person)} · ${esc(a.task.title)} · ${Number(a.minutes)} min previstos</button>`).join('')}${!ev.length&&!ta.length&&!teamPlan.length?'<div class="meta week-free">Sin sesiones</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();
 }

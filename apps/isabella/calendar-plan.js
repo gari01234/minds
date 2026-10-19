@@ -14,7 +14,9 @@ const valid=key=>{
 const dateKey=date=>[date.getFullYear(),String(date.getMonth()+1).padStart(2,'0'),String(date.getDate()).padStart(2,'0')].join('-');
 const addDays=(key,number)=>{if(!valid(key))return null;const d=new Date(key+'T12:00:00');d.setDate(d.getDate()+number);return dateKey(d)};
 const monday=key=>{if(!valid(key))return null;const d=new Date(key+'T12:00:00');return addDays(key,-((d.getDay()+6)%7))};
-const personKey=task=>task.assigneePersonId?'person:'+task.assigneePersonId:
+const personIds=task=>Array.isArray(task.assigneePersonIds)&&task.assigneePersonIds.length?
+  task.assigneePersonIds:(task.assigneePersonId?[task.assigneePersonId]:[]);
+const personKey=task=>personIds(task).length?'person:'+personIds(task)[0]:
   task.assignee?'legacy:'+task.assignee:'unassigned';
 const interval=task=>{
   const start=valid(task.startDate)?task.startDate:null;
@@ -26,7 +28,12 @@ const interval=task=>{
 const qualifies=(task,filters={})=>{
   if(task.archivedAt)return false;
   if(filters.projectId&&task.projectId!==filters.projectId)return false;
-  if(filters.personKey&&personKey(task)!==filters.personKey)return false;
+  if(filters.personKey){
+    const ids=personIds(task);
+    if(filters.personKey.startsWith('person:')){
+      if(!ids.includes(filters.personKey.slice(7)))return false;
+    }else if(personKey(task)!==filters.personKey)return false;
+  }
   return true;
 };
 function plan(state,reference,weeks=1,filters={},maxRows=4){

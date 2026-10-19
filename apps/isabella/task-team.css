@@ -1,0 +1,23 @@
+/* Build 99C · multiple responsibles and day-specific team plans. */
+.minds-task-team-field{display:flex;flex-direction:column;gap:7px;min-width:0;color:#7b7d84;font-size:11px}
+.minds-task-team-choice{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-height:35px}
+.minds-task-team-chip{border:1px solid #e4e5e8;background:#fff;padding:7px 9px;border-radius:999px;
+  font:500 11px inherit;color:#525661;cursor:pointer;transition:background .12s,border-color .12s}
+.minds-task-team-chip.is-selected{background:#eaf1fa;border-color:#91b1dc;color:#1d507b}
+.minds-task-team-chip.is-selected:before{content:'✓ ';font-weight:600}
+.minds-task-team-chip:disabled{opacity:.45;cursor:wait}
+.minds-team-allocations p{margin:0;font-size:11px;line-height:1.5}
+.minds-team-allocation-row{display:flex;align-items:center;gap:9px;justify-content:space-between;
+  border-bottom:1px solid #f0f0f2;padding:7px 1px;color:#525560;font-size:11px}
+.minds-team-allocation-row strong{margin-left:auto;font-weight:600;white-space:nowrap}
+.minds-team-allocation-row button{border:0;background:transparent;color:#9597a0;font-size:15px;cursor:pointer}
+.minds-team-alloc-form{display:grid;grid-template-columns:1.4fr 1.1fr 75px auto;gap:6px;align-items:center}
+.minds-team-alloc-form select,.minds-team-alloc-form input{min-width:0;width:100%;box-sizing:border-box;
+  border:1px solid #e4e5e8;background:#fff;color:#3f4350;border-radius:8px;padding:8px;font:11px inherit}
+.minds-team-alloc-form button{border:1px solid #dedfe5;background:#f7f7f8;color:#333740;
+  border-radius:8px;padding:8px;cursor:pointer;font:600 11px inherit;white-space:nowrap}
+.minds-team-alloc-form button:disabled{opacity:.5;cursor:default}
+.minds-team-day-entry{border-style:dashed!important;border-color:#91a1b3!important;
+  background:#eef2f8!important;font-size:10px;text-align:left;white-space:normal;line-height:1.3}
+.minds-team-month-time{font-size:8px;color:#697d92;display:block;padding:2px 3px}
+@media(max-width:640px){.minds-team-alloc-form{grid-template-columns:1fr 1fr}.minds-team-alloc-form button{grid-column:1/-1}}

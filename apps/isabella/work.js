@@ -215,10 +215,21 @@ async function loadPlanner(){
   if(!b?.length){const rows=DEFAULT_BUCKETS.map((name,i)=>({project_id:project.id,name,sort_order:i*10}));const ins=await sb.from('minds_work_buckets').insert(rows).select('id,name,sort_order,archived');if(ins.error)throw ins.error;b=ins.data||[]}
   buckets=b||[];
   const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order,assignee_person_id').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order').order('id');if(te)throw te;tasks=t||[];
+  if(tasks.length){
+    const {data:links,error:ae}=await sb.from('minds_work_task_assignees')
+      .select('task_id,person_id').in('task_id',tasks.map(t=>t.id));
+    if(ae)throw ae;
+    for(const task of tasks){
+      const ids=(links||[]).filter(l=>l.task_id===task.id).map(l=>l.person_id);
+      task.assignee_person_ids=ids.length?ids:(task.assignee_person_id?[task.assignee_person_id]:[]);
+    }
+  }
 }
 function localIso(){const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')}
 function taskMeta(t){
-  const parts=[];if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');const name=team.find(p=>p.id===t.assignee_person_id)?.name||t.assignee;if(name)parts.push(name);
+  const parts=[];if(t.priority&&t.priority!=='normal')parts.push(t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig');
+  const ids=t.assignee_person_ids||[],name=ids.length?ids.map(id=>team.find(p=>p.id===id)?.name||'Responsable').join(', '):t.assignee;
+  if(name)parts.push(name);
   return parts.join(' · ')
 }
 function taskChecklist(t){return Array.isArray(t.checklist)?t.checklist:[]}
