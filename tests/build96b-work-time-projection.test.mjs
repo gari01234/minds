@@ -58,7 +58,7 @@ test('native writes remain intentionally limited to native fields',()=>{
   for(const column of ['assignee','start_date','work_status','work_bucket_id','work_sort_order','labels','checklist','attachments','links']){
     assert.ok(!new RegExp('\\b'+column+'\\s*:').test(nativeWrite),'Native writes must not overwrite '+column);
   }
-  assert.match(work,/assignee:\$\('#workTaskAssignee'\)\.value\.trim\(\)\|\|null/);
+  assert.match(work,/assignee:chosen\?\.name\|\|oldAssignee,assignee_person_id:chosen\?\.id\|\|null/);
   assert.match(sync,/projectTaskRow\(t,catKey,projKey\)/);
 });
 
