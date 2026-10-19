@@ -87,7 +87,7 @@ test('Build 98 uses existing native day/week/month, direct confirmation and no i
   assert.match(app,/window\.MINDS_WORK_TEAM\.members\(data\.id\)/);
   assert.match(app,/if\(edge==='start'\)nextStart=P\.addDays/);
   assert.match(app,/\.eq\('updated_at',row\.updated_at\)/);
-  assert.match(app,/Las sesiones ya reservadas no se moverán/);
+  assert.match(app,/Las sesiones reservadas no se han movido/);
   assert.match(app,/edge==='move'/);
   assert.match(app,/start_date:nextStart,due_date:nextDue/);
   assert.match(css,/touch-action:pan-y/);
