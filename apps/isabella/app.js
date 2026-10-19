@@ -2577,7 +2577,12 @@ function nativePlanBand(week,monthMode=false){
 function nativePlanModel(anchor,weeks){
   const filters=nativePlanFilters();
   const rows=state.nativePlanShowAll?150:(weeks>1?3:12);
-  return window.MINDS_CALENDAR_PLAN.plan(state,anchor,weeks,filters,rows);
+  const P=window.MINDS_CALENDAR_PLAN;
+  const spanningTasks=state.tasks.filter(task=>{
+    const period=P.interval(task);
+    return period&&period.start<period.end;
+  });
+  return P.plan({...state,tasks:spanningTasks},anchor,weeks,filters,rows);
 }
 function bindNativePlanControls(){
   $$('[data-native-filter]').forEach(node=>node.onchange=()=>{
@@ -2704,7 +2709,9 @@ function week(){
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),
       ev=filters.personKey?[]:state.events.filter(x=>x.date===di&&(!filters.projectId||x.projectId===filters.projectId)).sort((a,b)=>a.start.localeCompare(b.start)),
-      ta=[]; // All dated tasks, including single-day tasks, appear once in the span band.
+      ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt&&window.MINDS_CALENDAR_PLAN.qualifies(x,filters)&&
+        (!window.MINDS_CALENDAR_PLAN.interval(x)||window.MINDS_CALENDAR_PLAN.interval(x).start===window.MINDS_CALENDAR_PLAN.interval(x).end))
+        .sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b)); // Single-day tasks retain native drag.
     h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Sin sesiones</div>':''}</div>`;
   }
   h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();
