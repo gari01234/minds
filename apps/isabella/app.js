@@ -2496,6 +2496,153 @@ function initVoice(){
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';const t=$('#focusTranscript');if(t){t.value='';t.textContent='';t.readOnly=true}}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
 function move(dir){let d=fromIso(state.date);if(state.view==='day')d=addDays(d,dir);else if(state.view==='week')d=addDays(d,dir*7);else d=new Date(d.getFullYear(),d.getMonth()+dir,1);state.date=iso(d);save();renderCalendar()}
+/* Native continuous planning shows the *same* canonical tasks on Week/Month.
+ * Session events are kept separate; teammate calendars are never inferred. */
+let nativePlanRoster={projectId:'',people:[]},nativePlanFetching='';
+const nativePlanFilters=()=>({
+  projectId:typeof state.nativePlanFilters?.projectId==='string'?state.nativePlanFilters.projectId:'',
+  personKey:typeof state.nativePlanFilters?.personKey==='string'?state.nativePlanFilters.personKey:''
+});
+function nativePlanSelectedPeople(projectId){
+  const people=new Map();
+  if(nativePlanRoster.projectId===projectId){
+    for(const person of nativePlanRoster.people)people.set('person:'+person.id,person.name);
+  }
+  for(const task of state.tasks){
+    if(task.archivedAt||(projectId&&task.projectId!==projectId))continue;
+    const key=window.MINDS_CALENDAR_PLAN.personKey(task);
+    if(key==='unassigned')continue;
+    if(!people.has(key))people.set(key,task.assignee||'Responsable');
+  }
+  return [...people].sort((a,b)=>a[1].localeCompare(b[1],'es'));
+}
+function nativePlanTeamName(task){
+  if(task.assigneePersonId){
+    const person=nativePlanRoster.people.find(p=>p.id===task.assigneePersonId);
+    if(person)return person.name;
+  }
+  return task.assignee||'Sin responsable';
+}
+function nativePlanLoadRoster(projectId){
+  if(!projectId||nativePlanRoster.projectId===projectId||nativePlanFetching===projectId)return;
+  if(!window.MINDS_SUPABASE||!window.MINDS_WORK_TEAM?.members)return;
+  const key=projectId;nativePlanFetching=key;
+  void (async()=>{
+    const {data,error}=await window.MINDS_SUPABASE.from('isabella_projects').select('id').eq('client_key',key).maybeSingle();
+    if(error)throw error;
+    const people=data?.id?await window.MINDS_WORK_TEAM.members(data.id):[];
+    if(nativePlanFilters().projectId!==key)return;
+    nativePlanRoster={projectId:key,people};
+    if(state.screen==='calendar')renderCalendar();
+  })().catch(()=>{}).finally(()=>{if(nativePlanFetching===key)nativePlanFetching=''});
+}
+function nativePlanToolbar(){
+  const filters=nativePlanFilters();
+  if(filters.projectId)nativePlanLoadRoster(filters.projectId);
+  const projects='<option value="">Todos los proyectos</option>'+state.projects.map(p=>
+    '<option value="'+esc(p.id)+'" '+(filters.projectId===p.id?'selected':'')+'>'+esc(p.name)+'</option>').join('');
+  const people='<option value="">Todos los responsables</option>'+
+    '<option value="unassigned" '+(filters.personKey==='unassigned'?'selected':'')+'>Sin asignar</option>'+
+    nativePlanSelectedPeople(filters.projectId).map(([key,name])=>
+      '<option value="'+esc(key)+'" '+(filters.personKey===key?'selected':'')+'>'+esc(name)+'</option>').join('');
+  return '<div class="minds-plan-controls"><div class="minds-plan-filter-row">'+
+    '<select aria-label="Filtrar proyecto" data-native-filter="project">'+projects+'</select>'+
+    '<select aria-label="Filtrar responsable" data-native-filter="person">'+people+'</select></div>'+
+    '<span>Las barras son períodos de tarea, no horas trabajadas</span></div>';
+}
+function nativePlanBand(week,monthMode=false){
+  if(!week)return '';
+  const segments=week.segments;
+  const rows=Math.max(1,...segments.map(s=>s.lane+1));
+  const grid='<div class="minds-plan-span-grid" style="grid-template-rows:repeat('+rows+','+
+    (monthMode?'22px':'27px')+')">'+segments.map(segment=>{
+      const t=segment.task,details=nativePlanTeamName(t),month=monthMode?'':(' · '+details);
+      const classes=['minds-plan-span-bar',t.done?'is-completed':'',segment.invalid?'is-invalid':'',
+        segment.continuesBefore?'is-continued-start':'',segment.continuesAfter?'is-continued-end':''].filter(Boolean).join(' ');
+      return '<div class="'+classes+'" style="grid-column:'+segment.col+' / span '+segment.length+
+        ';grid-row:'+(segment.lane+1)+';--item-color:'+itemColor(t)+'" data-plan-task="'+esc(t.id)+'">'+
+        (!segment.continuesBefore?'<button class="minds-plan-span-handle" data-plan-edge="start" aria-label="Arrastrar inicio de '+esc(t.title)+'" title="Arrastra para ajustar el inicio">‹</button>':'')+
+        '<button type="button" class="minds-plan-span-label" data-plan-open="'+esc(t.id)+'" '+
+        'title="'+esc(t.title)+' · '+esc(details)+' · '+esc(segment.originalStart)+' → '+esc(segment.originalEnd)+'">'+
+        (t.done?'✓ ':'')+esc(t.title)+(month?'<span class="minds-plan-span-identity">'+esc(month)+'</span>':'')+'</button>'+
+        (!segment.continuesAfter?'<button class="minds-plan-span-handle" data-plan-edge="due" aria-label="Arrastrar entrega de '+esc(t.title)+'" title="Arrastra para ajustar la entrega">›</button>':'')+
+        '</div>';
+    }).join('')+'</div>';
+  const more=week.hidden?'<button type="button" class="minds-plan-more" data-native-show-all>'+
+    '＋ '+week.hidden+' tareas más</button>':'';
+  return monthMode?'<div class="minds-month-span-week"><div></div>'+grid+more+'</div>':
+    '<div class="minds-native-plan-week"><div class="minds-native-plan-head"><span>Períodos de trabajo</span>'+
+    '<span>'+week.total+' tareas visibles esta semana</span></div>'+grid+more+'</div>';
+}
+function nativePlanModel(anchor,weeks){
+  const filters=nativePlanFilters();
+  const rows=state.nativePlanShowAll?150:(weeks>1?3:45);
+  return window.MINDS_CALENDAR_PLAN.plan(state,anchor,weeks,filters,rows);
+}
+function bindNativePlanControls(){
+  $('[data-native-filter]').forEach(node=>node.onchange=()=>{
+    const prev=nativePlanFilters();
+    state.nativePlanFilters=node.dataset.nativeFilter==='project'
+      ?{projectId:node.value,personKey:''}:{projectId:prev.projectId,personKey:node.value};
+    save();renderCalendar();
+  });
+  $('[data-native-show-all]').forEach(button=>button.onclick=()=>{
+    state.nativePlanShowAll=true;save();renderCalendar();
+  });
+  $('[data-plan-open]').forEach(button=>button.onclick=()=>{
+    if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
+    editItem('task',button.dataset.planOpen);
+  });
+  $('[data-plan-edge]').forEach(button=>{
+    button.type='button';
+    button.addEventListener('pointerdown',event=>{
+      if(event.button!==0)return;
+      event.stopPropagation();
+      const grid=button.closest('.minds-plan-span-grid');
+      if(!grid)return;
+      const task=button.closest('[data-plan-task]');
+      const startX=event.clientX;
+      button.setPointerCapture?.(event.pointerId);
+      const edge=button.dataset.planEdge,id=task?.dataset.planTask;
+      const up=release=>{
+        button.removeEventListener('pointerup',up);
+        button.removeEventListener('pointercancel',cancel);
+        const cellWidth=grid.getBoundingClientRect().width/7;
+        const delta=Math.round((release.clientX-startX)/cellWidth);
+        if(delta&&id)void nativePlanChangeDates(id,edge,delta);
+      };
+      const cancel=()=>{button.removeEventListener('pointerup',up);button.removeEventListener('pointercancel',cancel)};
+      button.addEventListener('pointerup',up,{once:true});
+      button.addEventListener('pointercancel',cancel,{once:true});
+    });
+  });
+}
+async function nativePlanChangeDates(clientKey,edge,shift){
+  const sb=window.MINDS_SUPABASE,P=window.MINDS_CALENDAR_PLAN;
+  if(!sb||!P||!Number.isInteger(shift)||shift===0||Math.abs(shift)>90)return;
+  try{
+    const {data:row,error}=await sb.from('isabella_tasks').select('id,client_key,start_date,due_date,updated_at').eq('client_key',clientKey).maybeSingle();
+    if(error||!row)throw error||new Error('Tarea no encontrada');
+    const start=P.valid(row.start_date)?row.start_date:row.due_date;
+    const due=P.valid(row.due_date)?row.due_date:row.start_date;
+    if(!P.valid(start)||!P.valid(due))throw new Error('La tarea no tiene fechas válidas.');
+    let nextStart=start,nextDue=due;
+    if(edge==='start')nextStart=P.addDays(start,shift);
+    else if(edge==='due')nextDue=P.addDays(due,shift);
+    else return;
+    if(nextStart>nextDue)throw new Error('El inicio no puede quedar después de la entrega.');
+    if(!window.confirm('¿Actualizar '+(edge==='start'?'el inicio':'la entrega')+
+      ' a '+(edge==='start'?nextStart:nextDue)+'? Las sesiones ya reservadas no se moverán.'))return;
+    const patch=edge==='start'?{start_date:nextStart}:{due_date:nextDue};
+    const {data,error:writeError}=await sb.from('isabella_tasks')
+      .update({...patch,updated_at:new Date().toISOString()}).eq('id',row.id).eq('updated_at',row.updated_at)
+      .select('id').maybeSingle();
+    if(writeError||!data)throw writeError||new Error('La tarea cambió mientras editabas. Recarga antes de intentarlo.');
+    const updated=await window.ISABELLA_SYNC_PULL_NOW?.();
+    if(updated!==true)throw new Error('Cambio guardado en MINDS. No se pudo refrescar la vista; recarga la aplicación.');
+    renderCalendar();
+  }catch(error){window.alert('No se pudo cambiar el período: '+(error?.message||error))}
+}
 function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
 function workSessionPresentation(event){
   if(event?.metadata?.kind!=='task_work_session_v1')
@@ -2516,8 +2663,9 @@ function agendaRow(kind,item){
   </div>`;
 }
 function month(){
+  const monthPlanning=nativePlanModel(iso(startWeek(new Date(fromIso(state.date).getFullYear(),fromIso(state.date).getMonth(),1))),6);
   const f=fromIso(state.date),first=new Date(f.getFullYear(),f.getMonth(),1),start=startWeek(first),wd=['L','M','X','J','V','S','D'];
-  let h=`<div class="month-year">${f.getFullYear()}</div><div class="month-weekdays"><div></div>${wd.map(x=>`<div>${x}</div>`).join('')}</div><div class="month-grid">`;
+  let h=nativePlanToolbar()+`<div class="month-year">${f.getFullYear()}</div><div class="month-weekdays"><div></div>${wd.map(x=>`<div>${x}</div>`).join('')}</div><div class="month-grid">`;
   for(let r=0;r<6;r++){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
@@ -2525,13 +2673,17 @@ function month(){
       const colors=dayColors(di);
       h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span></button>`;
     }
+    h+=nativePlanBand(monthPlanning.weeks[r],true);
   }
   h+='</div>';
   // The month action belongs between the month grid and the selected-day agenda.
   h+='<div class="calendar-create-row calendar-create-after-grid"><button type="button" data-calendar-create>＋ Añadir tarea o evento</button></div>';
   // Month groups linked reservations under their canonical task, even when
   // the booking falls on a different day than the task's due date.
-  const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(state,state.date);
+  const filters=nativePlanFilters(),model=window.MINDS_CALENDAR_PLAN;
+  const visibleState={...state,tasks:state.tasks.filter(t=>model.qualifies(t,filters)),
+    events:filters.personKey?[]:state.events.filter(e=>!filters.projectId||e.projectId===filters.projectId)};
+  const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(visibleState,state.date);
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
   if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
   for(const e of ev)h+=agendaRow('event',e);
@@ -2542,15 +2694,19 @@ function month(){
   h+='</div>';
   $('#calendarContent').innerHTML=h;
   $$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()});
-  bindCalendarItems();
+  bindCalendarItems();bindNativePlanControls();
 }
 function week(){
-  const s=startWeek(fromIso(state.date));let h='<div class="week">';
+  const s=startWeek(fromIso(state.date)),filters=nativePlanFilters();
+  const projection=nativePlanModel(iso(s),1);
+  let h=nativePlanToolbar()+nativePlanBand(projection.weeks[0])+'<div class="week">';
   for(let i=0;i<7;i++){
-    const d=addDays(s,i),di=iso(d),ev=state.events.filter(x=>x.date===di).sort((a,b)=>a.start.localeCompare(b.start)),ta=state.tasks.filter(x=>x.date===di&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
-    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Libre</div>':''}</div>`;
+    const d=addDays(s,i),di=iso(d),
+      ev=filters.personKey?[]:state.events.filter(x=>x.date===di&&(!filters.projectId||x.projectId===filters.projectId)).sort((a,b)=>a.start.localeCompare(b.start)),
+      ta=[]; // All dated tasks, including single-day tasks, appear once in the span band.
+    h+=`<div class="wday" data-week-date="${di}"><div class="whead">${d.toLocaleDateString('es-ES',{weekday:'short',day:'numeric'})}</div>${ev.map(e=>{const p=workSessionPresentation(e);return `<button class="witem calendar-entry event-item ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}"><b>${esc(e.start)}</b><br>${esc(p.title)}</button>`}).join('')}${ta.map(t=>`<button class="witem calendar-entry task-item ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${t.done?'✓':'○'} ${esc(t.title)}</button>`).join('')}${!ev.length&&!ta.length?'<div class="meta week-free">Sin sesiones</div>':''}</div>`;
   }
-  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();
+  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();
 }
 function day(){
   const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt).sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
