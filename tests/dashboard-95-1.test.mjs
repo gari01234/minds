@@ -48,7 +48,7 @@ test('all clickable task checks are circular, cache includes all upgraded assets
  assert.match(styles,/aspect-ratio:1\/1!important/);
  assert.match(styles,/border-radius:50%!important/);
  assert.match(html,/dashboard-fixes\.css\?v=1/);
- assert.match(html,/dashboard\.js\?v=3/);
+ assert.match(html,/dashboard\.js\?v=2/);
  assert.match(sw,/dashboard-fixes\.css\?v=1/);
- assert.match(sw,/dashboard\.js\?v=3/);
+ assert.match(sw,/dashboard\.js\?v=2/);
 });

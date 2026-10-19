@@ -3142,7 +3142,7 @@ function planTaskSession(taskId,scheduledDate=null,proposedStart='09:00'){
   const initial=remaining>0?Math.min(720,Math.max(15,remaining)):60;
   modal('Reservar tiempo para la tarea',`<div class="form item-editor">
     <p class="small">Tarea original · ${esc(task.title)}</p>
-    <p class="small">Estimación: ${estimate?esc(readable(estimate)):'aún no indicada'}. Sesiones reservadas: ${esc(readable(subtotal))}. ${estimate?'Pendiente de reservar: '+esc(readable(remaining))+'.':''} La tarea sigue siendo una sola en Work.</p>
+    <p class="small">Estimación: ${estimate?esc(readable(estimate)):'aún no indicada'}. Sesiones ya reservadas: ${esc(readable(subtotal))}. ${estimate?'Pendiente de reservar: '+esc(readable(remaining))+'.':''} La tarea sigue siendo una sola en Work.</p>
     <label>Fecha<input id="deskSessionDate" type="date" value="${esc(date)}"></label>
     <label>Comienzo<input id="deskSessionStart" type="time" value="${esc(proposedStart)}"></label>
     <label>Tiempo de trabajo (minutos, elegido por ti)<input id="deskSessionDuration" type="number" min="15" max="720" step="15" value="${initial}"></label>
