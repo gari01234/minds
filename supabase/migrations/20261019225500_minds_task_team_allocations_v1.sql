@@ -3,15 +3,20 @@
 create table if not exists public.minds_work_task_assignees (
   task_id uuid not null,
   person_id uuid not null,
+  project_id uuid not null,
   user_id uuid not null default auth.uid(),
   created_at timestamptz not null default now(),
   primary key(task_id,person_id),
   constraint minds_work_task_assignees_task_owner_fk
     foreign key(task_id,user_id) references public.isabella_tasks(id,user_id) on delete cascade,
   constraint minds_work_task_assignees_person_owner_fk
-    foreign key(person_id,user_id) references public.isabella_people(id,user_id) on delete cascade
+    foreign key(person_id,user_id) references public.isabella_people(id,user_id) on delete cascade,
+  -- Never silently orphan or cascade responsibility when removing project membership.
+  constraint minds_work_task_assignees_membership_fk
+    foreign key(project_id,person_id) references public.minds_work_project_people(project_id,person_id) on delete restrict
 );
 create index if not exists minds_work_task_assignees_person_idx on public.minds_work_task_assignees(person_id,task_id);
+create index if not exists minds_work_task_assignees_membership_idx on public.minds_work_task_assignees(project_id,person_id);
 alter table public.minds_work_task_assignees enable row level security;
 create policy minds_work_task_assignees_select_own on public.minds_work_task_assignees
   for select to authenticated using (user_id=(select auth.uid()));
@@ -28,7 +33,7 @@ begin
     select 1 from public.isabella_tasks t
     join public.minds_work_project_people m
       on m.project_id=t.project_id and m.person_id=new.person_id and m.user_id=t.user_id
-    where t.id=new.task_id and t.user_id=new.user_id
+    where t.id=new.task_id and t.user_id=new.user_id and t.project_id=new.project_id
   ) then
     raise exception 'Responsible must belong to the task project';
   end if;
@@ -51,7 +56,10 @@ create table if not exists public.minds_work_task_allocations (
   created_at timestamptz not null default now(),
   primary key(task_id,person_id,work_date),
   constraint minds_work_task_allocations_assignee_fk
-    foreign key(task_id,person_id) references public.minds_work_task_assignees(task_id,person_id) on delete cascade,
+    -- Direct unassignment cannot silently erase planned team days. A full task
+    -- deletion may still cascade both dependent tables before commit.
+    foreign key(task_id,person_id) references public.minds_work_task_assignees(task_id,person_id)
+      on delete no action deferrable initially deferred,
   constraint minds_work_task_allocations_task_owner_fk
     foreign key(task_id,user_id) references public.isabella_tasks(id,user_id) on delete cascade
 );
@@ -70,8 +78,8 @@ create policy minds_work_task_allocations_delete_own on public.minds_work_task_a
 grant select,insert,update,delete on public.minds_work_task_allocations to authenticated;
 
 -- Backfill legacy single-person assignments without changing the original task row.
-insert into public.minds_work_task_assignees(task_id,person_id,user_id)
-select t.id,t.assignee_person_id,t.user_id
+insert into public.minds_work_task_assignees(task_id,person_id,project_id,user_id)
+select t.id,t.assignee_person_id,t.project_id,t.user_id
 from public.isabella_tasks t
 join public.minds_work_project_people m
   on m.project_id=t.project_id and m.person_id=t.assignee_person_id and m.user_id=t.user_id
@@ -129,8 +137,8 @@ begin
   ) then raise exception 'Remove planned team days before unassigning this person'; end if;
   delete from public.minds_work_task_assignees
    where task_id=p_task_id and user_id=v_owner and not(person_id=any(v_ids));
-  insert into public.minds_work_task_assignees(task_id,person_id,user_id)
-   select p_task_id,p,v_owner from unnest(v_ids) p
+  insert into public.minds_work_task_assignees(task_id,person_id,project_id,user_id)
+   select p_task_id,p,v_project,v_owner from unnest(v_ids) p
    on conflict(task_id,person_id) do nothing;
   update public.isabella_tasks
     set assignee_person_id=v_ids[1],

@@ -80,3 +80,48 @@ test('PWA references matched files and versions',()=>{
  assert.match(sw,/isabella-shell-v161/);
  assert.ok(html.indexOf('task-team.js?v=1')<html.indexOf('task-detail.js?v=3'));
 });
+
+test('project membership is referentially enforced for primary and secondary assignees',()=>{
+ assert.match(sql,/project_id uuid not null/);
+ assert.match(sql,/foreign key\(project_id,person_id\) references public\.minds_work_project_people\(project_id,person_id\) on delete restrict/);
+ assert.match(sql,/where t\.id=new\.task_id and t\.user_id=new\.user_id and t\.project_id=new\.project_id/);
+ assert.match(sql,/minds_work_task_assignees_membership_idx on public\.minds_work_task_assignees\(project_id,person_id\)/);
+ assert.match(sql,/insert into public\.minds_work_task_assignees\(task_id,person_id,project_id,user_id\)/);
+ assert.match(sql,/select p_task_id,p,v_project,v_owner from unnest\(v_ids\)/);
+ // Allocations may never be cascade-deleted by a direct unassignment.
+ assert.match(sql,/foreign key\(task_id,person_id\) references public\.minds_work_task_assignees\(task_id,person_id\)\s+on delete no action deferrable initially deferred/);
+ assert.match(sql,/foreign key\(task_id,user_id\) references public\.isabella_tasks\(id,user_id\) on delete cascade/);
+ assert.match(read('work-team.js'),/re\.code==='23503'/);
+});
+
+test('reading team rows preserves the authoritative primary and deterministic secondary order',async()=>{
+ const vm=await import('node:vm');
+ const responses={
+  minds_work_task_assignees:[
+   {person_id:'third',created_at:'2026-10-20T15:00:00Z'},
+   {person_id:'secondary',created_at:'2026-10-19T10:00:00Z'},
+   {person_id:'primary',created_at:'2026-10-21T10:00:00Z'}
+  ],
+  minds_work_task_allocations:[{person_id:'secondary',work_date:'2026-10-23',planned_minutes:120}]
+ };
+ const calls=[];
+ const sb={from(table){
+  const q={
+   select(){return q},eq(){return q},
+   order(field){calls.push([table,field]);return q},
+   then(resolve,reject){return Promise.resolve({data:responses[table]||[],error:null}).then(resolve,reject)}
+  };
+  return q;
+ }};
+ const ctx={window:{MINDS_SUPABASE:sb},document:{}};
+ vm.runInNewContext(team,ctx);
+ const readTeam=ctx.window.MINDS_TASK_TEAM.read;
+ const result=await readTeam('canonical-task','primary');
+ assert.deepEqual(Array.from(result.ids),['primary','secondary','third']);
+ assert.equal(result.allocations.length,1);
+ assert.deepEqual(Array.from((await readTeam('canonical-task')).ids),['secondary','third','primary']);
+ assert.deepEqual(Array.from((await readTeam('canonical-task','unknown')).ids),['secondary','third','primary']);
+ assert.ok(calls.some(([table,col])=>table==='minds_work_task_assignees'&&col==='created_at'));
+ assert.match(taskDetail,/MINDS_TASK_TEAM\.read\(task\.id,task\.assignee_person_id\)/);
+ assert.match(team,/read\(ctx\.task\.id,ctx\.task\.assignee_person_id\)/);
+});

@@ -83,7 +83,9 @@ async function open(project,onChanged=()=>{}){
     b.disabled=true;
     const {error:re}=await sb.from('minds_work_project_people')
       .delete().eq('project_id',project.id).eq('person_id',id);
-    if(re){error('Nicht entfernt. Prüfe, ob noch Aufgaben zugeordnet sind.');b.disabled=false;return}
+    if(re){error(re.code==='23503'
+      ? 'Nicht entfernt: Erst Aufgaben-Zuordnungen und geplante Teamtage dieser Person entfernen.'
+      : 'Nicht entfernt: '+(re.message||'Bitte Zuordnungen prüfen.'));b.disabled=false;return}
     await refresh();
   });
   $$('[data-work-team-rename]').forEach(b=>b.onclick=async()=>{

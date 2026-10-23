@@ -63,7 +63,7 @@ async function open(opts={}){
     if(ticket!==generation)return;
     if(!projectId&&task)projectId=task.project_id;
     const categoryId=task?.category_id||choices.categories.find(c=>c.client_key===opts.categoryKey)?.id||null;
-    const teamData=task&&window.MINDS_TASK_TEAM?.read?await window.MINDS_TASK_TEAM.read(task.id):{ids:[],allocations:[]};
+    const teamData=task&&window.MINDS_TASK_TEAM?.read?await window.MINDS_TASK_TEAM.read(task.id,task.assignee_person_id):{ids:[],allocations:[]};
     const ctx={ticket,task,projectId,categoryId,choices,opts,queue:Promise.resolve(),blocked:false,
       teamIds:teamData.ids.length?teamData.ids:(task?.assignee_person_id?[task.assignee_person_id]:[]),
       allocations:teamData.allocations};

@@ -8,15 +8,25 @@ const yes=x=>Array.isArray(x)?x:[];
 const validDate=x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x));
 const localDay=()=>{const d=new Date();return [d.getFullYear(),String(d.getMonth()+1).padStart(2,'0'),String(d.getDate()).padStart(2,'0')].join('-')};
 const teamIds=ctx=>yes(ctx.teamIds);
-async function read(taskId){
+async function read(taskId,primaryPersonId=null){
   if(!taskId)return {ids:[],allocations:[]};
   const [a,b]=await Promise.all([
-    sb.from('minds_work_task_assignees').select('person_id').eq('task_id',taskId),
+    sb.from('minds_work_task_assignees').select('person_id,created_at').eq('task_id',taskId)
+      .order('created_at',{ascending:true}).order('person_id',{ascending:true}),
     sb.from('minds_work_task_allocations').select('person_id,work_date,planned_minutes,note,updated_at')
       .eq('task_id',taskId).order('work_date')
   ]);
   if(a.error||b.error)throw a.error||b.error;
-  return {ids:yes(a.data).map(x=>x.person_id),allocations:yes(b.data)};
+  // Deterministic secondary ordering; the legacy primary is the authoritative first person.
+  // Reopening a task must not promote a secondary due to unordered database results.
+  const links=[...yes(a.data)].filter(x=>x.person_id).sort((x,y)=>
+    String(x.created_at||'').localeCompare(String(y.created_at||''))||
+    String(x.person_id).localeCompare(String(y.person_id)));
+  const ids=[...new Set(links.map(x=>x.person_id))];
+  if(primaryPersonId&&ids.includes(primaryPersonId)){
+    ids.splice(ids.indexOf(primaryPersonId),1);ids.unshift(primaryPersonId);
+  }
+  return {ids,allocations:yes(b.data)};
 }
 const name=(ctx,id)=>ctx.choices.people.find(x=>x.id===id)?.name||'Integrante';
 function selectorHtml(ctx){
@@ -111,7 +121,7 @@ async function allocate(ctx){
         {onConflict:'task_id,person_id,work_date'})
       .select('person_id,work_date,planned_minutes,note,updated_at');
     if(error||!data?.length)throw error||new Error('No se confirmó la asignación de horas.');
-    ctx.allocations=(await read(ctx.task.id)).allocations;
+    ctx.allocations=(await read(ctx.task.id,ctx.task.assignee_person_id)).allocations;
     refreshRows(ctx);status('Jornada prevista guardada. No bloquea el calendario personal.');
     void window.ISABELLA_SYNC_PULL_NOW?.().catch(()=>{});
   }catch(err){status('No se pudo guardar: '+(err?.message||err))}
@@ -124,7 +134,7 @@ async function removeAllocation(ctx,person_id,work_date){
     .eq('task_id',ctx.task.id).eq('person_id',person_id).eq('work_date',work_date)
     .select('task_id');
   if(error||!data?.length){status('No se pudo quitar la previsión: '+(error?.message||'no encontrada'));return}
-  ctx.allocations=(await read(ctx.task.id)).allocations;refreshRows(ctx);status('Previsión eliminada.');
+  ctx.allocations=(await read(ctx.task.id,ctx.task.assignee_person_id)).allocations;refreshRows(ctx);status('Previsión eliminada.');
   void window.ISABELLA_SYNC_PULL_NOW?.().catch(()=>{});
 }
 function bind(ctx){
