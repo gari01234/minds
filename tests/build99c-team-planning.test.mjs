@@ -7,7 +7,7 @@ const read=x=>readFileSync(new URL('../apps/isabella/'+x,import.meta.url),'utf8'
 const P=require('../apps/isabella/calendar-plan.js');
 const taskDetail=read('task-detail.js'),team=read('task-team.js'),sync=read('sync.js');
 const app=read('app.js'),work=read('work.js'),dashboard=read('dashboard.js'),html=read('index.html'),sw=read('sw.js');
-const sql=readFileSync(new URL('../supabase/migrations/20261019225500_minds_task_team_allocations_v1.sql',import.meta.url),'utf8');
+const sql=readFileSync(new URL('../supabase/migrations/20261023083324_minds_task_team_allocations_v1.sql',import.meta.url),'utf8');
 
 test('filter by either responsible on one and the same canonical task',()=>{
  const t={id:'canonical-task',title:'Grundriss 2OG',date:'2026-10-23',startDate:'2026-10-20',

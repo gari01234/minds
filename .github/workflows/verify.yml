@@ -53,6 +53,6 @@ jobs:
       - name: Build synthetic owner-scoped schema
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/build99c-fixture.sql
       - name: Apply exact Build 99C migration (no production connection)
-        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261019225500_minds_task_team_allocations_v1.sql
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261023083324_minds_task_team_allocations_v1.sql
       - name: Verify SQL integrity, RLS, and negative cases
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/build99c-acceptance.sql
