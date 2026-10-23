@@ -7,7 +7,7 @@ import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/ca
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {verifyCalendarSemanticProposal,validatedCalendarClock} from "../_shared/calendar-semantic-boundary.mjs";
-import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
+import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,unregisteredReviewAttempt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
 import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
@@ -4283,9 +4283,16 @@ pregunta cuál.`;
   let reply=String(extractText(payload)||"").trim() ||
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
+  // A rejected/suppressed review tool is not a registered proposal. Replace
+  // unverified model prose with a deterministic status; no phrase filters.
+  const reviewAttemptWithoutReceipt=unregisteredReviewAttempt(usedTools,toolProposals,policyMode);
   const directAuthorization=authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
     reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
+  }else if(reviewAttemptWithoutReceipt){
+    // The attempted write was never admitted as a reviewable proposal.
+    // Do not imply a new card or a successful DB mutation.
+    reply="No pude registrar una propuesta nueva y verificable para esta operación. No hay ningún cambio confirmado a partir de esta solicitud. Revisa los datos o aclara la operación para volver a intentarlo.";
   }else if(fastAgenda&&!toolProposals.length){
     // The model may re-interpret a rejected semantic claim; no action is
     // registered until the claim passes validation. Do not fabricate approval.

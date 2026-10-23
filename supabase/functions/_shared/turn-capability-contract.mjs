@@ -53,3 +53,16 @@ export function scopedHistoryReady(messages,{now="",minMessages=4}={}){
  return last<=time+60000&&time-last<=60*60000&&
    recent.some(x=>x.role==="user")&&recent.some(x=>x.role==="assistant");
 }
+
+/**
+ * Review-required tools may be rejected by provenance, semantic grounding,
+ * policy, or deduplication. Mere use of a tool is not a proposal receipt.
+ * This detector sees only server-recorded tool names and registered proposals;
+ * never model text, languages, or user phrasing.
+ */
+export function unregisteredReviewAttempt(tools,proposals,policyMode){
+ if(!Array.isArray(tools)||!tools.length||!Array.isArray(proposals)||proposals.length)
+   return false;
+ if(typeof policyMode!=="function")return false;
+ return tools.some(name=>typeof name==="string"&&policyMode(name)==="confirm");
+}
