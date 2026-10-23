@@ -315,6 +315,7 @@ function init(){
   bind();
   initSituationPullRefresh();
   renderMessages(true);
+  void recoverReviewedTaskReceipts();
   renderToday();
   renderCalendar();
   void syncDurableChatJobs();
@@ -325,6 +326,7 @@ function init(){
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){
       void syncDurableChatJobs();
+      void recoverReviewedTaskReceipts();
       if(state.screen==='calendar')window.ISABELLA_SYNC_PULL_NOW?.();
     }
   });
@@ -502,6 +504,7 @@ function show(name){
     renderCalendar();
     if(previous!=='calendar')setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
   }
+  if(name==='assistant'&&previous!=='assistant')void recoverReviewedTaskReceipts();
   if(name==='feed')renderFeed();
   if(name==='ideas')renderIdeas();
   if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);
@@ -1133,6 +1136,20 @@ function restoreAssistantScroll(snapshot,force=false){
   scroller.dataset.initialScroll='1';
 }
 function scrollAssistantToLatest(force=false){restoreAssistantScroll({nearBottom:true},force)}
+
+function resolvedReviewText(m){
+  const state=m?.metadata?.review_state,items=m?.metadata?.review_proposals;
+  if(!Array.isArray(items)||!items.length)return null;
+  if(state==='applied_verified'){
+    const item=items.length===1?items[0]:null;
+    const date=item?.kind==='task'&&item.action==='update'&&/^\d{4}-\d{2}-\d{2}$/.test(String(item.date||''))?item.date:null;
+    return 'Cambio confirmado y verificado en Supabase'+(date?' · '+date:'')+'.';
+  }
+  if(state==='rejected')return 'Propuesta cancelada. No se aplicó el cambio.';
+  if(state==='reviewed_locally')return 'Revisión completada. Comprueba el resultado de la operación.';
+  return null;
+}
+
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
@@ -1146,7 +1163,7 @@ function renderMessages(forceBottom=false){
   box.innerHTML=state.messages.map(m=>{
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
     const artifactSurface=artifactSurfaceGroups(m.artifacts);
-    const displayText=cleanGeneratedDeliverableText(m.text,m.artifacts);
+    const displayText=resolvedReviewText(m)??cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
     return `<div class="message ${m.role}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
@@ -1531,6 +1548,55 @@ function proposalDetails(p){
   return '';
 }
 window.MINDS_PROPOSALS={review:p=>confirmProposal(p),edit:p=>proposalEditor(p,q=>{if(q)confirmProposal(q);else closeModal()})};
+
+let reviewReceiptRecoveryBusy=false;
+/* A committed mutation may lose the browser response. Restore its acknowledgement
+ * from owner-scoped immutable receipts and canonical state; never repeat the RPC. */
+async function recoverReviewedTaskReceipts(){
+  if(reviewReceiptRecoveryBusy)return false;
+  const pending=state.messages.filter(m=>m.role==='assistant'&&!m.metadata?.review_state&&
+    Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length===1&&
+    m.metadata.review_proposals[0]?.kind==='task'&&m.metadata.review_proposals[0]?.action==='update');
+  const ids=[...new Set(pending.map(m=>m.metadata.review_proposals[0].request_id).filter(id=>
+    typeof id==='string'&&/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id)))].slice(-20);
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||!ids.length)return false;
+  reviewReceiptRecoveryBusy=true;
+  try{
+    const {data:auth,error:authError}=await sb.auth.getSession();
+    const owner=auth?.session?.user?.id;
+    if(authError||!owner)return false;
+    const [receiptResult,decisionResult]=await Promise.all([
+      sb.from('minds_calendar_action_receipts').select('id,request_id,entity_id,action,after_state')
+        .eq('user_id',owner).in('request_id',ids),
+      sb.from('minds_shadow_decisions').select('request_id,status')
+        .eq('user_id',owner).in('request_id',ids)
+    ]);
+    if(receiptResult.error||decisionResult.error)return false;
+    const accepted=new Set((decisionResult.data||[]).filter(d=>d.status==='accepted').map(d=>d.request_id));
+    const receipts=new Map((receiptResult.data||[]).filter(r=>r.id&&r.entity_id&&
+      r.action==='update_task'&&accepted.has(r.request_id)).map(r=>[r.request_id,r]));
+    if(!receipts.size)return false;
+    const {data:tasks,error:readError}=await sb.from('isabella_tasks')
+      .select('id,title,due_date,updated_at').eq('user_id',owner)
+      .in('id',[...new Set([...receipts.values()].map(r=>r.entity_id))]);
+    if(readError)return false;
+    const canonical=new Map((tasks||[]).map(t=>[t.id,t]));
+    let updated=false;
+    for(const m of pending){
+      const r=receipts.get(m.metadata.review_proposals[0].request_id),t=r&&canonical.get(r.entity_id);
+      if(!t||!r.after_state||t.title!==r.after_state.title||
+         t.due_date!==(r.after_state.date||null)||
+         Date.parse(t.updated_at)!==Date.parse(r.after_state.updated_at))continue;
+      m.metadata={...m.metadata,review_state:'applied_verified',review_receipt_id:r.id};
+      updated=true;
+    }
+    if(updated){save();renderMessages();}
+    return updated;
+  }catch{return false}
+  finally{reviewReceiptRecoveryBusy=false}
+}
+
 function finalizeInlineReview(proposals,status){
   const ids=new Set((Array.isArray(proposals)?proposals:[proposals])
     .map(p=>String(p?.request_id||'')).filter(Boolean));
