@@ -37,20 +37,41 @@
         return {ok:false,reason:'missing_review_candidate',proposals:[]};
       if(name!=='proposal_created'&&proposals.length>0)
         return {ok:false,reason:'unexpected_review_candidate',proposals:[]};
-      if(name==='action_applied'&&(!Number.isSafeInteger(outcome.applied_count)||
-          outcome.applied_count<1||
-          !(result.autonomy_execution?.id||
-            (Array.isArray(result.action_receipts)&&
-              result.action_receipts.some(r=>r&&typeof r.receipt_id==='string'&&r.receipt_id)))))
-        return {ok:false,reason:'missing_execution_receipt',proposals:[]};
+      // A claim of execution is not evidence. Only a complete one-to-one list
+      // of server-origin action receipts can support action_applied.
+      const applied=outcome.applied_count;
+      if(!Number.isSafeInteger(applied)||applied<0)
+        return {ok:false,reason:'invalid_applied_count',proposals:[]};
+      if(result.action_receipts!=null&&!Array.isArray(result.action_receipts))
+        return {ok:false,reason:'malformed_action_receipts',proposals:[]};
+      const receipts=Array.isArray(result.action_receipts)?result.action_receipts:[];
+      const receiptIds=new Set();
+      for(const r of receipts){
+        if(!r||typeof r!=='object'||typeof r.receipt_id!=='string'||
+           !r.receipt_id.trim()||typeof r.request_id!=='string'||!r.request_id.trim()||
+           receiptIds.has(r.receipt_id))
+          return {ok:false,reason:'invalid_or_duplicate_action_receipt',proposals:[]};
+        receiptIds.add(r.receipt_id);
+      }
+      if(name==='action_applied'){
+        if(!applied||receipts.length!==applied)
+          return {ok:false,reason:'missing_execution_receipt',proposals:[]};
+      }else if(applied!==0||receipts.length){
+        return {ok:false,reason:'unexpected_execution_receipt',proposals:[]};
+      }
     }
     // Older fast-action and contextual paths supply a canonical request_id
     // but no outcome field. Permit review, never infer action_applied.
     return {ok:true,proposals,typed:outcome!=null,
-      outcome:outcome?.outcome||(proposals.length?'proposal_created':'answered')};
+      outcome:outcome?.outcome||(proposals.length?'proposal_created':'answered'),
+      applied_count:outcome?.applied_count||0};
   }
   function summary(check){
     if(!check?.ok)return 'No pude verificar el resultado de esta operación. No he confirmado ningún cambio.';
+    if(check.outcome==='action_applied')
+      return 'El servidor devolvió '+check.applied_count+
+        (check.applied_count===1?' recibo de ejecución.':' recibos de ejecución.')+
+        ' La operación se ha registrado, no se ha inferido de una respuesta de texto.';
     if(!check.proposals?.length)return null;
     const p=check.proposals[0],n=check.proposals.length;
     if(n!==1)return 'He preparado '+n+' propuestas para tu revisión. Ninguna se ha aplicado todavía.';

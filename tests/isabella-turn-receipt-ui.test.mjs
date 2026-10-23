@@ -59,9 +59,9 @@ test("full browser chat shows and persists review actions from typed result",()=
  assert.match(app,/data-review-message/);
  assert.match(app,/confirmProposals\(items\)/);
  assert.match(app,/finalizeInlineReview\(/);
- assert.ok(html.indexOf("turn-integrity.js?v=2")<html.indexOf("app.js?v=126"));
- assert.match(sw,/isabella-shell-v161/);
- assert.match(sw,/turn-integrity\.js\?v=2/);
+ assert.ok(html.indexOf("turn-integrity.js?v=3")<html.indexOf("app.js?v=126"));
+ assert.match(sw,/isabella-shell-v162/);
+ assert.match(sw,/turn-integrity\.js\?v=3/);
 });
 test("receipt validation is independent of magic Spanish correction phrases",()=>{
  const file=read("apps/isabella/turn-integrity.js");
@@ -103,4 +103,31 @@ test("real message renderer restores the inline review button from saved message
  buttons[0].onclick();
  assert.equal(calls.length,1);
  assert.equal(calls[0][0].request_id,"review-1");
+});
+
+test("Build 100A: typed execution has exact canonical receipt cardinality",()=>{
+ const receipt={request_id:"turn-uuid",receipt_id:"receipt-uuid"};
+ const ok=validate({outcome:{outcome:"action_applied",proposal_count:0,applied_count:1},
+   action_receipts:[receipt],reply:"Model reply falsely claims something else"});
+ assert.equal(ok.ok,true);
+ assert.equal(ok.outcome,"action_applied");
+ assert.equal(ok.applied_count,1);
+ assert.match(summary(ok),/servidor devolvió 1 recibo/);
+ assert.doesNotMatch(summary(ok),/falsely claims/);
+ for(const data of [
+   {outcome:{outcome:"action_applied",proposal_count:0,applied_count:1},autonomy_execution:{id:"run-only"}},
+   {outcome:{outcome:"action_applied",proposal_count:0,applied_count:2},action_receipts:[receipt]},
+   {outcome:{outcome:"action_applied",proposal_count:0,applied_count:2},action_receipts:[receipt,receipt]},
+   {outcome:{outcome:"action_applied",proposal_count:0,applied_count:1},action_receipts:[{receipt_id:"missing-turn"}]},
+   {outcome:{outcome:"action_applied",proposal_count:0,applied_count:1},action_receipts:[{...receipt,receipt_id:" "}]},
+   {outcome:{outcome:"answered",proposal_count:0,applied_count:1},action_receipts:[receipt]},
+   {outcome:{outcome:"answered",proposal_count:0,applied_count:0},action_receipts:[receipt]},
+   {outcome:{outcome:"proposal_created",proposal_count:0,applied_count:0},action_receipts:receipt},
+   {outcome:{outcome:"failed",proposal_count:0,applied_count:-1}},
+ ]) {
+   const result=validate(data);
+   assert.equal(result.ok,false,JSON.stringify(data));
+   assert.equal(result.proposals.length,0);
+   assert.match(summary(result),/No pude verificar/);
+ }
 });
