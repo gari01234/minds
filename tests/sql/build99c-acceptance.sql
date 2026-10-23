@@ -160,7 +160,7 @@ select public.minds_work_set_task_assignees(
 );
 insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
 values ('99999999-9999-4999-8999-999999999992','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3','2026-10-29',90);
-do $
+do $build99c$
 declare message text;
 begin
  begin
@@ -181,23 +181,23 @@ begin
     where task_id='99999999-9999-4999-8999-999999999992') <> 1 then
    raise exception 'Rejected project move discarded planned days';
  end if;
-end $;
+end $build99c$;
 delete from public.minds_work_task_allocations
  where task_id='99999999-9999-4999-8999-999999999992';
 update public.isabella_tasks
  set project_id='11111111-1111-4111-8111-111111111111',
      assignee_person_id=null,assignee=null
  where id='99999999-9999-4999-8999-999999999992';
-do $
+do $build99c$
 begin
  if exists(select 1 from public.minds_work_task_assignees
            where task_id='99999999-9999-4999-8999-999999999992')
   then raise exception 'Old-project responsibility survived an approved project move';
  end if;
-end $;
+end $build99c$;
 
 -- Invalid allocation durations must fail the table-level CHECK constraint.
-do $
+do $build99c$
 begin
  begin
   insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
@@ -206,7 +206,7 @@ begin
   raise exception 'Unexpected non-15-minute allocation accepted';
  exception when check_violation then null;
  end;
-end $;
+end $build99c$;
 
 -- A full canonical task deletion may still cascade its allocations and assignments.
 insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
