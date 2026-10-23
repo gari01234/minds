@@ -2610,8 +2610,8 @@ function bindNativePlanControls(){
   $$('[data-native-show-all]').forEach(button=>button.onclick=()=>{
     state.nativePlanShowAll=!state.nativePlanShowAll;save();renderCalendar();
   });
-  $('[data-team-task]').forEach(button=>button.onclick=()=>editItem('task',button.dataset.teamTask));
-  $('[data-plan-open]').forEach(button=>{
+  $$('[data-team-task]').forEach(button=>button.onclick=()=>editItem('task',button.dataset.teamTask));
+  $$('[data-plan-open]').forEach(button=>{
     button.onclick=()=>{
       if(button.dataset.nativeJustDragged==='1'){button.dataset.nativeJustDragged='0';return}
       editItem('task',button.dataset.planOpen);
