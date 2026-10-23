@@ -49,11 +49,11 @@ test('90.6 Planner canonical query has a stable UUID tie-break after Work and ca
     ['work_sort_order','sort_order','id']);
   assert.deepEqual(ctx.tasks.map(x=>x.id),['task-a','task-b','task-c']);
   assert.equal(ctx.tasks[0].work_sort_order,10);
-  assert.deepEqual(ctx.tasks[0].assignee_person_ids,['person-a','person-b']);
-  assert.deepEqual(ctx.tasks[1].assignee_person_ids,['legacy-b']);
-  assert.deepEqual(ctx.tasks[2].assignee_person_ids,[]);
+  assert.deepEqual(Array.from(ctx.tasks[0].assignee_person_ids),['person-a','person-b']);
+  assert.deepEqual(Array.from(ctx.tasks[1].assignee_person_ids),['legacy-b']);
+  assert.deepEqual(Array.from(ctx.tasks[2].assignee_person_ids),[]);
   const teamRequest=requests.find(r=>r.table==='minds_work_task_assignees');
-  assert.deepEqual(teamRequest.filters,[{column:'task_id',values:['task-a','task-b','task-c']}]);
+  assert.deepEqual(teamRequest.filters.map(f=>({column:f.column,values:Array.from(f.values)})),[{column:'task_id',values:['task-a','task-b','task-c']}]);
 });
 
 test('90.6 stable ordering never modifies task records or merges Work order with calendar order',()=>{
