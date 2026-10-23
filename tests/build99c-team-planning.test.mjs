@@ -42,7 +42,7 @@ test('multiresponsibility uses atomic RPC, version check, stable person IDs',()=
  assert.match(team,/aria-pressed/);
  assert.match(taskDetail,/MINDS_TASK_TEAM\.selectorHtml\(ctx\)/);
  assert.match(taskDetail,/MINDS_TASK_TEAM\.allocationsHtml\(ctx\)/);
- assert.match(taskDetail,/await window\.MINDS_TASK_TEAM\.read\(task\.id\)/);
+ assert.match(taskDetail,/await window\.MINDS_TASK_TEAM\.read\(task\.id,task\.assignee_person_id\)/);
  assert.match(taskDetail,/assignee_person_id:null/);
  assert.match(taskDetail,/minds_work_set_task_assignees/);
  assert.match(work,/task\.assignee_person_ids/);
