@@ -78,9 +78,9 @@ test('the Workload UI reads the private roster and never presents available hour
 });
 
 test('PWA workload release pins HTML and SW to the same native assets',()=>{
-  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=5','dashboard-workload.css?v=1']){
+  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=6','dashboard-workload.css?v=1']){
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v160/);
+  assert.match(sw,/isabella-shell-v161/);
 });

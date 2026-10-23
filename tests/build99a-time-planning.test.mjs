@@ -120,10 +120,10 @@ test('unified task editor routes to proposed blocks only after pending saves com
 });
 
 test('PWA includes model, UI, CSS and matching task-detail/cache version',()=>{
-  for(const asset of ['time-plan-model.js?v=2','time-plan.js?v=3','time-plan.css?v=1','task-detail.js?v=2']){
+  for(const asset of ['time-plan-model.js?v=2','time-plan.js?v=3','time-plan.css?v=1','task-detail.js?v=3']){
     assert.ok(html.includes(asset),'HTML misses '+asset);
     assert.ok(sw.includes(asset),'service worker misses '+asset);
   }
   assert.ok(html.indexOf('time-plan-model.js?v=2')<html.indexOf('time-plan.js?v=3'));
-  assert.match(sw,/isabella-shell-v160/);
+  assert.match(sw,/isabella-shell-v161/);
 });

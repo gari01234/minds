@@ -225,7 +225,7 @@
   // Resolve current person names by stable ID; Work renames never break assignment.
   let knownPersonNames=new Map(),loadedPeopleKey='',loadingPeopleKey='';
   const refreshPersonNames = state => {
-    const ids=[...new Set((state.tasks||[]).map(t=>t.assigneePersonId).filter(Boolean))].sort();
+    const ids=[...new Set((state.tasks||[]).flatMap(t=>personIds(t)).filter(Boolean))].sort();
     const key=ids.join('|'),sb=window.MINDS_SUPABASE;
     if(!key||!sb||key===loadedPeopleKey||key===loadingPeopleKey)return;
     loadingPeopleKey=key;
@@ -250,9 +250,17 @@
       scheduleRender();
     })().catch(()=>{}).finally(()=>{if(loadingRosterKey===key)loadingRosterKey=''});
   };
-  const personKey = task => task.assigneePersonId?'person:'+task.assigneePersonId:
+  const personIds = task => {
+    const ids=task.assigneePersonIds?.length?[...new Set(task.assigneePersonIds)]:
+      (task.assigneePersonId?[task.assigneePersonId]:[]);
+    const primary=task.assigneePersonId;
+    return primary&&ids.includes(primary)?[primary,...ids.filter(id=>id!==primary)]:ids;
+  };
+  const personKey = task => personIds(task).length?'person:'+personIds(task)[0]:
     task.assignee?'legacy:'+task.assignee:'unassigned';
-  const personName = task => (task.assigneePersonId&&knownPersonNames.get(task.assigneePersonId))||task.assignee||'Sin responsable';
+  const personName = task => personIds(task).length?
+    personIds(task).map(id=>knownPersonNames.get(id)||'Responsable').join(', '):
+    task.assignee||'Sin responsable';
   const planWeekHtml = state => {
     const projects=state.projects||[];
     const projectId=projects.some(p=>p.id===prefs.planProject)?prefs.planProject:'';
@@ -260,12 +268,17 @@
     const all=[...week.rows,...week.overdue,...week.unscheduled];
     const roster=projectRoster.key===projectId?projectRoster.people:[];
     const people=new Map(roster.map(person=>['person:'+person.id,person.name]));
-    for(const entry of all)if(!people.has(personKey(entry.task)))
-      people.set(personKey(entry.task),personName(entry.task));
+    for(const entry of all){
+      const ids=personIds(entry.task);
+      if(ids.length)for(const id of ids)people.set('person:'+id,knownPersonNames.get(id)||'Responsable');
+      else if(!people.has(personKey(entry.task)))people.set(personKey(entry.task),personName(entry.task));
+    }
     const choosePerson='<option value="">Todas las personas</option>'+[...people]
       .sort((a,b)=>a[1].localeCompare(b[1],'es'))
       .map(([key,name])=>'<option value="'+E(key)+'" '+(prefs.planPerson===key?'selected':'')+'>'+E(name)+'</option>').join('');
-    const byPerson=entry=>!prefs.planPerson||personKey(entry.task)===prefs.planPerson;
+    const byPerson=entry=>!prefs.planPerson||
+      (prefs.planPerson.startsWith('person:')?personIds(entry.task).includes(prefs.planPerson.slice(7)):
+        personKey(entry.task)===prefs.planPerson);
     const rows=week.rows.filter(byPerson),overdue=week.overdue.filter(byPerson),
       unscheduled=week.unscheduled.filter(byPerson);
     const gridHead='<div class="desk-week-head"><span>Tarea / entrega</span>'+week.days.map(date=>

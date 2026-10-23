@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import vm from 'node:vm';
 import {createRequire} from 'node:module';
 import {readFileSync} from 'node:fs';
 const require=createRequire(import.meta.url);
@@ -86,7 +87,7 @@ test('view preserves stable person keys, filters and explicit booking actions',(
   assert.equal(pref.planGrouping,'person');
   assert.equal(M.sanitizePreferences({planMode:'wrong',planGrouping:'wrong'}).planMode,'day');
   assert.match(dashboard,/M\.weeklyPlan\(state,prefs\.selectedDate,projectId\)/);
-  assert.match(dashboard,/task\.assigneePersonId\?'person:'/);
+  assert.match(dashboard,/const byPerson=entry=>/);
   assert.match(dashboard,/data-desk-week-book/);
   assert.match(dashboard,/planTaskSession\?\.\(button\.dataset\.deskWeekBook,date\)/);
   assert.match(dashboard,/data-desk-week-project/);
@@ -97,10 +98,34 @@ test('view preserves stable person keys, filters and explicit booking actions',(
   assert.match(css,/desk-week-cell\.is-window/);
 });
 
+test('weekly person filter includes secondary, legacy and unassigned identities without duplicating tasks',()=>{
+  const personStart=dashboard.indexOf('  const personIds = task =>');
+  const personEnd=dashboard.indexOf('  const personName = task =>',personStart);
+  const filterStart=dashboard.indexOf('    const byPerson=entry=>');
+  const filterEnd=dashboard.indexOf('    const rows=week.rows.filter(byPerson)',filterStart);
+  assert.ok(personStart>=0&&personEnd>personStart&&filterStart>=0&&filterEnd>filterStart);
+  const prefs={planPerson:'person:second'};
+  const source=dashboard.slice(personStart,personEnd)+dashboard.slice(filterStart,filterEnd)+'\n({personIds,byPerson})';
+  const {personIds,byPerson}=vm.runInNewContext(source,{prefs});
+  const multi={assigneePersonIds:['first','second'],assigneePersonId:'first'};
+  assert.deepEqual(Array.from(personIds(multi)),['first','second']);
+  assert.equal(byPerson({task:multi}),true);
+  prefs.planPerson='person:missing';
+  assert.equal(byPerson({task:multi}),false);
+  prefs.planPerson='person:legacy-id';
+  assert.equal(byPerson({task:{assigneePersonId:'legacy-id'}}),true);
+  prefs.planPerson='legacy:Unresolved';
+  assert.equal(byPerson({task:{assignee:'Unresolved'}}),true);
+  prefs.planPerson='unassigned';
+  assert.equal(byPerson({task:{}}),true);
+  prefs.planPerson='';
+  assert.equal(byPerson({task:multi}),true);
+});
+
 test('PWA updates model, interface and stylesheet as one cached release',()=>{
-  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=5','dashboard-week.css?v=1']){
+  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=6','dashboard-week.css?v=1']){
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v160/);
+  assert.match(sw,/isabella-shell-v161/);
 });

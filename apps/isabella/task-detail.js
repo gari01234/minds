@@ -63,7 +63,10 @@ async function open(opts={}){
     if(ticket!==generation)return;
     if(!projectId&&task)projectId=task.project_id;
     const categoryId=task?.category_id||choices.categories.find(c=>c.client_key===opts.categoryKey)?.id||null;
-    const ctx={ticket,task,projectId,categoryId,choices,opts,queue:Promise.resolve(),blocked:false};
+    const teamData=task&&window.MINDS_TASK_TEAM?.read?await window.MINDS_TASK_TEAM.read(task.id,task.assignee_person_id):{ids:[],allocations:[]};
+    const ctx={ticket,task,projectId,categoryId,choices,opts,queue:Promise.resolve(),blocked:false,
+      teamIds:teamData.ids.length?teamData.ids:(task?.assignee_person_id?[task.assignee_person_id]:[]),
+      allocations:teamData.allocations};
     render(ctx);
   }catch(error){if(ticket===generation)errView(error?.message||error)}
 }
@@ -100,7 +103,7 @@ function render(ctx){
     '<label>Bucket<select id="taskDetailBucket">'+bucketOptions+'</select></label>'+
     '<label>Inicio<input type="date" id="taskDetailStart" value="'+E(t.start_date||ctx.opts.startDate||'')+'"></label>'+
     '<label>Entrega<input type="date" id="taskDetailDue" value="'+E(t.due_date||ctx.opts.date||'')+'"></label>'+
-    '<label>Responsable<select id="taskDetailAssignee">'+peopleOptions+'</select></label>'+
+    '<div class="minds-task-team-field"><span>Responsables</span>'+window.MINDS_TASK_TEAM.selectorHtml(ctx)+'</div>'+
     '<label>Estado<select id="taskDetailWorkStatus">'+
     [['not_started','Nicht begonnen'],['in_progress','In Bearbeitung'],['waiting','Warten'],['completed','Erledigt']]
       .map(([id,name])=>selectOption(id,name,statusValue)).join('')+'</select></label>'+
@@ -122,6 +125,7 @@ function render(ctx){
     '<div class="minds-task-section"><div class="minds-task-section-head"><strong>Enlaces</strong>'+
     '<button type="button" class="minds-task-inline-add" id="taskDetailAddLink">＋ Añadir enlace</button></div>'+
     '<div id="taskDetailLinks">'+linksHtml+'</div></div>'+
+    window.MINDS_TASK_TEAM.allocationsHtml(ctx)+
     '<div class="minds-task-section"><div class="minds-task-section-head"><strong>Sesiones de trabajo</strong>'+
     '<div class="minds-task-session-actions"><button type="button" class="minds-task-inline-add" id="taskDetailPropose">◇ Proponer bloques</button>'+ 
     '<button type="button" class="minds-task-inline-add" id="taskDetailBook">＋ Reservar tiempo</button></div></div>'+
@@ -167,10 +171,6 @@ function bind(ctx){
     return {metadata:{...(ctx.task?.metadata||{}),planning:{...(ctx.task?.metadata?.planning||{}),estimated_minutes:n}}};
   });
   field('#taskDetailWorkStatus',value=>({work_status:value,completed_at:value==='completed'?(ctx.task?.completed_at||new Date().toISOString()):null}));
-  field('#taskDetailAssignee',value=>{
-    const p=ctx.choices.people.find(x=>x.id===value);
-    return {assignee_person_id:p?.id||null,assignee:p?.name||(value==='__legacy__'?ctx.task?.assignee||null:null)};
-  });
   field('#taskDetailProject',value=>{void changeProject(ctx,value||null);return null});
   $('#taskDetailComplete').onclick=()=>void update(ctx,{completed_at:ctx.task?.completed_at?null:new Date().toISOString(),
     work_status:ctx.task?.completed_at?'not_started':'completed'},true);
@@ -212,6 +212,7 @@ function bind(ctx){
     const key=ctx.task.client_key||ctx.task.id;
     if(!app()?.planTaskSession?.(key))status('Sincroniza la tarea antes de reservar tiempo.',true);
   };
+  window.MINDS_TASK_TEAM?.bind?.(ctx);
   if(!ctx.task)$('#taskDetailCreate').onclick=()=>void createTask(ctx);
 }
 function collectChecks(){
@@ -253,6 +254,11 @@ function update(ctx,patch,rerender=false){
   return ctx.queue;
 }
 async function changeProject(ctx,id){
+  if(ctx.task&&ctx.allocations?.length){
+    render(ctx);
+    status('Antes de cambiar de proyecto, retira las jornadas previstas del equipo.',true);
+    return;
+  }
   if(!ctx.task){
     ctx.projectId=id;ctx.opts.projectId=id;ctx.opts.bucketId=null;ctx.choices=await readChoices(id);
     if(ctx.ticket===generation)render(ctx);return;
@@ -260,6 +266,7 @@ async function changeProject(ctx,id){
   await update(ctx,{project_id:id,assignee_person_id:null,assignee:null,work_bucket_id:null});
   if(ctx.blocked)return;
   ctx.projectId=id;ctx.opts.bucketId=null;ctx.choices=await readChoices(id);
+  ctx.teamIds=[];ctx.allocations=[];
   if(ctx.ticket===generation)render(ctx);
 }
 async function createTask(ctx){
@@ -268,7 +275,7 @@ async function createTask(ctx){
   if(!datesValid($('#taskDetailStart').value,$('#taskDetailDue').value)){
     status('La fecha de inicio debe ser anterior o igual a la entrega.',true);return;
   }
-  const member=ctx.choices.people.find(p=>p.id===$('#taskDetailAssignee').value);
+  const member=ctx.choices.people.find(p=>(ctx.teamIds||[]).includes(p.id));
   const estimate=Number($('#taskDetailEstimate').value||0);
   if(!Number.isInteger(estimate)||estimate<0||estimate>43200){status('Estimación fuera de rango.',true);return}
   const projectId=$('#taskDetailProject').value||null;
@@ -277,8 +284,8 @@ async function createTask(ctx){
   const row={title,project_id:projectId,category_id:$('#taskDetailCategory').value||null,
     work_bucket_id:$('#taskDetailBucket').value||null,work_status:statusValue,
     priority:$('#taskDetailPriority').value,start_date:$('#taskDetailStart').value||null,
-    due_date:$('#taskDetailDue').value||null,assignee_person_id:member?.id||null,
-    assignee:member?.name||null,labels:$('#taskDetailLabels').value.split(',').map(s=>s.trim()).filter(Boolean),
+    due_date:$('#taskDetailDue').value||null,assignee_person_id:null,
+    assignee:null,labels:$('#taskDetailLabels').value.split(',').map(s=>s.trim()).filter(Boolean),
     notes:$('#taskDetailNotes').value,checklist:collectChecks(),
     completed_at:statusValue==='completed'?new Date().toISOString():null,
     metadata:{planning:{estimated_minutes:estimate}},reminder_time:$('#taskDetailDue').value?($('#taskDetailReminder').value||null):null,
@@ -289,11 +296,22 @@ async function createTask(ctx){
     const {data,error}=await sb.from('isabella_tasks').insert(row).select('*').single();
     if(error||!data)throw error||new Error('El servidor no confirmó la tarea.');
     ctx.task=data;ctx.projectId=data.project_id;ctx.categoryId=data.category_id;
+    if(ctx.teamIds?.length){
+      const assigned=await sb.rpc('minds_work_set_task_assignees',{
+        p_task_id:data.id,p_person_ids:ctx.teamIds,p_expected_updated_at:data.updated_at
+      });
+      if(assigned.error)throw assigned.error;
+      const fresh=await readTask({taskId:data.id});
+      ctx.task=fresh;
+    }
     await app()?.refresh?.();
     void window.ISABELLA_SYNC_PULL_NOW?.().catch(()=>{});
     if(typeof ctx.opts.onUpdated==='function')void Promise.resolve(ctx.opts.onUpdated()).catch(()=>{});
     render(ctx);status('Tarea creada · guardado automático activo');
-  }catch(error){fail(error);button.disabled=false}
+  }catch(error){
+    if(ctx.task){render(ctx);status('La tarea se creó, pero falta confirmar la asignación: '+(error?.message||error),true)}
+    else{fail(error);button.disabled=false}
+  }
 }
 async function doAction(ctx,action){
   if(!ctx.task){status('Aún no existe una tarea para esta acción.',true);return}

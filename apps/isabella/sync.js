@@ -324,18 +324,47 @@ function projectTaskRow(t,catKey,projKey){
   };
 }
 async function pullState(local,maps){
-  const [{data:tasks,error:te},{data:events,error:ee},{data:mem,error:me},{data:pref,error:pre},{data:assistantPref,error:ape}] = await Promise.all([
+  const [{data:tasks,error:te},{data:events,error:ee},{data:mem,error:me},{data:pref,error:pre},{data:assistantPref,error:ape},
+    {data:assignees,error:asError},{data:allocations,error:alError},
+    {data:teamPeople,error:peopleError}] = await Promise.all([
     sb.from('isabella_tasks').select('*').eq('user_id',user.id).order('due_date',{ascending:true}),
     sb.from('isabella_events').select('*').eq('user_id',user.id).order('starts_at',{ascending:true}),
     sb.from('isabella_memories').select('*').eq('user_id',user.id).eq('status','active').order('created_at',{ascending:true}),
     sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','feed').maybeSingle(),
-    sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle()
+    sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle(),
+    sb.from('minds_work_task_assignees').select('task_id,person_id,created_at').eq('user_id',user.id),
+    sb.from('minds_work_task_allocations').select('task_id,person_id,work_date,planned_minutes').eq('user_id',user.id),
+    sb.from('isabella_people').select('id,name').eq('user_id',user.id)
   ]);
   if(te)throw te;if(ee)throw ee;if(me)throw me;if(pre)throw pre;if(ape)throw ape;
+  if(asError)throw asError;if(alError)throw alError;if(peopleError)throw peopleError;
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
   const deletedTaskIds=new Set(local.deletedTaskIds||[]);
   const deletedEventIds=new Set(local.deletedEventIds||[]);
-  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>projectTaskRow(t,catKey,projKey));
+  const teamIdsFor=(links,primary)=>{
+    const ids=[...new Set([...links].filter(x=>x.person_id)
+      .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))||
+        String(a.person_id).localeCompare(String(b.person_id)))
+      .map(x=>x.person_id))];
+    if(primary&&ids.includes(primary)){
+      ids.splice(ids.indexOf(primary),1);ids.unshift(primary);
+    }
+    return ids;
+  };
+  const assignedByTask=new Map();
+  for(const a of assignees||[]){
+    if(!assignedByTask.has(a.task_id))assignedByTask.set(a.task_id,[]);
+    assignedByTask.get(a.task_id).push(a);
+  }
+  const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>{
+    const ids=teamIdsFor(assignedByTask.get(t.id)||[],t.assignee_person_id);
+    return {...projectTaskRow(t,catKey,projKey),
+      assigneePersonIds:ids.length?ids:(t.assignee_person_id?[t.assignee_person_id]:[])};
+  });
+  const taskKeys=new Map((tasks||[]).map(t=>[t.id,t.client_key||t.id]));
+  const teamAllocations=(allocations||[]).map(a=>({
+    taskId:taskKeys.get(a.task_id),personId:a.person_id,date:a.work_date,plannedMinutes:a.planned_minutes
+  })).filter(a=>a.taskId);
   const remoteEvents=(events||[]).filter(e=>!deletedEventIds.has(e.client_key||e.id)).map(e=>{const s=new Date(e.starts_at),en=new Date(e.ends_at);return{id:e.client_key||e.id,title:e.title,date:isoDate(s),start:timeOf(s),duration:Math.max(1,Math.round((en-s)/60000)),allDay:!!e.all_day,categoryId:catKey.get(e.category_id)||'personal',projectId:projKey.get(e.project_id)||null,recurrence:e.recurrence||{},notes:e.notes||'',metadata:e.metadata||{},updatedAt:e.updated_at||null}});
   const remoteMemory=(mem||[]).map(m=>({id:m.client_key||m.id,kind:m.kind,subject:m.subject,content:m.content,status:m.status,confidence:Number(m.confidence),source:m.source,exposure_scope_key:m.exposure_scope_key||'global',provenance_class:m.provenance_class||'owner',metadata:m.metadata||{}}));
   const remoteMessages=await pullConversation();
@@ -343,7 +372,8 @@ async function pullState(local,maps){
   const freshest=mergePulledEntityState(remoteTasks,remoteEvents,app.getState(),local);
   const remoteFeed=(pref?.status!=='rejected'&&pref?.value&&typeof pref.value==='object')?canonicalFeedPreferences(pref.value):canonicalFeedPreferences(freshest.feedPreferences);
   const remoteAssistant=(assistantPref?.status!=='rejected'&&assistantPref?.value&&typeof assistantPref.value==='object')?{...(freshest.assistantPreferences||{}),...assistantPref.value}:freshest.assistantPreferences;
-  return {...freshest,memory:remoteMemory,feedPreferences:remoteFeed,assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:freshest.messages};
+  return {...freshest,teamPeople:teamPeople||[],teamAllocations,memory:remoteMemory,feedPreferences:remoteFeed,
+    assistantPreferences:remoteAssistant,messages:mergedMessages.length?mergedMessages:freshest.messages};
 }
 async function updateMessageMetadata(clientKey,patch){
   if(!user||!clientKey||!patch||typeof patch!=='object')return false;

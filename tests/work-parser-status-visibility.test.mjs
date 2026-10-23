@@ -13,7 +13,7 @@ test('Desktop exposes specialist-reader deferral without treating it as failed o
 test('PWA installs updated Work UI with matching cache pins',()=>{
  const html=read('apps/isabella/index.html');
  const sw=read('apps/isabella/sw.js');
- assert.match(html,/work\.js\?v=28/);
- assert.match(sw,/work\.js\?v=28/);
- assert.match(sw,/isabella-shell-v160/);
+ assert.match(html,/work\.js\?v=29/);
+ assert.match(sw,/work\.js\?v=29/);
+ assert.match(sw,/isabella-shell-v161/);
 });
