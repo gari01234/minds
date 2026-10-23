@@ -151,6 +151,63 @@ delete from public.minds_work_project_people
  where project_id='11111111-1111-4111-8111-111111111111'
    and person_id='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2';
 
+-- Project moves cannot silently drop planned team days; after clearing them,
+-- the existing AFTER UPDATE trigger may clear old-project assignees safely.
+select public.minds_work_set_task_assignees(
+ '99999999-9999-4999-8999-999999999992',
+ array['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3']::uuid[],
+ (select updated_at from public.isabella_tasks where id='99999999-9999-4999-8999-999999999992')
+);
+insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
+values ('99999999-9999-4999-8999-999999999992','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa3','2026-10-29',90);
+do $
+declare message text;
+begin
+ begin
+   update public.isabella_tasks
+     set project_id='11111111-1111-4111-8111-111111111111',
+         assignee_person_id=null,assignee=null
+     where id='99999999-9999-4999-8999-999999999992';
+   raise exception 'Unexpected move with team allocations succeeded';
+ exception when raise_exception then
+   get stacked diagnostics message=message_text;
+   if message <> 'Remove planned team days before moving the task to another project' then raise; end if;
+ end;
+ if (select project_id from public.isabella_tasks where id='99999999-9999-4999-8999-999999999992')
+      <> '22222222-2222-4222-8222-222222222222'::uuid then
+   raise exception 'Rejected project move changed original task';
+ end if;
+ if (select count(*) from public.minds_work_task_allocations
+    where task_id='99999999-9999-4999-8999-999999999992') <> 1 then
+   raise exception 'Rejected project move discarded planned days';
+ end if;
+end $;
+delete from public.minds_work_task_allocations
+ where task_id='99999999-9999-4999-8999-999999999992';
+update public.isabella_tasks
+ set project_id='11111111-1111-4111-8111-111111111111',
+     assignee_person_id=null,assignee=null
+ where id='99999999-9999-4999-8999-999999999992';
+do $
+begin
+ if exists(select 1 from public.minds_work_task_assignees
+           where task_id='99999999-9999-4999-8999-999999999992')
+  then raise exception 'Old-project responsibility survived an approved project move';
+ end if;
+end $;
+
+-- Invalid allocation durations must fail the table-level CHECK constraint.
+do $
+begin
+ begin
+  insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
+  values ('99999999-9999-4999-8999-999999999991',
+          'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1','2026-10-30',17);
+  raise exception 'Unexpected non-15-minute allocation accepted';
+ exception when check_violation then null;
+ end;
+end $;
+
 -- A full canonical task deletion may still cascade its allocations and assignments.
 insert into public.minds_work_task_allocations(task_id,person_id,work_date,planned_minutes)
 values ('99999999-9999-4999-8999-999999999991','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1','2026-10-28',60);
