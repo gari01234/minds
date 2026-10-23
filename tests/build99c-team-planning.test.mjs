@@ -125,3 +125,30 @@ test('reading team rows preserves the authoritative primary and deterministic se
  assert.match(taskDetail,/MINDS_TASK_TEAM\.read\(task\.id,task\.assignee_person_id\)/);
  assert.match(team,/read\(ctx\.task\.id,ctx\.task\.assignee_person_id\)/);
 });
+
+
+test('Work and calendar sync retain the same primary-first order for any database row order',async()=>{
+ const vm=await import('node:vm');
+ const people=[
+  {person_id:'secondary',created_at:'2026-10-19T13:00:00Z'},
+  {person_id:'primary',created_at:'2026-10-21T09:00:00Z'},
+  {person_id:'third',created_at:'2026-10-20T09:00:00Z'}
+ ];
+ const extractTeamOrder=src=>{
+  const start=src.indexOf('  const teamIdsFor=(links,primary)=>{');
+  const end=src.indexOf('\n  };',start);
+  assert.ok(start>=0&&end>start,'Missing deterministic responsible ordering');
+  return vm.runInNewContext('('+src.slice(start,end+4).trim().replace(/^const teamIdsFor=/,'')+')');
+ };
+ for(const src of [work,sync]){
+  const fn=extractTeamOrder(src);
+  assert.deepEqual(Array.from(fn(people,'primary')),['primary','secondary','third']);
+  assert.deepEqual(Array.from(fn([...people].reverse(),'primary')),['primary','secondary','third']);
+  assert.deepEqual(Array.from(fn(people,'missing')),['secondary','third','primary']);
+ }
+ assert.match(work,/\.select\('task_id,person_id,created_at'\)/);
+ assert.match(sync,/\.select\('task_id,person_id,created_at'\)/);
+ assert.match(work,/teamIdsFor\(\(links\|\|\[\]\)\.filter/);
+ assert.match(sync,/teamIdsFor\(assignedByTask\.get\(t\.id\)\|\|\[\],t\.assignee_person_id\)/);
+ assert.match(dashboard,/const primary=task\.assigneePersonId;/);
+});

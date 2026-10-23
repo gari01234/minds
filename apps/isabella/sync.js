@@ -332,7 +332,7 @@ async function pullState(local,maps){
     sb.from('isabella_memories').select('*').eq('user_id',user.id).eq('status','active').order('created_at',{ascending:true}),
     sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','feed').maybeSingle(),
     sb.from('isabella_preferences').select('value,status,updated_at').eq('user_id',user.id).eq('preference_key','assistant').maybeSingle(),
-    sb.from('minds_work_task_assignees').select('task_id,person_id').eq('user_id',user.id),
+    sb.from('minds_work_task_assignees').select('task_id,person_id,created_at').eq('user_id',user.id),
     sb.from('minds_work_task_allocations').select('task_id,person_id,work_date,planned_minutes').eq('user_id',user.id),
     sb.from('isabella_people').select('id,name').eq('user_id',user.id)
   ]);
@@ -341,13 +341,23 @@ async function pullState(local,maps){
   const catKey=new Map(maps.cats.map(c=>[c.id,c.client_key])),projKey=new Map(maps.projs.map(p=>[p.id,p.client_key]));
   const deletedTaskIds=new Set(local.deletedTaskIds||[]);
   const deletedEventIds=new Set(local.deletedEventIds||[]);
+  const teamIdsFor=(links,primary)=>{
+    const ids=[...new Set([...links].filter(x=>x.person_id)
+      .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))||
+        String(a.person_id).localeCompare(String(b.person_id)))
+      .map(x=>x.person_id))];
+    if(primary&&ids.includes(primary)){
+      ids.splice(ids.indexOf(primary),1);ids.unshift(primary);
+    }
+    return ids;
+  };
   const assignedByTask=new Map();
   for(const a of assignees||[]){
     if(!assignedByTask.has(a.task_id))assignedByTask.set(a.task_id,[]);
-    assignedByTask.get(a.task_id).push(a.person_id);
+    assignedByTask.get(a.task_id).push(a);
   }
   const remoteTasks=(tasks||[]).filter(t=>!deletedTaskIds.has(t.client_key||t.id)).map(t=>{
-    const ids=assignedByTask.get(t.id)||[];
+    const ids=teamIdsFor(assignedByTask.get(t.id)||[],t.assignee_person_id);
     return {...projectTaskRow(t,catKey,projKey),
       assigneePersonIds:ids.length?ids:(t.assignee_person_id?[t.assignee_person_id]:[])};
   });

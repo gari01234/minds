@@ -250,8 +250,12 @@
       scheduleRender();
     })().catch(()=>{}).finally(()=>{if(loadingRosterKey===key)loadingRosterKey=''});
   };
-  const personIds = task => task.assigneePersonIds?.length?task.assigneePersonIds:
-    (task.assigneePersonId?[task.assigneePersonId]:[]);
+  const personIds = task => {
+    const ids=task.assigneePersonIds?.length?[...new Set(task.assigneePersonIds)]:
+      (task.assigneePersonId?[task.assigneePersonId]:[]);
+    const primary=task.assigneePersonId;
+    return primary&&ids.includes(primary)?[primary,...ids.filter(id=>id!==primary)]:ids;
+  };
   const personKey = task => personIds(task).length?'person:'+personIds(task)[0]:
     task.assignee?'legacy:'+task.assignee:'unassigned';
   const personName = task => personIds(task).length?

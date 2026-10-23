@@ -216,11 +216,21 @@ async function loadPlanner(){
   buckets=b||[];
   const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order,assignee_person_id').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order').order('id');if(te)throw te;tasks=t||[];
   if(tasks.length){
+  const teamIdsFor=(links,primary)=>{
+    const ids=[...new Set([...links].filter(x=>x.person_id)
+      .sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))||
+        String(a.person_id).localeCompare(String(b.person_id)))
+      .map(x=>x.person_id))];
+    if(primary&&ids.includes(primary)){
+      ids.splice(ids.indexOf(primary),1);ids.unshift(primary);
+    }
+    return ids;
+  };
     const {data:links,error:ae}=await sb.from('minds_work_task_assignees')
-      .select('task_id,person_id').in('task_id',tasks.map(t=>t.id));
+      .select('task_id,person_id,created_at').in('task_id',tasks.map(t=>t.id));
     if(ae)throw ae;
     for(const task of tasks){
-      const ids=(links||[]).filter(l=>l.task_id===task.id).map(l=>l.person_id);
+      const ids=teamIdsFor((links||[]).filter(l=>l.task_id===task.id),task.assignee_person_id);
       task.assignee_person_ids=ids.length?ids:(task.assignee_person_id?[task.assignee_person_id]:[]);
     }
   }
