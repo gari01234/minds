@@ -105,7 +105,7 @@ test('weekly person filter includes secondary, legacy and unassigned identities 
   const filterEnd=dashboard.indexOf('    const rows=week.rows.filter(byPerson)',filterStart);
   assert.ok(personStart>=0&&personEnd>personStart&&filterStart>=0&&filterEnd>filterStart);
   const prefs={planPerson:'person:second'};
-  const source=dashboard.slice(personStart,personEnd)+dashboard.slice(filterStart,filterEnd)+'\\n({personIds,byPerson})';
+  const source=dashboard.slice(personStart,personEnd)+dashboard.slice(filterStart,filterEnd)+'\n({personIds,byPerson})';
   const {personIds,byPerson}=vm.runInNewContext(source,{prefs});
   const multi={assigneePersonIds:['first','second'],assigneePersonId:'first'};
   assert.deepEqual(Array.from(personIds(multi)),['first','second']);
