@@ -59,8 +59,8 @@ test("full browser chat shows and persists review actions from typed result",()=
  assert.match(app,/data-review-message/);
  assert.match(app,/confirmProposals\(items\)/);
  assert.match(app,/finalizeInlineReview\(/);
- assert.ok(html.indexOf("turn-integrity.js?v=3")<html.indexOf("app.js?v=126"));
- assert.match(sw,/isabella-shell-v162/);
+ assert.ok(html.indexOf("turn-integrity.js?v=3")<html.indexOf("app.js?v=127"));
+ assert.match(sw,/isabella-shell-v163/);
  assert.match(sw,/turn-integrity\.js\?v=3/);
 });
 test("receipt validation is independent of magic Spanish correction phrases",()=>{
@@ -73,6 +73,9 @@ test("real message renderer restores the inline review button from saved message
  const begin=app.indexOf("function renderMessages(forceBottom=false){");
  const end=app.indexOf("\nfunction ",begin+12);
  assert.ok(begin>0&&end>begin);
+ const statusStart=app.indexOf("function resolvedReviewText(m){");
+ assert.ok(statusStart>0&&statusStart<begin);
+ const statusRenderer=app.slice(statusStart,begin);
  const render=app.slice(begin,end);
  const buttons=[],calls=[],container={innerHTML:""},scroller={dataset:{initialScroll:"1"}};
  const messages=[{id:"assistant-review-1",role:"assistant",text:"Corrección propuesta",
@@ -97,7 +100,7 @@ test("real message renderer restores the inline review button from saved message
    formatMessageText:x=>String(x),confirmProposals:items=>calls.push(items),
    console,Image:function(){},
  };
- runInNewContext(render+"\nrenderMessages();",ctx);
+ runInNewContext(statusRenderer+"\n"+render+"\nrenderMessages();",ctx);
  assert.match(container.innerHTML,/data-review-message="assistant-review-1"/);
  assert.equal(buttons.length,1);
  buttons[0].onclick();
