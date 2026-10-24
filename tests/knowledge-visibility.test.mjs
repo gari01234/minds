@@ -18,5 +18,5 @@ test('PWA publishes visible knowledge statuses with coherent cache pins',()=>{
   assert.match(read('apps/isabella/index.html'),/work\.js\?v=29/);
   const sw=read('apps/isabella/sw.js');
   assert.match(sw,/work\.js\?v=29/);
-  assert.match(sw,/isabella-shell-v164/);
+  assert.match(sw,/isabella-shell-v165/);
 });
