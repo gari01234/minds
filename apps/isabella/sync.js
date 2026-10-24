@@ -410,6 +410,21 @@ function mergeConversationMessages(remote=[],local=[]){
       saved.metadata={...(saved.metadata||{}),durable_request_id:requestId,
         ...(m.metadata?.durable_status?{durable_status:m.metadata.durable_status}:{})};
     }
+    // A remote conversation echo can predate the confirmed review. Preserve
+    // local server-verified acknowledgement only for the SAME registered
+    // request; do not infer execution from message text or mere metadata.
+    const localReceipt=m.metadata?.review_receipt_id;
+    const localReview=m.metadata?.review_proposals;
+    const remoteReview=saved.metadata?.review_proposals;
+    if(m.metadata?.review_state==='applied_verified'&&
+       typeof localReceipt==='string'&&/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(localReceipt)&&
+       Array.isArray(localReview)&&localReview.length===1&&
+       Array.isArray(remoteReview)&&remoteReview.length===1&&
+       localReview[0]?.request_id&&
+       localReview[0].request_id===remoteReview[0]?.request_id){
+      saved.metadata={...(saved.metadata||{}),review_state:'applied_verified',
+        review_receipt_id:localReceipt};
+    }
   }
   out.sort((a,b)=>String(a.at||'').localeCompare(String(b.at||'')));
   return out;

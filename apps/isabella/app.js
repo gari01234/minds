@@ -4391,6 +4391,9 @@ function categoriesPanel(){
   };
 }
 window.addEventListener('isabella:synced',()=>{
+  // Sync can restore a remote pre-acceptance message. Recheck accepted receipts
+  // against the canonical task after every successful state replacement.
+  void recoverReviewedTaskReceipts();
   if(document.body.dataset.section==='feed')void window.MINDS_SITUATION?.render?.();
   void afterSync();
 });
