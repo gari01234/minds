@@ -43,12 +43,15 @@ private enum NativeKeychain {
         let data = try JSONEncoder().encode(session)
         let attributes: [String: Any] = [kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
-        if SecItemUpdate(selector as CFDictionary, attributes as CFDictionary) == errSecItemNotFound {
+        let status = SecItemUpdate(selector as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
             var new = selector
             attributes.forEach { new[$0.key] = $0.value }
             guard SecItemAdd(new as CFDictionary, nil) == errSecSuccess else {
                 throw BackendError.verificationFailed
             }
+        } else if status != errSecSuccess {
+            throw BackendError.verificationFailed
         }
     }
     static func clear() { SecItemDelete(selector as CFDictionary) }
@@ -241,10 +244,18 @@ actor BackendClient {
         let token = try await access()
         let fmt = DateFormatter()
         fmt.dateFormat = "yyyy-MM-dd"
+        let clock = DateFormatter()
+        clock.dateFormat = "yyyy-MM-dd'T'HH:mm"
+        let time = DateFormatter()
+        time.dateFormat = "HH:mm"
         let payload: [String: Any] = [
             "message": text,
             "context": ["client_current_date": fmt.string(from: Date()),
-                        "timezone": TimeZone.current.identifier],
+                        "current_date": fmt.string(from: Date()),
+                        "current_local_datetime": clock.string(from: Date()),
+                        "current_local_time": time.string(from: Date()),
+                        "timezone": TimeZone.current.identifier,
+                        "locale": Locale.current.identifier],
             "background": false, "attachments": [], "stream": false,
             "durable": false, "surface": "chat_browser",
             "client_message_id": requestID.uuidString.lowercased()
@@ -262,6 +273,14 @@ actor BackendClient {
         guard !reply.isEmpty || !proposals.isEmpty else { throw BackendError.invalidResponse }
         return NativeChatResult(reply: reply, proposals: validated,
                                 invalidProposalCount: proposals.count - validated.count)
+    }
+
+    // PostgREST and RPC can serialize the same instant with different UTC offsets.
+    private func parseTimestamp(_ raw: String) -> Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractional.date(from: raw) { return date }
+        return ISO8601DateFormatter().date(from: raw)
     }
 
     func review(_ proposal: NativeReviewProposal, approve: Bool) async throws -> String {
@@ -308,7 +327,11 @@ actor BackendClient {
               row["id"] as? String == entityID,
               row["title"] as? String == after["title"] as? String,
               row["due_date"] as? String == after["date"] as? String,
-              row["updated_at"] as? String == after["updated_at"] as? String else {
+              let rawActual = row["updated_at"] as? String,
+              let rawExpected = after["updated_at"] as? String,
+              let actual = parseTimestamp(rawActual),
+              let expected = parseTimestamp(rawExpected),
+              abs(actual.timeIntervalSince(expected)) < 0.001 else {
             throw BackendError.verificationFailed
         }
         return "Cambio confirmado y verificado en Supabase."
