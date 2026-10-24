@@ -71,9 +71,14 @@ final class AppModel {
         do {
             async let remoteTasks = backend.tasks()
             async let remoteMessages = backend.history()
-            let (loadedTasks, loadedMessages) = try await (remoteTasks, remoteMessages)
+            async let remoteReview = backend.pendingReview()
+            let (loadedTasks, loadedMessages, loadedReview) =
+                try await (remoteTasks, remoteMessages, remoteReview)
             tasks = loadedTasks
-            if !isThinking { messages = loadedMessages }
+            if !isThinking {
+                messages = loadedMessages
+                pendingReview = loadedReview
+            }
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

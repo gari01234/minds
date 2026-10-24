@@ -240,6 +240,53 @@ actor BackendClient {
         }
     }
 
+    // Restore only a proposal actually shown in the owner's Isabella conversation.
+    // Neither model prose nor an old proposal is evidence that an action remains pending.
+    func pendingReview() async throws -> NativeReviewProposal? {
+        let token = try await access()
+        guard let owner = session?.userID else { throw BackendError.notSignedIn }
+        let conversations = try await network("rest/v1/conversations", query: [
+            .init(name: "select", value: "id"),
+            .init(name: "app_scope", value: "eq.isabella"),
+            .init(name: "order", value: "updated_at.desc"),
+            .init(name: "limit", value: "1")
+        ], token: token)
+        guard let rows = try JSONSerialization.jsonObject(with: conversations) as? [[String: Any]],
+              let conversationID = rows.first?["id"] as? String,
+              UUID(uuidString: conversationID) != nil else { return nil }
+        let data = try await network("rest/v1/conversation_messages", query: [
+            .init(name: "select", value: "metadata"),
+            .init(name: "conversation_id", value: "eq." + conversationID),
+            .init(name: "role", value: "eq.assistant"),
+            .init(name: "order", value: "created_at.desc"),
+            .init(name: "limit", value: "40")
+        ], token: token)
+        guard let messages = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { throw BackendError.invalidResponse }
+        for message in messages {
+            guard let meta = message["metadata"] as? [String: Any],
+                  let proposals = meta["review_proposals"] as? [[String: Any]],
+                  proposals.count == 1,
+                  let candidate = proposals.first,
+                  let proposal = NativeReviewProposal(json: candidate),
+                  proposal.reviewable else { continue }
+            let decisions = try await network("rest/v1/minds_shadow_decisions", query: [
+                .init(name: "select", value: "status,action,proposal_kind"),
+                .init(name: "request_id", value: "eq." + proposal.id),
+                .init(name: "user_id", value: "eq." + owner),
+                .init(name: "limit", value: "1")
+            ], token: token)
+            let records = try JSONSerialization.jsonObject(with: decisions) as? [[String: Any]]
+            if let record = records?.first,
+               record["status"] as? String == "pending",
+               record["proposal_kind"] as? String == "task",
+               record["action"] as? String == proposal.action + "_task" {
+                return proposal
+            }
+        }
+        return nil
+    }
+
     func sendMessage(_ text: String, requestID: UUID) async throws -> NativeChatResult {
         let token = try await access()
         let fmt = DateFormatter()

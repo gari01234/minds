@@ -40,3 +40,12 @@ test("review is owner receipt based with canonical readback and no Siri write", 
   assert.match(intents, /TodayMINDSIntent/);
   assert.doesNotMatch(intents, /minds_commit_reviewed|minds_resolve_shadow/);
 });
+
+test("native reload restores owner-scoped pending review only from stored evidence", () => {
+  assert.match(backend, /func pendingReview\(\)/);
+  assert.match(backend, /"review_proposals"/);
+  assert.match(backend, /"status" as\? String == "pending"/);
+  assert.match(backend, /"proposal_kind" as\? String == "task"/);
+  assert.match(backend, /"request_id"/);
+  assert.match(model, /backend\.pendingReview\(\)/);
+});
