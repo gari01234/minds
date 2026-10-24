@@ -144,7 +144,8 @@ struct NativeReviewProposal: Identifiable {
             guard let value = Self.readable(candidate[name]) else { return nil }
             // False is not an active change. Explicit clear_date=true is shown.
             if ["all_day", "clear_date"].contains(name), value == "0" { return nil }
-            return ReviewDetail(id: name, label: label, value: value == "1" ? "Sí" : value)
+            return ReviewDetail(id: name, label: label,
+                                value: ["all_day", "clear_date"].contains(name) && value == "1" ? "Sí" : value)
         }
     }
 }
