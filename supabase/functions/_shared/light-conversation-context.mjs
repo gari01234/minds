@@ -41,3 +41,43 @@ export function promptComponentSizes({instructions="",context={},input=[],tools=
    tools_count:Array.isArray(tools)?tools.length:0
  };
 }
+
+/**
+ * Non-enforcing per-turn context signal: no text or user identifiers.
+ * Thresholds reflect a preliminary observed footprint envelope (Oct 2026),
+ * not a guaranteed SLA, permission gate or instruction to remove sources.
+ */
+export function contextFootprintSignal(tier,footprint,sectionSizes={}){
+ const p=footprint&&typeof footprint==='object'?footprint:{};
+ const sizes={
+  instructions_chars:Number(p.instructions_chars||0),
+  context_chars:Number(p.context_chars||0),
+  input_chars:Number(p.input_chars||0),
+  tools_chars:Number(p.tools_chars||0),
+  tools_count:Number(p.tools_count||0)
+ };
+ const envelopes={
+  calendar_fast:{instructions_chars:6000,context_chars:16000,input_chars:12000,tools_chars:20000,tools_count:20},
+  lean:{instructions_chars:16000,context_chars:50000,input_chars:25000,tools_chars:50000,tools_count:60}
+ };
+ const budget=envelopes[tier]||null,over=[];
+ if(budget)for(const [field,limit] of Object.entries(budget))
+  if(sizes[field]>limit)over.push(field);
+ const sections=sectionSizes?.sections&&typeof sectionSizes.sections==='object'?sectionSizes.sections:{};
+ const dominant=Object.entries(sections)
+  .map(([name,row])=>({name,chars:Number(row?.chars||0)}))
+  .filter(x=>Number.isFinite(x.chars)&&x.chars>0)
+  .sort((a,b)=>b.chars-a.chars)[0]||null;
+ return {
+  version:'100a5_observation_v1',
+  tier:typeof tier==='string'?tier:'unknown',
+  budget_kind:budget?'observational_envelope':'profile_only',
+  above_envelope:over.length>0,
+  exceeding_fields:over,
+  dominant_context_section:dominant?.name||null,
+  dominant_context_chars:dominant?.chars||0,
+  // Never place raw input, source excerpts, claims, names or user text here.
+  routed_work_chars:Number(sections.routed_work_context?.chars||0),
+  needs_work_prefetch_profile:tier==='full'&&Number(sections.routed_work_context?.chars||0)>120000
+ };
+}
