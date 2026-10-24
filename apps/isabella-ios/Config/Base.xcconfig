@@ -1,7 +1,2 @@
-// Configuración local del cliente nativo.
-// No guardar secretos privados aquí.
-// SUPABASE_ANON_KEY es una clave pública del cliente, pero se deja vacía por defecto
-// para que el proyecto pueda compilar sin duplicar configuración del backend web.
-
-SUPABASE_URL =
-SUPABASE_ANON_KEY =
+// Clave publica del backend, no secreta. RLS y JWT gobiernan el acceso.
+SUPABASE_ANON_KEY = sb_publishable_ALAQ5tHd9m5vB7oM9jpj9A_9IAOep2X

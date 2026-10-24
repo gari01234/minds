@@ -1,29 +1,25 @@
-# MINDS · Isabella iOS
+# Isabella — cliente iOS privado
 
-Cliente nativo experimental de MINDS para iPhone.
+Cliente SwiftUI para un solo propietario. Supabase y MINDS siguen siendo el único backend y la fuente canónica de tareas, memoria y permisos.
 
-La intención no es reescribir el agente. Supabase, memoria, conversaciones, rutinas, Feed, Sofía y las Edge Functions siguen siendo la infraestructura compartida. Este directorio sustituye progresivamente la capa Safari/PWA por una interfaz SwiftUI.
+## Implementado en esta rama
 
-## Desarrollo gratuito
+La pantalla de inicio de sesión solicita el código OTP al usuario ya registrado; no crea usuarios nuevos. La sesión se conserva en Keychain con protección ThisDeviceOnly. El cliente no contiene ningún secreto service_role. Solo utiliza la clave publicable de Supabase, diseñada para aplicaciones distribuidas.
 
-Apple permite compilar y probar la app en un iPhone propio con un Apple Account gratuito mediante Xcode Personal Team. Ese modo exige volver a aprovisionar e instalar periódicamente la app y no incluye toda la matriz de capacidades del Apple Developer Program.
+La agenda muestra tareas reales recuperadas por REST bajo RLS. El chat reutiliza la Edge Function isabella-chat mediante surface chat_browser y un identificador UUID por turno, sin habilitar la ruta durable de texto que no dispone de herramientas. Se recuperan los mensajes de la conversación más reciente de Isabella.
 
-El proyecto se describe con XcodeGen para poder versionarlo como texto y validar el cliente en CI sin guardar un .xcodeproj generado.
+Las propuestas únicas de creación o actualización de tareas pueden aprobarse mediante las RPC ya existentes, con recibo y lectura canónica. Las propuestas múltiples o de otro tipo no ejecutan acciones. La cancelación utiliza la decisión registrada en Supabase. Ante errores de transporte no se repiten automáticamente las llamadas al modelo ni las mutaciones.
 
-En macOS:
+Siri y Atajos incluyen abrir Isabella y consultar de forma read-only las tareas de hoy. No existen mutaciones Siri ni ejecución permanente en segundo plano. El servicio de notificaciones locales continúa disponible; APNs queda pendiente de la membresía de Apple y de su integración con Attention Economy.
 
-1. Instalar Xcode desde Apple.
-2. Instalar XcodeGen: `brew install xcodegen`.
-3. Desde este directorio ejecutar `xcodegen generate`.
-4. Abrir `MINDS.xcodeproj`.
-5. En Signing & Capabilities seleccionar el Apple Account personal y un iPhone propio.
+## Instalación local
 
-La configuración de backend queda vacía en `Config/Base.xcconfig` a propósito. La siguiente fase conectará autenticación y las Edge Functions existentes sin introducir una API paralela.
+En un Mac instala Xcode y XcodeGen. En apps/isabella-ios ejecuta xcodegen generate, abre MINDS.xcodeproj, elige tu Apple Account en Signing & Capabilities y selecciona tu iPhone. Compila, instala y entra con el mismo correo de MINDS.
 
-## Arquitectura
+Apple Developer Program cuesta 99 USD/año antes de eventuales precios locales. La compilación de GitHub Actions solo demuestra que compila para simulador sin firma: aún faltan pruebas físicas autenticadas, firma y distribución TestFlight.
 
-El ORB grande pertenece al estado inicial. Cuando existe conversación, el mismo ORB vive en el toolbar nativo y no se superpone al transcript.
+## Límites de aceptación
 
-Los mensajes usan controles nativos y text selection del sistema. Esto elimina el workaround de WebKit que seleccionaba toda la página.
+El chat y la agenda son un primer cliente nativo, no la sustitución completa de la PWA. Deben revisarse la continuidad entre superficies, el tratamiento de propuestas múltiples, restauración de revisiones pendientes, salida y reapertura de iOS, scopes de conversación y experiencia de Siri en dispositivo. No se considera aprobado Build 100 ni rendimiento SLO por este desarrollo.
 
-Las rutinas continúan ejecutándose server-side en Supabase. Las notificaciones locales pueden usarse gratuitamente para recordatorios cuyo horario ya conoce el dispositivo. APNs se añadirá cuando se active una membresía que soporte las capacidades remotas necesarias.
+No guardar certificados Apple, perfiles, claves privadas, service_role ni tokens de usuario en GitHub.
