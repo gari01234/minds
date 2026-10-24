@@ -36,3 +36,12 @@ test("Siri next-event and tasks remain read only", () => {
   assert.match(intents, /BackendClient\(\)\.todayTasks\(\)/);
   assert.doesNotMatch(intents, /minds_commit_reviewed_task|minds_resolve_shadow/);
 });
+
+test("local reminders filter future timed candidates before applying iOS cap", () => {
+  const service = read("Sources/Services/NotificationService.swift");
+  assert.match(service, /tasks\.compactMap/);
+  assert.match(service, /\.sorted \{ \$0\.date < \$1\.date \}/);
+  assert.match(service, /for candidate in candidates\.prefix\(50\)/);
+  assert.doesNotMatch(service, /tasks\.filter\(\{ \$0\.completedAt == nil \}\)\.prefix\(50\)/);
+  assert.match(service, /fire > now/);
+});
