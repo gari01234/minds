@@ -136,7 +136,7 @@ private struct TodayStrip: View {
         return formatter.string(from: Date())
     }
 
-    private var todayEventCount: Int {
+    @MainActor private var todayEventCount: Int {
         model.events.filter {
             guard let date = $0.startDate else { return false }
             return Calendar.current.isDate(date, inSameDayAs: Date())
