@@ -213,6 +213,22 @@ actor BackendClient {
         return try JSONDecoder().decode([AgendaTask].self, from: data)
     }
 
+    // Siri reads an exact due-date slice, never the capped general agenda list.
+    func todayTasks() async throws -> [AgendaTask] {
+        let token = try await access()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        let data = try await network("rest/v1/isabella_tasks", query: [
+            .init(name: "select", value: "id,title,due_date,completed_at,notes"),
+            .init(name: "due_date", value: "eq." + today),
+            .init(name: "archived_at", value: "is.null"),
+            .init(name: "completed_at", value: "is.null"),
+            .init(name: "order", value: "title.asc")
+        ], token: token)
+        return try JSONDecoder().decode([AgendaTask].self, from: data)
+    }
+
     func history() async throws -> [ChatMessage] {
         let token = try await access()
         let data = try await network("rest/v1/conversations", query: [

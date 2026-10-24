@@ -49,3 +49,10 @@ test("native reload restores owner-scoped pending review only from stored eviden
   assert.match(backend, /"request_id"/);
   assert.match(model, /backend\.pendingReview\(\)/);
 });
+
+test("Siri reads only owner calendar rows for the exact day, not a capped snapshot", () => {
+  assert.match(backend, /func todayTasks\(\)/);
+  assert.match(backend, /"due_date", value: "eq\." \+ today/);
+  assert.match(backend, /"completed_at", value: "is\.null"/);
+  assert.match(intents, /BackendClient\(\)\.todayTasks\(\)/);
+});

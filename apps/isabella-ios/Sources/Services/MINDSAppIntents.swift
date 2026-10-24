@@ -15,7 +15,7 @@ struct TodayMINDSIntent: AppIntent {
     static var description = IntentDescription("Consulta la agenda de MINDS sin modificar nada.")
 
     func perform() async throws -> some IntentResult & ProvidesDialog {
-        let tasks = try await BackendClient().tasks()
+        let tasks = try await BackendClient().todayTasks()
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         let today = formatter.string(from: Date())
