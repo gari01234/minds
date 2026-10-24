@@ -63,10 +63,34 @@ struct AgendaTask: Identifiable, Decodable {
     let dueDate: String?
     let completedAt: String?
     let notes: String?
+    let reminderTime: String?
     enum CodingKeys: String, CodingKey {
         case id, title, notes
         case dueDate = "due_date"
         case completedAt = "completed_at"
+        case reminderTime = "reminder_time"
+    }
+}
+
+struct AgendaEvent: Identifiable, Decodable {
+    let id: UUID
+    let title: String
+    let startsAt: String
+    let endsAt: String?
+    let allDay: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case id, title
+        case startsAt = "starts_at"
+        case endsAt = "ends_at"
+        case allDay = "all_day"
+    }
+
+    var startDate: Date? {
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: startsAt)
+            ?? ISO8601DateFormatter().date(from: startsAt)
     }
 }
 
@@ -265,12 +289,26 @@ actor BackendClient {
     func tasks() async throws -> [AgendaTask] {
         let token = try await access()
         let data = try await network("rest/v1/isabella_tasks", query: [
-            .init(name: "select", value: "id,title,due_date,completed_at,notes"),
+            .init(name: "select", value: "id,title,due_date,completed_at,notes,reminder_time"),
             .init(name: "archived_at", value: "is.null"),
             .init(name: "order", value: "due_date.asc.nullslast"),
             .init(name: "limit", value: "100")
         ], token: token)
         return try JSONDecoder().decode([AgendaTask].self, from: data)
+    }
+
+    func events() async throws -> [AgendaEvent] {
+        let token = try await access()
+        // Start from local midnight to include today's earlier events.
+        let start = Calendar.current.startOfDay(for: Date())
+        let utc = ISO8601DateFormatter().string(from: start)
+        let data = try await network("rest/v1/isabella_events", query: [
+            .init(name: "select", value: "id,title,starts_at,ends_at,all_day"),
+            .init(name: "starts_at", value: "gte." + utc),
+            .init(name: "order", value: "starts_at.asc"),
+            .init(name: "limit", value: "100")
+        ], token: token)
+        return try JSONDecoder().decode([AgendaEvent].self, from: data)
     }
 
     // Siri reads an exact due-date slice, never the capped general agenda list.
@@ -280,7 +318,7 @@ actor BackendClient {
         formatter.dateFormat = "yyyy-MM-dd"
         let today = formatter.string(from: Date())
         let data = try await network("rest/v1/isabella_tasks", query: [
-            .init(name: "select", value: "id,title,due_date,completed_at,notes"),
+            .init(name: "select", value: "id,title,due_date,completed_at,notes,reminder_time"),
             .init(name: "due_date", value: "eq." + today),
             .init(name: "archived_at", value: "is.null"),
             .init(name: "completed_at", value: "is.null"),

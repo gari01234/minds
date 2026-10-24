@@ -9,6 +9,8 @@ final class AppModel {
     var section: Section = .chat
     var messages: [ChatMessage] = []
     var tasks: [AgendaTask] = []
+    var events: [AgendaEvent] = []
+    var localRemindersEnabled = UserDefaults.standard.bool(forKey: "minds.native.reminders.enabled")
     var isLoading = true
     var isAuthenticated = false
     var isAuthenticating = false
@@ -59,30 +61,58 @@ final class AppModel {
 
     func logout() async {
         await backend.logout()
+        await notifications.removeTaskReminders()
+        localRemindersEnabled = false
+        UserDefaults.standard.set(false, forKey: "minds.native.reminders.enabled")
         isAuthenticated = false
         codeSent = false
         pendingReview = nil
         messages = []
         tasks = []
+        events = []
         errorMessage = nil
     }
 
     func reload() async {
         do {
             async let remoteTasks = backend.tasks()
+            async let remoteEvents = backend.events()
             async let remoteMessages = backend.history()
             async let remoteReview = backend.pendingReview()
-            let (loadedTasks, loadedMessages, loadedReview) =
-                try await (remoteTasks, remoteMessages, remoteReview)
+            let (loadedTasks, loadedEvents, loadedMessages, loadedReview) =
+                try await (remoteTasks, remoteEvents, remoteMessages, remoteReview)
             tasks = loadedTasks
+            events = loadedEvents
             if !isThinking {
                 messages = loadedMessages
                 pendingReview = loadedReview
             }
             errorMessage = nil
+            if localRemindersEnabled {
+                do { _ = try await notifications.syncTaskReminders(loadedTasks) }
+                catch { errorMessage = error.localizedDescription }
+            }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    func enableLocalReminders() async {
+        do {
+            guard try await notifications.requestAuthorization() else {
+                throw BackendError.rejected("Las notificaciones no están autorizadas en iOS.")
+            }
+            _ = try await notifications.syncTaskReminders(tasks)
+            localRemindersEnabled = true
+            UserDefaults.standard.set(true, forKey: "minds.native.reminders.enabled")
+            errorMessage = nil
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    func disableLocalReminders() async {
+        await notifications.removeTaskReminders()
+        localRemindersEnabled = false
+        UserDefaults.standard.set(false, forKey: "minds.native.reminders.enabled")
     }
 
     func sendCurrentMessage() async {
