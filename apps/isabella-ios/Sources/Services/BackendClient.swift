@@ -87,7 +87,67 @@ struct NativeReviewProposal: Identifiable {
         date = json["date"] as? String
         candidate = json
     }
-    var reviewable: Bool { kind == "task" && ["create", "update"].contains(action) }
+    // Every potentially actionable field must be understood and presented.
+    // Unknown/complex proposals remain reviewable in the existing web UI only.
+    private static let knownFields: Set<String> = [
+        "request_id", "kind", "action", "target_id", "target_title", "target_date",
+        "target_time", "title", "date", "time", "all_day", "clear_date",
+        "duration_minutes", "category", "project", "notes", "reminder_time",
+        "recurrence", "temporal_grounding"
+    ]
+
+    var reviewable: Bool {
+        guard kind == "task", ["create", "update"].contains(action),
+              Set(candidate.keys).isSubset(of: Self.knownFields) else { return false }
+        // A recurrence is more than a single date: present it in the advanced web review.
+        if let recurrence = candidate["recurrence"] as? [String: Any],
+           !recurrence.isEmpty { return false }
+        if let recurrence = candidate["recurrence"] as? [Any],
+           !recurrence.isEmpty { return false }
+        if action == "create" {
+            return !(Self.readable(candidate["title"]) ?? "").isEmpty
+        }
+        return !(Self.readable(candidate["target_id"])
+            ?? Self.readable(candidate["target_title"]) ?? "").isEmpty
+    }
+
+    struct ReviewDetail: Identifiable {
+        let id: String
+        let label: String
+        let value: String
+    }
+
+    private static func readable(_ raw: Any?) -> String? {
+        guard let raw, !(raw is NSNull) else { return nil }
+        if let text = raw as? String { return text.isEmpty ? nil : text }
+        if let number = raw as? NSNumber { return number.stringValue }
+        return nil
+    }
+
+    var reviewDetails: [ReviewDetail] {
+        let names: [(String, String)] = [
+            ("target_title", "Tarea actual"),
+            ("target_date", "Fecha anterior"),
+            ("target_time", "Hora anterior"),
+            ("title", "Título propuesto"),
+            ("date", "Nueva fecha"),
+            ("time", "Nueva hora"),
+            ("reminder_time", "Recordatorio"),
+            ("category", "Categoría"),
+            ("project", "Proyecto"),
+            ("notes", "Notas"),
+            ("duration_minutes", "Duración en minutos"),
+            ("all_day", "Día completo"),
+            ("clear_date", "Quitar fecha")
+        ]
+        return names.compactMap { name, label in
+            guard let value = Self.readable(candidate[name]) else { return nil }
+            // False is not an active change. Explicit clear_date=true is shown.
+            if ["all_day", "clear_date"].contains(name), value == "0" { return nil }
+            return ReviewDetail(id: name, label: label,
+                                value: ["all_day", "clear_date"].contains(name) && value == "1" ? "Sí" : value)
+        }
+    }
 }
 
 struct NativeChatResult {

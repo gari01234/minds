@@ -98,10 +98,21 @@ private struct NativeReviewSheet: View {
             Text(proposal.title).font(.headline)
             Text(proposal.action == "create" ? "Crear tarea" : "Actualizar tarea")
                 .foregroundStyle(.secondary)
-            if let date = proposal.date {
-                Text("Fecha propuesta: " + date).font(.subheadline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(proposal.reviewDetails) { detail in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(detail.label).font(.caption)
+                                .foregroundStyle(.secondary)
+                            Text(detail.value)
+                                .font(.body)
+                                .textSelection(.enabled)
+                        }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            Text("Isabella necesita tu confirmación. Supabase verificará el recibo y el resultado.")
+            Text("Comprueba los datos antes de aprobar. Supabase verificará el recibo y el resultado.")
                 .font(.footnote).foregroundStyle(.secondary)
             if model.isReviewing { ProgressView() }
             if proposal.reviewable {
@@ -115,7 +126,7 @@ private struct NativeReviewSheet: View {
                 }
                 .disabled(model.isReviewing)
             } else {
-                Text("Esta acción todavía requiere revisión en la PWA. No se ha aplicado ningún cambio.")
+                Text("Esta propuesta contiene información que el cliente nativo todavía no puede revisar completamente. Utiliza MINDS web. No se ha aplicado ningún cambio.")
                     .foregroundStyle(.secondary)
                 Button("Cerrar") { model.pendingReview = nil }
             }
