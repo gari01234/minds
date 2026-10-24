@@ -21,11 +21,11 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: local.minds.isabella
         GENERATE_INFOPLIST_FILE: YES
-        INFOPLIST_KEY_CFBundleDisplayName: MINDS
+        INFOPLIST_KEY_CFBundleDisplayName: Isabella
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Isabella usa el micrófono cuando hablas con ella.
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Isabella puede transcribir tu voz para convertirla en mensajes.
-        INFOPLIST_KEY_SUPABASE_URL: "$(SUPABASE_URL)"
+        INFOPLIST_KEY_SUPABASE_URL: "https://lodexwyyynlarkqgkyhy.supabase.co"
         INFOPLIST_KEY_SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
         TARGETED_DEVICE_FAMILY: 1
         SUPPORTS_MACCATALYST: NO
