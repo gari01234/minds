@@ -136,6 +136,13 @@ private struct TodayStrip: View {
         return formatter.string(from: Date())
     }
 
+    private var todayEventCount: Int {
+        model.events.filter {
+            guard let date = $0.startDate else { return false }
+            return Calendar.current.isDate(date, inSameDayAs: Date())
+        }.count
+    }
+
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 18) {
             Text("Hoy")
@@ -145,7 +152,7 @@ private struct TodayStrip: View {
                     .font(.system(size: 16, weight: .medium))
                 Text(String(model.tasks.filter {
                     $0.dueDate == today && $0.completedAt == nil
-                }.count) + " tareas pendientes")
+                }.count) + " tareas · " + String(todayEventCount) + " eventos")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }

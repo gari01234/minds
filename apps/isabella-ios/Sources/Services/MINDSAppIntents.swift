@@ -28,6 +28,22 @@ struct TodayMINDSIntent: AppIntent {
     }
 }
 
+// Fetches the next real MINDS event, without requesting Calendar.app permissions.
+struct NextMINDSCalendarEventIntent: AppIntent {
+    static var title: LocalizedStringResource = "Próximo evento de MINDS"
+    static var description = IntentDescription("Consulta el siguiente evento de tu agenda privada.")
+
+    func perform() async throws -> some IntentResult & ProvidesDialog {
+        let events = try await BackendClient().events()
+        guard let next = events.first(where: { ($0.startDate ?? .distantPast) > Date() }),
+              let start = next.startDate else {
+            return .result(dialog: "No veo eventos próximos en MINDS.")
+        }
+        let date = start.formatted(date: .abbreviated, time: next.allDay ? .omitted : .shortened)
+        return .result(dialog: IntentDialog("Tu próximo evento es \(next.title), \(date)."))
+    }
+}
+
 struct MINDSShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
         AppShortcut(
@@ -47,6 +63,15 @@ struct MINDSShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "Tareas de hoy",
             systemImageName: "calendar"
+        )
+        AppShortcut(
+            intent: NextMINDSCalendarEventIntent(),
+            phrases: [
+                "Próximo evento en \(.applicationName)",
+                "Consultar próximo evento en \(.applicationName)"
+            ],
+            shortTitle: "Próximo evento",
+            systemImageName: "calendar.badge.clock"
         )
     }
 }

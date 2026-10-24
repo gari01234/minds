@@ -23,3 +23,9 @@ Apple Developer Program cuesta 99 USD/año antes de eventuales precios locales. 
 El chat y la agenda son un primer cliente nativo, no la sustitución completa de la PWA. Deben revisarse la continuidad entre superficies, el tratamiento de propuestas múltiples, restauración de revisiones pendientes, salida y reapertura de iOS, scopes de conversación y experiencia de Siri en dispositivo. No se considera aprobado Build 100 ni rendimiento SLO por este desarrollo.
 
 No guardar certificados Apple, perfiles, claves privadas, service_role ni tokens de usuario en GitHub.
+
+## Agenda nativa y notificaciones locales
+
+La agenda muestra eventos y tareas canónicas desde Supabase. En el menú de Agenda puedes elegir Activar avisos locales; el sistema solicitará permiso. Solo entonces la app programa avisos de tareas futuras que tengan due_date y reminder_time. Los avisos pertenecientes a esta capa se identifican con un prefijo propio y pueden desactivarse sin borrar las notificaciones de otras apps. En logout se cancelan los avisos de esta capa.
+
+Esta funcionalidad no es APNs: si una tarea cambia mientras la app está cerrada, los recordatorios locales se reconciliarán al volver a cargar la agenda. El servidor no envía notificaciones de cambios con esta capa. Siri incorpora una consulta read-only del próximo evento de MINDS, además de las tareas de hoy.
