@@ -64,3 +64,14 @@ test("native protocol handles single proposal field and enforces typed outcome",
   assert.match(backend, /appliedCount == 0/);
   assert.match(backend, /outcome == "proposal_created"/);
 });
+
+test("native task review shows changed fields and refuses unrecognized proposals", () => {
+  const ui = read("Sources/Features/Chat/ChatView.swift");
+  assert.match(backend, /Set\(candidate\.keys\)\.isSubset\(of: Self\.knownFields\)/);
+  assert.match(backend, /if let recurrence = candidate\["recurrence"\]/);
+  assert.match(backend, /var reviewDetails: \[ReviewDetail\]/);
+  for (const field of ["target_title","target_date","title","date","time","notes","reminder_time","clear_date","project","category"])
+    assert.ok(backend.includes('"'+field+'"'), "missing review detail "+field);
+  assert.match(ui, /ForEach\(proposal\.reviewDetails\)/);
+  assert.match(ui, /if proposal\.reviewable/);
+});
