@@ -56,3 +56,11 @@ test("Siri reads only owner calendar rows for the exact day, not a capped snapsh
   assert.match(backend, /"completed_at", value: "is\.null"/);
   assert.match(intents, /BackendClient\(\)\.todayTasks\(\)/);
 });
+
+test("native protocol handles single proposal field and enforces typed outcome", () => {
+  assert.match(backend, /let plural = result\["proposals"\]/);
+  assert.match(backend, /result\["proposal"\] as\? \[String: Any\]/);
+  assert.match(backend, /registeredCount == proposals\.count/);
+  assert.match(backend, /appliedCount == 0/);
+  assert.match(backend, /outcome == "proposal_created"/);
+});

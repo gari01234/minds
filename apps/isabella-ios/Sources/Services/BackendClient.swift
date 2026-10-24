@@ -329,8 +329,20 @@ actor BackendClient {
         if let error = result["error"] as? String {
             throw BackendError.rejected(result["message"] as? String ?? error)
         }
-        let proposals = result["proposals"] as? [[String: Any]]
-            ?? (result["proposal"] as? [String: Any]).map { [$0] } ?? []
+        // Server contract: one proposal is in "proposal", while "proposals" is [].
+        // Always check the typed outcome, not the model's natural-language claim.
+        let plural = result["proposals"] as? [[String: Any]] ?? []
+        let proposals = !plural.isEmpty ? plural
+            : (result["proposal"] as? [String: Any]).map { [$0] } ?? []
+        guard let typed = result["outcome"] as? [String: Any],
+              let outcome = typed["outcome"] as? String,
+              let registeredCount = typed["proposal_count"] as? Int,
+              let appliedCount = typed["applied_count"] as? Int,
+              appliedCount == 0, registeredCount == proposals.count,
+              (outcome == "answered" && proposals.isEmpty) ||
+              (outcome == "proposal_created" && !proposals.isEmpty) else {
+            throw BackendError.invalidResponse
+        }
         let validated = proposals.compactMap(NativeReviewProposal.init(json:))
         let reply = result["reply"] as? String ?? ""
         guard !reply.isEmpty || !proposals.isEmpty else { throw BackendError.invalidResponse }
