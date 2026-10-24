@@ -11,7 +11,7 @@ import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,unregistere
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
 import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
-import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes} from "../_shared/light-conversation-context.mjs";
+import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
@@ -3577,7 +3577,7 @@ pregunta cuál.`;
           }
           const deliveryReceiptSaved=surface==="chat_browser"?
             await saveBrowserChatStreamReceipt(req,clientMessageId,finalText.trim(),streamCompleted,incompleteReason):false;
-          await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated});
+          await recordUsage(req,"isabella_chat",model,completed?.usage,{round:0,route,initial_semantic:initialSemantic,fast_path:false,direct_stream:true,conversation_rotated:!!streamConversation.rotated,agent_run_id:run?.id||null});
           if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
           await finishAgentRun(req,run,streamCompleted?"success":"error",{incomplete_response:!streamCompleted,incomplete_reason:incompleteReason,partial_chars:streamCompleted?0:finalText.length,rounds:1,tools:[],initial_semantic:initialSemantic,direct_stream:true,ttft_streamed:true,delivery_receipt_saved:deliveryReceiptSaved,conversation_rotated:!!streamConversation.rotated,conversation_message_count:streamConversation.messageCount||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",conversation_id:conversationInfo?.dbId||null,exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:false,work_consulted:!!currentWorkThread,specialists:[],specialist_orchestrations:[],stream_total_ms:Date.now()-startedAt},incompleteReason||undefined);
           send("result",{
@@ -3866,6 +3866,10 @@ pregunta cuál.`;
     context:fastAgenda?fastCalendarContext:modelContext,input,tools});
   (footprint as any).work_project_model_prefetch=sourceFirstWorkPrefetch?"deferred_source_first":"full";
   (footprint as any).context_sections=contextSectionSizes(fastAgenda?fastCalendarContext:modelContext);
+  // Monitoring only. Work evidence stays intact; the signal never changes
+  // routing, tools, model instructions or an authorized action.
+  (footprint as any).context_signal=contextFootprintSignal(
+    fastAgenda?"calendar_fast":leanSurface?"lean":"full",footprint,(footprint as any).context_sections);
   let payload:any=null;
   const model=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
   const reasoningEffort=budget.reasoning;
@@ -3898,7 +3902,7 @@ pregunta cuál.`;
       })
     });
     payload=await response.json();
-    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,conversation_rotated:!!conversationInfo.rotated});
+    await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,context_tier:fastAgenda?"calendar_fast":leanSurface?"lean":"full",prompt_components:footprint,conversation_rotated:!!conversationInfo.rotated,agent_run_id:run?.id||null});
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
