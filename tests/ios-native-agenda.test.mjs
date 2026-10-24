@@ -37,14 +37,21 @@ test("Siri next-event and tasks remain read only", () => {
   assert.doesNotMatch(intents, /minds_commit_reviewed_task|minds_resolve_shadow/);
 });
 
+test("local reminders filter future timed candidates before applying iOS cap", () => {
+  const service = read("Sources/Services/NotificationService.swift");
+  assert.match(service, /tasks\.compactMap/);
+  assert.match(service, /\.sorted \{ \$0\.date < \$1\.date \}/);
+  assert.match(service, /for candidate in candidates\.prefix\(50\)/);
+  assert.doesNotMatch(service, /tasks\.filter\(\{ \$0\.completedAt == nil \}\)\.prefix\(50\)/);
+  assert.match(service, /fire > now/);
+});
+
 test("local reminders query eligible owner tasks independent of the agenda cap", () => {
   const backend = read("Sources/Services/BackendClient.swift");
   const app = read("Sources/AppModel.swift");
-  const native = read("Sources/Services/NotificationService.swift");
   assert.match(backend, /func localReminderTasks\(\)/);
   assert.match(backend, /"reminder_time", value: "not\.is\.null"/);
   assert.match(backend, /"due_date", value: "gte\." \+ today/);
   assert.match(backend, /"archived_at", value: "is\.null"/);
   assert.match(app, /backend\.localReminderTasks\(\)/);
-  assert.match(native, /\$0\.reminderTime != nil/);
 });
