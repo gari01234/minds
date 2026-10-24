@@ -3510,25 +3510,43 @@ function newPanel(presetDate=null){
     <label>Categoría<select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
     <label>Proyecto<select id="newProject"><option value="">Sin proyecto</option>${state.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
     <input id="newTime" type="time" value="09:00">
-    <button id="newSave" class="primary">Guardar</button>
+    <button id="newSave" type="button" class="primary">Guardar</button><div id="quickTaskStatus" class="small" role="status" aria-live="polite"></div>
   </div>`);
   const type=$('#newType'),dateInput=$('#newDate'),timeInput=$('#newTime');
   const syncType=()=>{const event=type.value==='event';if(event&&!dateInput.value)dateInput.value=today();timeInput.classList.toggle('hidden',!event)};
   type.onchange=syncType;syncType();
-  $('#newSave').onclick=()=>{
-    const title=$('#newTitle').value.trim();if(!title)return;
+  let saving=false,attempt=null;
+  $('#newSave').onclick=async()=>{
+    if(saving)return;
+    const title=$('#newTitle').value.trim();if(!title){$('#quickTaskStatus').textContent='Escribe un nombre para la tarea.';return}
     const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value,projectId=$('#newProject').value||null;
-    if(kind==='task'&&typeof window!=='undefined'&&window.MINDS_TASK_DETAIL?.open){
-      void window.MINDS_TASK_DETAIL.open({title,date,categoryKey:categoryId,projectKey:projectId});return;
-    }
     if(kind==='task'){
-      const item={id:uid(),title,date,categoryId,projectId,done:false,completedAt:null,archivedAt:null,sortOrder:nextTaskOrder(date)};
-      state.tasks.push(item);mutation('task','create',null,item,'manual');
-    }else{
-      if(!date)return;
-      const item={id:uid(),title,date,categoryId,projectId,start:timeInput.value||'09:00',duration:60};
-      state.events.push(item);mutation('event','create',null,item,'manual');
+      const button=$('#newSave'),status=$('#quickTaskStatus');
+      if(!window.MINDS_TASK_DETAIL?.createQuick){status.textContent='La creación no está disponible. Recarga MINDS.';return}
+      const values={title,date,categoryKey:categoryId,projectKey:projectId};
+      if(attempt){
+        if(!Object.entries(values).every(([k,v])=>attempt[k]===v)){
+          status.textContent='El guardado anterior aún no se verificó. Reintenta con los mismos datos o abre un formulario nuevo.';
+          return;
+        }
+      }else attempt={...values,clientKey:crypto.randomUUID()};
+      saving=true;button.disabled=true;button.textContent='Guardando…';
+      status.textContent='Guardando en Supabase…';
+      try{
+        const task=await window.MINDS_TASK_DETAIL.createQuick(attempt);
+        if(!task?.id||task.title!==attempt.title)throw new Error('No se pudo verificar la tarea.');
+        status.textContent='Tarea creada y verificada en Supabase.';
+        void Promise.resolve(window.ISABELLA_SYNC_PULL_NOW?.()).then(()=>renderCalendar()).catch(()=>{});
+        setTimeout(()=>{if($('#newSave')===button)closeModal()},650);
+      }catch(error){
+        status.textContent='No se pudo verificar el guardado: '+String(error?.message||error);
+        button.disabled=false;button.textContent='Guardar';
+      }finally{saving=false}
+      return;
     }
+    if(!date){$('#quickTaskStatus').textContent='El evento necesita una fecha.';return}
+    const item={id:uid(),title,date,categoryId,projectId,start:timeInput.value||'09:00',duration:60};
+    state.events.push(item);mutation('event','create',null,item,'manual');
     save();closeModal();renderCalendar();
   };
 }

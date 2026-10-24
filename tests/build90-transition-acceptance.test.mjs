@@ -15,30 +15,34 @@ function part(source,start,end){
 }
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-test('90.4 manual calendar creation retains date, category and canonical project on the same task',()=>{
+test('90.4 manual calendar Guardar preserves category and project in one canonical insert',async()=>{
   const elements={
     '#newType':{value:'task'},'#newDate':{value:'2026-10-15'},
     '#newTime':{value:'09:00',classList:{toggle(){}}},
     '#newTitle':{value:'Revisar Schnitt'},'#newCat':{value:'trabajo'},
-    '#newProject':{value:'bernried'},'#newSave':{}
+    '#newProject':{value:'bernried'},'#newSave':{},
+    '#quickTaskStatus':{textContent:''}
   };
   const state={tasks:[],events:[],categories:[{id:'trabajo',name:'Trabajo'}],projects:[{id:'bernried',name:'Bernried'}]};
-  const calls=[];
+  const calls=[];let row;
   const c={state,$:s=>elements[s],modal:(title,html)=>calls.push(['modal',title,html]),esc,
+    window:{MINDS_TASK_DETAIL:{createQuick:async x=>{row=x;return {id:'canonical-id',title:x.title}}},
+      ISABELLA_SYNC_PULL_NOW:async()=>true},
+    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'},
+    setTimeout:()=>{},Promise,
     uid:()=> 'task-one',today:()=> '2026-10-09',nextTaskOrder:()=>10,
     mutation:(...args)=>calls.push(['mutation',...args]),save:()=>calls.push(['save']),closeModal:()=>{},renderCalendar:()=>{}};
   const fn=vm.runInNewContext('('+part(app,'function newPanel(presetDate=null){','function autonomyContextLabel(').trim()+')',c);
   fn('2026-10-15');
   assert.match(calls[0][2],/id="newProject"/);
   assert.match(calls[0][2],/value="2026-10-15"/);
-  elements['#newSave'].onclick();
-  assert.equal(state.tasks.length,1);
-  const task=state.tasks[0];
-  assert.deepEqual([task.id,task.title,task.date,task.categoryId,task.projectId,task.sortOrder],
-    ['task-one','Revisar Schnitt','2026-10-15','trabajo','bernried',10]);
-  assert.equal(calls.find(x=>x[0]==='mutation')?.[2],'create');
+  await elements['#newSave'].onclick();
+  assert.equal(calls.filter(x=>x[0]==='modal').length,1,'no second required create modal');
+  assert.equal(state.tasks.length,0,'not a local-only task');
+  assert.deepEqual([row.title,row.date,row.categoryKey,row.projectKey],
+    ['Revisar Schnitt','2026-10-15','trabajo','bernried']);
+  assert.match(elements['#quickTaskStatus'].textContent,/verificada en Supabase/);
 });
-
 test('90.4 event creation also preserves explicit project and date',()=>{
   const elements={
     '#newType':{value:'event'},'#newDate':{value:'2026-10-21'},

@@ -66,5 +66,5 @@ test('PWA installs the private team UI before Work with matching cache pins',()=
     assert.ok(html.includes(asset),'HTML: '+asset);
     assert.ok(sw.includes(asset),'SW: '+asset);
   }
-  assert.match(sw,/isabella-shell-v164/);
+  assert.match(sw,/isabella-shell-v165/);
 });

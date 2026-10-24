@@ -11,7 +11,8 @@ test('Work and Tiempo route the same canonical task into the common editor',()=>
   assert.match(work,/taskId:task\?\.id\|\|null,projectId:project\.id/);
   assert.match(app,/if\(kind==='task'&&typeof window!=='undefined'&&window\.MINDS_TASK_DETAIL\?\.open\)/);
   assert.match(app,/window\.MINDS_TASK_DETAIL\.open\(\{clientKey:id\}\)/);
-  assert.match(app,/window\.MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
+  assert.match(app,/await window\.MINDS_TASK_DETAIL\.createQuick\(attempt\)/);
+  assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
   assert.match(detail,/async function readTask\(opts\)/);
   assert.match(detail,/\.eq\('id',opts\.taskId\)/);
   assert.match(detail,/\.eq\('client_key',opts\.clientKey\)/);
@@ -81,10 +82,10 @@ test('full task detail uses explicit creation and menu-only destructive actions'
 });
 
 test('PWA serves one task detail with matching versions',()=>{
-  for(const asset of ['task-detail.js?v=3','task-detail.css?v=1','app.js?v=128','work.js?v=29']){
+  for(const asset of ['task-detail.js?v=4','task-detail.css?v=1','app.js?v=129','work.js?v=29']){
     assert.ok(html.includes(asset),'HTML '+asset);
     assert.ok(sw.includes(asset),'SW '+asset);
   }
-  assert.match(sw,/isabella-shell-v164/);
-  assert.ok(html.indexOf('task-detail.js?v=3')>html.indexOf('sync.js?v=pwa39'));
+  assert.match(sw,/isabella-shell-v165/);
+  assert.ok(html.indexOf('task-detail.js?v=4')>html.indexOf('sync.js?v=pwa39'));
 });

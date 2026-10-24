@@ -367,5 +367,49 @@ async function loadSessions(ctx){
     '<span class="minds-task-muted">Sin reservas todavía.</span>';
   target.querySelectorAll('[data-task-session]').forEach(b=>b.onclick=()=>app()?.editEventById?.(b.dataset.taskSession));
 }
-window.MINDS_TASK_DETAIL={open,datesValid};
+
+/** One-save task creation with authenticated canonical readback. The stable
+ * client_key supports retry after a committed insert with a lost response. */
+async function createQuick({title,date=null,categoryKey=null,projectKey=null,clientKey}={}){
+  title=String(title||'').trim();
+  if(!title)throw new Error('Escribe un nombre para la tarea.');
+  if(date!=null&&(!/^\d{4}-\d{2}-\d{2}$/.test(date)||Number.isNaN(new Date(date+'T12:00:00Z').getTime())))
+    throw new Error('La fecha de la tarea no es válida.');
+  if(typeof clientKey!=='string'||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(clientKey))
+    throw new Error('El intento de guardado no tiene un identificador válido.');
+  if(!sb)throw new Error('Supabase no está conectado.');
+  const {data:auth,error:authError}=await sb.auth.getSession();
+  const owner=auth?.session?.user?.id;
+  if(authError||!owner)throw new Error('Inicia sesión para guardar esta tarea.');
+  const choices=await readChoices(null);
+  const category=categoryKey?choices.categories.find(c=>c.client_key===categoryKey||c.id===categoryKey):null;
+  const project=projectKey?choices.projects.find(p=>p.client_key===projectKey||p.id===projectKey):null;
+  if(categoryKey&&!category)throw new Error('La categoría ya no está disponible. Actualiza MINDS.');
+  if(projectKey&&!project)throw new Error('El proyecto ya no está disponible. Actualiza MINDS.');
+  const row={client_key:clientKey,title,due_date:date||null,
+    category_id:category?.id||null,project_id:project?.id||null};
+  const read=async()=>{
+    const {data,error}=await sb.from('isabella_tasks')
+      .select('id,client_key,user_id,title,due_date,category_id,project_id,updated_at')
+      .eq('user_id',owner).eq('client_key',clientKey).maybeSingle();
+    if(error)throw error;
+    return data;
+  };
+  let task=await read();
+  if(!task){
+    const result=await sb.from('isabella_tasks').insert(row).select('id').maybeSingle();
+    if(result.error){
+      task=await read();
+      if(!task)throw result.error;
+    }else task=await read();
+  }
+  if(!task)throw new Error('No pude verificar la creación en Supabase. Reintenta Guardar.');
+  if(task.client_key!==clientKey||task.user_id!==owner||task.title!==row.title||
+     task.due_date!==row.due_date||task.category_id!==row.category_id||
+     task.project_id!==row.project_id)
+    throw new Error('Existe un guardado anterior con otros datos. No se ha duplicado la tarea.');
+  return task;
+}
+
+window.MINDS_TASK_DETAIL={open,datesValid,createQuick};
 })();
