@@ -45,3 +45,13 @@ test("local reminders filter future timed candidates before applying iOS cap", (
   assert.doesNotMatch(service, /tasks\.filter\(\{ \$0\.completedAt == nil \}\)\.prefix\(50\)/);
   assert.match(service, /fire > now/);
 });
+
+test("local reminders query eligible owner tasks independent of the agenda cap", () => {
+  const backend = read("Sources/Services/BackendClient.swift");
+  const app = read("Sources/AppModel.swift");
+  assert.match(backend, /func localReminderTasks\(\)/);
+  assert.match(backend, /"reminder_time", value: "not\.is\.null"/);
+  assert.match(backend, /"due_date", value: "gte\." \+ today/);
+  assert.match(backend, /"archived_at", value: "is\.null"/);
+  assert.match(app, /backend\.localReminderTasks\(\)/);
+});
