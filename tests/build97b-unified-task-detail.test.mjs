@@ -81,10 +81,10 @@ test('full task detail uses explicit creation and menu-only destructive actions'
 });
 
 test('PWA serves one task detail with matching versions',()=>{
-  for(const asset of ['task-detail.js?v=3','task-detail.css?v=1','app.js?v=127','work.js?v=29']){
+  for(const asset of ['task-detail.js?v=3','task-detail.css?v=1','app.js?v=128','work.js?v=29']){
     assert.ok(html.includes(asset),'HTML '+asset);
     assert.ok(sw.includes(asset),'SW '+asset);
   }
-  assert.match(sw,/isabella-shell-v163/);
-  assert.ok(html.indexOf('task-detail.js?v=3')>html.indexOf('sync.js?v=pwa38'));
+  assert.match(sw,/isabella-shell-v164/);
+  assert.ok(html.indexOf('task-detail.js?v=3')>html.indexOf('sync.js?v=pwa39'));
 });
