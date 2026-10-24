@@ -89,7 +89,10 @@ final class AppModel {
             }
             errorMessage = nil
             if localRemindersEnabled {
-                do { _ = try await notifications.syncTaskReminders(loadedTasks) }
+                do {
+                    let eligible = try await backend.localReminderTasks()
+                    _ = try await notifications.syncTaskReminders(eligible)
+                }
                 catch { errorMessage = error.localizedDescription }
             }
         } catch {
@@ -102,7 +105,8 @@ final class AppModel {
             guard try await notifications.requestAuthorization() else {
                 throw BackendError.rejected("Las notificaciones no están autorizadas en iOS.")
             }
-            _ = try await notifications.syncTaskReminders(tasks)
+            let eligible = try await backend.localReminderTasks()
+            _ = try await notifications.syncTaskReminders(eligible)
             localRemindersEnabled = true
             UserDefaults.standard.set(true, forKey: "minds.native.reminders.enabled")
             errorMessage = nil

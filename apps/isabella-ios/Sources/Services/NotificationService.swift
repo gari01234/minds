@@ -27,7 +27,9 @@ actor NotificationService {
         await removeTaskReminders()
         var count = 0
         // iOS limits pending local notifications; reserve capacity for other app reminders.
-        for task in tasks.filter({ $0.completedAt == nil }).prefix(50) {
+        for task in tasks.filter({
+            $0.completedAt == nil && $0.dueDate != nil && $0.reminderTime != nil
+        }).prefix(50) {
             guard let date = task.dueDate, let time = task.reminderTime else { continue }
             let day = date.split(separator: "-").compactMap { Int($0) }
             let hour = time.split(separator: ":").compactMap { Int($0) }

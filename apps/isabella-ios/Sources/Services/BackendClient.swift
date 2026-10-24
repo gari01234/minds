@@ -297,6 +297,25 @@ actor BackendClient {
         return try JSONDecoder().decode([AgendaTask].self, from: data)
     }
 
+    // Reminders are not derived from the capped agenda UI. Only canonical,
+    // owner-RLS, incomplete tasks with an explicit future date and reminder time.
+    func localReminderTasks() async throws -> [AgendaTask] {
+        let token = try await access()
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        let data = try await network("rest/v1/isabella_tasks", query: [
+            .init(name: "select", value: "id,title,due_date,completed_at,notes,reminder_time"),
+            .init(name: "due_date", value: "gte." + today),
+            .init(name: "reminder_time", value: "not.is.null"),
+            .init(name: "completed_at", value: "is.null"),
+            .init(name: "archived_at", value: "is.null"),
+            .init(name: "order", value: "due_date.asc"),
+            .init(name: "limit", value: "100")
+        ], token: token)
+        return try JSONDecoder().decode([AgendaTask].self, from: data)
+    }
+
     func events() async throws -> [AgendaEvent] {
         let token = try await access()
         // Start from local midnight to include today's earlier events.
