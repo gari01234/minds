@@ -33,7 +33,7 @@ test("Native main tab surface no longer claims missing Feed, Ideas or Readings",
   assert.match(shell, /ChatView\(\)/);
   assert.match(shell, /CalendarHomeView\(\)/);
   assert.doesNotMatch(shell, /FeedView\(\)|IdeasView\(\)|ReadingsView\(\)/);
-  assert.match(model, /var section: Section = \.continuity/);
+  assert.match(model, /var section: Section = \.web/);
   assert.match(model, /func reloadContinuity\(\)/);
   assert.match(model, /continuityItems = \[\]/);
 });

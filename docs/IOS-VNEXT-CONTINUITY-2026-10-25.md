@@ -1,5 +1,8 @@
 # Isabella iOS vNext · Continuity Surface / auditoría 25-10-2026
 
+> **Addendum de producto 25/10/2026 (posterior a esta especificación):** Gari decidió que la app iPhone incluya **todo MINDS webapp más las capacidades Apple**, no una simplificación con pérdida funcional. El principio «interfaz de continuidad» prohíbe un segundo cerebro pero **no** restringe funcionalidades. Fase puente con WebKit a la PWA existente y matriz de equivalencia en [IOS-FUNCTIONAL-PARITY-v0.1](IOS-FUNCTIONAL-PARITY-v0.1.md); no declarar paridad sin aceptación física. Build 101 conserva su objetivo original.
+
+
 ## Diagnóstico verificado y decisión
 
 Main inicial e86e8a8a68772cbae84ab71586841744398e5720. El prototipo SwiftUI se introdujo el 26-09; se registraron 278 commits posteriores en minds hasta este corte. Builds 95–99C reformaron planificación personal y Work (task/session/team/allocations), Builds 100A–100A.5 reformaron recibos, restauración y telemetría. Un TabView iOS con Feed, Ideas y Lecturas placeholder no representa la aplicación que se usa actualmente. Los PR #206–#211 han mejorado conectividad y compilación, no equivalencia E2E.

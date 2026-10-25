@@ -12,6 +12,9 @@ struct RootView: View {
                 NativeSignInView()
             } else {
                 TabView(selection: $model.section) {
+                    FullMINDSView()
+                        .tabItem { Label("MINDS", systemImage: "square.grid.2x2") }
+                        .tag(AppModel.Section.web)
                     ContinuityView()
                         .tabItem { Label("Continuidad", systemImage: "circle.dotted.circle") }
                         .tag(AppModel.Section.continuity)
