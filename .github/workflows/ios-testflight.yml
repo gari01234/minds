@@ -1,0 +1,106 @@
+name: Isabella iPhone — TestFlight (manual)
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: isabella-ios-testflight
+  cancel-in-progress: false
+jobs:
+  distribute:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-15
+    timeout-minutes: 50
+    environment: apple-testflight
+    env:
+      APPLE_TEAM_ID: ${{ vars.ISABELLA_APPLE_TEAM_ID }}
+      APP_BUNDLE_ID: ${{ vars.ISABELLA_IOS_BUNDLE_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ISABELLA_ASC_ISSUER_ID }}
+      ASC_KEY_ID: ${{ secrets.ISABELLA_ASC_KEY_ID }}
+      ASC_API_KEY_P8: ${{ secrets.ISABELLA_ASC_API_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check release settings before contacting Apple
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in APPLE_TEAM_ID APP_BUNDLE_ID ASC_ISSUER_ID ASC_KEY_ID ASC_API_KEY_P8; do
+            [[ -n "$(printenv "$name")" ]] || { echo "Missing Apple setting: $name" >&2; exit 1; }
+          done
+          [[ "$APP_BUNDLE_ID" =~ ^[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+$ ]] || {
+            echo "Invalid bundle identifier" >&2; exit 1; }
+          [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Invalid Team ID" >&2; exit 1; }
+          [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Invalid Key ID" >&2; exit 1; }
+
+      - name: Create temporary signing credential
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/isabella-apple"
+          chmod 700 "$RUNNER_TEMP/isabella-apple"
+          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
+          chmod 600 "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
+          test -s "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
+
+      - name: Generate native Xcode project
+        working-directory: apps/isabella-ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Archive iPhone build using Apple cloud signing
+        working-directory: apps/isabella-ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MINDS.xcodeproj \
+            -scheme MINDS \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/Isabella.xcarchive" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            PRODUCT_BUNDLE_IDENTIFIER="$APP_BUNDLE_ID" \
+            CODE_SIGN_STYLE=Automatic \
+            MARKETING_VERSION="0.1.0" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
+            archive
+
+      - name: Set App Store Connect export destination
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/IsabellaExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>uploadSymbols</key><true/>
+            <key>manageAppVersionAndBuildNumber</key><false/>
+          </dict></plist>
+          EOF
+          plutil -lint "$RUNNER_TEMP/IsabellaExportOptions.plist"
+
+      - name: Upload signed archive to TestFlight
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/Isabella.xcarchive" \
+            -exportPath "$RUNNER_TEMP/IsabellaExport" \
+            -exportOptionsPlist "$RUNNER_TEMP/IsabellaExportOptions.plist" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      - name: Destroy temporary signing key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/isabella-apple"
