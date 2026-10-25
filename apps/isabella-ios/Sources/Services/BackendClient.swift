@@ -331,6 +331,93 @@ actor BackendClient {
     }
 
     // Siri reads an exact due-date slice, never the capped general agenda list.
+    // Owner-scoped read model: four canonical sources, zero mutations.
+    // No LLM summarization, heuristic score, or inferred approval.
+    func continuityItems() async throws -> [ContinuityItem] {
+        let token = try await access()
+        guard let owner = session?.userID else { throw BackendError.notSignedIn }
+        let ownerFilter = URLQueryItem(name: "user_id", value: "eq." + owner)
+
+        async let decisions = network("rest/v1/minds_shadow_decisions", query: [
+            .init(name: "select", value: "request_id,action,proposal_kind,status"),
+            ownerFilter, .init(name: "status", value: "eq.pending"),
+            .init(name: "order", value: "created_at.desc"),
+            .init(name: "limit", value: "10")
+        ], token: token)
+        async let attention = network("rest/v1/minds_attention_events", query: [
+            .init(name: "select", value: "id,title,body,status,requires_user"),
+            ownerFilter, .init(name: "status", value: "eq.delivered"),
+            .init(name: "requires_user", value: "eq.true"),
+            .init(name: "consumed_at", value: "is.null"),
+            .init(name: "order", value: "created_at.desc"),
+            .init(name: "limit", value: "10")
+        ], token: token)
+        async let missions = network("rest/v1/minds_mission_runs", query: [
+            .init(name: "select", value: "id,instruction,status,blocker_question"),
+            ownerFilter, .init(name: "status", value: "in.(paused,waiting,in_progress)"),
+            .init(name: "order", value: "updated_at.desc"),
+            .init(name: "limit", value: "10")
+        ], token: token)
+        async let commitments = network("rest/v1/minds_commitments", query: [
+            .init(name: "select", value: "id,title,objective,status"),
+            ownerFilter, .init(name: "status", value: "eq.active"),
+            .init(name: "order", value: "updated_at.desc"),
+            .init(name: "limit", value: "10")
+        ], token: token)
+
+        func rows(_ data: Data) throws -> [[String: Any]] {
+            guard let records = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+            else { throw BackendError.invalidResponse }
+            return records
+        }
+        let (decisionData, attentionData, missionData, commitmentData) =
+            try await (decisions, attention, missions, commitments)
+        var items: [ContinuityItem] = []
+        for row in try rows(decisionData) {
+            guard let id = row["request_id"] as? String, let uuid = UUID(uuidString: id),
+                  row["status"] as? String == "pending" else { continue }
+            let kind = row["proposal_kind"] as? String ?? "desconocido"
+            items.append(ContinuityItem(
+                id: "review:" + id, kind: .review,
+                title: "Propuesta pendiente",
+                detail: "Tipo: " + kind + ". Debe revisarse en el contexto original.",
+                sourceState: "pending", sourceID: uuid))
+        }
+        for row in try rows(attentionData) {
+            guard let id = row["id"] as? String, let uuid = UUID(uuidString: id),
+                  row["requires_user"] as? Bool == true,
+                  row["status"] as? String == "delivered" else { continue }
+            items.append(ContinuityItem(
+                id: "attention:" + id, kind: .attention,
+                title: row["title"] as? String ?? "Atención registrada",
+                detail: row["body"] as? String ?? "Consulta el asunto original.",
+                sourceState: "delivered", sourceID: uuid))
+        }
+        for row in try rows(missionData) {
+            guard let id = row["id"] as? String, let uuid = UUID(uuidString: id),
+                  let status = row["status"] as? String,
+                  ["paused", "waiting", "in_progress"].contains(status) else { continue }
+            let stateText = status == "paused" ? "Pausada" :
+                status == "waiting" ? "Esperando una condición" : "En ejecución"
+            let blocker = (row["blocker_question"] as? String)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            let detail = blocker?.isEmpty == false ? blocker! : stateText
+            items.append(ContinuityItem(
+                id: "mission:" + id, kind: .mission,
+                title: row["instruction"] as? String ?? "Trabajo registrado",
+                detail: detail, sourceState: status, sourceID: uuid))
+        }
+        for row in try rows(commitmentData) {
+            guard let id = row["id"] as? String, let uuid = UUID(uuidString: id),
+                  row["status"] as? String == "active" else { continue }
+            items.append(ContinuityItem(
+                id: "commitment:" + id, kind: .commitment,
+                title: row["title"] as? String ?? "Compromiso",
+                detail: row["objective"] as? String ?? "Compromiso activo.",
+                sourceState: "active", sourceID: uuid))
+        }
+        return items
+    }
+
     func todayTasks() async throws -> [AgendaTask] {
         let token = try await access()
         let formatter = DateFormatter()

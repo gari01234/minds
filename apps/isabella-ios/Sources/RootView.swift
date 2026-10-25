@@ -12,21 +12,15 @@ struct RootView: View {
                 NativeSignInView()
             } else {
                 TabView(selection: $model.section) {
+                    ContinuityView()
+                        .tabItem { Label("Continuidad", systemImage: "circle.dotted.circle") }
+                        .tag(AppModel.Section.continuity)
                     ChatView()
-                        .tabItem { Label("Chat", systemImage: "circle") }
+                        .tabItem { Label("Isabella", systemImage: "message") }
                         .tag(AppModel.Section.chat)
-                    FeedView()
-                        .tabItem { Label("Feed", systemImage: "rectangle.stack") }
-                        .tag(AppModel.Section.feed)
-                    IdeasView()
-                        .tabItem { Label("Ideas", systemImage: "circle.dotted") }
-                        .tag(AppModel.Section.ideas)
                     CalendarHomeView()
-                        .tabItem { Label("Calendario", systemImage: "calendar") }
+                        .tabItem { Label("Agenda", systemImage: "calendar") }
                         .tag(AppModel.Section.calendar)
-                    ReadingsView()
-                        .tabItem { Label("Lecturas", systemImage: "text.justify") }
-                        .tag(AppModel.Section.readings)
                 }
                 .tint(.primary)
             }

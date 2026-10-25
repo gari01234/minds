@@ -4,12 +4,14 @@ import Observation
 @MainActor
 @Observable
 final class AppModel {
-    enum Section: Hashable { case chat, feed, ideas, calendar, readings }
+    enum Section: Hashable { case continuity, chat, calendar }
 
-    var section: Section = .chat
+    var section: Section = .continuity
     var messages: [ChatMessage] = []
     var tasks: [AgendaTask] = []
     var events: [AgendaEvent] = []
+    var continuityItems: [ContinuityItem] = []
+    var continuityError: String?
     var localRemindersEnabled = UserDefaults.standard.bool(forKey: "minds.native.reminders.enabled")
     var isLoading = true
     var isAuthenticated = false
@@ -29,7 +31,7 @@ final class AppModel {
     func bootstrap() async {
         isLoading = true
         isAuthenticated = await backend.isSignedIn
-        if isAuthenticated { await reload() }
+        if isAuthenticated { await reload(); await reloadContinuity() }
         isLoading = false
     }
 
@@ -54,6 +56,7 @@ final class AppModel {
             isAuthenticated = true
             errorMessage = nil
             await reload()
+            await reloadContinuity()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -70,6 +73,8 @@ final class AppModel {
         messages = []
         tasks = []
         events = []
+        continuityItems = []
+        continuityError = nil
         errorMessage = nil
     }
 
@@ -97,6 +102,17 @@ final class AppModel {
             }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    func reloadContinuity() async {
+        do {
+            let items = try await backend.continuityItems()
+            continuityItems = items
+            continuityError = nil
+        } catch {
+            continuityItems = []
+            continuityError = error.localizedDescription
         }
     }
 
