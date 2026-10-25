@@ -18,7 +18,7 @@ struct ContinuityItem: Identifiable {
         switch kind {
         case .review: return "Necesita revisión"
         case .attention: return "Requiere tu atención"
-        case .mission: return "Trabajo en curso"
+        case .mission: return "Estado del trabajo"
         case .commitment: return "Compromiso activo"
         }
     }

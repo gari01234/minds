@@ -37,3 +37,9 @@ test("Native main tab surface no longer claims missing Feed, Ideas or Readings",
   assert.match(model, /func reloadContinuity\(\)/);
   assert.match(model, /continuityItems = \[\]/);
 });
+
+test("Paused missions are not presented as work actively running", () => {
+  const continuity = file("Features/Continuity/ContinuityItem.swift");
+  assert.match(continuity, /case \.mission: return "Estado del trabajo"/);
+  assert.doesNotMatch(continuity, /case \.mission: return "Trabajo en curso"/);
+});
