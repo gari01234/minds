@@ -8,18 +8,26 @@ options:
 settings:
   base:
     SWIFT_VERSION: 5.10
+    MINDS_BUNDLE_ID: local.minds.isabella
 targets:
   MINDS:
     type: application
     platform: iOS
     sources:
       - Sources
+      - CaptureShared
+      - SharedGlance
     configFiles:
       Debug: Config/Base.xcconfig
       Release: Config/Base.xcconfig
+    entitlements:
+      path: Config/MINDS.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - "group.$(MINDS_BUNDLE_ID)"
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: local.minds.isabella
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID)"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Isabella
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
@@ -27,7 +35,64 @@ targets:
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Isabella puede transcribir tu voz para convertirla en mensajes.
         INFOPLIST_KEY_SUPABASE_URL: "https://lodexwyyynlarkqgkyhy.supabase.co"
         INFOPLIST_KEY_SUPABASE_ANON_KEY: "$(SUPABASE_ANON_KEY)"
+        INFOPLIST_KEY_MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"
         TARGETED_DEVICE_FAMILY: 1
         SUPPORTS_MACCATALYST: NO
+    dependencies:
+      - target: MINDSShare
+        embed: true
+      - target: MINDSWidget
+        embed: true
     scheme:
       testTargets: []
+  MINDSShare:
+    type: app-extension
+    platform: iOS
+    sources:
+      - ShareExtension
+      - CaptureShared
+    info:
+      path: Config/Share-Info.plist
+      properties:
+        MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.share-services
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
+          NSExtensionAttributes:
+            NSExtensionActivationSupportsText: true
+            NSExtensionActivationSupportsWebURLWithMaxCount: 1
+            NSExtensionActivationSupportsImageWithMaxCount: 1
+            NSExtensionActivationSupportsFileWithMaxCount: 1
+    entitlements:
+      path: Config/Share.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - "group.$(MINDS_BUNDLE_ID)"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).share"
+        SWIFT_VERSION: 5.10
+        APPLICATION_EXTENSION_API_ONLY: YES
+  MINDSWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - WidgetExtension
+      - SharedGlance
+      - Sources/Features/Continuity/ContinuityItem.swift
+    info:
+      path: Config/Widget-Info.plist
+      properties:
+        MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Config/Widget.entitlements
+      properties:
+        com.apple.security.application-groups:
+          - "group.$(MINDS_BUNDLE_ID)"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).widget"
+        SWIFT_VERSION: 5.10
+        APPLICATION_EXTENSION_API_ONLY: YES

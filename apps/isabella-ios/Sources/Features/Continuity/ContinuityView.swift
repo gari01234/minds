@@ -4,6 +4,7 @@ import SwiftUI
 // Intentionally no generated summaries, autonomous approvals or lock-screen data.
 struct ContinuityView: View {
     @Environment(AppModel.self) private var model
+    @State private var showCaptures = false
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,14 @@ struct ContinuityView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                     .buttonStyle(.borderedProminent)
+
+                    Button {
+                        showCaptures = true
+                    } label: {
+                        Label("Capturar o revisar fuentes", systemImage: "square.and.arrow.down.on.square")
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .buttonStyle(.bordered)
 
                     if let issue = model.continuityError {
                         Text("No se pudo verificar la continuidad: " + issue)
@@ -66,6 +75,9 @@ struct ContinuityView: View {
                     }
                 }
                 .padding(20)
+            }
+.sheet(isPresented: $showCaptures) {
+                CaptureInboxView()
             }
             .refreshable { await model.reloadContinuity() }
             .navigationTitle("Continuidad")

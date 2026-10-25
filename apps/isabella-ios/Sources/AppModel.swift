@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import WidgetKit
 
 @MainActor
 @Observable
@@ -70,6 +71,8 @@ final class AppModel {
         isAuthenticated = false
         codeSent = false
         pendingReview = nil
+        GlanceStore.clear()
+        WidgetCenter.shared.reloadTimelines(ofKind: "IsabellaContinuity")
         messages = []
         tasks = []
         events = []
@@ -109,9 +112,13 @@ final class AppModel {
         do {
             let items = try await backend.continuityItems()
             continuityItems = items
+            GlanceStore.save(items)
+            WidgetCenter.shared.reloadTimelines(ofKind: "IsabellaContinuity")
             continuityError = nil
         } catch {
             continuityItems = []
+            GlanceStore.clear()
+            WidgetCenter.shared.reloadTimelines(ofKind: "IsabellaContinuity")
             continuityError = error.localizedDescription
         }
     }
