@@ -23,3 +23,12 @@ En App Store Connect > Apps > Isabella > TestFlight, espera a que Apple procese 
 El workflow sin credenciales NO puede validar la firma real ni la subida; esa acceptance vendra despues de activar la membresia. Puede requerir ajustes por version de Xcode o permisos de Apple en el primer intento. El inicio de sesion nativo, acciones revisadas, notificaciones locales y Siri todavia requieren aceptacion fisica en el iPhone. Las notificaciones APNs originadas en Supabase son otro desarrollo.
 
 La clave p8 vive solo en un secreto de entorno de GitHub y temporalmente en el runner; no se incorpora al repo. No se crean servicios backend ni una segunda Isabella.
+
+
+## Integraciones adicionales antes de la primera firma
+
+El proyecto iOS incluye dos extensiones nuevas: `MINDSShare` para compartir fuentes desde otras apps y `MINDSWidget` para el widget de continuidad. Sus IDs de bundle se derivan automáticamente del identificador definitivo: `<bundle-id>.share` y `<bundle-id>.widget`. Antes del primer archivo firmado, registra o permite registrar también estos App IDs en Apple Developer y crea el **App Group** `group.<bundle-id>` asociándolo a los tres targets (app, Share, Widget). Los tres necesitan perfiles de aprovisionamiento que incluyan el grupo. El workflow proporciona `MINDS_BUNDLE_ID` a todos los targets durante la firma; esto evita asignar por error el mismo Bundle ID a las extensiones.
+
+La extensión captura hasta 12 MiB por fuente en un contenedor privado del iPhone, con protección de archivos, SHA-256, tipo y procedencia. Los originales permanecen como **pendientes locales**: todavía no se envían a Supabase ni se convierten en Claims o memoria. Puedes ver y eliminar esas fuentes dentro de Continuidad → Capturas. La eliminación es explícita y permanente. No confundir con una captura ya sincronizada o archivada en Work.
+
+El widget únicamente muestra recuentos derivados de estados verificados, nunca el contenido de los documentos. Caduca su caché tras cuatro horas y el sistema puede retrasar las actualizaciones. Estas extensiones todavía requieren firma real y aceptación en iPhone; CI solo puede probar la compilación para simulador.
