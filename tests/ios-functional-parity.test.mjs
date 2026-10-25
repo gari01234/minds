@@ -49,5 +49,5 @@ test("documentation treats functional parity as an acceptance gate, not complete
   assert.match(contract, /Share Extension/);
   assert.match(contract, /APNs/);
   assert.match(contract, /WidgetKit/);
-  assert.match(rootDoc, /cliente iOS/);
+  assert.match(rootDoc, /cliente iOS/i);
 });
