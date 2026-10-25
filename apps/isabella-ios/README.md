@@ -1,31 +1,23 @@
-# Isabella — cliente iOS privado
+# Isabella para iPhone — MINDS completo + Apple
 
-Cliente SwiftUI para un solo propietario. Supabase y MINDS siguen siendo el único backend y la fuente canónica de tareas, memoria y permisos.
+**Estado: 25 de octubre de 2026.** Cliente privado para un propietario. La app iOS debe conservar **toda la funcionalidad de la webapp de MINDS** y añadir integración Apple; no es un producto reducido ni un segundo agente. Decisión y aceptación: [IOS-FUNCTIONAL-PARITY-v0.1](../../docs/IOS-FUNCTIONAL-PARITY-v0.1.md).
 
-## Implementado en esta rama
+## Lo implementado actualmente (código en main/PR, no aceptación física)
+- **MINDS completo:** puente `WKWebView` hacia la PWA existente para navegar la superficie más avanzada (Chat, Work, Agenda/planificación, Lecturas, etc.) sin reescribir su lógica. Los enlaces principales permanecen en `/minds/`; enlaces externos abren Safari. El inicio de sesión web es **separado** del inicio de sesión nativo: usar la misma cuenta. No se inyecta el token Keychain en JavaScript. Logout nativo limpia también el estado web embebido.
+- **Continuidad SwiftUI:** proyección owner-scoped de revisiones, Attention, Missions y Commitments, con estados/huecos honestos. No concede permisos ni ejecuta decisiones.
+- **Isabella Chat nativo:** OTP, Keychain ThisDeviceOnly y llamadas autenticadas a `isabella-chat` con `surface=chat_browser`, `client_message_id` y contrato de recibos. Soporta un subconjunto limitado de aprobaciones; las demás requieren la interfaz web. No reintenta turnos o mutaciones con resultado ambiguo.
+- **Agenda nativa:** eventos/tareas owner-scoped, recordatorios locales explícitos, Siri/Atajos básicos read-only. La planificación avanzada sigue accesible en MINDS web.
+- **Share Extension + WidgetKit:** captura original offline en App Group, límite 12 MiB, y snapshot de conteos privados con TTL de cuatro horas. **Las capturas todavía no se admiten en Supabase** (#221). Widgets y extensiones precisan firma App Group y prueba física.
 
-La pantalla de inicio de sesión solicita el código OTP al usuario ya registrado; no crea usuarios nuevos. La sesión se conserva en Keychain con protección ThisDeviceOnly. El cliente no contiene ningún secreto service_role. Solo utiliza la clave publicable de Supabase, diseñada para aplicaciones distribuidas.
+## Pendiente antes de declarar paridad
+La pestaña WKWebView **no equivale a una aceptación de paridad**. Validar en un iPhone real mediante TestFlight: sesión web/nativa, conversaciones completas, Work/Threads, subida/descarga de documentos y artefactos, Lecturas/Sofía/annotaciones, gestos/teclado, navegación, notificaciones, suspensión/reanudación, cierre de sesión, scopes, VoiceOver y privacidad. La descarga de archivos y algunas APIs WebKit pueden comportarse distinto de Safari. Los contratos nativos/servidor de estas áreas no se replicarán silenciosamente.
 
-La agenda muestra tareas reales recuperadas por REST bajo RLS. El chat reutiliza la Edge Function isabella-chat mediante surface chat_browser y un identificador UUID por turno, sin habilitar la ruta durable de texto que no dispone de herramientas. Se recuperan los mensajes de la conversación más reciente de Isabella.
+Después: admisión Source-First de capturas (#221), APNs vía Attention Economy (#215/#219), Widgets con deep links exactos (#216) y Apple Watch (#220) **solo** si hay dispositivo real. No interpretar la compilación de simulador como aceptación. No cambiar Build 101 por este trabajo.
 
-Las propuestas únicas de creación o actualización de tareas pueden aprobarse mediante las RPC ya existentes, con recibo y lectura canónica. Las propuestas múltiples o de otro tipo no ejecutan acciones. La cancelación utiliza la decisión registrada en Supabase. Ante errores de transporte no se repiten automáticamente las llamadas al modelo ni las mutaciones.
+## Instalación y distribución
+El repositorio incluye `project.yml` (XcodeGen, iOS 17+), `.github/workflows/ios-native.yml` y `.github/workflows/ios-testflight.yml`. Véase [TESTFLIGHT-SIN-MAC.md](TESTFLIGHT-SIN-MAC.md) para Team ID, tres Bundle IDs y App Group. La suscripción Apple Developer, el aprovisionamiento y la firma deben estar activos para distribuir: no presuponerlos a partir de CI.
 
-Siri y Atajos incluyen abrir Isabella y consultar de forma read-only las tareas de hoy. No existen mutaciones Siri ni ejecución permanente en segundo plano. El servicio de notificaciones locales continúa disponible; APNs queda pendiente de la membresía de Apple y de su integración con Attention Economy.
+No guardar Team API private keys `.p8`, service_role, certificados, perfiles de firma ni JWT en el repositorio o chat. Supabase sigue siendo la autoridad: originales, tareas, proyectos, memoria, decisiones, ejecución y notificaciones conservan sus contratos existentes.
 
-## Instalación local
-
-En un Mac instala Xcode y XcodeGen. En apps/isabella-ios ejecuta xcodegen generate, abre MINDS.xcodeproj, elige tu Apple Account en Signing & Capabilities y selecciona tu iPhone. Compila, instala y entra con el mismo correo de MINDS.
-
-Apple Developer Program cuesta 99 USD/año antes de eventuales precios locales. La compilación de GitHub Actions solo demuestra que compila para simulador sin firma: aún faltan pruebas físicas autenticadas, firma y distribución TestFlight.
-
-## Límites de aceptación
-
-El chat y la agenda son un primer cliente nativo, no la sustitución completa de la PWA. Deben revisarse la continuidad entre superficies, el tratamiento de propuestas múltiples, restauración de revisiones pendientes, salida y reapertura de iOS, scopes de conversación y experiencia de Siri en dispositivo. No se considera aprobado Build 100 ni rendimiento SLO por este desarrollo.
-
-No guardar certificados Apple, perfiles, claves privadas, service_role ni tokens de usuario en GitHub.
-
-## Agenda nativa y notificaciones locales
-
-La agenda muestra eventos y tareas canónicas desde Supabase. En el menú de Agenda puedes elegir Activar avisos locales; el sistema solicitará permiso. Solo entonces la app programa avisos de tareas futuras que tengan due_date y reminder_time. Los avisos pertenecientes a esta capa se identifican con un prefijo propio y pueden desactivarse sin borrar las notificaciones de otras apps. En logout se cancelan los avisos de esta capa.
-
-Esta funcionalidad no es APNs: si una tarea cambia mientras la app está cerrada, los recordatorios locales se reconciliarán al volver a cargar la agenda. El servidor no envía notificaciones de cambios con esta capa. Siri incorpora una consulta read-only del próximo evento de MINDS, además de las tareas de hoy.
+## Historia
+El prototipo iOS del 26 de septiembre aportó OTP, chat y agenda; la reconstrucción de octubre sumó Continuidad (#213), Share Extension y WidgetKit (#218). La PWA sigue siendo funcionalmente más amplia: el puente MINDS completo evita pérdida de acceso **mientras** migramos área por área. La aceptación nativa sigue pendiente de dispositivo físico.

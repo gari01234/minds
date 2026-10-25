@@ -5,9 +5,9 @@ import WidgetKit
 @MainActor
 @Observable
 final class AppModel {
-    enum Section: Hashable { case continuity, chat, calendar }
+    enum Section: Hashable { case web, continuity, chat, calendar }
 
-    var section: Section = .continuity
+    var section: Section = .web
     var messages: [ChatMessage] = []
     var tasks: [AgendaTask] = []
     var events: [AgendaEvent] = []
@@ -26,6 +26,7 @@ final class AppModel {
     var errorMessage: String?
     var pendingReview: NativeReviewProposal?
 
+    let webPortal = MINDSWebPortalSession()
     let backend = BackendClient()
     let notifications = NotificationService()
 
@@ -65,6 +66,7 @@ final class AppModel {
 
     func logout() async {
         await backend.logout()
+        await webPortal.clearForLogout()
         await notifications.removeTaskReminders()
         localRemindersEnabled = false
         UserDefaults.standard.set(false, forKey: "minds.native.reminders.enabled")

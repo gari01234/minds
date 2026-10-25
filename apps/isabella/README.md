@@ -1,4 +1,6 @@
-# Isabella · staging v0.3
+# Isabella · documentación acumulativa (histórico desde v0.3)
+
+> **Estado vigente · 25/10/2026:** Isabella PWA es la superficie web más completa de MINDS; esta documentación acumulativa incluye secciones históricas y versiones de Builds anteriores. Los números de versión/modelo mostrados en esas secciones son snapshots, **no inventario live**. La reconstrucción iOS debe preservar todas las funciones PWA más integraciones Apple: [contrato de equivalencia](../../docs/IOS-FUNCTIONAL-PARITY-v0.1.md). La app nativa todavía no iguala esta cobertura. Para runtime/migraciones actuales prevalecen código, PRs, CI y Supabase verificables.
 
 Web: https://gari01234.github.io/minds/isabella/ — aplicación hermana de Theory.
 
