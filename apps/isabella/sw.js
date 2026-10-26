@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v166';
+const CACHE_NAME = 'isabella-shell-v167';
 const SHELL = [
   './',
   './index.html',
@@ -17,13 +17,14 @@ const SHELL = [
   './dashboard-week.css?v=1',
   './dashboard-workload.css?v=1',
   './dashboard-daily-polish.css?v=1',
+  './daily-controls.css?v=1',
   './mobile-refinement.css?v=1',
   './shell.js?v=104',
   './situation.js?v=5',
   './turn-integrity.js?v=3',
     './calendar-plan.js?v=2',
   './day-layout.js?v=1',
-'./app.js?v=129',
+'./app.js?v=130',
   './work-team.js?v=1',
   './work.js?v=30',
   './sync.js?v=pwa39',
@@ -35,7 +36,8 @@ const SHELL = [
   './ai.js?v=56',
   './ambient.js?v=2',
   './dashboard-model.js?v=5',
-  './dashboard.js?v=6',
+  './calendar-colors.js?v=1',
+  './dashboard.js?v=7',
   './manifest.webmanifest?v=2',
   './icon.svg?v=2',
   './apple-touch-icon.png?v=2',
