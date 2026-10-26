@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import createRequire from 'node:module';
+import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
 const read=path=>readFileSync(new URL('../'+path,import.meta.url),'utf8');
 const colors=require('../apps/isabella/calendar-colors.js');
