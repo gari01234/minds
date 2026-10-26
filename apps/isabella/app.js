@@ -3243,7 +3243,18 @@ function initEventDrag(){
     row.addEventListener('touchcancel',finish,{passive:true});
   });
 }
-function openDrawer(){const refresh=$('#refreshViewAction');if(refresh){refresh.classList.toggle('hidden',!['feed','ideas'].includes(state.screen));refresh.textContent=state.screen==='feed'?'Actualizar situación':'Actualizar ideas guardadas'}const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
+function openDrawer(){
+  const currentBuild=$('#currentBuildInfo');
+  if(currentBuild){
+    const meta=document.querySelector('meta[name="minds-build-sha"]')?.content||'local';
+    const tag=/^[0-9a-f]{40}$/.test(meta)?meta.slice(0,12):null;
+    const source=document.querySelector('script[src*="app.js?v="]')?.getAttribute('src')||'';
+    const assetVersion=/app\.js\?v=([\w.\-]+)/.exec(source)?.[1]||'desconocida';
+    currentBuild.textContent=tag
+      ?'Versión cargada · commit '+tag+' · app v'+assetVersion
+      :'Versión local · app v'+assetVersion;
+  }
+  const refresh=$('#refreshViewAction');if(refresh){refresh.classList.toggle('hidden',!['feed','ideas'].includes(state.screen));refresh.textContent=state.screen==='feed'?'Actualizar situación':'Actualizar ideas guardadas'}const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
 function action(a){if(a==='refreshview'){if(state.screen==='feed')void renderFeed(false);if(state.screen==='ideas')void renderIdeas(false)}if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 function reviewAgeCopy(hours){
   const n=Math.max(0,Number(hours||0));

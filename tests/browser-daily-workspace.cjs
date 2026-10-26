@@ -26,6 +26,9 @@ try{
   });
   console.log('DESKTOP_COMPUTED_METRICS',JSON.stringify({viewport:{width:1698,height:882},section:await page.locator('body').getAttribute('data-section'),stats,errors:errors.slice(0,10)},null,2));
   const panel=stats['.desk-panel--chat'],layout=stats['.desk-layout'];
+  assert.equal(await page.locator('body').getAttribute('data-section'),'assistant',
+    'App initialization must finish (calendar model must precede app.js)');
+  assert.deepEqual(errors,[],'The daily screen must initialize without page errors');
   assert.ok(panel&&layout,'The real Isabella daily grid must mount');
   assert.ok(layout.bottom>=862,'Daily grid bottom '+layout.bottom+' leaves unused viewport under dashboard');
   assert.ok(panel.bottom>=862,'Chat panel bottom '+panel.bottom+' leaves unused viewport');
@@ -46,6 +49,9 @@ try{
   await page.locator('#drawer:not(.hidden)').waitFor({timeout:4000});
   assert.ok(await page.locator('#drawer [data-action="permissions"]').count(),'Permissions remain reachable');
   assert.ok(await page.locator('#drawer [data-action="reviews"]').count(),'Reviews remain reachable');
+  const buildNote=await page.locator('#currentBuildInfo').innerText();
+  assert.match(buildNote,/Versión cargada · commit [0-9a-f]{12} · app v129/);
+  console.log('BUILD_VERSION_DISPLAYED',buildNote);
   console.log('DAILY_BROWSER_ACCEPTED');
 }
 finally{await browser.close();}
