@@ -159,7 +159,7 @@ function receipt() {
     '<p class="meta">29 oct → 30 oct · Preparar dossier de coordinación</p>' +
     '<code>DEMO-ONLY · NO SERVER RECEIPT</code></div>' +
     '<p class="page-subtitle" style="margin-top:17px">No hay recibo canónico porque no se realizó ninguna operación real. En producción se exigiría readback de Supabase.</p>' +
-    button("Volver a la tarea", "task", "btn full") + '</div>';
+    button("Volver a la tarea", "returnTask", "btn full") + '</div>';
 }
 function work() {
   return '<div class="view-pad">' + sectionHeader("WORK · PROYECTOS", "Proyecto Faro", "Contexto sintético para evaluar navegación documental.") +
@@ -186,7 +186,7 @@ function askDocument() {
     '<div class="context-preview"><strong>Origen:</strong> Proyecto Faro / Informe de coordinación.pdf<br><strong>Alcance:</strong> fragmento parcial de demostración, no documento completo.</div>' +
     '<div class="conversation"><div class="bubble owner">¿Qué dice el fragmento sobre el acceso principal?</div>' +
     '<div class="bubble assistant"><span class="inline-status">Respuesta simulada</span><p>El fragmento menciona una revisión de coordinación del acceso principal. No permite confirmar su resultado ni la fecha definitiva de entrega.</p></div></div>' +
-    '<div class="btn-row">' + button("Volver al PDF", "document", "btn primary") + button("Ir a Work", "work", "btn") + '</div></div>';
+    '<div class="btn-row">' + button("Volver al PDF", "returnDocument", "btn primary") + button("Ir a Work", "work", "btn") + '</div></div>';
 }
 function library() {
   return '<div class="view-pad">' + sectionHeader("BIBLIOTECA", "Biblioteca", "Dos actividades con identidades propias, un acceso de navegación compartido.") +
@@ -220,7 +220,7 @@ function sofia(s) {
     '<div class="context-preview">“Reducir elementos no significa reducir experiencia; puede cambiar qué percibimos con mayor intensidad.”</div>' +
     '<div class="conversation"><div class="bubble owner">¿Cuál es la distinción conceptual aquí?</div>' +
     '<div class="bubble assistant"><span class="inline-status purple">Interpretación simulada</span><p>La reducción aparece como una operación, no como una finalidad autónoma. El ejemplo sugiere que su valor depende de la intensidad perceptiva que permite.</p><p class="meta">Lectura hipotética del fragmento ficticio; no es una tesis aceptada.</p></div></div>' +
-    button("Volver al mismo pasaje", "reader", "btn primary full") +
+    button("Volver al mismo pasaje", "returnReader", "btn primary full") +
     (s.highlighted ? '<div class="notes">El fragmento continúa subrayado en esta sesión de demostración.</div>' : '') + '</div>';
 }
 function thoughts() {
@@ -267,7 +267,7 @@ function render(variant) {
     '<span class="island" aria-hidden="true"></span><span class="phone-status">● ▰</span></div>' +
     '<div class="prototype-banner">PROTOTIPO ' + variant + ' · DATOS FICTICIOS · SIN CONEXIÓN</div>';
   phone.innerHTML = header + detailHeader(s, titleFor(s)) +
-    '<main class="main-viewport" id="viewport-' + variant + '" tabindex="-1">' + contentFor(s) + '</main>' + bar(s);
+    '<div class="main-viewport" id="viewport-' + variant + '" tabindex="-1">' + contentFor(s) + '</div>' + bar(s);
   const metric = document.getElementById("metrics-" + variant);
   metric.innerHTML = '<span class="metrics-strong">' + s.steps + ' interacciones</span> · Destino actual: ' +
     titleFor(s) + ' · ' + (s.taskStatus === "confirmed" ? "Resultado simulado" : s.highlighted ? "Subrayado local" : "Sin operaciones reales") +
@@ -299,6 +299,19 @@ function back(s) {
     render(s.variant);
   }
 }
+function returnTo(s, page) {
+  if (!ALLOWED_ROUTES.has(page)) return;
+  const index = s.history.lastIndexOf(page);
+  if (index >= 0) {
+    s.history = s.history.slice(0, index);
+  } else {
+    s.history.length = 0;
+  }
+  s.page = page;
+  s.steps += 1;
+  s.log.push("return:" + page);
+  render(s.variant);
+}
 function dispatch(s, action) {
   if (action === "reset") {
     sessions[s.variant] = makeSession(s.variant);
@@ -316,12 +329,15 @@ function dispatch(s, action) {
   }
   if (action === "cancelReview") {
     if (s.page !== "review") return;
-    s.taskStatus = "cancelled";go(s,"task",false);return;
+    s.taskStatus = "cancelled";returnTo(s,"task");return;
   }
   if (action === "highlight") {
     if (s.page !== "reader") return;
     s.highlighted = true;s.steps++;render(s.variant);return;
   }
+  if (action === "returnDocument") { returnTo(s, "document"); return; }
+  if (action === "returnReader") { returnTo(s, "reader"); return; }
+  if (action === "returnTask") { returnTo(s, "task"); return; }
   if (ALLOWED_ROUTES.has(action)) {
     const isTab = TABS[s.variant].some(t=>t[0] === action);
     go(s,action,isTab);
