@@ -23,6 +23,8 @@ Una tarea es la misma entidad en Tiempo/Work/Isabella; una sesión, estimación,
 
 La interfaz actual está documentada y evaluada como un sistema completo, a partir de trece capturas reales y del código web/iOS: [arquitectura de experiencia e inventario de superficies](docs/MINDS-EXPERIENCE-ARCHITECTURE-v0.1.md), [alternativas de navegación](docs/MINDS-NAVIGATION-OPTIONS-v0.1.md) y [criterios de aceptación por recorridos](docs/MINDS-EXPERIENCE-ACCEPTANCE-v0.1.md). Los tres documentos son **hipótesis de diseño para validación**, no un rediseño ya aprobado ni una modificación de permisos, runtime o navegación. Se conserva la equivalencia funcional PWA→iPhone.
 
+**Comparación de navegación en iPhone:** [abrir Design Lab B1/B2](https://gari01234.github.io/minds/isabella/design-lab/) — dos prototipos interactivos con datos ficticios, sin login, backend ni cambios reales. Las variantes no están aprobadas ni incorporadas a la app nativa. Código: `apps/isabella/design-lab/`.
+
 ## Estado y aceptación
 
 El histórico de Builds 71–100A.5 está en el repositorio y en sus PRs. No confundir diseñado, implementado, tests/CI, fusionado, desplegado y aceptado en dispositivo. Las prioridades transversales abiertas incluyen [#113 Knowledge Coverage](https://github.com/gari01234/minds/issues/113), [#138 integridad conversacional](https://github.com/gari01234/minds/issues/138), [#204 coste/contexto Work](https://github.com/gari01234/minds/issues/204) y [#212 iOS vNext](https://github.com/gari01234/minds/issues/212). Build 101 conserva el significado **Daily & Weekly Workload Intelligence** y no se renombra como iOS.
