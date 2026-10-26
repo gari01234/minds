@@ -123,9 +123,9 @@ test('weekly person filter includes secondary, legacy and unassigned identities 
 });
 
 test('PWA updates model, interface and stylesheet as one cached release',()=>{
-  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=6','dashboard-week.css?v=1']){
+  for(const asset of ['dashboard-model.js?v=5','dashboard.js?v=7','dashboard-week.css?v=1']){
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v166/);
+  assert.match(sw,/isabella-shell-v167/);
 });
