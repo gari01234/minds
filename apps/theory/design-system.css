@@ -86,3 +86,18 @@ html.embedded .v09-reading-filters button{
 html.embedded .v09-reading-filters button.active{
   border:0;border-bottom:2px solid var(--m-ink);background:transparent;color:var(--m-ink);
 }
+
+/* UX A.5 — maintain the existing editorial horizontal filters; on phones,
+   swipe gestures land at complete filter labels instead of arbitrary cuts. */
+@media(max-width:620px){
+  html.embedded .v09-reading-filters{
+    scroll-snap-type:x proximity;
+    scroll-padding-inline:var(--m-content-gutter);
+    overscroll-behavior-inline:contain;
+    padding-right:calc(var(--m-content-gutter) + 12px);
+  }
+  html.embedded .v09-reading-filters button{
+    scroll-snap-align:start;
+    scroll-margin-inline:8px;
+  }
+}
