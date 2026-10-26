@@ -16,6 +16,7 @@ const SHELL = [
   './day-interactions.css?v=1',
   './dashboard-week.css?v=1',
   './dashboard-workload.css?v=1',
+  './dashboard-daily-polish.css?v=1',
   './mobile-refinement.css?v=1',
   './shell.js?v=104',
   './situation.js?v=5',
