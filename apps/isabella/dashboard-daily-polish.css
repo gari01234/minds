@@ -1,0 +1,155 @@
+/* MINDS UX A.6 — The existing Isabella daily workspace is the principal surface.
+ * Surgical desktop-only corrections, not a redesign of the Work application.
+ * Its four movable panels, original chat DOM and all native actions are retained.
+ */
+@media (min-width:950px){
+  /* Use the viewport as the sole size authority.  Never let the conversation
+     content or the rail's natural size truncate the dashboard above the bottom
+     of the browser.  Any excess belongs to its panel's own scroll container. */
+  body[data-section="assistant"].desk-enabled{
+    block-size:100dvh;
+    overflow:hidden;
+  }
+  body[data-section="assistant"].desk-enabled .app{
+    block-size:100dvh;
+    min-block-size:100dvh;
+    max-block-size:100dvh;
+  }
+  body[data-section="assistant"].desk-enabled #swipeArea{
+    position:relative;
+    block-size:100%;
+    align-self:stretch;
+    min-block-size:0;
+  }
+  body[data-section="assistant"].desk-enabled #assistantScreen.screen.active{
+    position:absolute;
+    inset:0;
+    block-size:100%;
+    min-block-size:0;
+    max-block-size:none;
+    display:flex;
+    flex-direction:column;
+  }
+  body[data-section="assistant"].desk-enabled #assistantScreen>.desk-shell{
+    flex:1 1 0;
+    block-size:100%;
+    min-block-size:0;
+    overflow:hidden;
+  }
+  body[data-section="assistant"].desk-enabled .desk-layout{
+    flex:1 1 0;
+    min-block-size:0;
+    min-inline-size:0;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage,
+  body[data-section="assistant"].desk-enabled .desk-rail,
+  body[data-section="assistant"].desk-enabled .desk-stage>.desk-panel{
+    min-block-size:0;
+    align-self:stretch;
+  }
+
+  /* Information remains quiet but must be readable at its actual point size.
+     Secondary text: >=4.5:1 against white; decoration stays understated. */
+  body[data-section="assistant"].desk-enabled .desk-panel-title{
+    color:#222226;
+    font-size:13px;
+    font-weight:650;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button{
+    width:34px;
+    height:34px;
+    color:#62626a;
+    font-size:18px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-bar button{
+    width:34px;
+    height:34px;
+    color:#62626a;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-weekdays{
+    color:#64646d;
+    font-size:10px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day{
+    font-size:12px;
+    color:#333338;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-outside{
+    color:#73737a;
+  }
+  body[data-section="assistant"].desk-enabled .desk-subtitle,
+  body[data-section="assistant"].desk-enabled .desk-plan-date{
+    color:#62626b;
+    font-size:11px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-task-detail strong{
+    font-size:12px;
+    line-height:1.4;
+  }
+  body[data-section="assistant"].desk-enabled .desk-task-detail small{
+    color:#686870;
+    font-size:11px;
+    line-height:1.4;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-footer span{
+    color:#686870;
+    font-size:11px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-footer button{
+    color:#424249;
+    font-size:11px;
+    min-height:32px;
+    padding:6px 4px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-empty,
+  body[data-section="assistant"].desk-enabled .desk-small{
+    color:#67676f;
+    font-size:11px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-plan-hours{
+    color:#6c6c74;
+    font-size:10px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-time-event small{
+    color:#64646c;
+    font-size:10px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-plan-metrics,
+  body[data-section="assistant"].desk-enabled .desk-plan-tasks-head,
+  body[data-section="assistant"].desk-enabled .desk-week-explainer{
+    color:#6a6a72;
+    font-size:11px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-week-filters label{
+    color:#66666f;
+    font-size:11px;
+  }
+
+  /* The composer is the primary daily action. Preserve its capsule, position
+     and black send button while making icon hits and placeholder discernible. */
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer{
+    border-color:#d6d6da;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.send,.mic,.attach){
+    flex-basis:40px;
+    width:40px;
+    min-width:40px;
+    height:40px;
+    min-height:40px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.mic,.attach){
+    color:#39393f;
+    background:#f2f2f3;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer textarea::placeholder{
+    color:#696971;
+    opacity:1;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button:focus-visible,
+  body[data-section="assistant"].desk-enabled .desk-month-bar button:focus-visible,
+  body[data-section="assistant"].desk-enabled .desk-panel-footer button:focus-visible,
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer :is(.send,.mic,.attach):focus-visible{
+    outline:2px solid #333339;
+    outline-offset:2px;
+  }
+}
