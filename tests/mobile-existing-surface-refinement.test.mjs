@@ -36,7 +36,7 @@ test('UX A.5 is last stylesheet and SW keeps versioned assets offline',()=>{
   assert.ok(sw.includes('./mobile-refinement.css?v=1'));
   assert.ok(html.includes('./work.js?v=30'));
   assert.ok(sw.includes('./work.js?v=30'));
-  assert.ok(sw.includes('isabella-shell-v166'));
+  assert.ok(sw.includes('isabella-shell-v167'));
   assert.ok(html.indexOf('./mobile-refinement.css?v=1')>html.indexOf('./dashboard-workload.css?v=1'));
   for(const route of ['assistant','feed','calendar','work','readings','thoughts'])
     assert.ok(shell.includes('data-nav="'+route+'"'),'Missing destination '+route);
