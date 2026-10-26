@@ -8,8 +8,7 @@ const workSignedCache=new Map();
 let team=[];
 /* Purely visual preferences and labels; no task statuses are rewritten. */
 const WORK_MOBILE_LAYOUT_KEY='minds-work-mobile-planner-layout-v1';
-const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
-function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
+
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
 function sourceKind(file){const n=String(file?.name||'').toLowerCase(),m=String(file?.type||'');if(n.endsWith('.eml')||n.endsWith('.msg')||m==='message/rfc822')return'email';if(m.startsWith('image/'))return'image';if(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$/i.test(n))return'document';return'file'}
@@ -46,6 +45,8 @@ let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnap
 /* Build 90.3 — Project as a usable, source-bound understanding lens.
    Read-only projection: no bucket creation, canonical mutation or secondary model. */
 async function renderOverview(){
+  const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
+  function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
   const body=$('#workBody'),projectId=project.id;
   body.classList.add('work-overview-host');
   body.innerHTML='<div class="work-empty">Leyendo el estado del proyecto…</div>';
