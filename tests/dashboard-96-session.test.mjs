@@ -41,7 +41,7 @@ test('all modified PWA asset URLs match between HTML and SW and rotate the cache
     assert.ok(html.includes(asset),'HTML missing '+asset);
     assert.ok(sw.includes(asset),'SW missing '+asset);
   }
-  assert.match(sw,/isabella-shell-v165/);
+  assert.match(sw,/isabella-shell-v166/);
 });
 
 test('month groups each task once while preserving every independently editable booking',()=>{
