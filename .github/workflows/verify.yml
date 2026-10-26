@@ -56,3 +56,23 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261023083324_minds_task_team_allocations_v1.sql
       - name: Verify SQL integrity, RLS, and negative cases
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/build99c-acceptance.sql
+
+  browser-daily-workspace:
+    name: Desktop browser layout (Chromium)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install isolated browser dependencies
+        run: |
+          npm install --no-save --no-package-lock --ignore-scripts playwright@1.56.0
+          npx playwright install --with-deps chromium
+      - name: Build and serve the real PWA bundle
+        run: |
+          node scripts/build.mjs
+          python3 -m http.server 8765 --directory dist >/tmp/minds-local-server.log 2>&1 &
+          sleep 2
+      - name: Measure layout and verify original More menu
+        run: node tests/browser-daily-workspace.cjs
