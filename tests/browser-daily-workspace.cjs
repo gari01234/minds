@@ -91,6 +91,8 @@ try{
     nodes.map(node=>getComputedStyle(node).backgroundColor));
   const compactToday=await page.locator('.desk-month-day[data-desk-date="'+fixtureDate+'"]').getAttribute('class');
   assert.match(compactToday,/is-today/);
+  await page.locator('#closeDrawer').click();
+  await page.locator('#drawer.hidden').waitFor({timeout:4000});
   await page.locator('#desktopLenses [data-nav="calendar"]').click();
   await page.locator('.mc[data-date="'+fixtureDate+'"] .dotset i').first().waitFor();
   const fullColors=await page.locator('.mc[data-date="'+fixtureDate+'"] .dotset i').evaluateAll(nodes=>
