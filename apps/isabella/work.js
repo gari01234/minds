@@ -6,6 +6,10 @@ const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführun
 let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
 const workSignedCache=new Map();
 let team=[];
+/* Purely visual preferences and labels; no task statuses are rewritten. */
+const WORK_MOBILE_LAYOUT_KEY='minds-work-mobile-planner-layout-v1';
+const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
+function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
 function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
 function sourceKind(file){const n=String(file?.name||'').toLowerCase(),m=String(file?.type||'');if(n.endsWith('.eml')||n.endsWith('.msg')||m==='message/rfc822')return'email';if(m.startsWith('image/'))return'image';if(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$/i.test(n))return'document';return'file'}
@@ -57,7 +61,7 @@ async function renderOverview(){
   const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
   projectModelSnapshot=modelResult?.data||null;
   const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
-  const taskText=taskRows.map(x=>'<button type="button" class="work-overview-item work-overview-task" data-work-edit-task="'+esc(x.id)+'"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',x.work_status||''].filter(Boolean).join(' · '))+'</small></button>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
+  const taskText=taskRows.map(x=>'<button type="button" class="work-overview-item work-overview-task" data-work-edit-task="'+esc(x.id)+'"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',workStatusText(x.work_status)].filter(Boolean).join(' · '))+'</small></button>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
   const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
   const filesLabel=fileResult?String(fileResult.count??0)+' documentos registrados':'Cobertura documental no comprobable';
   const rev=projectModelSnapshot?.current_revision;
@@ -265,13 +269,21 @@ async function hydratePlannerImages(root=document){
 }
 async function renderPlanner(){
   await loadPlanner();team=await window.MINDS_WORK_TEAM.members(project.id);const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
-  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
-    <div class="work-board">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
+  const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)!=='columns';
+  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
+    <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header><strong>${esc(b.name)}</strong>${b.virtual?'':`<button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button>`}</header>
       <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
       ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
       ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
     </section>`}).join('')}</div>`;
+  $('[data-work-layout-toggle]')?.addEventListener('click',e=>{
+    const board=body.querySelector('.work-board');if(!board)return;
+    const listMode=!board.classList.contains('mobile-stack');
+    board.classList.toggle('mobile-stack',listMode);
+    e.currentTarget.setAttribute('aria-pressed',String(listMode));
+    localStorage.setItem(WORK_MOBILE_LAYOUT_KEY,listMode?'list':'columns');
+  });
   $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
   $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
