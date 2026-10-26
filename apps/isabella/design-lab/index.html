@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6f6f4">
+  <meta name="robots" content="noindex, nofollow">
+  <title>MINDS · Laboratorio de navegación iPhone</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+  <a class="skip-link" href="#comparison">Saltar al comparador</a>
+  <header class="lab-header">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>MINDS <span class="thin">/ Design Lab</span></span></div>
+    <div class="lab-tag">PROTOTIPO AISLADO · SIN DATOS REALES</div>
+  </header>
+  <main>
+    <section class="intro" aria-labelledby="lab-title">
+      <div class="eyebrow">INVESTIGACIÓN DE EXPERIENCIA · 01</div>
+      <h1 id="lab-title">Una aplicación.<br><span>Dos formas de orientarse.</span></h1>
+      <p>Compara dos opciones de navegación para iPhone utilizando <strong>exactamente los mismos recorridos</strong>. Las funciones y estados son simulados; nada se guarda, envía ni modifica en MINDS.</p>
+      <div class="decision-notice"><span class="notice-dot" aria-hidden="true"></span> Todavía no hemos elegido una navegación definitiva. El puente actual con la webapp se conserva.</div>
+    </section>
+    <section class="lab-controls" aria-labelledby="scenario-title">
+      <div class="control-heading"><h2 id="scenario-title">Recorrido de prueba</h2><p>Las acciones reinician ambas variantes a un estado idéntico.</p></div>
+      <div class="scenario-tabs" id="scenarioTabs" role="group" aria-label="Seleccionar recorrido">
+        <button type="button" data-scenario="day" aria-pressed="true"><span class="tab-number">01</span> Organizar el día</button>
+        <button type="button" data-scenario="document" aria-pressed="false"><span class="tab-number">02</span> Documento y contexto</button>
+        <button type="button" data-scenario="reading" aria-pressed="false"><span class="tab-number">03</span> Leer con Sofía</button>
+      </div>
+      <div class="task-instruction" id="taskInstruction" role="status" aria-live="polite">Encuentra una tarea, revisa un cambio de fecha y comprueba el recibo simulado.</div>
+      <div class="variant-tabs" role="group" aria-label="Variante visible en pantalla estrecha">
+        <button type="button" data-visible="B1" aria-pressed="true">B1 · Lecturas directa</button>
+        <button type="button" data-visible="B2" aria-pressed="false">B2 · Biblioteca</button>
+      </div>
+    </section>
+    <section id="comparison" class="comparison" aria-label="Prototipos B1 y B2">
+      <article class="variant" data-variant="B1" aria-labelledby="b1-title">
+        <div class="variant-heading"><div><div class="eyebrow">ALTERNATIVA B1</div><h2 id="b1-title">Lecturas en primer nivel</h2></div><span class="variant-status">En evaluación</span></div>
+        <p class="variant-detail">Isabella · Ahora · Tiempo · Work · Lecturas. <strong>Thoughts</strong> conserva acceso explícito e independiente.</p>
+        <div class="phone-shell">
+          <div class="phone" id="phone-B1" aria-label="Prototipo interactivo B1"></div>
+        </div>
+        <div class="journey-metrics" id="metrics-B1" aria-live="polite"></div>
+      </article>
+      <article class="variant" data-variant="B2" aria-labelledby="b2-title">
+        <div class="variant-heading"><div><div class="eyebrow">ALTERNATIVA B2</div><h2 id="b2-title">Biblioteca como destino</h2></div><span class="variant-status">En evaluación</span></div>
+        <p class="variant-detail">Isabella · Ahora · Tiempo · Work · Biblioteca, con <strong>Lecturas y Thoughts</strong> como destinos diferenciados.</p>
+        <div class="phone-shell">
+          <div class="phone" id="phone-B2" aria-label="Prototipo interactivo B2"></div>
+        </div>
+        <div class="journey-metrics" id="metrics-B2" aria-live="polite"></div>
+      </article>
+    </section>
+    <section class="evaluation" aria-labelledby="evaluation-title">
+      <div class="eyebrow">QUÉ ESTAMOS COMPARANDO</div>
+      <h2 id="evaluation-title">La calidad de la orientación, no la cantidad de pantallas.</h2>
+      <div class="evaluation-grid">
+        <div><span class="evaluation-number">01</span><h3>Encontrar</h3><p>¿El destino corresponde a lo que esperabas encontrar allí?</p></div>
+        <div><span class="evaluation-number">02</span><h3>Actuar</h3><p>¿Distingues inspeccionar, proponer, confirmar y recibir un resultado?</p></div>
+        <div><span class="evaluation-number">03</span><h3>Regresar</h3><p>¿Vuelves al objeto de origen con el contexto intacto?</p></div>
+        <div><span class="evaluation-number">04</span><h3>Conservar</h3><p>¿Las funciones existentes siguen disponibles sin obligarte a escribir un prompt?</p></div>
+      </div>
+      <p class="limitations"><strong>Alcance:</strong> estas maquetas verifican rutas de navegación y jerarquía visual preliminar. No comprueban equivalencia real, autenticación, recibos de Supabase, accesibilidad completa ni comportamiento de una app firmada. La futura aplicación nativa seguirá su propio ciclo SwiftUI/TestFlight y preservará la PWA completa.</p>
+    </section>
+  </main>
+  <footer class="lab-footer"><span>MINDS · Estudio de navegación v0.1</span><a href="https://github.com/gari01234/minds/blob/main/docs/MINDS-NAVIGATION-OPTIONS-v0.1.md" target="_blank" rel="noopener noreferrer">Fundamento y alternativas</a></footer>
+</body>
+</html>

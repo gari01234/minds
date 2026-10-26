@@ -112,3 +112,7 @@ La base de código y Supabase siguen intactos durante esta fase de diseño. Los 
 **No tocar:** Build 101 (Daily & Weekly Workload Intelligence), issues de Knowledge Coverage/conversación/coste, contratos de permisos, original→extracción→claim, RLS, Apple signing, Share intake/APNs/Watch hasta sus gates propios.
 
 La regla final es sencilla: **se rediseña la experiencia, no se sustituye la identidad ni el patrimonio funcional de MINDS**.
+
+## Artefacto de ensayo añadido 26/10/2026
+
+[Design Lab B1/B2](https://gari01234.github.io/minds/isabella/design-lab/) permite comparar con fixtures ficticios tres flujos representativos (tarea/revisión; PDF/contexto; lectura/anotación) y el acceso a Thoughts. El contador de interacciones es un **indicador descriptivo del prototipo**, no un benchmark empírico de usabilidad. Se necesita observación real en móvil, dificultad percibida, retorno, accesibilidad y feedback explícito antes de decidir la navegación. Los demás journeys J01–J18 siguen pendientes de aceptación auténtica. No se ha añadido ninguna acción productiva ni API.

@@ -126,3 +126,15 @@ Registrar pasos, destinos equivocadamente elegidos, tiempo para orientación, di
 - [MINDS · Design Language v0.1](../DESIGN-SYSTEM-v0.1.md), [Paridad iOS](IOS-FUNCTIONAL-PARITY-v0.1.md).
 
 Los mapas B1/B2 y las valoraciones de esta página son **juicios de diseño propios**. No se atribuyen a Apple; requerirán revisión empírica y una decisión explícita antes de traducirse a arquitectura nativa de producción.
+
+## Prototipo interactivo comparativo · 26/10/2026
+
+Se han construido **dos maquetas navegables reales**, B1 y B2, usando exactamente los mismos datos **sintéticos**. Se pueden abrir en cualquier navegador moderno, incluido iPhone, sin cuenta de Apple Developer:
+
+**[Abrir Design Lab B1/B2](https://gari01234.github.io/minds/isabella/design-lab/)** (`apps/isabella/design-lab/`).
+
+Los tres recorridos seleccionables son: tarea → propuesta de cambio de fecha → cancelación o recibo explícitamente ficticio; Work → PDF con extracción parcial → consulta contextual de Isabella → retorno; y Lecturas → texto ficticio → subrayado → interpretación ficticia de Sofía → retorno. Thoughts tiene acceso directo y rotulado en B1 y aparece como destino explícito de Biblioteca en B2. Ambos estados son independientes, con contador de interacciones por variante y reinicio individual.
+
+**Límites:** son prototipos HTML/CSS/JS autocontenidos, no builds SwiftUI ni tests de dispositivo firmado; no incluyen datos reales, sesiones, conexión a Supabase, persistencia, IA ni operaciones. Las interacciones y los «recibos» solo cambian el estado en memoria del navegador. Este sitio es público por GitHub Pages, por lo que solo contiene fixtures ficticios. No confundir la ventaja de un clic en un journey con preferencia global por B1; el resultado final requiere evaluación de todas las superficies, especialmente Thoughts. No sustituye la webapp ni implica aprobación de una variante.
+
+La suite `tests/ios-design-lab.test.mjs` comprueba rutas, flujos, separación de variantes, cancelación, marca explícita de recibo simulado, ausencia de conectores y publicación estática. El estudio debe recibir feedback del propietario y pruebas táctiles antes de escoger navegación final o codificarla en SwiftUI.
