@@ -87,7 +87,7 @@ test("day: review distinguishes simulation from real receipt and can be cancelle
   h.click("B1","confirmReview");
   assert.match(view(h,"B1"),/DEMO-ONLY · NO SERVER RECEIPT/);
   assert.match(view(h,"B1"),/No hay recibo canónico/);
-  h.click("B1","task");
+  h.click("B1","returnTask");
   assert.match(view(h,"B1"),/30 de octubre/);
   assert.match(metrics(h,"B2"),/0 interacciones/);
 });
@@ -102,7 +102,7 @@ test("document: owner returns to original file after contextual Isabella query",
   h.click("B2","askDocument");
   assert.match(view(h,"B2"),/Origen:/);
   assert.match(view(h,"B2"),/Respuesta simulada/);
-  h.click("B2","document");
+  h.click("B2","returnDocument");
   assert.match(view(h,"B2"),/Informe de coordinación/);
   assert.match(view(h,"B2"),/No se ha cargado ningún archivo real/);
   assert.match(metrics(h,"B1"),/0 interacciones/);
@@ -116,7 +116,7 @@ test("reading: B1 direct Lecturas vs B2 Biblioteca, annotation survives return",
   h.click("B1","highlight");
   h.click("B1","sofia");
   assert.match(view(h,"B1"),/Interpretación simulada/);
-  h.click("B1","reader");
+  h.click("B1","returnReader");
   assert.match(view(h,"B1"),/Subrayado local de ejemplo/);
   h.click("B2","library");
   assert.match(view(h,"B2"),/Obra visual autónoma/);
@@ -124,7 +124,7 @@ test("reading: B1 direct Lecturas vs B2 Biblioteca, annotation survives return",
   h.click("B2","reader");
   h.click("B2","highlight");
   h.click("B2","sofia");
-  h.click("B2","reader");
+  h.click("B2","returnReader");
   assert.match(view(h,"B2"),/Subrayado local de ejemplo/);
   const count=s=>Number(metrics(h,s).match(/(\d+) interacciones/)[1]);
   assert.equal(count("B2"),count("B1")+1);
