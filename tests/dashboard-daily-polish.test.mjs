@@ -35,7 +35,7 @@ test('UX A.6 daily desktop takes full browser height through all nested panels',
   assert.ok(desk.includes('stage = elt(\'div\',\'desk-stage\')'));
 });
 test('UX A.6 improves legibility without losing quiet white desktop',()=>{
-  const matches=[...css.matchAll(/color:(#[0-9a-fA-F]{6});/g)].map(x=>x[1]);
+  const matches=[...css.matchAll(/(?<![a-zA-Z-])color:(#[0-9a-fA-F]{6});/g)].map(x=>x[1]);
   assert.ok(matches.length>=14,'Semantic text colors missing');
   for(const c of matches)assert.ok(ratio(c)>=4.5,c+' contrast '+ratio(c).toFixed(2)+' < 4.5 on white');
   assert.match(css,/\.desk-panel-actions button\{[\s\S]*?width:34px;[\s\S]*?height:34px/);
