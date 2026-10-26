@@ -77,8 +77,8 @@ test('Sunsama-like estimates and work sessions are distinct with no new data sto
  assert.match(app,/remaining=estimate>0\?Math\.max\(0,estimate-subtotal\):0/);
  assert.match(dash,/totalEstimate=plannedTasks\.reduce/);
  assert.match(html,/dashboard-95-2\.css\?v=3/);
- assert.match(html,/app\.js\?v=129/);
+ assert.match(html,/app\.js\?v=130/);
  assert.match(html,/dashboard-model\.js\?v=5/);
- assert.match(html,/dashboard\.js\?v=6/);
- assert.match(sw,/isabella-shell-v166/);
+ assert.match(html,/dashboard\.js\?v=7/);
+ assert.match(sw,/isabella-shell-v167/);
 });

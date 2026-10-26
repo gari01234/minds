@@ -208,21 +208,13 @@ function fallbackColor(seed=''){
   return palette[h%palette.length];
 }
 function itemColor(item){
-  if(item?.projectId){
-    const p=state.projects.find(x=>x.id===item.projectId);
-    if(p?.color)return p.color;
-  }
-  if(item?.categoryId){
-    const k=state.categories.find(x=>x.id===item.categoryId);
-    if(k?.color)return k.color;
-  }
-  return fallbackColor(item?.projectId||item?.categoryId||item?.id||'item');
+  return window.MINDS_CALENDAR_COLORS.itemColor(state,item);
 }
 function dayColors(date,filters=null){
   const P=window.MINDS_CALENDAR_PLAN;
   const events=state.events.filter(e=>e.date===date&&(!filters?.projectId||e.projectId===filters.projectId)&&!filters?.personKey);
   const tasks=state.tasks.filter(t=>t.date===date&&!t.archivedAt&&(!filters||!P||P.qualifies(t,filters)));
-  return [...new Set([...events,...tasks].map(itemColor).filter(Boolean))].slice(0,4);
+  return window.MINDS_CALENDAR_COLORS.colorsForItems(state,[...events,...tasks]);
 }
 function formatMessageText(text){
   // Shared, escaped presentation for Isabella and Work Threads.

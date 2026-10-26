@@ -121,10 +121,10 @@ test('failed Guardar does not close, and retry preserves same idempotency key',a
 });
 test('PWA pins both changed scripts and rotates one coherent cache',()=>{
  const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
- for(const pin of ['app.js?v=129','task-detail.js?v=4']){
+ for(const pin of ['app.js?v=130','task-detail.js?v=4']){
   assert.ok(html.includes(pin),'HTML '+pin);assert.ok(sw.includes(pin),'SW '+pin);
  }
- assert.match(sw,/isabella-shell-v166/);
+ assert.match(sw,/isabella-shell-v167/);
  assert.match(app,/await window\.MINDS_TASK_DETAIL\.createQuick\(attempt\)/);
  assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
 });

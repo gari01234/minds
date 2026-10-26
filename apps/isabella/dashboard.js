@@ -160,10 +160,8 @@
     const grid = M.monthCells(prefs.selectedDate);
     const now = M.dayKey(new Date());
     const cells = grid.map(cell => {
-      const events = M.eventsForDay(state,cell.key);
-      const tasks = M.tasksForDay(state,cell.key);
-      const dots = [...events,...tasks].slice(0,3).map(item =>
-        '<i style="background:' + safeColor(M.colorFor(state,item)) + '"></i>').join('');
+      const dots = window.MINDS_CALENDAR_COLORS.colorsForDay(state,cell.key).map(color =>
+        '<i style="background:' + safeColor(color) + '"></i>').join('');
       return '<button class="desk-month-day' + (cell.inMonth?'':' is-outside') +
         (cell.key===prefs.selectedDate?' is-selected':'') + (cell.key===now?' is-today':'') +
         '" type="button" data-desk-date="' + cell.key +

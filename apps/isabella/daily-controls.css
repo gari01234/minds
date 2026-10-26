@@ -1,0 +1,111 @@
+/* MINDS UX A.7 · Daily workspace micro-interactions.
+ * Apple HIG-inspired control hierarchy, not a new layout. The PWA retains
+ * its own visual language; only the calendar's shared semantic states match.
+ */
+:root {
+  --m-calendar-selected:#1b1b1d;
+  --m-calendar-today:#d94b5b;
+  --m-calendar-secondary:#70737c;
+  --m-calendar-dot-outline:#ffffff;
+}
+@media(min-width:950px){
+  /* The original composer remains fixed at the foot of Isabella's panel. */
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer {
+    align-items:center;
+    gap:5px;
+    min-height:58px;
+    padding:6px 7px;
+    border:1px solid #d7d8db;
+    border-radius:29px;
+    transition:border-color .14s ease, box-shadow .14s ease;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer:focus-within {
+    border-color:#9b9da4;
+    box-shadow:0 0 0 2px rgba(45,48,56,.06);
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic,.send) {
+    flex:0 0 44px;
+    width:44px;
+    min-width:44px;
+    height:44px;
+    min-height:44px;
+    display:inline-grid;
+    place-items:center;
+    margin:0;
+    border:0;
+    border-radius:50%;
+    line-height:1;
+    transition:background-color .14s ease, color .14s ease, transform .14s ease;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic) {
+    background:#f4f4f5;
+    color:#3d4047;
+    font-size:22px;
+    font-weight:400;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic):hover {
+    background:#e9e9eb;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send {
+    color:#fff;
+    background:#1b1b1d;
+    font-size:24px;
+    font-weight:500;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send:hover {
+    background:#343438;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic,.send):active {
+    transform:scale(.95);
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer textarea {
+    font-size:14px;
+    color:#212329;
+    line-height:1.42;
+    padding:10px 5px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer textarea::placeholder {
+    color:#656870;
+    opacity:1;
+  }
+  /* Same 'today' and 'selected date' semantics as full Time calendar.
+     Selection takes priority; today's date is red only when not selected. */
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-selected {
+    background:var(--m-calendar-selected);
+    color:#fff;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-today:not(.is-selected) {
+    color:var(--m-calendar-today);
+    font-weight:750;
+    box-shadow:none;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-outside:not(.is-selected):not(.is-today) {
+    color:var(--m-calendar-secondary);
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-selected .desk-month-dots i {
+    box-shadow:0 0 0 .5px var(--m-calendar-dot-outline);
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-dots {
+    height:5px;
+    gap:2px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-dots i {
+    width:4px;
+    height:4px;
+    flex:none;
+  }
+}
+/* Only shared semantic date colors below; no global calendar geometry changes. */
+.app .mc.selected .mn {
+  background:var(--m-calendar-selected);
+  color:#fff;
+}
+.app .mc.today:not(.selected) .mn {
+  color:var(--m-calendar-today);
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic,.send),
+  body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer {
+    transition:none;
+  }
+}
