@@ -11,6 +11,10 @@
 - **Backend** — `supabase/`: Edge Functions, migraciones, memoria, Project Model, Commitments, Missions, Expectations, Authority/Review, Attention Economy, Work Source-First, capability runtime y recibos.
 - **Biblioteca y pruebas** — `apps/isabella/skills/`, `apps/theory/skills/`, `tests/`, `.github/workflows/`, `docs/`.
 
+## Identidad de la aplicación (27/10/2026)
+
+**Window** es el nombre provisional elegido por el propietario para la ficha iOS y TestFlight. **MINDS** sigue siendo el sistema y **Isabella** la asistente. La elección de nombre no altera los Bundle IDs `com.gari01234.minds`, `.share`, `.widget` ni el App Group. **NIL / Nobody Is Looking** expresa una dirección futura de privacidad verificable y arquitectura local-first, **no una prestación disponible ni un renombramiento aprobado**. Véase [decisión de producto y límites](docs/PRODUCT-NAME-WINDOW-NIL-2026-10-27.md).
+
 ## Contratos constitucionales
 
 Supabase es fuente de verdad. Las pantallas y agentes externos son clientes y ejecutores, no bases paralelas de datos o permisos. `native_minds` sigue siendo el runtime canónico; los proveedores/modelos/Skills suministran capacidad, nunca autoridad. Separar fuente original, extracción, interpretación propuesta, conocimiento confirmado y memoria autobiográfica. Preservar scope de acceso, versiones, evidencia y recibos; un HTTP ambiguo no autoriza reejecutar mutaciones.
