@@ -6,17 +6,29 @@ on:
     paths:
       - "apps/isabella-ios/**"
       - ".github/workflows/ios-native.yml"
+      - ".github/workflows/ios-testflight.yml"
+      - "tests/ios-testflight-readiness.test.mjs"
   pull_request:
     paths:
       - "apps/isabella-ios/**"
       - ".github/workflows/ios-native.yml"
+      - ".github/workflows/ios-testflight.yml"
+      - "tests/ios-testflight-readiness.test.mjs"
   workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+
+      - name: Confirm App Store Connect SDK requirements
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Validate release configuration
+        run: node --test tests/ios-testflight-readiness.test.mjs
 
       - name: Install XcodeGen
         run: brew install xcodegen

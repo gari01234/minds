@@ -1,16 +1,64 @@
 name: Isabella iPhone — TestFlight (manual)
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: "Validación sin Apple o subida firmada a TestFlight"
+        required: true
+        type: choice
+        default: preflight
+        options:
+          - preflight
+          - upload
 permissions:
   contents: read
 concurrency:
   group: isabella-ios-testflight
   cancel-in-progress: false
 jobs:
-  distribute:
+  preflight:
     if: github.ref == 'refs/heads/main'
-    runs-on: macos-15
-    timeout-minutes: 50
+    runs-on: macos-26
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require Xcode 26 and compatible SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild -version
+          major="$(xcodebuild -version | awk '/^Xcode / {split($2,v,"."); print v[1]}')"
+          [[ "$major" =~ ^[0-9]+$ ]] && (( major >= 26 )) || {
+            echo "App Store Connect requires Xcode 26 or later." >&2
+            exit 1
+          }
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Generate native project
+        working-directory: apps/isabella-ios
+        run: |
+          brew list --versions xcodegen >/dev/null 2>&1 || brew install xcodegen
+          xcodegen generate
+      - name: Compile all three targets without Apple credentials
+        working-directory: apps/isabella-ios
+        shell: bash
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project MINDS.xcodeproj \
+            -scheme MINDS \
+            -configuration Release \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            MINDS_BUNDLE_ID=com.minds.preview \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+      - name: Validate TestFlight release contracts
+        run: node --test tests/ios-testflight-readiness.test.mjs
+  distribute:
+    needs: preflight
+    if: github.ref == 'refs/heads/main' && inputs.mode == 'upload'
+    runs-on: macos-26
+    timeout-minutes: 60
     environment: apple-testflight
     env:
       APPLE_TEAM_ID: ${{ vars.ISABELLA_APPLE_TEAM_ID }}
@@ -20,7 +68,7 @@ jobs:
       ASC_API_KEY_P8: ${{ secrets.ISABELLA_ASC_API_KEY_P8 }}
     steps:
       - uses: actions/checkout@v4
-      - name: Check release settings before contacting Apple
+      - name: Validate Apple settings before contacting Apple
         shell: bash
         run: |
           set -euo pipefail
@@ -29,26 +77,27 @@ jobs:
           done
           [[ "$APP_BUNDLE_ID" =~ ^[a-zA-Z][a-zA-Z0-9-]*(\.[a-zA-Z0-9-]+)+$ ]] || {
             echo "Invalid bundle identifier" >&2; exit 1; }
+          [[ "$APP_BUNDLE_ID" != "local.minds.isabella" ]] || {
+            echo "Local development identifier is not valid for distribution" >&2; exit 1; }
           [[ "$APPLE_TEAM_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Invalid Team ID" >&2; exit 1; }
           [[ "$ASC_KEY_ID" =~ ^[A-Z0-9]{10}$ ]] || { echo "Invalid Key ID" >&2; exit 1; }
-
-      - name: Create temporary signing credential
+          [[ "$ASC_ISSUER_ID" =~ ^[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}$ ]] || {
+            echo "Invalid Issuer ID" >&2; exit 1; }
+      - name: Create temporary Apple signing credential
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/isabella-apple"
           chmod 700 "$RUNNER_TEMP/isabella-apple"
-          printf '%s' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_API_KEY_P8" > "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
           chmod 600 "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
-          test -s "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8"
-
-      - name: Generate native Xcode project
+          openssl pkey -in "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8" -check -noout >/dev/null
+      - name: Generate Xcode project
         working-directory: apps/isabella-ios
         run: |
-          brew install xcodegen
+          brew list --versions xcodegen >/dev/null 2>&1 || brew install xcodegen
           xcodegen generate
-
-      - name: Archive iPhone build using Apple cloud signing
+      - name: Archive using Apple's automatic signing
         working-directory: apps/isabella-ios
         shell: bash
         run: |
@@ -69,8 +118,15 @@ jobs:
             MARKETING_VERSION="0.1.0" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             archive
-
-      - name: Set App Store Connect export destination
+      - name: Assert both extensions are embedded in the archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          app="$(find "$RUNNER_TEMP/Isabella.xcarchive/Products/Applications" -mindepth 1 -maxdepth 1 -name '*.app' -print -quit)"
+          [[ -n "$app" && -d "$app" ]] || { echo "Missing archived app" >&2; exit 1; }
+          test -d "$app/PlugIns/MINDSShare.appex"
+          test -d "$app/PlugIns/MINDSWidget.appex"
+      - name: Prepare export for TestFlight / App Store Connect
         shell: bash
         run: |
           set -euo pipefail
@@ -78,7 +134,7 @@ jobs:
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0"><dict>
-            <key>method</key><string>app-store</string>
+            <key>method</key><string>app-store-connect</string>
             <key>destination</key><string>upload</string>
             <key>signingStyle</key><string>automatic</string>
             <key>teamID</key><string>$APPLE_TEAM_ID</string>
@@ -87,7 +143,6 @@ jobs:
           </dict></plist>
           EOF
           plutil -lint "$RUNNER_TEMP/IsabellaExportOptions.plist"
-
       - name: Upload signed archive to TestFlight
         shell: bash
         run: |
@@ -100,7 +155,7 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-
+          echo "Apple upload requested. Check TestFlight processing in App Store Connect."
       - name: Destroy temporary signing key
         if: always()
         run: rm -rf "$RUNNER_TEMP/isabella-apple"

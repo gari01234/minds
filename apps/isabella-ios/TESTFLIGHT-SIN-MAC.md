@@ -1,34 +1,51 @@
-# Isabella iPhone sin Mac — TestFlight
+# MINDS / Isabella · Primera instalación mediante TestFlight (sin Mac)
 
-Esta via usa un runner macOS de GitHub Actions. No requiere un Mac personal. Se ejecuta exclusivamente a mano desde main y requiere membresia Apple Developer activa.
+**Estado 27/10/2026:** la membresía Apple Developer aparece activa en la aplicación Apple Developer, con rol **Account Holder** y vigencia hasta el 26/10/2027. La membresía ya no está pendiente. **El archivo firmado, los App IDs, el App Group, el acceso a la API y la primera subida siguen sin verificarse**; no se deben marcar como realizados sin evidencia de Apple/GitHub. Este procedimiento conserva la promesa MINDS completo + funciones Apple. La PWA de producción y Supabase no se modifican para distribuir la app.
 
-## Pasos del propietario desde iPhone
+## A. Prueba de compilación que podemos lanzar antes de cualquier configuración Apple
 
-Primero, instala Apple Developer desde App Store. Abre Account, inicia sesion con tu Apple Account y selecciona Enroll Now > Individual. Apple puede pedir verificacion de identidad, nombre legal, doble factor y pago. La cuota base es 99 USD al ano, con precio local en la inscripcion y renovacion automatica si se contrata desde la app.
+En [GitHub Actions del repositorio](https://github.com/gari01234/minds/actions/workflows/ios-testflight.yml) abrir «Isabella iPhone — TestFlight (manual)» > «Run workflow». Elegir `main` y modo **`preflight`**. El runner macOS 26 verifica Xcode 26+, genera el proyecto XcodeGen y compila para simulador los tres targets: `MINDS`, `MINDSShare`, `MINDSWidget`. Este modo no accede a Apple, no tiene secretos y **no sube nada**. La aceptación del simulador no equivale a firma de distribución ni prueba física.
 
-Despues, en developer.apple.com/account identifica el Team ID y registra un App ID explicito para Isabella. El Bundle ID definitivo ha de coincidir con el que usaras en App Store Connect; no utilizar local.minds.isabella para distribuir.
+Desde el 28/04/2026 Apple exige Xcode 26 o superior con el SDK correspondiente para subir apps de iOS. El pipeline anterior no lo garantizaba. Ahora usa `macos-26` y un control explícito. Referencia: https://developer.apple.com/news/upcoming-requirements/
 
-En appstoreconnect.apple.com > Apps > + > New App crea la ficha iOS de Isabella con ese Bundle ID, antes de subir el primer build. Crear la ficha no exige publicar en el App Store.
+## B. Cinco preparaciones que requieren tu cuenta Apple
 
-En App Store Connect > Users and Access > Integrations > App Store Connect API, como Account Holder solicita acceso si fuera necesario y genera una Team API Key. No usar Individual API Key: las individuales no pueden utilizar los endpoints de aprovisionamiento necesarios para firma automatizada. Descarga el AuthKey_....p8: Apple solo permite descargarlo una vez. Nunca envies la clave ni contrasenas por chat o issues.
+Estos pasos pueden hacerse en Safari solicitando «Sitio web de escritorio». **No nos envíes capturas que incluyan claves, códigos, certificados, contraseñas o tokens**.
 
-En github.com/gari01234/minds > Settings > Environments, crea el entorno apple-testflight. Configura dos variables en el entorno: ISABELLA_APPLE_TEAM_ID y ISABELLA_IOS_BUNDLE_ID. Configura tres secretos en el mismo entorno: ISABELLA_ASC_ISSUER_ID, ISABELLA_ASC_KEY_ID e ISABELLA_ASC_API_KEY_P8. El ultimo es el texto completo de la clave privada .p8 con sus lineas BEGIN/END PRIVATE KEY. Desde iPhone, Safari puede requerir Solicitar sitio web de escritorio para estos menus.
+**1 · Team ID.** En https://developer.apple.com/account, abre Membership details e identifica el **Team ID de diez caracteres** de tu equipo individual. Coincide con la cuenta que tiene el rol Account Holder. No confundir con el nombre de equipo ni el Apple Account.
 
-Ve a GitHub > Actions > Isabella iPhone — TestFlight (manual) > Run workflow. Selecciona main. El workflow verifica la configuracion antes de contactar Apple, genera Xcode con XcodeGen, solicita la firma remota de Apple, crea el archivo y envia el build a App Store Connect. No hay publicacion automatica al hacer commits.
+**2 · Identificadores y App Group.** En https://developer.apple.com/account/resources/identifiers/list registra tres App IDs explícitos para la misma familia:
+- Principal: `<tu.bundle.id>` (ejemplo de formato `com.ejemplo.minds`, no un identificador decidido ni registrado por nosotros).
+- Share Extension: `<tu.bundle.id>.share`.
+- Widget Extension: `<tu.bundle.id>.widget`.
 
-En App Store Connect > Apps > Isabella > TestFlight, espera a que Apple procese el build, crea un grupo Internal Testing y agrega tu propio usuario. Instala TestFlight en iPhone, acepta la invitacion y prueba la app. Los builds de TestFlight caducan a los 90 dias; puedes subir otro desde GitHub.
+No reutilizar `local.minds.isabella`, reservado al desarrollo. Crear además un App Group `group.<tu.bundle.id>`, habilitar la capacidad «App Groups» y asociarlo **a los tres App IDs**. Revisar este identificador antes de registrarlo; debe permanecer estable en actualizaciones. Los permisos de grupo y aprovisionamiento reales se comprueban al archivar, no los inferimos de XcodeGen. Documentación: https://developer.apple.com/help/account/identifiers/register-an-app-id y https://developer.apple.com/help/account/identifiers/register-an-app-group.
 
-## Alcance y seguridad
+**3 · Ficha privada de app.** En https://appstoreconnect.apple.com/apps > «+» > «New App», crear una app iOS llamada provisionalmente MINDS/Isabella, con el **mismo Bundle ID principal** y equipo. Crear esta ficha **no publica** la app en App Store. La primera prueba será por **Internal Testing**. Las extensiones no necesitan fichas independientes en App Store Connect.
 
-El workflow sin credenciales NO puede validar la firma real ni la subida; esa acceptance vendra despues de activar la membresia. Puede requerir ajustes por version de Xcode o permisos de Apple en el primer intento. El inicio de sesion nativo, acciones revisadas, notificaciones locales y Siri todavia requieren aceptacion fisica en el iPhone. Las notificaciones APNs originadas en Supabase son otro desarrollo.
+**4 · App Store Connect API.** Como Account Holder, abre https://appstoreconnect.apple.com/access/integrations/api y, si lo solicita, **Request Access**. Apple revisa este acceso caso por caso; membresía activa no significa que la API esté activada. Cuando esté habilitado, genera una **Team API Key** de alcance suficientemente limitado para aprovisionamiento y subida (normalmente «Admin» o permiso apropiado; comprobar las operaciones permitidas por Apple), no una «Individual API Key». Guarda una única vez el `AuthKey_<KEY_ID>.p8`, el **Key ID** de diez caracteres y el **Issuer ID** UUID. Nunca pegar `.p8` en ChatGPT, Issues ni el repositorio.
 
-La clave p8 vive solo en un secreto de entorno de GitHub y temporalmente en el runner; no se incorpora al repo. No se crean servicios backend ni una segunda Isabella.
+**5 · GitHub Environment.** En https://github.com/gari01234/minds/settings/environments crea o abre `apple-testflight`. Configura *environment variables*:
+- `ISABELLA_APPLE_TEAM_ID` = Team ID del paso 1.
+- `ISABELLA_IOS_BUNDLE_ID` = Bundle ID principal exacto del paso 2.
 
+Configura *environment secrets*:
+- `ISABELLA_ASC_ISSUER_ID` = Issuer ID.
+- `ISABELLA_ASC_KEY_ID` = Key ID.
+- `ISABELLA_ASC_API_KEY_P8` = contenido completo de la clave privada `.p8` (incluyendo BEGIN/END).
 
-## Integraciones adicionales antes de la primera firma
+Nunca uses un secreto de repositorio público para estos valores; se referencian solo en el job `distribute` ligado al entorno `apple-testflight`. Si GitHub permite revisores/branch restrictions de Environment, restringir a `main`. **No realizar `upload` antes de verificar que todos los pasos anteriores estén completos.**
 
-El proyecto iOS incluye dos extensiones nuevas: `MINDSShare` para compartir fuentes desde otras apps y `MINDSWidget` para el widget de continuidad. Sus IDs de bundle se derivan automáticamente del identificador definitivo: `<bundle-id>.share` y `<bundle-id>.widget`. Antes del primer archivo firmado, registra o permite registrar también estos App IDs en Apple Developer y crea el **App Group** `group.<bundle-id>` asociándolo a los tres targets (app, Share, Widget). Los tres necesitan perfiles de aprovisionamiento que incluyan el grupo. El workflow proporciona `MINDS_BUNDLE_ID` a todos los targets durante la firma; esto evita asignar por error el mismo Bundle ID a las extensiones.
+## C. Primer TestFlight real
 
-La extensión captura hasta 12 MiB por fuente en un contenedor privado del iPhone, con protección de archivos, SHA-256, tipo y procedencia. Los originales permanecen como **pendientes locales**: todavía no se envían a Supabase ni se convierten en Claims o memoria. Puedes ver y eliminar esas fuentes dentro de Continuidad → Capturas. La eliminación es explícita y permanente. No confundir con una captura ya sincronizada o archivada en Work.
+En el mismo workflow manual de GitHub elige `main` y modo **`upload`**. El preflight de simulador debe pasar primero; luego se accede al entorno `apple-testflight`, se validan los formatos de la configuración, se genera temporalmente la clave del runner y se solicita a Apple aprovisionamiento automático. Si los perfiles y certificados de App Group están disponibles, Xcode crea el archivo firmado con aplicación + las dos extensiones, y `xcodebuild -exportArchive` con `method=app-store-connect` y `destination=upload` envía el build.
 
-El widget únicamente muestra recuentos derivados de estados verificados, nunca el contenido de los documentos. Caduca su caché tras cuatro horas y el sistema puede retrasar las actualizaciones. Estas extensiones todavía requieren firma real y aceptación en iPhone; CI solo puede probar la compilación para simulador.
+El workflow no publica en App Store. Abre https://appstoreconnect.apple.com/apps > MINDS > TestFlight para ver el resultado del procesamiento de Apple. Si aparece el build, crea un grupo **Internal Testing** y añade tu usuario App Store Connect; instala [TestFlight](https://apps.apple.com/app/testflight/id899247664) en iPhone y acepta la invitación. No asumir éxito porque el job de GitHub muestre upload completado; **Apple debe procesarlo**.
+
+Los primeros intentos podrían revelar errores de firma, permisos API, bundle IDs, perfiles de grupo, iconos/metadatos, versión Xcode o compatibilidad de extensiones. En esos casos revisar logs con cuidado, nunca copiar claves o tokens. Dejar los recibos y el estado de Apple como verdad.
+
+## D. Criterios de aceptación del primer iPhone
+
+La app actual integra una superficie nativa (Continuidad, Chat, Agenda), Share Extension/WidgetKit y un puente WKWebView a la **PWA completa**. Su intención es no perder nada de lo ya construido. Aun así, un wrapper WebKit **no prueba paridad**: comprobar acceso a Isabella real, planificación, Work/archivos, Threads, Lecturas/Sofía, memoria/recibos, notificaciones, teclado, navegación, descargas y el logout conjunto. La sesión web es independiente de la nativa; iniciar sesión en ambas con la **misma cuenta MINDS**. La captura de Share Extension queda local hasta que se complete #221; no se debe prometer que ya alimenta conocimiento en Supabase. APNs y funciones Watch siguen siendo trabajos posteriores.
+
+El primer objetivo es tener un binario auténtico en el iPhone y abrir una matriz de pruebas; **no declarar producto terminado** tras el primer upload. No crear una segunda Isabella, no cambiar Source-First, permisos, datos de producción ni el alcance de Build 101.
