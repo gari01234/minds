@@ -53,3 +53,17 @@ test('macOS 26 CI validates the distribution workflow without production credent
   assert.ok(ci.includes('xcodegen generate'));
   assert.ok(ci.includes('-sdk iphonesimulator'));
 });
+
+test('Window is installed under the approved visible name with a 1024px opaque App Store icon', () => {
+  assert.ok(project.includes('INFOPLIST_KEY_CFBundleDisplayName: Window'));
+  assert.ok(project.includes('ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon'));
+  assert.ok(project.includes('      - Assets.xcassets'));
+  const manifest = JSON.parse(read('apps/isabella-ios/Assets.xcassets/AppIcon.appiconset/Contents.json'));
+  assert.equal(manifest.images[0].size, '1024x1024');
+  assert.equal(manifest.images[0].filename, 'Window-AppIcon-1024.png');
+  const script = read('apps/isabella-ios/Config/prepare-app-icon.sh');
+  assert.ok(script.includes('icon-512.png'));
+  assert.ok(script.includes('sips -s format jpeg -z 1024 1024'));
+  assert.equal(workflow.split('bash Config/prepare-app-icon.sh').length - 1, 2);
+  assert.ok(ci.includes('bash Config/prepare-app-icon.sh'));
+});
