@@ -52,6 +52,14 @@ def output(*args):
     return subprocess.check_output(args, stderr=subprocess.PIPE)
 
 
+def signing_authority(path):
+    # TN3161: the certificate chain requires two verbosity levels; -dv omits it.
+    details = subprocess.run(["codesign", "--display", "--verbose=2", str(path)],
+                             capture_output=True, check=True, text=True).stderr
+    return next((line.removeprefix("Authority=") for line in details.splitlines()
+                 if line.startswith("Authority=")), "")
+
+
 def validate_bundles(mode, root, bundle_id, team):
     apps = list(root.glob("*.app"))
     require(len(apps) == 1, "Expected one app")
@@ -72,8 +80,9 @@ def validate_bundles(mode, root, bundle_id, team):
         if mode == "distribution":
             profile = plistlib.loads(output("security", "cms", "-D", "-i", str(path / "embedded.mobileprovision")))
             validate_distribution(profile, entitlements, bundle_id + suffix, f"group.{bundle_id}", team)
-            signature = subprocess.run(["codesign", "-dv", str(path)], capture_output=True, check=True).stderr.decode()
-            require("Authority=Apple Distribution:" in signature or "Authority=iPhone Distribution:" in signature, f"{target}: no distribution signing authority")
+            authority = signing_authority(path)
+            require(authority, f"{target}: codesign did not report a signing authority")
+            require(authority.startswith(("Apple Distribution:", "iPhone Distribution:")), f"{target}: no distribution signing authority")
         print(f"{target}: {mode} verified; bundle={bundle_id + suffix}; App Group verified; version={current[0]} ({current[1]})")
 
 
