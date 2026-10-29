@@ -1,11 +1,14 @@
 # MINDS XVIII · Handoff operativo integral
 **Fecha de corte:** jueves, 29 de octubre de 2026 · Europe/Berlin  
 **Repositorio canónico:** [gari01234/minds](https://github.com/gari01234/minds)  
-**Último HEAD de main verificado:** `d365a4f8104daa3a18c099f293cde5582a5a1f62`  
+**Último HEAD de implementación verificado (actualización tras run #6):** `1c59caf44cfb8f294c75e2b0e9d2d3642b6968e0`
+
 **Foco operativo inmediato:** desbloquear la primera distribución firmada de **Window** en TestFlight.  
 **Naturaleza:** snapshot documental y continuidad entre chats, no una release, ni una autorización de migración o modificación de producción.
 
-> **Para retomar:** No volver a registrar la app, los App IDs, la API key ni los secretos de GitHub. Todo eso ya está configurado según capturas. La ejecución de GitHub Actions **TestFlight #2 / run 40721375717** concluyó con **failure** el 28/10/2026: preflight exitoso y fallo en **Archive using Apple's automatic signing** por ausencia de *iOS App Development provisioning profiles* y mensaje de Apple sobre no tener dispositivos de desarrollo registrados. El paso de subida NO se ejecutó. Hay que resolver **firma de distribución App Store Connect para los tres targets**; no confundir TestFlight con instalación de desarrollo en un iPhone registrado.
+> **Para retomar — actualización del 29/10/2026 tras los runs #5 y #6:** el bloqueo vigente ya no es el archivo ni el permiso de la API key. Las PRs #233–235 están fusionadas y CI pasó. Archivo y exportación App Store Connect funcionan con la clave Admin actual. Los tres targets del IPA exportado fallan su requisito designado: `cn_matches_authority=false`, pero `cn_matches_after_nfc=true`, y `uses_cdhash=false`. El run #6 es [40908457243](https://github.com/gari01234/minds/actions/runs/40908457243); el upload se detuvo antes de contactar con la subida de Apple. Apple DTS reprodujo este tipo de fallo Unicode en [el hilo 843700](https://developer.apple.com/forums/thread/843700), reporte existente **FB24633162**, y recomienda solicitar a Developer Programs un nombre técnico de equipo sin diacríticos, sin cambiar el nombre legal. Después debe revisarse la sustitución del certificado de distribución afectado, que conserva el nombre de emisión. El contacto de soporte todavía no se ha enviado. No repetir upload ni crear otra API key para este mismo estado. Ver evidencia, límites y siguiente acción en [la guía actualizada](../apps/isabella-ios/TESTFLIGHT-SIN-MAC.md#c1-bloqueo-unicode-confirmado-en-los-runs-5-y-6).
+
+**Lectura del historial:** las secciones siguientes conservan el corte inicial del run #2 y las decisiones de producto. Su plan de reparación inicial fue ejecutado parcialmente por las PRs #233–235; la actualización anterior y la sección C.1 de la guía sustituyen ese plan operativo para la firma. El caso Apple, el cambio de nombre técnico, la sustitución del certificado, una nueva subida y la aceptación en iPhone siguen pendientes. No confundir el reporte de otro desarrollador `FB24633162` con un caso propio ya abierto.
 
 ## 1. Naturaleza, propósito e identidad del proyecto
 

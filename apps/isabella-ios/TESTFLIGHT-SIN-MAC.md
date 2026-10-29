@@ -1,6 +1,6 @@
 # Window · Primera instalación mediante TestFlight (sin Mac)
 
-**Estado 29/10/2026, tras el run #4:** archivo y exportación App Store Connect correctos. Los controles de certificado de distribución, perfiles, equipo, Bundle IDs, versiones y App Group pasaron para **los tres targets**, incluido Widget. La subida sí se ejecutó, pero Apple rechazó el IPA: tres errores `90035` de requisitos de firma y tres `90360` por metadatos ausentes en Share/Widget. **No hay un build aceptado ni probado en iPhone.** Se corrigen los metadatos y se refuerza la verificación local del requisito interno de cada firma; la causa concreta de `90035` todavía debe aislarse en un IPA recién exportado. No repetir App IDs, App Group, ficha Window ni credenciales. La clave Admin existente ya permitió la firma cloud. El icono sigue siendo provisional.
+**Estado 29/10/2026, tras los runs #5 y #6:** archivo y exportación App Store Connect correctos, pero los tres targets exportados incumplen su requisito designado. El nombre exigido por ese requisito y la autoridad del certificado mostrada por `codesign` difieren y solo coinciden tras normalización Unicode NFC. El control de la PR #235 lo detecta y detiene la subida. La causa coincide con el fallo reproducido por Apple DTS en el reporte existente **FB24633162**; ver sección C.1. **No hay un build aceptado ni probado en iPhone.** El siguiente paso es contactar con Developer Programs por el nombre técnico del equipo y el certificado afectado. No repetir el mismo upload ni regenerar la API key. App IDs, App Group, ficha Window y clave Admin ya están configurados; el icono sigue siendo provisional.
 
 ## A. Prueba de compilación (superada el 28/10/2026)
 
@@ -38,7 +38,7 @@ Nunca uses un secreto de repositorio público para estos valores; se referencian
 
 ## C. Primer TestFlight real
 
-En el mismo workflow manual de GitHub elige `main` y modo **`upload`**, una sola vez después de que CI del ajuste pase. El preflight de simulador debe pasar primero; luego se accede al entorno `apple-testflight` y se valida la configuración existente. No repetir el alta de App IDs, ficha, API key ni secretos.
+**Ahora hay un bloqueo de firma externo al build: resolver primero la sección C.1.** Una vez corregido el estado del nombre técnico/certificado, en el mismo workflow manual de GitHub elegir `main` y modo **`upload`**, una sola vez. El preflight de simulador debe pasar primero; luego se accede al entorno `apple-testflight` y se valida la configuración existente. No repetir el alta de App IDs, ficha, API key ni secretos.
 
 El archivo para dispositivo se prepara con `CODE_SIGN_IDENTITY=-`, `AD_HOC_CODE_SIGNING_ALLOWED=YES` y `CODE_SIGN_STYLE=Automatic`, sin credenciales ni peticiones de aprovisionamiento en el comando de archivo. Esta firma local conserva los entitlements de app, Share y Widget; **no es la distribución Ad Hoc de Apple, no permite instalar el archivo y no requiere UDID**. `Release` por sí solo no selecciona distribución: en el run #2 se pidió desarrollo antes de llegar a la exportación. Desactivar toda firma con `CODE_SIGNING_ALLOWED=NO` en este archivo arriesgaría perder entitlements; se conserva únicamente en simulador.
 
@@ -61,6 +61,26 @@ Referencias: [firma de distribución de Apple](https://help.apple.com/xcode/mac/
 El workflow no publica en App Store. Antes de XcodeGen, prepara un icono provisional AppIcon de 1024 px, sin alfa, a partir del icono de la PWA, y usa «Window» como nombre visible en iPhone. Abre https://appstoreconnect.apple.com/apps > Window > TestFlight para ver el resultado del procesamiento de Apple. Si aparece el build, crea un grupo **Internal Testing** y añade tu usuario App Store Connect; instala [TestFlight](https://apps.apple.com/app/testflight/id899247664) en iPhone y acepta la invitación. No asumir éxito porque el job de GitHub muestre upload completado; **Apple debe procesarlo**.
 
 Los primeros intentos podrían revelar errores de firma, permisos API, bundle IDs, perfiles de grupo, iconos/metadatos, versión Xcode o compatibilidad de extensiones. En esos casos revisar logs con cuidado, nunca copiar claves o tokens. Dejar los recibos y el estado de Apple como verdad.
+
+### C.1. Bloqueo Unicode confirmado en los runs #5 y #6
+
+Los runs [#5 / 40899368372](https://github.com/gari01234/minds/actions/runs/40899368372) y [#6 / 40908457243](https://github.com/gari01234/minds/actions/runs/40908457243) usaron `main` en `1c59caf`, con la PR #235. Ambos pasaron preflight, archivo de los tres targets y exportación App Store Connect; ambos fallaron en la verificación del IPA y omitieron la subida. En cada target el sello es válido en disco, pero no se satisface el requisito designado. El diagnóstico devuelve exactamente:
+
+```json
+{"cn_matches_after_nfc": true, "cn_matches_authority": false, "uses_cdhash": false, "uses_certificate_cn": true}
+```
+
+Esto confirma una diferencia de representación Unicode entre el CN exigido por el requisito y la autoridad mostrada por `codesign`. No se han publicado nombres del titular, certificados ni perfiles, ni se ha obtenido en este entorno un volcado DER del certificado. La evidencia coincide con el fallo reproducido por Apple DTS en [Apple Developer Forums, hilo 843700](https://developer.apple.com/forums/thread/843700), reporte de otro desarrollador **FB24633162**. Otro [hilo específico de firma cloud](https://developer.apple.com/forums/thread/848968) remite a esa misma respuesta. No atribuir el rechazo a los avisos de Node.js ni a la espera de runners macOS: son incidencias distintas.
+
+Apple DTS indica contactar con [Apple Developer Support / Developer Programs](https://developer.apple.com/contact/) para retirar los caracteres no ASCII del **nombre técnico del equipo**, manteniendo el nombre legal. El hilo también aborda membresías individuales. Un participante confirmó que consiguió distribuir tras ese cambio y la sustitución de los certificados que aún llevaban el nombre anterior. Es una vía documentada; todavía no está aplicada ni validada para este equipo.
+
+La petición debe identificar Team ID `B74XM2TH77`, membresía individual y Window (`com.gari01234.minds`, `.share`, `.widget`), citar `FB24633162` y solicitar confirmación de la corrección para esta cuenta. El formulario requiere iniciar sesión con Apple. **No se ha enviado aún una solicitud ni existe un número de caso propio.** Evitar cambiar el nombre legal, el nombre de la app o los Bundle IDs como supuesto arreglo. La [guía de actualización de cuenta](https://developer.apple.com/help/account/membership/updating-your-account-information/) distingue el nombre del Apple Account de los datos de la membresía: editar el primero no corrige por sí solo el segundo.
+
+Tras la confirmación de Apple, identificar el certificado cloud de distribución que conserva el nombre anterior y revisar su alcance antes de sustituirlo. No revocar certificados en bloque ni la API key. La [revocación invalida los perfiles que incluyen ese certificado](https://developer.apple.com/help/account/certificates/revoke-a-certificate/); coordinar el certificado concreto y sus perfiles con el propietario/soporte. Un cambio de nombre no reescribe certificados ya emitidos. Después, una nueva exportación debe producir firmas que satisfagan sus requisitos y superar los controles de los tres targets antes de subir. La aceptación y procesamiento de TestFlight se verifican aparte.
+
+Se contrastó la alternativa de firma local: Apple permite [usar un certificado Apple Distribution con clave privada en el llavero del runner](https://developer.apple.com/help/account/certificates/cloud-managed-certificates/). Un desarrollador documentó [re-firma con un requisito basado en Team ID/OU](https://stefanomondino.com/posts/a-grave-accent-broke-my-testflight-upload/) para evitar el CN Unicode. No se ha implementado ni probado esa alternativa aquí: requiere una identidad privada local y un flujo de firma distinto. No fingir que basta normalizar el texto después de exportar, ni saltar la verificación: cambiar el requisito exige una firma válida nueva.
+
+La CI de #235 y de `main` pasó en Xcode 26.6: once pruebas sin omisiones, simulador y archivo local de los tres targets. Las versiones de archivo se verificaron como `0.1.0 (42)` y `0.1.0 (43)` en CI; los runs reales fallidos usaron builds `5` y `6`. Los metadatos ausentes del run #4 ya están corregidos. El éxito local no valida una firma cloud generada después.
 
 ## D. Criterios de aceptación del primer iPhone
 
