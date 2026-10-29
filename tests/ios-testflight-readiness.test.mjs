@@ -42,6 +42,8 @@ test('Native App, Share and Widget have distinct IDs and consistent App Group', 
   assert.ok(project.includes('      - target: MINDSShare\n        embed: true'));
   assert.ok(project.includes('      - target: MINDSWidget\n        embed: true'));
   assert.ok(archive.includes('MINDS_BUNDLE_ID="$APP_BUNDLE_ID"'));
+  assert.equal(project.split('CFBundleShortVersionString: "$(MARKETING_VERSION)"').length - 1, 2);
+  assert.equal(project.split('CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"').length - 1, 2);
 });
 
 test('Device archive preserves entitlements offline; verified distribution export must precede upload', () => {
