@@ -15,7 +15,8 @@ test("TestFlight signing requires manual trigger, main and protected Apple envir
   assert.match(yml,/vars\.ISABELLA_IOS_BUNDLE_ID/);
   assert.match(yml,/-allowProvisioningUpdates/);
   assert.match(yml,/-exportArchive/);
-  assert.match(yml,/CODE_SIGN_STYLE=Automatic/);
-  assert.match(yml,/<string>upload<\/string>/);
+  assert.match(yml,/archive-for-testflight\.sh/);
+  assert.match(yml,/<string>export<\/string>/);
+  assert.match(yml,/altool --upload-app/);
   assert.match(yml,/if: always\(\)/);
 });
