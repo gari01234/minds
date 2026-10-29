@@ -82,6 +82,20 @@ for p, e in cases:
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
 
+test('macOS reads the real certificate authority from signed code without Apple credentials',
+  {skip: process.platform !== 'darwin'}, () => {
+  const result = spawnSync('python3', ['-B', '-c', `
+import importlib.util
+spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Config/verify-testflight-signing.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+# Use an Apple-signed system binary: this catches -dv omitting the Authority fields.
+authority = m.signing_authority('/usr/bin/codesign')
+assert authority, 'Failed to read the certificate chain of a signed macOS binary'
+assert not authority.startswith(('Apple Distribution:', 'iPhone Distribution:')), 'System code is not our distribution identity'
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
 test('macOS 26 CI validates the distribution workflow without production credentials', () => {
   for(const required of ['runs-on: macos-26','ios-testflight.yml',
       'tests/ios-testflight-readiness.test.mjs','CODE_SIGNING_ALLOWED=NO']) {
