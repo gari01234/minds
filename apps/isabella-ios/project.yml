@@ -58,6 +58,7 @@ targets:
     info:
       path: Config/Share-Info.plist
       properties:
+        CFBundleDisplayName: Window
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"
@@ -65,10 +66,11 @@ targets:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
           NSExtensionAttributes:
-            NSExtensionActivationSupportsText: true
-            NSExtensionActivationSupportsWebURLWithMaxCount: 1
-            NSExtensionActivationSupportsImageWithMaxCount: 1
-            NSExtensionActivationSupportsFileWithMaxCount: 1
+            NSExtensionActivationRule:
+              NSExtensionActivationSupportsText: true
+              NSExtensionActivationSupportsWebURLWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 1
+              NSExtensionActivationSupportsFileWithMaxCount: 1
     entitlements:
       path: Config/Share.entitlements
       properties:
@@ -89,6 +91,7 @@ targets:
     info:
       path: Config/Widget-Info.plist
       properties:
+        CFBundleDisplayName: Window
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"

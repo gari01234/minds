@@ -5,8 +5,10 @@ Print only a small non-secret receipt, never raw profiles or full build settings
 import datetime
 import json
 import plistlib
+import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
 
 TARGETS = {"MINDS": "", "MINDSShare": ".share", "MINDSWidget": ".widget"}
@@ -60,21 +62,67 @@ def signing_authority(path):
                  if line.startswith("Authority=")), "")
 
 
+def requirement_summary(requirement, authority):
+    # Report comparisons, never the certificate holder's name or raw requirement.
+    summary = {"uses_cdhash": "cdhash " in requirement,
+               "uses_certificate_cn": "certificate leaf[subject.CN]" in requirement}
+    match = re.search(r'certificate leaf\[subject.CN\]\s*=\s*(0x[0-9a-fA-F]+|"[^"\\]*")', requirement)
+    if match and authority:
+        value = match[1]
+        cn = bytes.fromhex(value[2:]).decode("utf-8") if value.startswith("0x") else value[1:-1]
+        summary.update(cn_matches_authority=cn == authority,
+                       cn_matches_after_nfc=unicodedata.normalize("NFC", cn) == unicodedata.normalize("NFC", authority))
+    return summary
+
+
+def verify_signature(path):
+    # TN2206: verbose verification also evaluates the code's own designated
+    # requirement. A valid seal alone did not catch run #4's Apple 90035 errors.
+    result = subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(path)],
+                            capture_output=True, text=True)
+    if result.returncode:
+        try:
+            details = subprocess.run(["codesign", "--display", "--requirements", "-", str(path)],
+                                     capture_output=True, check=True, text=True)
+            summary = requirement_summary(details.stdout + details.stderr, signing_authority(path))
+        except (ValueError, OSError, subprocess.CalledProcessError):
+            summary = {"requirement_diagnostic_unavailable": True}
+        reason = result.stderr.strip().replace(str(path), path.name)
+        raise ValueError(f"{path.name}: signature verification failed: {reason}; {json.dumps(summary, sort_keys=True)}")
+
+
+def validate_metadata(info, target):
+    require(info.get("CFBundleDisplayName") == "Window", f"{target}: missing or unexpected CFBundleDisplayName")
+    if target == "MINDSShare":
+        rule = info.get("NSExtension", {}).get("NSExtensionAttributes", {}).get("NSExtensionActivationRule")
+        require(isinstance(rule, dict), "MINDSShare: missing activation rule dictionary")
+        require(rule.get("NSExtensionActivationSupportsText") is True, "MINDSShare: missing text support")
+        for kind in ("WebURL", "Image", "File"):
+            value = rule.get(f"NSExtensionActivationSupports{kind}WithMaxCount")
+            require(type(value) is int and value == 1, f"MINDSShare: unexpected {kind} activation limit")
+
+
 def validate_bundles(mode, root, bundle_id, team):
     apps = list(root.glob("*.app"))
     require(len(apps) == 1, "Expected one app")
     app = apps[0]
     require({p.name for p in (app / "PlugIns").glob("*.appex")} == {"MINDSShare.appex", "MINDSWidget.appex"}, "Missing or unexpected extensions")
     version = None
+    signature_errors = []
     for target, suffix in TARGETS.items():
         path = app if not suffix else app / "PlugIns" / f"{target}.appex"
         info = plistlib.loads((path / "Info.plist").read_bytes())
+        validate_metadata(info, target)
         require(info.get("CFBundleIdentifier") == bundle_id + suffix, f"{target}: bundle ID mismatch")
         current = (info.get("CFBundleShortVersionString"), info.get("CFBundleVersion"))
         require(all(current), f"{target}: missing version/build")
         version = version or current
         require(current == version, f"{target}: version/build mismatch")
-        output("codesign", "--verify", "--strict", str(path))
+        try:
+            verify_signature(path)
+        except ValueError as error:
+            signature_errors.append(str(error))
+            continue
         entitlements = plistlib.loads(output("codesign", "-d", "--entitlements", ":-", str(path)))
         require(entitlements.get(GROUPS) == [f"group.{bundle_id}"], f"{target}: signed App Group missing")
         if mode == "distribution":
@@ -84,6 +132,7 @@ def validate_bundles(mode, root, bundle_id, team):
             require(authority, f"{target}: codesign did not report a signing authority")
             require(authority.startswith(("Apple Distribution:", "iPhone Distribution:")), f"{target}: no distribution signing authority")
         print(f"{target}: {mode} verified; bundle={bundle_id + suffix}; App Group verified; version={current[0]} ({current[1]})")
+    require(not signature_errors, "\n".join(signature_errors))
 
 
 if __name__ == "__main__":

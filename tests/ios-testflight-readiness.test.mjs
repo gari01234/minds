@@ -96,6 +96,73 @@ assert not authority.startswith(('Apple Distribution:', 'iPhone Distribution:'))
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
 
+test('Bundle metadata rejects the three omissions reported by Apple in run #4', () => {
+  const result = spawnSync('python3', ['-B', '-c', `
+import copy, importlib.util
+spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Config/verify-testflight-signing.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+rule = {'NSExtensionActivationSupportsText': True, **{'NSExtensionActivationSupports' + kind + 'WithMaxCount': 1 for kind in ('WebURL', 'Image', 'File')}}
+share = {'CFBundleDisplayName': 'Window', 'NSExtension': {'NSExtensionAttributes': {'NSExtensionActivationRule': rule}}}
+for target in m.TARGETS:
+    info = share if target == 'MINDSShare' else {'CFBundleDisplayName': 'Window'}
+    m.validate_metadata(info, target)
+    bad = copy.deepcopy(info); del bad['CFBundleDisplayName']
+    try: m.validate_metadata(bad, target)
+    except ValueError: pass
+    else: raise AssertionError('Missing display name accepted: ' + target)
+for attributes in (rule, {'NSExtensionActivationRule': 'TRUEPREDICATE'}, {'NSExtensionActivationRule': {}}):
+    bad = copy.deepcopy(share); bad['NSExtension']['NSExtensionAttributes'] = attributes
+    try: m.validate_metadata(bad, 'MINDSShare')
+    except ValueError: pass
+    else: raise AssertionError('Invalid activation rule accepted')
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
+test('Signing diagnostics distinguish retained hashes and Unicode mismatches without logging names', () => {
+  const result = spawnSync('python3', ['-B', '-c', `
+import importlib.util, json, unicodedata
+spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Config/verify-testflight-signing.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+authority = 'Apple Distribution: Synthetic Società (A123456789)'
+cn = unicodedata.normalize('NFD', authority)
+summary = m.requirement_summary('designated => certificate leaf[subject.CN] = 0x' + cn.encode().hex(), authority)
+assert summary['uses_certificate_cn'] and not summary['cn_matches_authority'] and summary['cn_matches_after_nfc']
+assert 'Synthetic' not in json.dumps(summary)
+summary = m.requirement_summary('designated => certificate leaf[subject.CN] = "' + authority + '"', authority)
+assert summary['cn_matches_authority']
+assert m.requirement_summary('designated => cdhash H"1234"', '')['uses_cdhash']
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
+test('macOS rejects a valid seal with an unsatisfied designated requirement before upload',
+  {skip: process.platform !== 'darwin'}, () => {
+  const result = spawnSync('python3', ['-B', '-c', `
+import importlib.util, subprocess, tempfile
+from pathlib import Path
+spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Config/verify-testflight-signing.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+with tempfile.TemporaryDirectory() as temp:
+    source, binary = Path(temp) / 'main.c', Path(temp) / 'fixture'
+    source.write_text('int main(void) { return 0; }')
+    subprocess.run(['xcrun', 'clang', str(source), '-o', str(binary)], check=True, capture_output=True)
+    for identifier in ('com.minds.fixture', 'com.minds.wrong'):
+        subprocess.run(['codesign', '--force', '--sign', '-', '--identifier', 'com.minds.fixture',
+                        '--requirements', '=designated => identifier "' + identifier + '"', str(binary)], check=True, capture_output=True)
+        # The previous gate accepts both seals, including the intentionally bad DR.
+        subprocess.run(['codesign', '--verify', '--strict', str(binary)], check=True, capture_output=True)
+        if identifier == 'com.minds.fixture':
+            m.verify_signature(binary)
+        else:
+            try: m.verify_signature(binary)
+            except ValueError as error:
+                assert 'does not satisfy its designated Requirement' in str(error), str(error)
+            else: raise AssertionError('Unsatisfied designated requirement accepted')
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
 test('macOS 26 CI validates the distribution workflow without production credentials', () => {
   for(const required of ['runs-on: macos-26','ios-testflight.yml',
       'tests/ios-testflight-readiness.test.mjs','CODE_SIGNING_ALLOWED=NO']) {
