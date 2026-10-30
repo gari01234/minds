@@ -82,5 +82,5 @@ test('PWA workload release pins HTML and SW to the same native assets',()=>{
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v169/);
+  assert.match(sw,/isabella-shell-v170/);
 });

@@ -76,3 +76,7 @@ entrypoint = "./functions/isabella-work-ingest-runner/index.ts"
 [functions.isabella-self-review]
 verify_jwt = false
 entrypoint = "./functions/isabella-self-review/index.ts"
+
+[functions.isabella-code-preparation]
+verify_jwt = false
+entrypoint = "./functions/isabella-code-preparation/index.ts"
