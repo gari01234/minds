@@ -74,10 +74,9 @@ document.body.innerHTML = `
     <section id="workScreen" class="screen work-screen" data-screen="work">
       <div class="work-shell">
         <div class="work-head">
-          <div><h1 id="workProjectTitle">Bernried</h1></div>
+          <div><h1 id="workProjectTitle">Work</h1></div>
           <div class="work-project-switch" aria-label="Proyecto">
-            <button data-work-project="bernried" class="active">Bernried</button>
-            <button data-work-project="schwarz">Schwarz</button>
+            <span class="small">Cargando proyectos…</span>
           </div>
           <span class="minds-menu-slot" data-menu-slot="work"></span>
         </div>

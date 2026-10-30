@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v168';
+const CACHE_NAME = 'isabella-shell-v169';
 const SHELL = [
   './',
   './index.html',
@@ -19,14 +19,14 @@ const SHELL = [
   './dashboard-daily-polish.css?v=1',
   './daily-controls.css?v=1',
   './mobile-refinement.css?v=1',
-  './shell.js?v=104',
+  './shell.js?v=105',
   './situation.js?v=5',
   './turn-integrity.js?v=3',
     './calendar-plan.js?v=2',
   './day-layout.js?v=1',
 './app.js?v=131',
   './work-team.js?v=1',
-  './work.js?v=30',
+  './work.js?v=31',
   './sync.js?v=pwa39',
     './task-team.js?v=1',
 './task-detail.js?v=4',

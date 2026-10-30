@@ -5,7 +5,7 @@ const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
 let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
 const workSignedCache=new Map();
-let team=[];
+let team=[],reviewSettings=null,reviewReportLimit=20;
 /* Purely visual preferences and labels; no task statuses are rewritten. */
 const WORK_MOBILE_LAYOUT_KEY='minds-work-mobile-planner-layout-v1';
 
@@ -16,7 +16,7 @@ async function getSession(){if(!sb)return null;const {data}=await sb.auth.getSes
 async function loadProject(){const session=await getSession();if(!session)return null;const {data,error}=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('client_key',projectKey).maybeSingle();if(error)throw error;return data||null}
 function bindStatic(){
   if(bound)return;bound=true;
-  $$('[data-work-project]').forEach(b=>b.onclick=()=>{projectKey=b.dataset.workProject;localStorage.setItem('minds-work-project',projectKey);folderId=null;activeThreadId=null;void render()});
+  $('.work-project-switch')?.addEventListener('click',e=>{const b=e.target.closest('[data-work-project]');if(!b)return;projectKey=b.dataset.workProject;localStorage.setItem('minds-work-project',projectKey);folderId=null;activeThreadId=null;reviewReportLimit=20;void render()});
   $$('[data-work-view]').forEach(b=>b.onclick=()=>{view=b.dataset.workView;localStorage.setItem('minds-work-view',view);void render()});
   const input=$('#workFileInput');if(input)input.onchange=()=>{const fs=[...(input.files||[])];input.value='';if(fs.length)void uploadFiles(fs)};
   const body=$('#workBody');
@@ -35,10 +35,52 @@ async function render(){
   try{
     const session=await getSession();
     if(!session){$('#workBody').innerHTML='<div class="work-empty">Conecta la memoria de MINDS para abrir Work.</div>';return}
+    const catalog=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('archived',false).order('name');
+    if(catalog.error)throw catalog.error;
+    const switcher=$('.work-project-switch');
+    if(switcher)switcher.innerHTML=(catalog.data||[]).map(p=>`<button data-work-project="${esc(p.client_key)}">${esc(p.name)}</button>`).join('');
+    if(!(catalog.data||[]).some(p=>p.client_key===projectKey)&&catalog.data?.length)projectKey=catalog.data[0].client_key;
     project=await loadProject();paintChrome();
+    const settings=project?await sb.from('minds_self_review_settings').select('enabled,timezone,local_hour').eq('project_id',project.id).eq('user_id',session.user.id).maybeSingle():null;
+    reviewSettings=settings?.data||null;
     if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
-    if(view==='overview')await renderOverview();else if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
+    if(view==='overview'&&reviewSettings)await renderSelfReview();else if(view==='overview')await renderOverview();else if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
   }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
+}
+async function renderSelfReview(){
+  const body=$('#workBody');
+  const [reportsQ,proposalsQ]=await Promise.all([
+    sb.from('minds_self_review_reports').select('id,review_key,window_start,window_end,status,report,evidence,coverage,error,created_at,completed_at',{count:'exact'}).eq('project_id',project.id).order('created_at',{ascending:false}).limit(reviewReportLimit),
+    sb.from('minds_self_review_proposals').select('id,report_id,title,details,status,owner_note,created_at,reviewed_at').eq('project_id',project.id).order('created_at',{ascending:false}).limit(200)
+  ]);
+  if(reportsQ.error||proposalsQ.error)throw reportsQ.error||proposalsQ.error;
+  const reports=reportsQ.data||[],proposals=proposalsQ.data||[];
+  const labels={proposed:'Pendiente',accepted:'Aceptada para trabajar',rejected:'Descartada',testing:'En prueba',implemented:'Implementada',verified:'Verificada'};
+  const prose=t=>`<p style="white-space:pre-wrap">${esc(t||'')}</p>`;
+  const field=(label,text)=>text?`<strong>${label}</strong>${prose(text)}`:'';
+  body.innerHTML=`<div class="work-threads">
+    <div class="work-desktop-toolbar"><div><strong>Revisión de Isabella</strong><p class="small">${reviewSettings.enabled?'Revisión diaria':'Revisión pausada'} · ${String(reviewSettings.local_hour).padStart(2,'0')}:15 · ${esc(reviewSettings.timezone)}. Los informes se guardan aquí, sin avisos diarios.</p><p class="small">Aceptar una propuesta permite planificarla; no cambia el código, los permisos ni el comportamiento de Isabella.</p></div></div>
+    <h3>Propuestas · ${proposals.filter(p=>p.status==='proposed').length} pendientes</h3>
+    ${proposals.length?proposals.map(p=>`<details class="work-thread-row" style="display:block;padding:14px"><summary><strong>${esc(p.title)}</strong> · ${esc(labels[p.status]||p.status)}</summary>
+      ${field('Observación',p.details.observation)}${field('Causa probable, pendiente de comprobar',p.details.suspected_cause)}${field('Cambio propuesto',p.details.change)}${field('Prueba de aceptación',p.details.acceptance_test)}${field('Qué hace falta',p.details.owner_action)}
+      <p class="small">Propuesta ${esc(p.id)} · Informe ${esc(p.report_id)} · Confianza declarada: ${esc(p.details.confidence)}</p>
+      <details><summary>Referencias de evidencia</summary>${prose((p.details.evidence_refs||[]).join('\n'))}<p class="small">Puedes consultar estos registros en el informe de origen.</p></details>
+      ${['proposed','accepted','rejected'].includes(p.status)?`<label>Tu comentario<textarea data-review-note="${p.id}" rows="3">${esc(p.owner_note)}</textarea></label><div class="work-thread-toolbar-actions"><button data-review-decision="accepted" data-id="${p.id}">Aceptar propuesta</button><button data-review-decision="rejected" data-id="${p.id}">Descartar</button><button data-review-decision="proposed" data-id="${p.id}">Dejar pendiente</button></div>`:prose(p.owner_note)}
+    </details>`).join(''):'<p>Todavía no hay propuestas. Una revisión puede concluir sin proponer cambios.</p>'}
+    <h3>Informes · ${reportsQ.count||0}</h3>
+    ${reports.length?reports.map(r=>`<details class="work-thread-row" style="display:block;padding:14px"><summary><strong>${r.review_key==='baseline'?'Revisión inicial':esc(r.review_key)}</strong> · ${esc({completed:'Guardado',running:'En revisión',pending:'Pendiente',failed:'No se pudo completar'}[r.status])}</summary>
+      <p class="small">${esc(new Date(r.window_start).toLocaleString('es-ES'))} — ${esc(new Date(r.window_end).toLocaleString('es-ES'))} · ${esc(r.id)}</p>
+      ${r.status==='completed'?`${field('Evaluación',r.report.summary)}${field('Qué funcionó',r.report.what_worked)}${field('Límites de la revisión',r.report.limitations)}<p class="small">Esta evaluación es una propuesta del modelo, no una verificación independiente.</p>`:prose(r.error||'El informe aparecerá cuando termine la revisión.')}
+      <details><summary>Cobertura y evidencia consultada</summary>${prose(JSON.stringify(r.coverage,null,2))}${(r.evidence||[]).map(e=>`<details><summary>${esc(e.ref)}</summary><pre style="white-space:pre-wrap;overflow-wrap:anywhere">${esc(JSON.stringify(e,null,2))}</pre></details>`).join('')}</details>
+    </details>`).join(''):'<p>La primera revisión está pendiente. Se conservará aquí al terminar.</p>'}
+    ${(reportsQ.count||0)>reports.length?'<button data-more-reviews>Mostrar informes anteriores</button>':''}
+  </div>`;
+  $('[data-more-reviews]')?.addEventListener('click',()=>{reviewReportLimit+=20;void renderSelfReview()});
+  $$('[data-review-decision]').forEach(b=>b.onclick=async()=>{
+    b.disabled=true;
+    try{const note=$(`[data-review-note="${b.dataset.id}"]`)?.value||'';const result=await sb.rpc('minds_review_improvement_v1',{p_id:b.dataset.id,p_status:b.dataset.reviewDecision,p_note:note});if(result.error)throw result.error;await renderSelfReview();setStatus('Revisión guardada. No se ha aplicado ningún cambio al sistema.');}
+    catch(e){b.disabled=false;setStatus('No pude guardar tu revisión: '+(e.message||String(e)))}
+  });
 }
 let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnapshot=null;
 

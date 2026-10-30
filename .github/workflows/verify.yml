@@ -21,7 +21,7 @@ jobs:
       - uses: denoland/setup-deno@v2
         with:
           deno-version: v2.x
-      - run: deno check supabase/functions/_shared/mission-runtime.ts supabase/functions/_shared/mission-runtime-routing.ts supabase/functions/_shared/openai-agents-runtime.ts supabase/functions/_shared/capability-registry.ts supabase/functions/_shared/skill-registry.ts supabase/functions/_shared/persistent-work.ts supabase/functions/_shared/capability-runtime.ts supabase/functions/_shared/temporal-presentation.ts supabase/functions/_shared/constitutional-state.ts supabase/functions/isabella-agent-shadow/index.ts supabase/functions/isabella-chat/index.ts supabase/functions/isabella-capability-runtime/index.ts supabase/functions/isabella-capability-runner/index.ts supabase/functions/isabella-heartbeat/index.ts supabase/functions/isabella-mission-runner/index.ts supabase/functions/isabella-routine-runner/index.ts supabase/functions/isabella-push/index.ts supabase/functions/isabella-delivery-runner/index.ts supabase/functions/isabella-artifact-intake/index.ts supabase/functions/isabella-runtime-mcp/index.ts supabase/functions/isabella-operating-model/index.ts supabase/functions/isabella-work-ingest-runner/index.ts
+      - run: deno check supabase/functions/_shared/mission-runtime.ts supabase/functions/_shared/mission-runtime-routing.ts supabase/functions/_shared/openai-agents-runtime.ts supabase/functions/_shared/capability-registry.ts supabase/functions/_shared/skill-registry.ts supabase/functions/_shared/persistent-work.ts supabase/functions/_shared/capability-runtime.ts supabase/functions/_shared/temporal-presentation.ts supabase/functions/_shared/constitutional-state.ts supabase/functions/isabella-agent-shadow/index.ts supabase/functions/isabella-chat/index.ts supabase/functions/isabella-self-review/index.ts supabase/functions/isabella-capability-runtime/index.ts supabase/functions/isabella-capability-runner/index.ts supabase/functions/isabella-heartbeat/index.ts supabase/functions/isabella-mission-runner/index.ts supabase/functions/isabella-routine-runner/index.ts supabase/functions/isabella-push/index.ts supabase/functions/isabella-delivery-runner/index.ts supabase/functions/isabella-artifact-intake/index.ts supabase/functions/isabella-runtime-mcp/index.ts supabase/functions/isabella-operating-model/index.ts supabase/functions/isabella-work-ingest-runner/index.ts
       - run: deno test supabase/functions/_shared/mission-runtime.test.ts supabase/functions/_shared/mission-runtime-routing.test.ts supabase/functions/_shared/openai-agents-runtime.test.ts supabase/functions/_shared/temporal-presentation.test.ts supabase/functions/_shared/skill-registry.test.ts supabase/functions/_shared/persistent-work.test.ts supabase/functions/_shared/constitutional-state.test.ts
 
   build99c-postgres:
@@ -89,6 +89,41 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030153655_minds_reviewed_routine_management_v1.sql
       - name: Verify SQL integrity, RLS, and negative cases
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/routines-acceptance.sql
+
+  window-postgres:
+    name: Window self-review SQL integration (ephemeral PostgreSQL 17)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: minds_window_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d minds_window_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 8
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: minds_window_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Build synthetic owner-scoped schema
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/window-fixture.sql
+      - name: Apply exact Window migration (no production connection)
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030165228_minds_window_daily_review_v1.sql
+      - name: Apply required project category integration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030170807_minds_window_project_category.sql
+      - name: Verify SQL integrity, RLS, and negative cases
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/window-acceptance.sql
 
   browser-daily-workspace:
     name: Desktop browser layout (Chromium)

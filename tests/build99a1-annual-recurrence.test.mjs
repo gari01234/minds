@@ -64,7 +64,7 @@ test('PWA pins, confirmation and original safety guards remain intact',()=>{
   assert.match(ui,/await window\.ISABELLA_SYNC_NOW\?\.\(\)/);
   assert.match(ui,/!M\.sameSlots\(slots,rebuilt\.slots\)/);
   assert.match(ui,/\.insert\(inserted\)\.select\('client_key'\)/);
-  assert.match(sw,/isabella-shell-v168/);
+  assert.match(sw,/isabella-shell-v169/);
   for(const pin of ['time-plan-model.js?v=2','time-plan.js?v=3']){
     assert.ok(html.includes(pin),'HTML '+pin);
     assert.ok(sw.includes(pin),'SW '+pin);

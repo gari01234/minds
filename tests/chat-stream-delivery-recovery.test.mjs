@@ -67,7 +67,7 @@ test('Browser stream uses an opaque authenticated receipt ID and only falls back
   assert.doesNotThrow(()=>new Script(recovery,{filename:'chat-stream-recovery.js'}));
   assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=57'));
   assert.ok(sw.includes("'./chat-stream-recovery.js?v=1'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v168'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v169'"));
 });
 
 test('Server stores completion before terminal SSE result, never promoting partial to complete',()=>{
@@ -83,7 +83,7 @@ test('Server stores completion before terminal SSE result, never promoting parti
 });
 
 test('Continuation and Work cannot inherit the tiny light-response budget',()=>{
-  assert.match(server,/const responseContinuation=\/\(/);
+  assert.ok(server.includes("const responseContinuation=route.response_continuation===true"));
   assert.ok(server.includes('if(!background&&!fastAgenda&&(route.work||responseContinuation))budget='));
   assert.ok(server.includes('responseContinuation?6200:4400'));
   assert.ok(server.includes('if(scheduleAssessment)budget='));
