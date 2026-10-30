@@ -28,7 +28,7 @@ jobs:
         with:
           node-version: '24'
       - name: Prepare isolated test image
-        run: docker pull node:24-bookworm-slim
+        run: docker build -t minds-window-sandbox -f scripts/window-code.Dockerfile .
       - name: Prepare one Window proposal
         env:
           GH_TOKEN: ${{ github.token }}

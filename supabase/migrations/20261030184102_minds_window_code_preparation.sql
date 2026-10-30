@@ -1,4 +1,5 @@
-alter table public.minds_self_review_settings add column code_preparation_enabled boolean not null default false;
+alter table public.minds_self_review_settings add column code_preparation_enabled boolean not null default false,
+ add column code_repository text;
 create table public.minds_window_code_jobs (
  id uuid primary key default gen_random_uuid(),
  user_id uuid not null references auth.users(id) on delete cascade,
@@ -27,7 +28,7 @@ declare s public.minds_self_review_settings; p public.minds_self_review_proposal
 begin
  if p_sha !~ '^[0-9a-f]{40}$' or p_run !~ '^[0-9]+$' then raise exception 'invalid_run';end if;
  update public.minds_window_code_jobs set status='failed',completed_at=now(),result='{"reason":"worker_lease_expired"}' where status='preparing' and lease_until<now();
- for s in select * from public.minds_self_review_settings where enabled and code_preparation_enabled for update skip locked loop
+ for s in select * from public.minds_self_review_settings where enabled and code_preparation_enabled and code_repository='gari01234/minds' for update skip locked loop
   if exists(select 1 from public.minds_window_code_jobs where user_id=s.user_id and created_at>=date_trunc('day',now() at time zone 'Europe/Berlin') at time zone 'Europe/Berlin') then continue;end if;
   select * into p from public.minds_self_review_proposals x where x.user_id=s.user_id and x.project_id=s.project_id and x.status in ('proposed','accepted')
    and x.details->>'change_type' in ('code','tools','context','reasoning','communication') and not exists(select 1 from public.minds_window_code_jobs prior_job where prior_job.proposal_id=x.id)
@@ -44,7 +45,7 @@ grant execute on function public.minds_claim_window_code_v1(text,text) to servic
 create function public.minds_set_window_code_v1(p_enabled boolean) returns boolean language plpgsql security definer set search_path=public,pg_temp as $$
 begin
  if auth.uid() is null or p_enabled is null then raise exception 'auth_required';end if;
- update public.minds_self_review_settings set code_preparation_enabled=p_enabled where user_id=auth.uid();
+ update public.minds_self_review_settings set code_preparation_enabled=p_enabled where user_id=auth.uid() and code_repository='gari01234/minds';
  if not found then raise exception 'window_not_configured';end if;
  return p_enabled;
 end $$;

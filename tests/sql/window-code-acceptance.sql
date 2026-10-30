@@ -1,6 +1,7 @@
 begin;
 select set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
 select public.minds_enable_window_review_v1();
+update public.minds_self_review_settings set code_repository='gari01234/minds' where user_id=auth.uid();
 select public.minds_set_window_code_v1(true);
 do $$
 declare p uuid; project uuid; r uuid; j jsonb;

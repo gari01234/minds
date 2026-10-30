@@ -38,7 +38,7 @@ try{
   writeFileSync(target,f.content);
  }
  // No credentials, no host sockets, no network, read-only source, nonroot user.
- const run=spawnSync('docker',['run','--rm','--network=none','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=128','--memory=2g','--cpus=2','--read-only','--user=1000:1000','--tmpfs','/tmp:rw,exec,size=768m','--mount','type=bind,source='+dir+',target=/source,readonly','--env','GITHUB_SHA='+sha,'node:24-bookworm-slim','sh','-c','cp -R /source /tmp/work && cd /tmp/work && node --test --test-reporter=tap tests/*.test.mjs && node scripts/build.mjs'],{encoding:'utf8',timeout:480000,maxBuffer:12000000});
+ const run=spawnSync('docker',['run','--rm','--network=none','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=128','--memory=2g','--cpus=2','--read-only','--user=1000:1000','--tmpfs','/tmp:rw,exec,size=768m','--mount','type=bind,source='+dir+',target=/source,readonly','--env','GITHUB_SHA='+sha,'minds-window-sandbox','sh','-c','cp -R /source /tmp/work && cd /tmp/work && node --test --test-reporter=tap tests/*.test.mjs && node scripts/build.mjs'],{encoding:'utf8',timeout:480000,maxBuffer:12000000});
  const testExit=run.status??-1;
  console.log('Window isolated tests/build exit: '+testExit);
  if(testExit!==0){await api('finish',{...binding,status:'failed',test_exit_code:testExit,reason:'Candidate failed isolated regression tests/build. No branch or PR was published.'});process.exitCode=1;}
