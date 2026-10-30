@@ -22,6 +22,7 @@ function compact(state){
   ].sort((a,b)=>(a.date+(a.time||'')).localeCompare(b.date+(b.time||''))).slice(0,30);
   const recentLocal=(state.messages||[]).slice(-20).map(m=>({role:m.role==='assistant'?'assistant':'user',content:String(m.text||'').trim(),created_at:m.at||null,reply_to:m.replyTo?.id?{id:String(m.replyTo.id),role:m.replyTo.role==='assistant'?'assistant':'user',content:String(m.replyTo.text||'').trim()}:null})).filter(m=>m.content);
   return {
+    routine_review_version:window.MINDS_ROUTINE_REVIEW_VERSION===1?1:0,
     work_context:window.MINDS_WORK?.context?.()||null,
     current_date:td,
     ...temporal,

@@ -38,14 +38,14 @@ test('Calendario principal y miniatura consumen la misma identidad cromática',(
   assert.match(desk,/MINDS_CALENDAR_COLORS\.colorsForDay\(state,cell\.key\)/);
 });
 test('Bootstrap y Service Worker mantienen orden y cache coherentes',()=>{
-  const positions=['dashboard-model.js?v=5','calendar-colors.js?v=1','app.js?v=130','dashboard.js?v=7'].map(x=>index.indexOf('./'+x));
+  const positions=['dashboard-model.js?v=5','calendar-colors.js?v=1','app.js?v=131','dashboard.js?v=7'].map(x=>index.indexOf('./'+x));
   assert.ok(positions.every(x=>x>=0));
   assert.ok(positions.every((x,i)=>!i||x>positions[i-1]));
-  for(const asset of ['calendar-colors.js?v=1','daily-controls.css?v=1','app.js?v=130','dashboard.js?v=7']){
+  for(const asset of ['calendar-colors.js?v=1','daily-controls.css?v=1','app.js?v=131','dashboard.js?v=7']){
     assert.ok(index.includes('./'+asset));
     assert.ok(sw.includes("'./"+asset+"'"));
   }
-  assert.match(sw,/isabella-shell-v167/);
+  assert.match(sw,/isabella-shell-v168/);
   assert.match(index,/<link rel="stylesheet" href="\.\/daily-controls\.css\?v=1">/);
   assert.ok(index.indexOf('daily-controls.css?v=1')>index.indexOf('dashboard-daily-polish.css?v=1'));
 });

@@ -15,5 +15,5 @@ test('PWA installs updated Work UI with matching cache pins',()=>{
  const sw=read('apps/isabella/sw.js');
  assert.match(html,/work\.js\?v=30/);
  assert.match(sw,/work\.js\?v=30/);
- assert.match(sw,/isabella-shell-v167/);
+ assert.match(sw,/isabella-shell-v168/);
 });

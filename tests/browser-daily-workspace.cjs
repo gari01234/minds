@@ -50,7 +50,7 @@ try{
   assert.ok(await page.locator('#drawer [data-action="permissions"]').count(),'Permissions remain reachable');
   assert.ok(await page.locator('#drawer [data-action="reviews"]').count(),'Reviews remain reachable');
   const buildNote=await page.locator('#currentBuildInfo').innerText();
-  assert.match(buildNote,/Versión cargada · commit [0-9a-f]{12} · app v130/);
+  assert.match(buildNote,/Versión cargada · commit [0-9a-f]{12} · app v131/);
   console.log('BUILD_VERSION_DISPLAYED',buildNote);
   // Visual measurements execute against actual computed styles, not CSS source.
   const composer=page.locator('.desk-stage .desk-panel--chat .composer');

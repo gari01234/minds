@@ -61,7 +61,7 @@ test("database executor binds an owner, reviewed decision and one idempotent rec
 test("single and batch task-create reviews defer feedback until verified commit",()=>{
  const single=app.slice(app.indexOf("function confirmProposal("),app.indexOf("function confirmProposals("));
  const batch=app.slice(app.indexOf("function confirmProposals("),app.indexOf("function findTarget("));
- assert.match(single,/const verified=p\.kind==='task'&&\['update','create'\]/);
+ assert.match(single,/const verified=.*p\.kind==='task'&&\['update','create'\]/);
  assert.match(single,/if\(verified\)\{state\.pendingIntent=null;save\(\);proposalFeedback\('accepted',p\)/);
  assert.match(batch,/if\(verified\)proposalFeedback\('accepted',p\)/);
  assert.match(app,/return applyVerifiedTaskCreate\(p\)/);

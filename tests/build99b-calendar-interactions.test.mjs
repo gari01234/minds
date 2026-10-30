@@ -62,9 +62,9 @@ test('dragging a multiday task is already authorization; toast offers Undo',()=>
  assert.match(css,/minds-calendar-toast/);
 });
 test('PWA loads layout before app and updates all asset versions',()=>{
- for(const file of ['day-layout.js?v=1','day-interactions.css?v=1','app.js?v=130','time-plan.js?v=3']){
+ for(const file of ['day-layout.js?v=1','day-interactions.css?v=1','app.js?v=131','time-plan.js?v=3']){
   assert.ok(sw.includes(file),'sw '+file);assert.ok(html.includes(file),'html '+file);
  }
- assert.ok(html.indexOf('day-layout.js?v=1')<html.indexOf('app.js?v=130'));
- assert.match(sw,/isabella-shell-v167/);
+ assert.ok(html.indexOf('day-layout.js?v=1')<html.indexOf('app.js?v=131'));
+ assert.match(sw,/isabella-shell-v168/);
 });
