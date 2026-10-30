@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
-import {trustedWorkflow,allowedPath,validateEdits} from '../supabase/functions/_shared/window-code-contract.mjs';
+import {trustedWorkflow,allowedPath,validateEdits,testDiagnostics} from '../supabase/functions/_shared/window-code-contract.mjs';
 const valid={repository:'gari01234/minds',repository_id:'1387794687',ref:'refs/heads/main',workflow_ref:'gari01234/minds/.github/workflows/window-code.yml@refs/heads/main',event_name:'schedule',run_id:'123',sha:'a'.repeat(40)};
 test('code worker admits only the pinned main workflow, never pull requests or forks',()=>{
  assert.equal(trustedWorkflow(valid),true);
@@ -18,8 +18,14 @@ test('edits are exact and bounded; existing regression tests and infrastructure 
 test('generated tests run without credentials, sockets, network or root privileges',()=>{
  const script=readFileSync(new URL('../scripts/window-code-runner.mjs',import.meta.url),'utf8');
  for(const part of ['--network=none','--cap-drop=ALL','--security-opt=no-new-privileges','--read-only','--user=1000:1000','draft:true'])assert.ok(script.includes(part));
- const sandbox=script.slice(script.indexOf("spawnSync('docker'"),script.indexOf('const testExit='));
+ const sandbox=script.slice(script.indexOf("spawnSync('docker'"),script.indexOf('let run=runChecks()'));
  assert.doesNotMatch(sandbox,/GH_TOKEN|ACTION.*TOKEN|docker.sock|SERVICE_ROLE/);
  assert.ok(script.indexOf('if(testExit!==0)')<script.indexOf("github('/git/trees'"));
  assert.doesNotMatch(script,/\/merge['"`]|git.*push.*main/);
+});
+
+test('bounded diagnostics retain failing cases instead of a generic exit code',()=>{
+ const text=testDiagnostics({stdout:'ok 1 - fine\nnot ok 2 - regression\n  error: expected a receipt\nok 3 - done',stderr:'',status:1});
+ assert.match(text,/not ok 2/);assert.match(text,/expected a receipt/);
+ assert.ok(testDiagnostics({stdout:'not ok '+ 'x'.repeat(20000)}).length<=12000);
 });

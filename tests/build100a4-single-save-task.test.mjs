@@ -124,7 +124,7 @@ test('PWA pins both changed scripts and rotates one coherent cache',()=>{
  for(const pin of ['app.js?v=131','task-detail.js?v=4']){
   assert.ok(html.includes(pin),'HTML '+pin);assert.ok(sw.includes(pin),'SW '+pin);
  }
- assert.match(sw,/isabella-shell-v170/);
+ assert.match(sw,/isabella-shell-v171/);
  assert.match(app,/await window\.MINDS_TASK_DETAIL\.createQuick\(attempt\)/);
  assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
 });

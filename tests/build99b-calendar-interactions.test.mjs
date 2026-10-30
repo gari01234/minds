@@ -66,5 +66,5 @@ test('PWA loads layout before app and updates all asset versions',()=>{
   assert.ok(sw.includes(file),'sw '+file);assert.ok(html.includes(file),'html '+file);
  }
  assert.ok(html.indexOf('day-layout.js?v=1')<html.indexOf('app.js?v=131'));
- assert.match(sw,/isabella-shell-v170/);
+ assert.match(sw,/isabella-shell-v171/);
 });

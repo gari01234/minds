@@ -44,7 +44,7 @@ test('Work saveTask can enumerate an empty checklist and persist an update',asyn
   assert.equal(rerendered,true);
 });
 test('PWA serves fixed Work save module with rotated cache',()=>{
-  assert.match(html,/work\.js\?v=32/);
-  assert.match(sw,/work\.js\?v=32/);
-  assert.match(sw,/isabella-shell-v170/);
+  assert.match(html,/work\.js\?v=33/);
+  assert.match(sw,/work\.js\?v=33/);
+  assert.match(sw,/isabella-shell-v171/);
 });
