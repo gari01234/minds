@@ -120,6 +120,8 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/window-fixture.sql
       - name: Apply exact Window migration (no production connection)
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030165228_minds_window_daily_review_v1.sql
+      - name: Apply required project category integration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030170807_minds_window_project_category.sql
       - name: Verify SQL integrity, RLS, and negative cases
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/window-acceptance.sql
 
