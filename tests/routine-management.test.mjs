@@ -54,3 +54,39 @@ test('old clients cannot receive mutation proposals their legacy UI would interp
  assert.match(ai,/routine_review_version:window.MINDS_ROUTINE_REVIEW_VERSION===1\?1:0/);
  assert.match(app,/window.MINDS_ROUTINE_REVIEW_VERSION=1/);
 });
+const searchCode=stripTypeScriptTypes(chat.slice(chat.indexOf('async function searchRoutines'),chat.indexOf('async function bindRoutineProposal')));
+function catalogClient({error=null,user={id:'owner'},rows=null}={}){
+ const calls=[];
+ const stored=rows||[
+  {id:'a',user_id:'owner',title:'Resumen diario del día',enabled:true,schedule:{kind:'daily',time:'07:45'}},
+  {id:'b',user_id:'owner',title:'Resumen diario de noticias internacionales',enabled:true,schedule:{kind:'daily',time:'08:00'}},
+  {id:'c',user_id:'other',title:'Private other routine',enabled:true,schedule:{kind:'daily',time:'10:00'}}
+ ];
+ let selected=stored;
+ const q={select(){return this},eq(key,value){calls.push([key,value]);selected=selected.filter(r=>r[key]===value);return this},ilike(){throw Error('No title filtering allowed')},order(){return this},async range(a,b){return {data: error?null:selected.slice(a,b+1),count:selected.length,error}}};
+ const ctx=vm.createContext({supabaseClient:()=>({auth:{getUser:async()=>({data:{user}})},from(){selected=stored;return q}})});
+ vm.runInContext(searchCode,ctx);return {ctx,calls};
+}
+test('production failing search phrases return both canonical brief schedules, with owner isolation',async()=>{
+ for(const query of ['resumen diario brief noticias','brief','resumen diario noticias 07:45 08:00']){
+  const {ctx,calls}=catalogClient();const r=await ctx.searchRoutines({}, {query});
+  assert.equal(r.status,'ok');assert.equal(r.scope,'owned_routine_catalog');assert.equal(r.total,2);assert.equal(r.complete,true);
+  assert.deepEqual(Array.from(r.routines,x=>x.schedule.time),['07:45','08:00']);assert.deepEqual(calls,[['user_id','owner']]);
+ }
+});
+test('exact ID lookup remains bound and is not an empty-catalog claim',async()=>{
+ const {ctx}=catalogClient();const r=await ctx.searchRoutines({}, {target_id:'missing'});
+ assert.equal(r.total,0);assert.equal(r.scope,'exact_routine_id');assert.match(r.guidance,/does not establish an empty catalog/);
+});
+test('read failures have no empty routines array and do not look like successful absence',async()=>{
+ for(const options of [{error:{message:'database unavailable'}},{user:null}]){
+  const {ctx}=catalogClient(options);const r=await ctx.searchRoutines({},{});
+  assert.notEqual(r.status,'ok');assert.equal(r.routines,undefined);assert.equal(r.total,undefined);
+ }
+});
+test('catalog pagination explicitly marks incomplete reads',async()=>{
+ const rows=Array.from({length:101},(_,i)=>({id:String(i),user_id:'owner'}));
+ const {ctx}=catalogClient({rows});const first=await ctx.searchRoutines({},{});
+ assert.equal(first.total,101);assert.equal(first.routines.length,100);assert.equal(first.complete,false);assert.equal(first.next_offset,100);
+ const last=await ctx.searchRoutines({},{offset:100});assert.equal(last.routines.length,1);assert.equal(last.next_offset,null);assert.equal(last.complete,false);
+});
