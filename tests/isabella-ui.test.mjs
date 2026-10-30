@@ -616,11 +616,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('id="currentBuildInfo"'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=104'));
+  assert.ok(index.includes('shell.js?v=105'));
   assert.ok(index.includes('app.js?v=131'));
   assert.ok(index.includes('sync.js?v=pwa39'));
   assert.ok(index.includes('ai.js?v=57'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v168'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v169'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -730,7 +730,7 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-work-view="planner"'));
   assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=30'));
+  assert.ok(index.includes('work.js?v=31'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -1137,12 +1137,11 @@ test('Build 64 bounded OpenAI working context survives Build 85 as scope-local r
   assert.ok(conv.includes("openai_scope_conversations"));
 });
 
-test('Build 64 gives light turns a lower-latency cognitive budget without weakening deep turns',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('return {depth:"light",lexical:8,semantic:5,entities:8,claims:16,feedback:8,activity:14,indexBatch:20,rounds:3,compact:48000,reasoning:"low",maxOutput:1800}'));
-  assert.ok(chat.includes('depth:"deep",lexical:18,semantic:14,entities:16,claims:40,feedback:24,activity:30,indexBatch:40,rounds:5,compact:180000,reasoning:"high"'));
-  assert.ok(chat.includes('fastAgenda)budget={...budget,depth:"light"'));
-  assert.ok(chat.includes('rounds:2,compact:32000,reasoning:"low",maxOutput:1200'));
+test('interactive requests have a reasoning budget without lexical scoring',()=>{
+ const chat=read('supabase/functions/isabella-chat/index.ts');
+ const fn=chat.slice(chat.indexOf('function cognitiveBudget'),chat.indexOf('const ACTION_POLICY'));
+ assert.ok(fn.includes('reasoning:"medium"'));assert.ok(fn.includes('rounds:5'));
+ assert.ok(!fn.includes('.test('));assert.ok(chat.includes('const fastAgenda=false'));
 });
 
 test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
@@ -1245,9 +1244,8 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.ok(chat.includes('if(background||attachments.length||simpleAgendaMutation(message)||likelyMaterialDeliverable(message)||(!dailyRead&&calendarAssessmentIntent(message)))return false'));
-  assert.ok(chat.includes('if(!dailyRead&&String(route?.complexity||"light")!=="light")return false'));
-  assert.ok(chat.includes('if((route?.web&&!freshWeather)||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
+  const fn=chat.slice(chat.indexOf('function directTextStreamEligible'),chat.indexOf('function parseOpenAISse'));
+  assert.ok(fn.includes('return false;'));assert.ok(!fn.includes('.test('));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
   assert.ok(chat.includes('const tools=(background?['));
   assert.ok(chat.includes('name:"orchestrate_specialists"'));
@@ -1307,7 +1305,7 @@ test('Build 67 gives Isabella operational workspace tools without promoting scra
 test('Build 67 keeps mission work out of direct text streaming and visible inside Continuity',()=>{
   const chat=read('supabase/functions/isabella-chat/index.ts');
   const app=read('apps/isabella/app.js');
-  assert.ok(chat.includes('mantener vivo|avanza|avanzar|retoma|retomar'));
+  assert.ok(chat.includes('const fastAgenda=false'));
   assert.ok(app.includes('data-mission-workspace'));
   assert.ok(app.includes('async function missionWorkspacePanel'));
   assert.ok(app.includes("card('Mission Workspaces'"));
@@ -1359,7 +1357,7 @@ test('Build 68 lets Isabella start and control durable Missions only around appr
   assert.ok(chat.includes('Usa start_mission_run directamente solo cuando el Commitment ya exista y Gari pida continuar ese objetivo.'));
   assert.ok(chat.includes('No prometas trabajo ilimitado: Persistent Work sigue teniendo checkpoints y reintentos acotados.'));
   assert.ok(chat.includes('durable_mission_used:'));
-  assert.ok(chat.includes('avísame cuando|avisame cuando'));
+  assert.ok(chat.includes('const fastAgenda=false'));
 });
 
 test('Build 68 returns durable outcomes to Isabella through realtime without making partial work memory',()=>{

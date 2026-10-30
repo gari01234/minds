@@ -38,7 +38,8 @@ test('Build 85.5 Bernried can leave working context without contaminating an unr
   assert.notEqual(personal.key,bernried.key);
 
   const route=c.deterministicRoute('Continúa con ese proyecto',false,{exposure_hint_project:'Bernried'});
-  assert.equal(route.project,'Bernried');
+  assert.equal(route.project,null); // A fallback cannot authorize project selection from wording.
+  route.project='Bernried'; // An owned, semantically resolved route resumes the same scope.
   const resumed=await c.exposureScopeForTurn({},route,null);
   assert.equal(resumed.key,bernried.key);
 });

@@ -19,12 +19,11 @@ test('90.8.5: Chat reuses a fresh, user-scoped, sourced forecast from Ahora',()=
   assert.match(chat,/situation_weather:situationWeather/);
   assert.match(chat,/No afirmes que careces de acceso al pronóstico/);
 });
-test('90.8.5: weather durable eligibility only bypasses web when cached data is valid',()=>{
-  assert.match(chat,/directTextStreamEligible\(message:string,route:any,attachments:any\[\],background:boolean,freshWeather=false\)/);
-  assert.match(chat,/\(route\?\.web&&!freshWeather\)/);
-  assert.match(chat,/!!situationWeather/);
-  assert.match(chat,/if\(background\|\|attachments\.length\|\|simpleAgendaMutation/);
-  assert.match(chat,/route\?\.work\|\|route\?\.sofia\|\|route\?\.deep_memory\|\|route\?\.project/);
+test('weather retains the same tool-capable reasoning path as other requests',()=>{
+  const fn=chat.slice(chat.indexOf('function directTextStreamEligible'),chat.indexOf('function parseOpenAISse'));
+  assert.match(fn,/return false;/);
+  assert.doesNotMatch(fn,/\.test\(/);
+  assert.match(chat,/situation_weather:situationWeather/);
 });
 test('90.8.5: completion pushes are idempotent and governed by Attention Economy',()=>{
   assert.match(sql,/when 'chat_reply_ready' then v_route:='interrupt'/);

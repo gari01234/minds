@@ -28,7 +28,7 @@ test('Build 79 has completion bias instead of file-extension keyword dependency'
   assert.ok(chat.includes('Gari no necesita decir "PDF", "Excel", "PowerPoint" ni "usa Python"'));
   assert.ok(chat.includes('name:"execute_artifact_task"'));
   assert.ok(chat.includes('General material execution environment'));
-  assert.ok(chat.includes('likelyMaterialDeliverable(message)'));
+  assert.ok(chat.includes('materialDeliverable:route.material_deliverable===true'));
   assert.ok(chat.includes('lista para imprimir y firmar'));
 });
 
@@ -118,12 +118,12 @@ test('Build 79 PWA assets are aligned',()=>{
   const sw=read('apps/isabella/sw.js');
   assert.ok(shell.includes('id="currentBuildInfo"'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=104'));
+  assert.ok(index.includes('shell.js?v=105'));
   assert.ok(index.includes('app.js?v=131'));
-  assert.ok(index.includes('work.js?v=30'));
+  assert.ok(index.includes('work.js?v=31'));
   assert.ok(index.includes('ambient.js?v=2'));
   assert.ok(index.includes('../shared/human-surface.js?v=2'));
-  assert.ok(sw.includes("isabella-shell-v168"));
+  assert.ok(sw.includes("isabella-shell-v169"));
   assert.ok(sw.includes("'./ambient.js?v=2'"));
 });
 

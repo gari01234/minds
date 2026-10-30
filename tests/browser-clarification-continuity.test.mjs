@@ -57,7 +57,7 @@ test("browser continuation is server-validated BEFORE routing and only exact sou
  assert.match(server,/\.eq\("user_id",user\.id\)\.eq\("client_key",requested\.source_turn_id\)/);
  assert.match(server,/if\(!validStoredClarification/);
  assert.match(server,/boundedContinuationEvidence/);
- assert.match(server,/verifiedContinuation\?\.capability==="calendar"/);
+ assert.match(server,/const fastAgenda=false/);
  assert.match(server,/request_clarification/);
  assert.match(server,/turn_outcome:"needs_clarification"/);
  assert.match(server,/provider_history_policy:"bounded_scoped"/);

@@ -8,7 +8,7 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const plain=p=>stripTypeScriptTypes(read(p).replace(/^import .*;\r?\n/gm,'').replace(/^export /gm,''));
 function chain(result){const q={then:(a,b)=>Promise.resolve(result).then(a,b)};for(const k of ['select','eq','in','is','not','order','limit','maybeSingle','single','gt','gte','lte','lt','contains','or','update','insert','upsert'])q[k]=()=>q;return q;}
 function edge(slug){
-  const c=vm.createContext({Request,Response,URL,URLSearchParams,Date,console,TextEncoder,TextDecoder,Uint8Array,Map,Set,crypto:webcrypto,Deno:{env:{get:()=>undefined},serve:fn=>{c.handler=fn}},fetch:()=>{throw Error('Unexpected network')},createClient:()=>{throw Error('Unexpected database')}});
+  const c=vm.createContext({Request,Response,URL,URLSearchParams,AbortSignal,Date,console,TextEncoder,TextDecoder,Uint8Array,Map,Set,crypto:webcrypto,Deno:{env:{get:()=>undefined},serve:fn=>{c.handler=fn}},fetch:()=>{throw Error('Unexpected network')},createClient:()=>{throw Error('Unexpected database')}});
   vm.runInContext(plain('supabase/functions/_shared/cognitive.ts'),c);
   vm.runInContext(plain('supabase/functions/_shared/conversations.ts'),c);
   vm.runInContext(plain(`supabase/functions/${slug}/index.ts`),c);return c;
@@ -39,10 +39,14 @@ test('invalid evidence cannot produce a success message',async()=>{
   const s=read('apps/isabella/app.js');vm.runInContext(s.slice(s.indexOf('async function createWorkClaimProposal('),s.indexOf('async function createSkillProposal(')),c);
   await c.createWorkClaimProposal({project:'Bernried',statement:'Example',source_file_id:'bad'});assert.equal(closed,false);assert.match(replies[0],/No se guardó/);
 });
-test('router recognizes inflections, project followups, and leaves a greeting light',()=>{
-  const c=edge('isabella-chat');const r=c.deterministicRoute('¿Recuerdas lo que acordamos sobre Bernried?',false);assert.equal(r.deep_memory,true);assert.equal(r.project,'Bernried');
-  const f=c.deterministicRoute('Continúa con ese proyecto',false,{recent_local_conversation:[{role:'user',content:'Revisemos Bernried'}]});assert.equal(f.project,'Bernried');
-  assert.equal(c.cognitiveBudget('Hola',[],false).depth,'light');assert.equal(c.cognitiveBudget('Analiza el proyecto'.repeat(70),[],false).compact,180000);
+test('neutral fallback never guesses intent from words, length or client history',()=>{
+  const c=edge('isabella-chat');
+  for(const message of ['Hola','¿Recuerdas lo que acordamos sobre Bernried?','Continúa con ese proyecto','Analiza el proyecto'.repeat(70)]){
+    const r=c.deterministicRoute(message,false,{recent_local_conversation:[{role:'user',content:'Revisemos Bernried'}]});
+    assert.equal(r.project,null);assert.equal(r.source,'neutral_fallback');
+    assert.equal(c.cognitiveBudget(message,[],false).depth,'standard');
+    assert.equal(c.directTextStreamEligible(message,r,[],false),false);
+  }
   assert.equal(c.userMessage('VOZ DE ISABELLA:\ntexto de estilo\nMENSAJE DE GARI:\nHola'),'Hola');
   assert.equal(c.workMatch({statement:'Revisar Dachentwässerung'},['puedes','dachentwässerung','bernried']),true);
   assert.equal(c.policyMode('propose_project_claim'),'confirm');assert.equal(c.policyMode('propose_skill'),'confirm');assert.equal(c.policyMode('propose_commitment'),'confirm');assert.equal(c.policyMode('search_commitments'),'allow');assert.equal(c.policyMode('unknown'),'deny');
@@ -87,4 +91,21 @@ test('heartbeat publication uses the atomic RPC and propagates errors',async()=>
   const c=edge('isabella-heartbeat');let got;
   const sb={rpc:async(name,args)=>{got={name,args};return {error:{message:'write failed'}}}};
   await assert.rejects(c.publishCandidate(sb,'user',{surface:true,fingerprint:'same'}),/write failed/);assert.equal(got.name,'minds_publish_heartbeat');
+});
+
+test('semantic routing uses owned project catalog and scoped server history for paraphrases',async()=>{
+ const c=edge('isabella-chat');let input;
+ c.supabaseClient=()=>({auth:{getUser:async()=>({data:{user:{id:'owner'}}})},from:()=>chain({data:[{id:'p',name:'Window',client_key:'window'}]})});
+ c.recentConversation=async(_req,_msg,_conv,scope)=>{assert.equal(scope,'project:p');return [{role:'user',content:'Hablemos de las propuestas de Window'}]};
+ c.recordUsage=async()=>{};
+ c.fetch=async(_url,opts)=>{input=JSON.parse(opts.body);return {ok:true,json:async()=>({output_text:JSON.stringify({project:'Window',work:true,complexity:'deep',specialists:['work']})})}};
+ for(const message of ['Retomemos lo que vimos','Lass uns dort weitermachen','Can we pick that back up?']){
+  const r=await c.routeRequest({},message,'fake',false,{server_scope_key:'project:p',recent_local_conversation:[{content:'untrusted client'}]});
+  assert.equal(r.project,'Window');assert.equal(r.source,'decision_model');
+  assert.ok(JSON.stringify(input).includes(message));assert.ok(!JSON.stringify(input).includes('untrusted client'));
+ }
+ c.fetch=async()=>({ok:true,json:async()=>({output_text:'{"project":"Unknown project"}'})});
+ assert.equal((await c.routeRequest({},'Continue','fake',false,{server_scope_key:'project:p'})).project,null);
+ c.fetch=async()=>{throw Error('offline')};
+ assert.equal((await c.routeRequest({},'Continue','fake',false,{server_scope_key:'project:p'})).source,'neutral_fallback');
 });
