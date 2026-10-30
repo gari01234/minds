@@ -52,13 +52,13 @@ async function renderSelfReview(){
   const [reportsQ,proposalsQ,codeQ]=await Promise.all([
     sb.from('minds_self_review_reports').select('id,review_key,window_start,window_end,status,report,evidence,coverage,error,created_at,completed_at',{count:'exact'}).eq('project_id',project.id).order('created_at',{ascending:false}).limit(reviewReportLimit),
     sb.from('minds_self_review_proposals').select('id,report_id,title,details,status,owner_note,created_at,reviewed_at').eq('project_id',project.id).order('created_at',{ascending:false}).limit(200),
-    sb.from('minds_window_code_jobs').select('id,proposal_id,status,branch,pr_url,result,created_at,completed_at').order('created_at',{ascending:false}).limit(100)
+    sb.from('minds_window_code_jobs').select('id,proposal_id,status,base_sha,branch,pr_url,result,created_at,completed_at').order('created_at',{ascending:false}).limit(100)
   ]);
   if(reportsQ.error||proposalsQ.error)throw reportsQ.error||proposalsQ.error;
   const reports=reportsQ.data||[],proposals=proposalsQ.data||[];
   const codeJobs=codeQ?.data||[];
   const codeState={preparing:'Preparando código',review_ready:'Borrador listo para revisar',no_change:'No se propone cambiar el código actual',failed:'La preparación no se completó',blocked:'Preparación bloqueada'};
-  const codeView=p=>{const j=codeJobs.find(j=>j.proposal_id===p.id);if(!j)return '';const url=String(j.pr_url||'');const safe=/^https:\/\/github\.com\/gari01234\/minds\/pull\/[0-9]+$/.test(url);return `<div class="work-empty"><strong>${esc(codeState[j.status]||j.status)}</strong><p>${esc(j.result?.reason||'')}</p>${safe?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Revisar cambios en GitHub</a>`:''}<p class="small">${esc((j.result?.limitations||[]).join(' · '))}</p><p class="small">${esc(j.branch||'')} · No publicado en producción.</p></div>`};
+  const codeView=p=>{const j=codeJobs.find(j=>j.proposal_id===p.id);if(!j)return '';const url=String(j.pr_url||'');const safe=/^https:\/\/github\.com\/gari01234\/minds\/pull\/[0-9]+$/.test(url);return `<div class="work-empty"><strong>${esc(codeState[j.status]||j.status)}</strong><p>${esc(j.result?.reason||'')}</p>${safe?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Revisar cambios en GitHub</a>`:''}<p class="small">Pruebas: ${j.result?.test_exit_code===0?'suite de regresión y construcción correctas':typeof j.result?.test_exit_code==='number'?'fallaron o no se completaron':'no ejecutadas'}. Base: ${esc(j.base_sha?.slice(0,12)||'')}</p><p class="small">${esc((j.result?.limitations||[]).join(' · '))}</p><p class="small">${esc(j.branch||'')} · No publicado en producción.</p></div>`};
   const labels={proposed:'Pendiente',accepted:'Aceptada para trabajar',rejected:'Descartada',testing:'En prueba',implemented:'Implementada',verified:'Verificada'};
   const prose=t=>`<p style="white-space:pre-wrap">${esc(t||'')}</p>`;
   const field=(label,text)=>text?`<strong>${label}</strong>${prose(text)}`:'';
