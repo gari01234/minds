@@ -41,7 +41,7 @@ async function render(){
     if(switcher)switcher.innerHTML=(catalog.data||[]).map(p=>`<button data-work-project="${esc(p.client_key)}">${esc(p.name)}</button>`).join('');
     if(!(catalog.data||[]).some(p=>p.client_key===projectKey)&&catalog.data?.length)projectKey=catalog.data[0].client_key;
     project=await loadProject();paintChrome();
-    const settings=project?await sb.from('minds_self_review_settings').select('enabled,timezone,local_hour').eq('project_id',project.id).eq('user_id',session.user.id).maybeSingle():null;
+    const settings=project?await sb.from('minds_self_review_settings').select('enabled,timezone,local_hour,code_preparation_enabled').eq('project_id',project.id).eq('user_id',session.user.id).maybeSingle():null;
     reviewSettings=settings?.data||null;
     if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
     if(view==='overview'&&reviewSettings)await renderSelfReview();else if(view==='overview')await renderOverview();else if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
@@ -49,20 +49,26 @@ async function render(){
 }
 async function renderSelfReview(){
   const body=$('#workBody');
-  const [reportsQ,proposalsQ]=await Promise.all([
+  const [reportsQ,proposalsQ,codeQ]=await Promise.all([
     sb.from('minds_self_review_reports').select('id,review_key,window_start,window_end,status,report,evidence,coverage,error,created_at,completed_at',{count:'exact'}).eq('project_id',project.id).order('created_at',{ascending:false}).limit(reviewReportLimit),
-    sb.from('minds_self_review_proposals').select('id,report_id,title,details,status,owner_note,created_at,reviewed_at').eq('project_id',project.id).order('created_at',{ascending:false}).limit(200)
+    sb.from('minds_self_review_proposals').select('id,report_id,title,details,status,owner_note,created_at,reviewed_at').eq('project_id',project.id).order('created_at',{ascending:false}).limit(200),
+    sb.from('minds_window_code_jobs').select('id,proposal_id,status,branch,pr_url,result,created_at,completed_at').order('created_at',{ascending:false}).limit(100)
   ]);
   if(reportsQ.error||proposalsQ.error)throw reportsQ.error||proposalsQ.error;
   const reports=reportsQ.data||[],proposals=proposalsQ.data||[];
+  const codeJobs=codeQ?.data||[];
+  const codeState={preparing:'Preparando código',review_ready:'Borrador listo para revisar',no_change:'No se propone cambiar el código actual',failed:'La preparación no se completó',blocked:'Preparación bloqueada'};
+  const codeView=p=>{const j=codeJobs.find(j=>j.proposal_id===p.id);if(!j)return '';const url=String(j.pr_url||'');const safe=/^https:\/\/github\.com\/gari01234\/minds\/pull\/[0-9]+$/.test(url);return `<div class="work-empty"><strong>${esc(codeState[j.status]||j.status)}</strong><p>${esc(j.result?.reason||'')}</p>${safe?`<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">Revisar cambios en GitHub</a>`:''}<p class="small">${esc((j.result?.limitations||[]).join(' · '))}</p><p class="small">${esc(j.branch||'')} · No publicado en producción.</p></div>`};
   const labels={proposed:'Pendiente',accepted:'Aceptada para trabajar',rejected:'Descartada',testing:'En prueba',implemented:'Implementada',verified:'Verificada'};
   const prose=t=>`<p style="white-space:pre-wrap">${esc(t||'')}</p>`;
   const field=(label,text)=>text?`<strong>${label}</strong>${prose(text)}`:'';
   body.innerHTML=`<div class="work-threads">
     <div class="work-desktop-toolbar"><div><strong>Revisión de Isabella</strong><p class="small">${reviewSettings.enabled?'Revisión diaria':'Revisión pausada'} · ${String(reviewSettings.local_hour).padStart(2,'0')}:15 · ${esc(reviewSettings.timezone)}. Los informes se guardan aquí, sin avisos diarios.</p><p class="small">Aceptar una propuesta permite planificarla; no cambia el código, los permisos ni el comportamiento de Isabella.</p></div></div>
+    ${codeQ?.error?'<p>No pude consultar el estado de preparación de código.</p>':''}
+    <p class="small">Preparación autónoma de código: ${reviewSettings.code_preparation_enabled?'activada, máximo una propuesta al día':'pausada'}. Los resultados y los bloqueos quedan registrados aquí.</p><button data-code-toggle>${reviewSettings.code_preparation_enabled?'Pausar preparación de código':'Activar preparación de código'}</button>
     <h3>Propuestas · ${proposals.filter(p=>p.status==='proposed').length} pendientes</h3>
     ${proposals.length?proposals.map(p=>`<details class="work-thread-row" style="display:block;padding:14px"><summary><strong>${esc(p.title)}</strong> · ${esc(labels[p.status]||p.status)}</summary>
-      ${field('Observación',p.details.observation)}${field('Causa probable, pendiente de comprobar',p.details.suspected_cause)}${field('Cambio propuesto',p.details.change)}${field('Prueba de aceptación',p.details.acceptance_test)}${field('Qué hace falta',p.details.owner_action)}
+      ${codeView(p)}${field('Observación',p.details.observation)}${field('Causa probable, pendiente de comprobar',p.details.suspected_cause)}${field('Cambio propuesto',p.details.change)}${field('Prueba de aceptación',p.details.acceptance_test)}${field('Qué hace falta',p.details.owner_action)}
       <p class="small">Propuesta ${esc(p.id)} · Informe ${esc(p.report_id)} · Confianza declarada: ${esc(p.details.confidence)}</p>
       <details><summary>Referencias de evidencia</summary>${prose((p.details.evidence_refs||[]).join('\n'))}<p class="small">Puedes consultar estos registros en el informe de origen.</p></details>
       ${['proposed','accepted','rejected'].includes(p.status)?`<label>Tu comentario<textarea data-review-note="${p.id}" rows="3">${esc(p.owner_note)}</textarea></label><div class="work-thread-toolbar-actions"><button data-review-decision="accepted" data-id="${p.id}">Aceptar propuesta</button><button data-review-decision="rejected" data-id="${p.id}">Descartar</button><button data-review-decision="proposed" data-id="${p.id}">Dejar pendiente</button></div>`:prose(p.owner_note)}
@@ -75,6 +81,7 @@ async function renderSelfReview(){
     </details>`).join(''):'<p>La primera revisión está pendiente. Se conservará aquí al terminar.</p>'}
     ${(reportsQ.count||0)>reports.length?'<button data-more-reviews>Mostrar informes anteriores</button>':''}
   </div>`;
+  $('[data-code-toggle]')?.addEventListener('click',async()=>{const r=await sb.rpc('minds_set_window_code_v1',{p_enabled:!reviewSettings.code_preparation_enabled});if(r.error){setStatus('No pude cambiar la preparación de código.');return}await render()});
   $('[data-more-reviews]')?.addEventListener('click',()=>{reviewReportLimit+=20;void renderSelfReview()});
   $$('[data-review-decision]').forEach(b=>b.onclick=async()=>{
     b.disabled=true;

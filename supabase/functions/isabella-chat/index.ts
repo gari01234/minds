@@ -2696,9 +2696,9 @@ async function readSelfReview(req:Request,args:any={}){
  const offset=Math.max(0,Math.floor(Number(args.offset)||0));
  let reports=sb.from("minds_self_review_reports").select(args.report_id?"*":"id,project_id,review_key,window_start,window_end,status,report,coverage,error,created_at",{count:"exact"}).eq("user_id",u).order("created_at",{ascending:false});
  reports=args.report_id?reports.eq("id",String(args.report_id)).limit(1):reports.range(offset,offset+9);
- const [r,p]=await Promise.all([reports,sb.from("minds_self_review_proposals").select("id,report_id,problem_key,title,status,details,owner_note,reviewed_at",{count:"exact"}).eq("user_id",u).order("created_at",{ascending:false}).range(offset,offset+9)]);
+ const [r,p,c]=await Promise.all([reports,sb.from("minds_self_review_proposals").select("id,report_id,problem_key,title,status,details,owner_note,reviewed_at",{count:"exact"}).eq("user_id",u).order("created_at",{ascending:false}).range(offset,offset+9),sb.from("minds_window_code_jobs").select("id,proposal_id,status,branch,pr_url,result,created_at",{count:"exact"}).eq("user_id",u).order("created_at",{ascending:false}).range(offset,offset+9)]);
  if(r.error||p.error)return {status:"unavailable",detail:r.error?.message||p.error?.message};
- return {status:"ok",reports:r.data,proposals:p.data,report_total:r.count,proposal_total:p.count,next_offset:offset+10<Math.max(r.count||0,p.count||0)?offset+10:null,authority:"observation_and_proposal_only"};
+ return {status:"ok",reports:r.data,proposals:p.data,code_preparations:c.error?{status:"unavailable"}:c.data,code_total:c.count,report_total:r.count,proposal_total:p.count,next_offset:offset+10<Math.max(r.count||0,p.count||0,c.count||0)?offset+10:null,authority:"observation_and_proposal_only"};
 }
 
 async function startAgentRun(req:Request,feature:string,route:any){

@@ -1,0 +1,35 @@
+name: Window code preparation
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/window-code.yml'
+      - 'scripts/window-code-runner.mjs'
+  schedule:
+    - cron: '35 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
+concurrency:
+  group: window-code-preparation
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'gari01234/minds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Prepare isolated test image
+        run: docker pull node:24-bookworm-slim
+      - name: Prepare one Window proposal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/window-code-runner.mjs
