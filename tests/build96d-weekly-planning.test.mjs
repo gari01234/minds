@@ -127,5 +127,5 @@ test('PWA updates model, interface and stylesheet as one cached release',()=>{
     assert.ok(html.includes(asset),asset+' missing in HTML');
     assert.ok(sw.includes(asset),asset+' missing in SW');
   }
-  assert.match(sw,/isabella-shell-v167/);
+  assert.match(sw,/isabella-shell-v168/);
 });

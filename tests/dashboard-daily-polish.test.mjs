@@ -51,7 +51,7 @@ test('UX A.6 ships an additive and offline precached stylesheet',()=>{
   assert.ok(html.includes('<link rel="stylesheet" href="'+path+'">'));
   assert.ok(sw.includes("'"+path+"'"));
   assert.ok(html.indexOf(path)>html.indexOf('./mobile-refinement.css?v=1'));
-  assert.match(sw,/const CACHE_NAME = 'isabella-shell-v167'/);
+  assert.match(sw,/const CACHE_NAME = 'isabella-shell-v168'/);
   assert.match(html,/dashboard\.js\?v=7/);
   assert.match(html,/work\.js\?v=30/);
   assert.match(mobile,/@media\(max-width:620px\)/);

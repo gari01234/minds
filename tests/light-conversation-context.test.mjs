@@ -73,7 +73,7 @@ test("telemetry is numeric-only, with separate instruction/context/input/tool fo
  assert.match(source,/context_tier:fastAgenda\?"calendar_fast":leanSurface\?"lean":"full"/);
 });
 test("governed tools and direct calendar receipts remain unchanged by the lean tier",()=>{
- assert.match(source,/const tools=background\?/);
+ assert.match(source,/const tools=\(background\?/);
  assert.match(source,/\.\.\.calendarTools/);
  assert.match(source,/recordShadowDecision\(req/);
  assert.match(source,/authorizedDirectBatch\(toolProposals/);

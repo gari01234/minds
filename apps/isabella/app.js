@@ -1301,9 +1301,11 @@ function localFallback(text){const n=text.toLowerCase();if(/qué tengo hoy|que t
 function rememberCandidates(items){for(const m of items||[]){if(!m?.content)continue;const exists=(state.memory||[]).some(x=>(typeof x==='object'?x.content:String(x))===m.content);if(!exists)state.memory.push({id:uid(),kind:normalizeMemoryKind(m.kind),content:m.content,confidence:Number(m.confidence??.7),status:'active',source:m.source||'ai_derived',metadata:{...(m.metadata||{}),derived:true,accepted_fact:false}})}save()}
 function proposalLabel(p){
   if(p.kind==='routine'){
+    const verb={create:'Programar',update:'Actualizar',pause:'Pausar',resume:'Reactivar',delete:'Eliminar'}[p.action||'create']||'Revisar';
+    if(['pause','resume','delete'].includes(p.action))return verb+' rutina · '+p.title;
     const days=p.schedule_kind==='weekly'&&Array.isArray(p.weekdays)&&p.weekdays.length?(' · '+p.weekdays.map(d=>['dom','lun','mar','mié','jue','vie','sáb'][Number(d)]||d).join(', ')):'';
-    if(p.schedule_kind==='once')return ['Programar recordatorio',p.title,p.date,p.time||'09:00'].filter(Boolean).join(' · ');
-    return ['Programar rutina',p.title,p.schedule_kind==='weekly'?'Semanal':'Todos los días',(p.time||'08:00')+days].filter(Boolean).join(' · ');
+    if(p.schedule_kind==='once')return [verb+' recordatorio',p.title,p.date,p.time||'09:00'].filter(Boolean).join(' · ');
+    return [verb+' rutina',p.title,p.schedule_kind==='weekly'?'Semanal':'Todos los días',(p.time||'08:00')+days].filter(Boolean).join(' · ');
   }
   if(p.kind==='feed_preferences'){
     const add=(p.add_entities||[]).length,remove=(p.remove_entities||[]).length,topics=(p.add_topics||[]).length+(p.add_custom_topics||[]).length;
@@ -1460,6 +1462,7 @@ function proposalEditor(p,onDone){
     return;
   }
   if(p.kind==='routine'){
+    if(['pause','resume','delete'].includes(p.action)){onDone?.(p);return}
     const weekdays=new Set((p.weekdays||[]).map(Number));
     const dayLabels=[['0','Dom'],['1','Lun'],['2','Mar'],['3','Mié'],['4','Jue'],['5','Vie'],['6','Sáb']];
     const isOnce=p.schedule_kind==='once';
@@ -1532,6 +1535,7 @@ function reviewedProposal(original,corrected){
   return {...corrected,...(keys.length?{_review:{changed_fields:keys,original:Object.fromEntries(keys.map(k=>[k,original[k]??null]))}}:{})};
 }
 function proposalDetails(p){
+  if(p.kind==='routine')return `<p>${esc(p.instruction||'')}</p><div class="small">${esc(p.timezone||'')}${p.before?' · Configuración actual: '+esc(p.before.schedule?.time||'')+' · '+(p.before.enabled?'Activa':'Pausada'):''}</div>`;
   if(p.kind==='expectation')return `<p>${esc(p.expected_event||'')}</p><div class="small">${esc(p.due_date||'')}${p.due_time?' · '+esc(p.due_time):' · sin hora exacta'} · Si vence sin evidencia, quedará pendiente de comprobar.</div>`;
   if(p.kind==='standing_intent')return `<p>${esc(p.reminder_text||'')}</p><div class="small">Recordatorio por conversación; no vigila fuentes externas · Máximo ${Number(p.max_triggers||3)} avisos · Separación: ${Number(p.cooldown_hours??24)} h · Caduca en ${Number(p.expires_days||90)} días</div>`;
   if(p.kind==='commitment')return `<p>${esc(p.objective||'')}</p><div class="small">Ámbito: ${esc(p.project||p.scope||'global')}${p.completion_criteria?' · Cierre: '+esc(p.completion_criteria):''}</div>${p.persistent_work?'<div class="small" style="margin-top:7px">Al confirmar, Isabella empezará a trabajar en esto y podrá continuar aunque cierres MINDS. Te pedirá algo solo si realmente queda bloqueada.</div>':''}${p.source_open_loop?'<div class="small" style="margin-top:7px">Procedencia: open loop derivado, pendiente de esta revisión.</div>':''}`;
@@ -1613,7 +1617,7 @@ function confirmProposal(p){
   $('#proposalConfirm').onclick=()=>{
     const b=$('#proposalConfirm');if(b.disabled)return;
     b.disabled=true;b.textContent='Guardando…';
-    const verified=p.kind==='task'&&['update','create'].includes(p.action||'create');
+    const verified=p.kind==='routine'||(p.kind==='task'&&['update','create'].includes(p.action||'create'));
     // For a verified calendar mutation, accepting a proposal cannot precede
     // its canonical write receipt. The legacy feedback remains unchanged for
     // other kinds until each gains the same reviewed executor.
@@ -1635,7 +1639,7 @@ function confirmProposals(list){
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
   $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){
-      const verified=p.kind==='task'&&['update','create'].includes(p.action||'create');
+      const verified=p.kind==='routine'||(p.kind==='task'&&['update','create'].includes(p.action||'create'));
       if(!verified)proposalFeedback('accepted',p);
       await Promise.resolve().then(()=>applyProposal(p));
       if(verified)proposalFeedback('accepted',p);
@@ -1654,29 +1658,22 @@ function findTarget(p){
   if(title)matches=matches.filter(x=>String(x.title||'').trim().toLowerCase()===title);
   return matches.length===1?matches[0]:null;
 }
+window.MINDS_ROUTINE_REVIEW_VERSION=1;
 async function createRoutineProposal(p){
   const sb=window.MINDS_SUPABASE;
-  if(!sb){closeModal();say('assistant','Necesito la memoria conectada para programar una rutina que funcione aunque cierres MINDS.');return}
-  const {data:{session}}=await sb.auth.getSession();
-  if(!session){closeModal();say('assistant','Conecta la memoria primero y entonces puedo programarla en el servidor.');return}
-  const kind=p.schedule_kind==='once'?'once':p.schedule_kind==='weekly'?'weekly':'daily';
-  const schedule={kind,time:p.time||'08:00',weekdays:Array.isArray(p.weekdays)?p.weekdays.map(Number):[],...(kind==='once'?{date:p.date||today()}:{})};
-  if(schedule.kind==='weekly'&&!schedule.weekdays.length){closeModal();say('assistant','Me faltan los días de la semana para esa rutina.');return}
-  if(schedule.kind==='once'&&!schedule.date){closeModal();say('assistant','Me falta la fecha del recordatorio.');return}
-  const row={
-    user_id:session.user.id,
-    title:p.title||'Rutina',
-    instruction:p.instruction||p.title||'',
-    schedule,
-    timezone:p.timezone||Intl.DateTimeFormat().resolvedOptions().timeZone||'Europe/Berlin',
-    enabled:true,
-    metadata:{source:'isabella_chat'}
-  };
-  const {data,error}=await sb.from('isabella_routines').insert(row).select('id,title,next_run_at').single();
+  if(!sb||!p.request_id)throw new Error('Necesito una propuesta registrada y la sesión conectada.');
+  const {data:receipt,error}=await sb.rpc('minds_commit_reviewed_routine_v1',{p_request_id:p.request_id,p_reviewed:p});
+  if(error)throw new Error(error.message.includes('routine_changed')
+    ?'La rutina cambió desde la propuesta. Pídeme consultarla de nuevo para conservar esos cambios.'
+    :error.message.includes('duplicate_routine')?'Ya existe una rutina equivalente. Pídeme editar la existente.':error.message);
+  if(!receipt?.receipt_id||!['applied','already_applied'].includes(receipt.status))
+    throw new Error('El servidor no confirmó el cambio.');
   closeModal();
-  if(error){say('assistant','No pude programarla todavía: '+error.message);return}
-  const once=schedule.kind==='once';
-  say('assistant',`Listo. ${once?'Programé el recordatorio':'Programé la rutina'} “${data.title}”. Isabella escribirá aquí desde el servidor aunque MINDS esté cerrado; la próxima ejecución quedó prevista para ${new Date(data.next_run_at).toLocaleString('es-ES')}. Las notificaciones del sistema son opcionales y solo hacen falta si quieres además un aviso fuera del chat.`);
+  const verb={create:'Programé',update:'Actualicé',pause:'Pausé',resume:'Reactivé',delete:'Eliminé'}[p.action||'create'];
+  const row=receipt.after;
+  say('assistant',`Listo. ${verb} la rutina “${row?.title||p.title}”.`+
+    (row?.enabled&&row?.next_run_at?` Próxima ejecución: ${new Date(row.next_run_at).toLocaleString('es-ES',{timeZone:row.timezone})} (${row.timezone}).`:''));
+  return receipt;
 }
 async function dbWorkProjectByName(name){
   const sb=window.MINDS_SUPABASE;if(!sb)return null;

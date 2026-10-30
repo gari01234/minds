@@ -363,7 +363,7 @@ test('Build 26 supports confirmed server-side Isabella routines',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(shell.includes('data-action="routines"'));
   assert.ok(app.includes("p.kind==='routine'"));
-  assert.ok(app.includes("from('isabella_routines').insert"));
+  assert.ok(app.includes("rpc('minds_commit_reviewed_routine_v1'"));
   assert.ok(app.includes('async function routinesPanel'));
   assert.ok(app.includes("await maybeProactiveNudge()"));
   assert.ok(!app.includes("const briefed=await maybeDailyBrief()"));
@@ -373,8 +373,8 @@ test('Build 26 supports confirmed server-side Isabella routines',()=>{
 test('Build 27 supports one-time server chat reminders without requiring push permission',()=>{
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes("p.schedule_kind==='once'"));
-  assert.ok(app.includes("kind==='once'?{date:p.date||today()}"));
-  assert.ok(app.includes("notificaciones del sistema son opcionales"));
+  assert.ok(read("supabase/migrations/20261030153655_minds_reviewed_routine_management_v1.sql").includes("jsonb_build_object('date',p_reviewed->>'date')"));
+  assert.ok(!app.slice(app.indexOf("async function createRoutineProposal"),app.indexOf("async function dbWorkProjectByName")).includes("Notification.requestPermission"));
   assert.ok(app.includes("sch.kind==='once'"));
 });
 
@@ -617,10 +617,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
   assert.ok(index.includes('shell.js?v=104'));
-  assert.ok(index.includes('app.js?v=130'));
+  assert.ok(index.includes('app.js?v=131'));
   assert.ok(index.includes('sync.js?v=pwa39'));
-  assert.ok(index.includes('ai.js?v=56'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v167'"));
+  assert.ok(index.includes('ai.js?v=57'));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v168'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -1249,7 +1249,7 @@ test('Build 66 refuses streaming when tools or deep context may be required',()=
   assert.ok(chat.includes('if(!dailyRead&&String(route?.complexity||"light")!=="light")return false'));
   assert.ok(chat.includes('if((route?.web&&!freshWeather)||route?.work||route?.sofia||route?.deep_memory||route?.project)return false'));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
-  assert.ok(chat.includes('const tools=background?['));
+  assert.ok(chat.includes('const tools=(background?['));
   assert.ok(chat.includes('name:"orchestrate_specialists"'));
   assert.ok(chat.includes('name:"read_work_file"'));
 });

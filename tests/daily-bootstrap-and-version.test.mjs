@@ -8,7 +8,7 @@ const shell=read('apps/isabella/shell.js');
 const build=read('scripts/build.mjs');
 test('Calendar projection loads before any synchronous app initialization',()=>{
   const m=html.indexOf('<script src="./dashboard-model.js?v=5"></script>');
-  const a=html.indexOf('<script src="./app.js?v=130"></script>');
+  const a=html.indexOf('<script src="./app.js?v=131"></script>');
   assert.ok(m>0&&a>m,'dashboard-model.js must precede app.js');
   assert.match(app,/MINDS_DESK_MODEL\.monthAgendaGroups/);
   assert.match(app,/function init\(\)\{/);

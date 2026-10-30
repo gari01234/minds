@@ -125,5 +125,5 @@ test('PWA includes model, UI, CSS and matching task-detail/cache version',()=>{
     assert.ok(sw.includes(asset),'service worker misses '+asset);
   }
   assert.ok(html.indexOf('time-plan-model.js?v=2')<html.indexOf('time-plan.js?v=3'));
-  assert.match(sw,/isabella-shell-v167/);
+  assert.match(sw,/isabella-shell-v168/);
 });
