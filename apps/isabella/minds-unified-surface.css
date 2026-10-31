@@ -24,6 +24,7 @@ body[data-section="work"] #swipeArea,
 body[data-section="assistant"] #swipeArea{
   background:var(--minds-ui-paper);
   color:var(--minds-ui-ink);
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
 }
 body[data-section="work"] .app button,
 body[data-section="assistant"] .app button,
