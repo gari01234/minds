@@ -34,5 +34,41 @@ const {chromium}=require('playwright');
   }));
   console.log('WORK_TAB_SNAPSHOT',JSON.stringify({after,events}));
   assert.ok(after.view,'Planner tab must respond to click');
+
+  // Synthetic browser-local session and rows. No network database writes.
+  await page.evaluate(()=>{
+    const sb=window.MINDS_SUPABASE;
+    sb.auth.getSession=async()=>({data:{session:{user:{id:'offline-test-user'}}}});
+    const project={id:'mock-project-id',client_key:'bernried',name:'Bernried Test'};
+    sb.from=(table)=>{
+      const query={
+        select(){return this},eq(){return this},is(){return this},
+        in(){return this},order(){return this},limit(){return this},
+        maybeSingle:async()=>({data:table==='isabella_projects'?project:null,error:null}),
+        then(resolve,reject){
+          const data=table==='isabella_projects'?[project]
+            :table==='minds_work_buckets'?[{id:'mock-bucket',name:'Grundrisse',sort_order:10,archived:false}]
+            :[];
+          return Promise.resolve({data,error:null}).then(resolve,reject);
+        }
+      };
+      return query;
+    };
+    if(window.MINDS_WORK_TEAM)window.MINDS_WORK_TEAM.members=async()=>[];
+    window.MINDS_WORK.render();
+  });
+  await page.waitForFunction(()=>{
+    const board=document.querySelector('#workBody')?.innerText||'';
+    return document.querySelectorAll('[data-work-project]').length===1 && /Grundrisse/.test(board);
+  },null,{timeout:7000});
+  const recovered=await page.evaluate(()=>({
+    switcher:document.querySelector('.work-project-switch')?.innerText,
+    board:document.querySelector('#workBody')?.innerText.slice(0,240),
+    selected:document.querySelector('[data-work-view="planner"]')?.classList.contains('active')
+  }));
+  assert.match(recovered.switcher,/Bernried Test/);
+  assert.ok(recovered.selected);
+  console.log('WORK_FAKE_SESSION_ACCEPTED',JSON.stringify(recovered));
+
  }finally{await browser.close()}
 })().catch(e=>{console.error(e.stack||e);process.exitCode=1});
