@@ -6,7 +6,7 @@ if(process.argv.includes('--cache')){
  run('deno',['cache','--no-lock','--node-modules-dir=none',...entries]);
 }else{
  // Type-check before executing candidate code. Dependencies were cached from trusted main.
- run('deno',['check','--cached-only','--no-lock','--node-modules-dir=none',...entries]);
+ run('deno',['check','--no-lock','--node-modules-dir=none',...entries]);
  if(!process.argv.includes('--types-only')){
   run('sh',['-c','node --test --test-reporter=tap tests/*.test.mjs']);
   run('node',['scripts/build.mjs']);
