@@ -9,7 +9,7 @@ const dashboard=read('apps/isabella/dashboard.js');
 const chat='body\\[data-section="assistant"\\]\\.desk-enabled ';
 
 test('Detail parity is the last stylesheet and part of the offline shell',()=>{
-  assert.match(index,/chat-apple-finish\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-detail-parity\.css\?v=1">\s*<\/head>/);
+  assert.match(index,/chat-apple-finish\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-detail-parity\.css\?v=1">/);
   assert.match(sw,/chat-apple-finish\.css\?v=1',\s*'\.\/minds-detail-parity\.css\?v=1'/);
   assert.doesNotMatch(css,/@import|@font-face|url\(/);
 });

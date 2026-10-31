@@ -164,7 +164,7 @@ async function renderOverview(){
   projectModelSnapshot=modelResult?.data||null;
   const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
   const taskText=taskRows.map(x=>'<button type="button" class="work-overview-item work-overview-task" data-work-edit-task="'+esc(x.id)+'"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',workStatusText(x.work_status)].filter(Boolean).join(' · '))+'</small></button>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
-  const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
+  const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(provenanceNames[x.provenance_class]||x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
   const filesLabel=fileResult?String(fileResult.count??0)+' documentos registrados':'Cobertura documental no comprobable';
   const rev=projectModelSnapshot?.current_revision;
   const revLabel=rev?'Revisión del Model: '+String(rev.id||'').slice(0,8):'Sin revisión del Project Model publicada';
@@ -269,6 +269,27 @@ function workKnowledgeStatus(file){
   if(k==='failed')return 'No se pudo leer · revisar';
   return 'Solo almacenado · aún sin leer';
 }
+// Desktop tiles: Finder-like vector icons and a readable file type instead of a raw MIME string.
+const WORK_TILE_COLORS={pdf:'#e5484d',doc:'#2f6fdb',docx:'#2f6fdb',rtf:'#2f6fdb',txt:'#6b7280',md:'#6b7280',xls:'#1f9d55',xlsx:'#1f9d55',csv:'#1f9d55',numbers:'#1f9d55',ppt:'#e8762c',pptx:'#e8762c',key:'#e8762c',dwg:'#8a5cf6',dxf:'#8a5cf6',ifc:'#8a5cf6',rvt:'#8a5cf6',pln:'#8a5cf6',skp:'#8a5cf6',zip:'#6b7280',rar:'#6b7280'};
+function workFileExt(f){const m=String(f?.name||'').toLowerCase().match(/\.([a-z0-9]{1,8})$/);return m?m[1]:''}
+function workFileTypeLabel(f){
+  const ext=workFileExt(f);if(ext)return ext.toUpperCase();
+  const sub=String(f?.mime_type||'').split('/').pop()||'';
+  return (sub.length<=6?sub:'Datei').toUpperCase();
+}
+function workTileIcon(kind,f=null){
+  const svg=(w,h,body)=>'<svg class="work-tile-svg" viewBox="0 0 '+w+' '+h+'" width="'+w+'" height="'+h+'" aria-hidden="true" focusable="false">'+body+'</svg>';
+  if(kind==='folder')return svg(48,40,'<path d="M3 8a4 4 0 0 1 4-4h10.2a4 4 0 0 1 3 1.35L23 8h18a4 4 0 0 1 4 4v22a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z" fill="#5ea4f0"/><path d="M3 15a4 4 0 0 1 4-4h34a4 4 0 0 1 4 4v19a4 4 0 0 1-4 4H7a4 4 0 0 1-4-4z" fill="#8cc3fb"/><path d="M7 11h34a4 4 0 0 1 4 4v1.2H3V15a4 4 0 0 1 4-4z" fill="#b3d8fe"/>');
+  if(kind==='back')return svg(48,40,'<rect x="6" y="4" width="36" height="32" rx="10" fill="#f1f3f6"/><path d="M27 14h-9.5l3.5-3.5M17.5 14l3.5 3.5M17.5 14h9a5.5 5.5 0 0 1 0 11H20" fill="none" stroke="#5d626a" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>');
+  if(kind==='image')return svg(48,40,'<rect x="7" y="3" width="34" height="34" rx="7" fill="#eaf4ff" stroke="#cfe0f5" stroke-width="1.4"/><circle cx="17" cy="13.5" r="3.4" fill="#ffb020"/><path d="M8.5 31.5l9.5-10.5 6.5 6.5 4.5-4.5 10.5 10.5v.5a2.6 2.6 0 0 1-2.6 2.6H11.1a2.6 2.6 0 0 1-2.6-2.6z" fill="#34c759"/>');
+  if(kind==='email')return svg(48,40,'<rect x="5" y="7" width="38" height="27" rx="6" fill="#eaf3ff" stroke="#b9d4f6" stroke-width="1.4"/><path d="M8 11l16 11.5L40 11" fill="none" stroke="#2f80ed" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>');
+  const ext=workFileExt(f),label=(ext||'doc').slice(0,4).toUpperCase(),color=WORK_TILE_COLORS[ext]||'#7b8494';
+  return svg(48,40,'<path d="M13 2h14.5L36 10.5V35a3 3 0 0 1-3 3H13a3 3 0 0 1-3-3V5a3 3 0 0 1 3-3z" fill="#fff" stroke="#d3d8df" stroke-width="1.4"/><path d="M27.5 2v6a2.5 2.5 0 0 0 2.5 2.5h6" fill="#eef1f5" stroke="#d3d8df" stroke-width="1.4" stroke-linejoin="round"/><rect x="5" y="22" width="'+(label.length>3?28:24)+'" height="11" rx="3" fill="'+color+'"/><text x="'+(label.length>3?19:17)+'" y="29.9" text-anchor="middle" font-size="6.8" font-weight="700" letter-spacing=".2" fill="#fff" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,Arial,sans-serif">'+label+'</text>');
+}
+// Thread previews show prose, not Markdown markers.
+function workPlainPreview(text){
+  return String(text||'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/(\*\*|__|`+)/g,'').replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm,'').replace(/\s+/g,' ').trim();
+}
 async function renderDesktop(){
   await loadFolders();
   let fq=sb.from('minds_work_files').select('id,folder_id,name,mime_type,size_bytes,source_kind,index_status,metadata,storage_path,created_at').eq('project_id',project.id).order('created_at',{ascending:false});
@@ -278,9 +299,9 @@ async function renderDesktop(){
   body.innerHTML=`<div class="work-desktop-toolbar"><div class="work-breadcrumb"><button data-work-project-root>${esc(project.name)}</button>${trail.map(f=>`<span>›</span><button data-work-crumb="${f.id}">${esc(f.name)}</button>`).join('')}</div><div class="work-toolbar-actions"><button data-work-new-folder>＋ Ordner</button><button data-work-upload>↑ Dateien</button></div></div>
     <div class="work-drop-hint">Dateien, PDFs, Word, Excel, Bilder oder E-Mails hierher ziehen</div>
     <div class="work-files">
-      ${folderId?`<button class="work-file work-folder work-up" data-work-up><span class="work-file-icon">↰</span><strong>Zurück</strong><small>Ordner</small></button>`:''}
-      ${childFolders.map(f=>`<button class="work-file work-folder" data-work-folder="${f.id}"><span class="work-file-icon">▰</span><strong>${esc(f.name)}</strong><small>Ordner</small></button>`).join('')}
-      ${files.map(f=>`<button class="work-file" data-work-file="${f.id}"><span class="work-file-icon">${f.source_kind==='email'?'✉':f.source_kind==='image'?'▧':'▤'}</span><strong>${esc(f.name)}</strong><small>${esc((f.mime_type||'Datei').split('/').pop())} · ${Math.max(1,Math.round(Number(f.size_bytes||0)/1024))} KB · ${esc(workKnowledgeStatus(f))}</small></button>`).join('')}
+      ${folderId?`<button class="work-file work-folder work-up" data-work-up><span class="work-file-icon">${workTileIcon('back')}</span><strong>Zurück</strong><small>Ordner</small></button>`:''}
+      ${childFolders.map(f=>`<button class="work-file work-folder" data-work-folder="${f.id}"><span class="work-file-icon">${workTileIcon('folder')}</span><strong>${esc(f.name)}</strong><small>Ordner</small></button>`).join('')}
+      ${files.map(f=>`<button class="work-file" data-work-file="${f.id}"><span class="work-file-icon">${workTileIcon(f.source_kind==='email'?'email':f.source_kind==='image'?'image':'file',f)}</span><strong>${esc(f.name)}</strong><small>${esc(workFileTypeLabel(f))} · ${Math.max(1,Math.round(Number(f.size_bytes||0)/1024))} KB · ${esc(workKnowledgeStatus(f))}</small></button>`).join('')}
       ${!childFolders.length&&!files.length&&!folderId?'<div class="work-empty work-empty-wide">Este Desktop está vacío. Crea un Ordner o arrastra aquí tus primeros Unterlagen.</div>':''}
     </div>`;
   $('[data-work-upload]')?.addEventListener('click',()=>$('#workFileInput')?.click());
@@ -803,7 +824,7 @@ async function renderThreads(){
       const at=t.last_activity_at||t.preview?.created_at||t.updated_at;
       return `<div class="work-thread-row">
         <button class="work-thread-card" data-work-thread="${t.id}">
-          <span class="work-thread-card-main"><strong>${esc(t.title)}</strong><span>${esc(preview?preview.slice(0,150):'Todavía sin conversación')}</span></span>
+          <span class="work-thread-card-main"><strong>${esc(t.title)}</strong><span>${esc(preview?workPlainPreview(preview).slice(0,150):'Todavía sin conversación')}</span></span>
           <span class="work-thread-card-meta">${esc(threadDate(at))}<b>›</b></span>
         </button>
         <button class="work-thread-more" data-work-thread-actions="${t.id}" aria-label="Opciones de ${esc(t.title)}">•••</button>
