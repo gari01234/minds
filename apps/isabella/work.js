@@ -331,7 +331,7 @@ async function hydratePlannerImages(root=document){
 async function renderPlanner(){
   await loadPlanner();team=await window.MINDS_WORK_TEAM.members(project.id);const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
   const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)!=='columns';
-  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
+  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button><button type="button" data-work-show-bucket-archive title="Archivierte Buckets und erledigte Aufgaben ansehen">Archiv</button></span></div>
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header class="work-bucket-header">${b.virtual
         ?`<strong>${esc(b.name)}</strong>`
@@ -359,6 +359,7 @@ async function renderPlanner(){
   });
   $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
+  $('[data-work-show-bucket-archive]')?.addEventListener('click',()=>void openArchivedBuckets());
   $$('[data-work-edit-bucket]').forEach(button=>button.onclick=e=>{
     e.stopPropagation();
     const menu=body.querySelector('[data-work-bucket-menu="'+button.dataset.workEditBucket+'"]');
@@ -527,10 +528,20 @@ function editBucket(id){const bucket=buckets.find(x=>x.id===id);if(bucket)bucket
 function archiveBucketDialog(id){
   const bucket=buckets.find(x=>x.id===id);if(!bucket)return;
   closeBucketMenus($('#workBody'));
-  const count=tasks.filter(t=>t.work_bucket_id===id).length;
+  const matching=tasks.filter(t=>t.work_bucket_id===id);
+  const unfinished=matching.filter(t=>!t.completed_at).length;
+  const completed=matching.filter(t=>!!t.completed_at).length;
+  const pendingText=unfinished
+    ?`${unfinished} offene Aufgabe${unfinished===1?'':'n'} ${unfinished===1?'wird':'werden'} nach <strong>Ohne Bucket</strong> verschoben.`
+    :'Keine offenen Aufgaben müssen verschoben werden.';
+  const completedText=completed
+    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} als Verlauf diesem archivierten Bucket zugeordnet — ohne Verschiebung nach Ohne Bucket.`
+    :'';
   window.ISABELLA_APP?.openModal?.('Bucket entfernen',`<div class="form work-bucket-editor">
-    <p>Möchtest du <strong>${esc(bucket.name)}</strong> entfernen?</p>
-    <p>${count} Aufgabe${count===1?'':'n'} werden nach <strong>Ohne Bucket</strong> verschoben. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
+    <p>Möchtest du <strong>${esc(bucket.name)}</strong> aus dem aktiven Planner entfernen?</p>
+    <p>${pendingText}</p>
+    ${completedText?`<p>${completedText}</p>`:''}
+    <p>Im <strong>Archiv</strong> bleibt der Bucket wiederherstellbar. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
     <div class="work-bucket-dialog-actions"><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Bucket entfernen</button><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button></div>
   </div>`);
   $('#workBucketArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
@@ -547,6 +558,56 @@ async function archiveBucket(id){
   await renderPlanner();setStatus('');
   setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
+
+async function openArchivedBuckets(){
+  if(!project)return;
+  const {data:archived,error}=await sb.from('minds_work_buckets')
+    .select('id,name,updated_at').eq('project_id',project.id).eq('archived',true)
+    .order('updated_at',{ascending:false}).limit(100);
+  if(error){setStatus('Archivierte Buckets konnten nicht geladen werden.');return}
+  const ids=(archived||[]).map(b=>b.id);
+  let history=[];
+  if(ids.length){
+    const {data,error:taskError}=await sb.from('isabella_tasks')
+      .select('id,title,completed_at,work_bucket_id')
+      .eq('project_id',project.id).in('work_bucket_id',ids).limit(1000);
+    if(taskError){setStatus('Aufgabenverlauf konnte nicht geladen werden.');return}
+    history=data||[];
+  }
+  const markup=archived?.length
+    ?archived.map(bucket=>{
+      const associated=history.filter(task=>task.work_bucket_id===bucket.id);
+      const finished=associated.filter(task=>!!task.completed_at);
+      const unfinished=associated.length-finished.length;
+      const taskPreview=associated.slice(0,40).map(task=>
+        `<li>${esc(task.title)} <small>${task.completed_at?'Erledigt':'Offen'}</small></li>`).join('');
+      return `<section class="work-bucket-archive-item">
+        <details><summary><strong>${esc(bucket.name)}</strong><small>${finished.length} erledigt${unfinished?', '+unfinished+' offen':''}</small></summary>
+          ${associated.length?`<ul>${taskPreview}</ul>`:'<p>Keine zugeordneten Aufgaben.</p>'}
+          ${associated.length>40?'<p>Weitere Aufgaben bleiben im Archiv erhalten.</p>':''}
+        </details>
+        <button type="button" data-work-restore-bucket="${bucket.id}">Wiederherstellen</button>
+      </section>`;
+    }).join('')
+    :'<p>Keine archivierten Buckets vorhanden.</p>';
+  window.ISABELLA_APP?.openModal?.('Archivierte Buckets',
+    `<div class="work-bucket-archive">${markup}</div>`);
+  $$('[data-work-restore-bucket]').forEach(button=>
+    button.onclick=()=>void restoreArchivedBucket(button.dataset.workRestoreBucket,button));
+}
+async function restoreArchivedBucket(id,button){
+  if(!project||!id)return;
+  if(button)button.disabled=true;
+  const {data,error}=await sb.rpc('minds_work_bucket_restore',
+    {p_project_id:project.id,p_bucket_id:id});
+  if(error||data!==true){
+    if(button)button.disabled=false;
+    setStatus('Bucket konnte nicht wiederhergestellt werden.');return;
+  }
+  window.ISABELLA_APP?.closeModal?.();
+  await renderPlanner();setStatus('');
+}
+
 function checklistRows(items=[]){return (items||[]).map(x=>`<div class="work-check-row" data-check-id="${esc(x?.id||'')}"><input type="checkbox" data-work-check-done ${x?.done?'checked':''}><input data-work-check-text value="${esc(x?.text||'')}" placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button></div>`).join('')}
 function bindChecklist(){$$('[data-work-check-remove]').forEach(b=>b.onclick=()=>b.closest('.work-check-row')?.remove())}
 function attachmentEditorMarkup(){
