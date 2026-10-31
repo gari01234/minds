@@ -44,9 +44,16 @@
   const escapeHtml = value => String(value == null ? '' : value)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+  // A task with a start date runs until its due date: it belongs to every day of
+  // that window, not only to the due day. Done tasks stay on their own date.
+  const validKey = key => /^\d{4}-\d{2}-\d{2}$/.test(String(key || ''));
+  const spansDay = (task, key) => !!task && !task.done && !task.archivedAt
+    && validKey(task.startDate) && validKey(task.date)
+    && task.startDate < task.date && task.startDate <= key && key < task.date;
   const tasksForDay = (state, key) => (state.tasks || [])
-    .filter(t => t.date === key && !t.archivedAt)
+    .filter(t => !t.archivedAt && (t.date === key || spansDay(t, key)))
     .sort((a,b) => Number(!!a.done) - Number(!!b.done)
+      || Number(a.date !== key) - Number(b.date !== key)
       || Number(a.sortOrder || 0) - Number(b.sortOrder || 0)
       || String(a.title || '').localeCompare(String(b.title || ''),'es'));
   const eventsForDay = (state, key) => (state.events || [])
@@ -211,7 +218,7 @@
       planPerson:typeof input.planPerson==='string'?input.planPerson:'',
       planGrouping:input.planGrouping==='person'?'person':'date'};
   };
-  return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,
+  return {PANELS,dayKey,dateFromKey,addDays,monthShift,monthCells,escapeHtml,tasksForDay,spansDay,
     eventsForDay,timedEvents,taskForSession,monthAgendaGroups,weekStart,weeklyPlan,estimatedMinutes,weeklyWorkload,projectFor,categoryFor,colorFor,minutes,
     defaultPreferences,sanitizePreferences};
 });

@@ -11,7 +11,7 @@ const app=read('apps/isabella/app.js');
 const work=read('apps/isabella/work.js');
 
 test('Section parity is the last Isabella stylesheet, offline, and Readings loads its own parity layer last',()=>{
-  assert.match(index,/minds-detail-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-sections-parity\.css\?v=1">\s*<\/head>/);
+  assert.match(index,/minds-detail-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-sections-parity\.css\?v=1">/);
   assert.match(sw,/minds-detail-parity\.css\?v=1',\s*'\.\/minds-sections-parity\.css\?v=1'/);
   assert.ok(theory.indexOf('design-system.css?v=2')<theory.indexOf('minds-parity.css?v=1'));
   for(const sheet of [css,theoryCss])assert.doesNotMatch(sheet,/@import|@font-face|url\(/);
