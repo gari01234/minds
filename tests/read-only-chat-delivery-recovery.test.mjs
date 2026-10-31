@@ -30,13 +30,27 @@ test("server writes owner-scoped completed read-only receipt before final succes
  assert.match(edge,/onConflict:"user_id,request_id"/);
  assert.match(edge,/expires_at:new Date\(Date\.now\(\)\+86400000\)/);
 });
-test("normal browser transport failure recovers existing owner receipt without re-execution",()=>{
- const normal=ai.slice(ai.indexOf("const {data,error}=await sb.functions.invoke('isabella-chat'"),ai.indexOf("async function brief("));
- assert.match(normal,/error\.name==='FunctionsFetchError'/);
- assert.match(normal,/window\.MINDS_CHAT_STREAM_RECOVERY\(options\.durableRequestId,\{attempts:85,intervalMs:1400\}\)/);
- assert.match(normal,/if\(recovered\?\.reply\)return/);
- assert.equal((normal.match(/functions\.invoke\('isabella-chat'/g)||[]).length,1);
- assert.match(recovered,/\.eq\('request_id',requestId\)/);
+test("normal browser transport failure recovers existing owner receipt without re-execution",async()=>{
+ for(const name of ['FunctionsFetchError','FunctionsRelayError']){
+  const calls=[],receipts=[];
+  const transport=Object.assign(new Error('transport failed'),{name});
+  const w={MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{}}})},functions:{invoke:async(endpoint,input)=>{calls.push({endpoint,input});return {error:transport}}}},
+   MINDS_CHAT_STREAM_RECOVERY:async(id)=>{receipts.push(id);return {reply:'Original answer',proposal:{unsafe:true},proposals:[{unsafe:true}]}}};
+  vm.runInNewContext(ai,{window:w,navigator:{language:'es'},setTimeout,clearTimeout,console},{timeout:1000});
+  const result=await w.ISABELLA_AI.ask('Please explain the context',{}, {durableRequestId:'original-request',continuation:{id:'existing'}});
+  assert.equal(calls.length,1);assert.equal(calls[0].endpoint,'isabella-chat');
+  assert.equal(calls[0].input.body.client_message_id,'original-request');
+  assert.deepEqual(receipts,['original-request']);assert.equal(result.reply,'Original answer');
+  assert.equal(result.proposal,null);assert.equal(result.proposals.length,0);
+ }
+});
+test("application errors do not recover or replay a request",async()=>{
+ let calls=0,receipts=0;
+ const original=Object.assign(new Error('denied'),{name:'FunctionsHttpError'});
+ const w={MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{}}})},functions:{invoke:async()=>{calls++;return {error:original}}}},MINDS_CHAT_STREAM_RECOVERY:async()=>{receipts++}};
+ vm.runInNewContext(ai,{window:w,navigator:{language:'es'},setTimeout,clearTimeout,console},{timeout:1000});
+ await assert.rejects(w.ISABELLA_AI.ask('Explain',{}, {durableRequestId:'original-request',continuation:{id:'existing'}}),e=>e===original);
+ assert.equal(calls,1);assert.equal(receipts,0);
 });
 test("receipt resolver returns the original answer but not invented authority",async()=>{
  let reads=0;

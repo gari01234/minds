@@ -23,3 +23,9 @@ Candidate code runs as a nonroot user in a Docker container with no network, no 
 A failed PR-creation permission leaves a blocked preparation with its branch recorded. A worker termination becomes a visible failed lease on the next poll. Each attempt allows one bounded repair after failed tests. Diagnostics are saved privately in Window. The owner may request another attempt after a failure, up to three attempts per proposal, with prior results retained; explicit retries are separate from the daily limit on new preparations. The pipeline does not certify semantic correctness from green tests. Owner notes and proposal decisions stay separate from code execution status.
 
 References: https://docs.github.com/en/actions/reference/security/oidc and https://developers.openai.com/api/docs/guides/structured-outputs.
+
+
+## Validation and revision retries
+The preparation image caches dependencies from the trusted checkout before accepting a candidate. The offline container type-checks the same Edge entrypoints as CI, then runs Node regressions and the PWA build. A failed type check is returned to the bounded repair step. Existing tests remain immutable to the worker. Browser transport tests exercise payloads and receipt recovery, rather than relying on the location or spelling of an implementation fragment.
+
+An owner-requested retry has a limit of three preparations per base revision. Updating main permits a new bounded budget; total attempts and history are retained. Repeated requests on an exhausted, unchanged revision do not execute the model. Preparing a draft never authorizes merge or production deployment.

@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
+import vm from "node:vm";
 import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,scopedHistoryReady}
   from "../supabase/functions/_shared/turn-capability-contract.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
@@ -62,14 +63,21 @@ test("a text response is not an action receipt, regardless of its wording",()=>{
  assert.equal(turnOutcomeReceipt({proposals:[{...p,request_id:null}]}).outcome,"answered");
  assert.equal(turnOutcomeReceipt({applied:[{receipt_id:"applied"}]}).outcome,"action_applied");
 });
-test("browser uses the capability endpoint directly, no heuristic durable/stream probes",()=>{
- const entry=client.slice(client.indexOf("async function ask(message,state,options={})"),
-   client.indexOf("async function brief(state)"));
- assert.doesNotMatch(entry,/askDurableChat\(/);
- assert.doesNotMatch(entry,/askDirectStream\(/);
- assert.match(entry,/sb\.functions\.invoke\('isabella-chat'/);
- assert.match(entry,/surface:options\.background\?'background':'chat_browser'/);
- assert.match(client,/if\(!options\.continuation&&!options\.workThread&&!options\.background&&!attachments\.length/);
+test("browser preserves capability payload across normal, project, attachment and background turns",async()=>{
+ for(const options of [{},{workThread:{id:'project-thread'}},{attachments:[{name:'synthetic.txt',type:'text/plain'}]},{background:true}]){
+  const calls=[];
+  const w={MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{}}})},functions:{invoke:async(endpoint,input)=>{calls.push({endpoint,input});return {data:{reply:'Answer'}}}}}};
+  vm.runInNewContext(client,{window:w,navigator:{language:'es'},setTimeout,clearTimeout,console},{timeout:1000});
+  const result=await w.ISABELLA_AI.ask('Explain the current context',{}, {...options,durableRequestId:'request-id'});
+  assert.equal(result.reply,'Answer');assert.equal(calls.length,1);
+  assert.equal(calls[0].endpoint,'isabella-chat');
+  const body=calls[0].input.body;
+  assert.equal(body.surface,options.background?'background':'chat_browser');
+  assert.equal(body.client_message_id,'request-id');
+  assert.equal(body.work_thread_id,options.workThread?.id||null);
+  assert.equal(body.attachments.length,options.attachments?.length||0);
+  assert.equal(body.stream,undefined);assert.equal(body.durable,undefined);
+ }
 });
 test("server rejects BOTH text-only transports before any route or model call",()=>{
  const gate=server.indexOf('turnContract.lane==="tool_capable"');

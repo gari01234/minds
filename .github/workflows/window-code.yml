@@ -5,6 +5,8 @@ on:
     paths:
       - '.github/workflows/window-code.yml'
       - 'scripts/window-code-runner.mjs'
+      - 'scripts/window-code-checks.mjs'
+      - 'scripts/window-code.Dockerfile'
   schedule:
     - cron: '35 * * * *'
   workflow_dispatch:

@@ -48,7 +48,7 @@ Deno.serve(async(req:Request)=>{
     const r=await fetch(`https://api.github.com/repos/${REPOSITORY}/pulls/${body.pr_number}`,{headers:{Accept:'application/vnd.github+json'}});const pr=await r.json();
     if(!r.ok||pr.head?.sha!==body.commit_sha||pr.head?.ref!==branch||pr.head?.repo?.full_name!==REPOSITORY||pr.base?.ref!=='main'||pr.draft!==true)throw Error('pr_receipt_mismatch');prUrl=pr.html_url;
    }
-   const result={diagnostics:String(body.diagnostics||'').slice(0,12000),reason:String(body.reason||'').slice(0,2000),test_exit_code:body.test_exit_code??null,checks:typeof body.test_exit_code==='number'?['Node regressions followed by PWA build (conditional on tests passing)']:[],limitations:['No authenticated acceptance test','No Deno or SQL integration in this preparation runner'],run_url:`https://github.com/${REPOSITORY}/actions/runs/${claims.run_id}`};
+   const result={diagnostics:String(body.diagnostics||'').slice(0,12000),reason:String(body.reason||'').slice(0,2000),test_exit_code:body.test_exit_code??null,checks:typeof body.test_exit_code==='number'?['See preparation run for the exact validator version and checks']:[],limitations:['No authenticated acceptance test','No SQL integration in this preparation runner'],run_url:`https://github.com/${REPOSITORY}/actions/runs/${claims.run_id}`};
    const saved=await sb.from('minds_window_code_jobs').update({status,branch:body.commit_sha?branch:null,commit_sha:body.commit_sha||null,pr_url:prUrl,result,completed_at:new Date().toISOString()}).eq('id',job.id).eq('status','preparing');if(saved.error)throw saved.error;
    return json({status,job_id:job.id});
   }
