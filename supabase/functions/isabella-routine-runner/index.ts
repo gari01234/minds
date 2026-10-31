@@ -84,7 +84,7 @@ Deno.serve(async(req:Request)=>{
 
       const contextQueries=await Promise.all([
         sb.from("isabella_events").select("title,starts_at,ends_at,all_day,notes").eq("user_id",routine.user_id).gte("starts_at",eventsFrom).lte("starts_at",eventsTo).order("starts_at",{ascending:true}).limit(40),
-        sb.from("isabella_tasks").select("title,due_date,completed_at,archived_at,reminder_time,notes").eq("user_id",routine.user_id).gte("due_date",today).lte("due_date",until).is("archived_at",null).order("due_date",{ascending:true}).limit(50),
+        sb.from("isabella_tasks").select("title,due_date,start_date,completed_at,archived_at,reminder_time,notes").eq("user_id",routine.user_id).gte("due_date",today).or(`due_date.lte.${until},start_date.lte.${until}`).is("archived_at",null).order("due_date",{ascending:true}).limit(50),
         sb.from("isabella_memories").select("kind,content,updated_at").eq("user_id",routine.user_id).eq("status","active").order("updated_at",{ascending:false}).limit(16),
         sb.from("conversations").select("id").eq("user_id",routine.user_id).eq("app_scope","isabella").order("updated_at",{ascending:false}).limit(1),
         sb.from("isabella_preferences").select("value").eq("user_id",routine.user_id).eq("preference_key","feed").maybeSingle(),
@@ -92,7 +92,9 @@ Deno.serve(async(req:Request)=>{
         attentionDigest?sb.from("minds_attention_events").select("id,title,body,urgency,reason,reason_code,source_type,event_type,created_at").eq("user_id",routine.user_id).eq("route","briefing").eq("status","pending").order("created_at",{ascending:true}).limit(12):Promise.resolve({data:[],error:null})
       ]);
 
-      const [events,tasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      const [events,rawTasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      // Multi-day tasks already running today are part of today's agenda.
+      const tasks=(rawTasks||[]).map((x:any)=>x.start_date&&x.due_date&&x.start_date<=today&&today<x.due_date?{...x,in_progress_today:true}:x);
       const urgencyRank:Record<string,number>={urgent:0,attention:1,info:2};
       const attentionItems=(attentionQ||[]).sort((a:any,b:any)=>(urgencyRank[String(a.urgency)]??3)-(urgencyRank[String(b.urgency)]??3)||String(a.created_at).localeCompare(String(b.created_at))).slice(0,8);
       attentionEventIds=attentionItems.map((x:any)=>String(x.id));
@@ -118,7 +120,7 @@ HORA LOCAL ACTUAL: ${localNow}
 
 CONTEXTO DE AGENDA:
 Eventos próximos: ${JSON.stringify(events||[])}
-Tareas próximas: ${JSON.stringify(tasks||[])}
+Tareas próximas (in_progress_today:true = tarea de varios días que ya empezó y sigue abierta hoy; trátala como parte de hoy): ${JSON.stringify(tasks||[])}
 
 MEMORIA RECIENTE:
 ${JSON.stringify(memories||[])}

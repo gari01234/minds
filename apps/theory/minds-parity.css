@@ -2,6 +2,8 @@
    Embedded Readings list uses the Work/Planner controls of the host app:
    tabs with a blue active rule, quiet r11 buttons, system-font count chips.
    Reading titles keep their editorial serif. Presentation only. */
+/* Embedded in MINDS there is no Readings header: give its 68px row back to the list. */
+html.embedded body #app{grid-template-rows:0 minmax(0,1fr)!important}
 html.embedded body .v09-reading-filters{
   gap:3px;
   padding-bottom:0;

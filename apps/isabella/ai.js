@@ -14,7 +14,9 @@ function compact(state){
   const catName=id=>(state.categories||[]).find(x=>x.id===id)?.name||id||null;
   const projectName=id=>(state.projects||[]).find(x=>x.id===id)?.name||id||null;
   const todayEvents=(state.events||[]).filter(x=>x.date===td).map(x=>({id:x.id,title:x.title,date:x.date,start:x.start,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)}));
-  const todayTasks=(state.tasks||[]).filter(x=>x.date===td&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0)}));
+  // Multi-day tasks (start_date <= today < due date) are part of today too, flagged as in progress.
+  const spansToday=x=>/^\d{4}-\d{2}-\d{2}$/.test(String(x.startDate||''))&&/^\d{4}-\d{2}-\d{2}$/.test(String(x.date||''))&&x.startDate<=td&&td<x.date;
+  const todayTasks=(state.tasks||[]).filter(x=>(x.date===td||spansToday(x))&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.date!==td)-Number(b.date!==td))||(Number(a.sortOrder||0)-Number(b.sortOrder||0))).map(x=>({id:x.id,title:x.title,date:x.date,category:catName(x.categoryId),project:projectName(x.projectId),reminder_time:x.reminderTime||null,sort_order:Number(x.sortOrder||0),...(x.date!==td?{in_progress:true,start_date:x.startDate,due_date:x.date}:{})}));
   const undatedTasks=(state.tasks||[]).filter(x=>!x.date&&!x.done&&!x.archivedAt).sort((a,b)=>(Number(a.sortOrder||0)-Number(b.sortOrder||0))).slice(0,30).map(x=>({id:x.id,title:x.title,category:catName(x.categoryId),project:projectName(x.projectId),sort_order:Number(x.sortOrder||0)}));
   const upcoming=[
     ...(state.events||[]).filter(x=>x.date>=td).slice(0,30).map(x=>({kind:'event',id:x.id,date:x.date,time:x.start,title:x.title,duration_minutes:x.duration||60,category:catName(x.categoryId),project:projectName(x.projectId)})),
@@ -450,6 +452,12 @@ async function ideaWork(workspace,message,history=[],state=null){
   if(error)throw error;
   if(data?.error)throw new Error(data.detail||data.error);
   const result=data||{reply:'',artifact:null,sources:[]};
+  // A complete JSON answer that arrived as text is split into prose + draft before it is stored.
+  const parts=typeof ideaWorkerParts==='function'?ideaWorkerParts(result.reply):null;
+  if(parts&&parts.complete){
+    result.reply=String(parts.reply||'').trim()||'He avanzado el trabajo.';
+    if(!result.artifact&&parts.artifact)result.artifact={title:parts.artifact.title||workspace?.title||'Artefacto',format:'markdown',content:parts.artifact.content};
+  }
   if(result?.file_request){
     const req=result.file_request,kind=String(req.kind||''),content=(kind==='docx'||kind==='pdf')?String(result?.artifact?.content||workspace?.artifact_content||''):'';
     result.generated_artifact=await createArtifact({kind,title:req.title||workspace?.title||'Artefacto',content,instruction:req.instruction||'',workspaceId:workspace?.id||null});

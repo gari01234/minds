@@ -32,15 +32,20 @@ async function render(){
     sb.from('minds_expectations').select('id,title,due_at,status,observability',{count:'exact'}).eq('user_id',user).in('status',['active','due_unconfirmed']).lte('due_at',withinWeek).order('due_at',{ascending:true}).limit(CAP),
     sb.from('minds_attention_events').select('id,title,reason,deadline_at,route,created_at',{count:'exact'}).eq('user_id',user).eq('requires_user',true).is('consumed_at',null).in('status',['pending','delivered']).order('created_at',{ascending:false}).limit(CAP),
     sb.from('minds_shadow_decisions').select('request_id',{count:'exact',head:true}).eq('user_id',user).eq('status','pending'),
-    sb.from('isabella_projects').select('id,name').eq('user_id',user)
+    sb.from('isabella_projects').select('id,name').eq('user_id',user),
+    // Multi-day tasks already running today (start_date <= today < due_date).
+    sb.from('isabella_tasks').select('id,title,due_date,start_date,project_id').eq('user_id',user).is('completed_at',null).is('archived_at',null).not('start_date','is',null).lte('start_date',today).order('due_date',{ascending:true}).limit(CAP*3)
   ];
-  const [a,b,c,d,pj]=await Promise.allSettled(queries);
+  const [a,b,c,d,pj,sp]=await Promise.allSettled(queries);
   if(version!==generation)return;
   const tasks=normalized(a),expectations=normalized(b),attention=normalized(c),reviews=normalized(d);
   const projects=normalized(pj);
   const canonicalProjectNames=new Map(projects.data.map(x=>[String(x.id),String(x.name||'')]));
   const checked=[tasks,expectations,attention,reviews].filter(x=>x.ok).length;
-  const rowsTask=tasks.data.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(canonicalProjectNames.get(String(t.project_id))?' · '+canonicalProjectNames.get(String(t.project_id)):'')}));
+  const listed=new Set(tasks.data.map(t=>String(t.id)));
+  const running=normalized(sp).data.filter(t=>t.start_date&&t.due_date&&t.start_date<=today&&t.due_date>today&&!listed.has(String(t.id))).slice(0,CAP);
+  const rowsTask=[...tasks.data.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:(t.due_date<today?'Vencida':'Para hoy')+' · '+displayDay(t.due_date)+(canonicalProjectNames.get(String(t.project_id))?' · '+canonicalProjectNames.get(String(t.project_id)):'')})),
+    ...running.map(t=>({id:t.id,title:t.title||'Tarea sin título',detail:'En curso · hasta '+displayDay(t.due_date)+(canonicalProjectNames.get(String(t.project_id))?' · '+canonicalProjectNames.get(String(t.project_id)):'')}))];
   const rowsExpect=expectations.data.map(x=>({title:x.title||'Confirmación esperada',detail:(x.status==='due_unconfirmed'?'Vencida, ocurrencia no confirmada':'Próxima comprobación')+' · '+displayDay(x.due_at)}));
   const rowsAttention=attention.data.map(x=>({title:x.title||'Necesita atención',detail:(x.route||'Atención')+(x.deadline_at?' · '+displayDay(x.deadline_at):'')+(x.reason?' · '+x.reason:'')}));
   const truncated=[tasks,expectations,attention].some(x=>x.ok&&x.count!==null&&x.count>x.data.length);
@@ -56,7 +61,7 @@ async function render(){
     (rowsAttention.length||!attention.ok?section('Atención que requiere respuesta',rowsAttention,'Sin avisos sin consumir en esta consulta.','attention',attention.ok):'')+
     (reviews.ok?(pendingReviews?'<div class="situation-reviews">'+esc(String(pendingReviews)+' propuestas de acción pendientes de confirmar')+'</div>':''):'<p class="situation-unavailable">Propuestas pendientes: fuente no disponible.</p>')+
     (noSignals?'<p class="situation-clear">Sin tareas vencidas ni solicitudes pendientes en las fuentes comprobadas.</p>':noRequests?'<p class="situation-clear">Sin otras solicitudes pendientes en las fuentes comprobadas.</p>':'')+
-    '<details class="situation-scope"><summary>Alcance de la consulta</summary><p>Cobertura limitada a tareas fechadas hasta hoy, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p></details>';
+    '<details class="situation-scope"><summary>Alcance de la consulta</summary><p>Cobertura limitada a tareas fechadas hasta hoy, tareas de varios días en curso, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p></details>';
   el.querySelector('[data-situation-calendar]')?.addEventListener('click',()=>document.querySelector('.main-nav-item[data-nav="calendar"]')?.click());
   (el.querySelectorAll?.('[data-situation-task]')||[]).forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.situationTask)));
 }

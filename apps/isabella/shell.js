@@ -24,6 +24,7 @@ document.body.innerHTML = `
     <button class="lens-nav-item" data-nav="work" aria-label="Work"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.work}</span><span class="lens-copy"><strong>Work</strong><small>Proyectos</small></span></button>
     <button class="lens-nav-item" data-nav="readings" aria-label="Lecturas"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.readings}</span><span class="lens-copy"><strong>Lecturas</strong><small>Investigación</small></span></button>
     <button class="lens-nav-item" data-nav="thoughts" aria-label="Thoughts"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.thoughts}</span><span class="lens-copy"><strong>Thoughts</strong><small>Dear: Thoughts</small></span></button>
+    <div class="minds-menu-slot lens-menu-slot" data-menu-slot="sidebar"></div>
     <div class="lenses-foot">Una memoria · distintas vistas</div>
   </nav>
 
@@ -126,7 +127,7 @@ document.body.innerHTML = `
     </div>
     <form id="feedThreadForm" class="feed-thread-form">
       <textarea id="feedThreadInput" rows="1" placeholder="Preguntar sobre esto..."></textarea>
-      <button class="send" aria-label="Enviar">↑</button>
+      <button class="send" aria-label="Enviar"><svg class="chat-ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
     </form>
   </section>
 
@@ -143,7 +144,7 @@ document.body.innerHTML = `
     </div>
     <form id="ideaWorkspaceForm" class="idea-workspace-form">
       <textarea id="ideaWorkspaceInput" rows="1" placeholder="Seguir trabajando en esta idea..."></textarea>
-      <button class="send" aria-label="Enviar">↑</button>
+      <button class="send" aria-label="Enviar"><svg class="chat-ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button>
     </form>
   </section>
 

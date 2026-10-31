@@ -190,12 +190,18 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     const taskView=(x:any)=>({id:x.client_key||x.id,title:x.title,date:x.due_date||null,reminder_time:x.reminder_time||null,sort_order:Number(x.sort_order||0),project_id:x.project_id||null,category_id:x.category_id||null,priority:x.priority||null,start_date:x.start_date||null,notes:x.notes||""});
     const tasks=(taskQ.data||[]).map(taskView);
     const tomorrowDate=new Date(new Date(currentDate+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10);
-    const tomorrowTasks=tasks.filter((x:any)=>x.date===tomorrowDate)
+    const tomorrowTasks=tasks.filter((x:any)=>x.date===tomorrowDate||(!!x.start_date&&!!x.date&&x.start_date<=tomorrowDate&&tomorrowDate<x.date))
       .sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title)));
-    const todayTasks=tasks.filter((x:any)=>x.date===currentDate).sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title)));
+    // Multi-day tasks belong to every day of their window (start_date <= day < due date).
+    const runsOn=(x:any,day:string)=>!!x.start_date&&!!x.date&&x.start_date<=day&&day<x.date;
+    const todayTasks=[
+      ...tasks.filter((x:any)=>x.date===currentDate).sort((a:any,b:any)=>a.sort_order-b.sort_order||String(a.title).localeCompare(String(b.title))),
+      ...tasks.filter((x:any)=>runsOn(x,currentDate)).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order)
+        .map((x:any)=>({...x,in_progress:true,due_date:x.date}))
+    ];
     const overdueTasks=tasks.filter((x:any)=>x.date&&x.date<currentDate).sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||a.sort_order-b.sort_order);
     const undatedTasks=tasks.filter((x:any)=>!x.date).sort((a:any,b:any)=>a.sort_order-b.sort_order).slice(0,30);
-    const futureTasks=tasks.filter((x:any)=>x.date&&x.date>currentDate).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order).slice(0,30);
+    const futureTasks=tasks.filter((x:any)=>x.date&&x.date>currentDate&&!runsOn(x,currentDate)).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order).slice(0,30);
     const eventView=(x:any)=>{
       const presentation=presentZonedRange(x.starts_at,x.ends_at,timeZone,!!x.all_day);
       return {
@@ -2515,14 +2521,15 @@ async function searchCalendar(req: Request, args: any) {
     const to=String(args?.date_to||"").trim();
     const query=normalizeText(args?.query||"");
     let eq=sb.from("isabella_events").select("client_key,title,starts_at,ends_at,all_day,notes").order("starts_at",{ascending:true}).limit(120);
-    let tq=sb.from("isabella_tasks").select("client_key,title,due_date,completed_at,archived_at,reminder_time,notes").order("due_date",{ascending:true}).limit(120);
+    let tq=sb.from("isabella_tasks").select("client_key,title,due_date,start_date,completed_at,archived_at,reminder_time,notes").order("due_date",{ascending:true}).limit(120);
     if(from){eq=eq.gte("starts_at",from+"T00:00:00");tq=tq.gte("due_date",from)}
-    if(to){eq=eq.lte("starts_at",to+"T23:59:59");tq=tq.lte("due_date",to)}
+    // A task overlaps the range when it is due in it or started before its end.
+    if(to){eq=eq.lte("starts_at",to+"T23:59:59");tq=tq.or(`due_date.lte.${to},start_date.lte.${to}`)}
     const [{data:events},{data:tasks}]=await Promise.all([eq,tq]);
     const has=(x:any)=>!query||normalizeText((x?.title||"")+" "+(x?.notes||"")).includes(query);
     return {
       events:(events||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:x.all_day})),
-      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time}))
+      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time}))
     };
   }catch{return {events:[],tasks:[]}}
 }
@@ -3165,7 +3172,7 @@ PRINCIPIO CENTRAL:
 Primero conversa y entiende la intención como lo haría ChatGPT. Solo usa una herramienta cuando la conversación realmente necesita consultar o modificar algo externo. No conviertas cada mensaje en una operación de agenda.
 
 AGENDA CANÓNICA:
-CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos.
+CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos. Las tareas con in_progress:true son tareas de varios días que ya empezaron (start_date) y siguen abiertas hasta su due_date: forman parte del día; nómbralas como tareas en curso con su fecha de entrega, no como si vencieran hoy.
 Cuando pregunte por "mañana", usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events como referencia del día siguiente; jamás confundas ese día con current_date. Si la consulta pide todas las tareas de mañana, examina primero el conjunto completo de tomorrow_tasks. Si agenda_context_source no es server_canonical, no afirmes que no hay tareas sin verificar la información disponible. Para una consulta puramente informativa de mañana no es necesario modificar ninguna tarea.
 PREVISIÓN METEOROLÓGICA COMPARTIDA:
 Si CONTEXTO PRIVADO.situation_weather contiene una previsión reciente, ya está disponible en MINDS/Situación (Ahora), con procedencia y fecha de generación. Para una pregunta sobre el clima de esa localidad y los días cubiertos, UTILIZA esos datos. No afirmes que careces de acceso al pronóstico. Aclara su antigüedad si es relevante. Nunca extrapoles a días fuera de los siete incluidos ni a una ciudad diferente; si piden otra localidad, consulta web_search en la ruta que lo permita o reconoce el límite.

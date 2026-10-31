@@ -44,7 +44,7 @@
   };
   const commitTodayOrder = list => {
     if (!list) return;
-    const ids=[...list.querySelectorAll(':scope > .desk-task-row:not(.is-done)')]
+    const ids=[...list.querySelectorAll(':scope > .desk-task-row:not(.is-done):not(.is-span)')]
       .map(row=>row.dataset.deskRowId).filter(Boolean);
     app()?.reorderDeskTasks?.(prefs.selectedDate,ids);
   };
@@ -200,8 +200,11 @@
         &&e.metadata?.task_client_key===item.id);
       const reserved = sessions.reduce((sum,e)=>sum+Math.max(0,Number(e.duration)||0),0);
       const estimate = M.estimatedMinutes(item);
-      return '<div class="desk-task-row' + (item.done?' is-done':'') +
-        '" draggable="' + (!item.done) + '" data-desk-row-id="' + E(item.id) +
+      // Multi-day task in progress on this date: listed, editable, not re-ordered into this day.
+      const span = item.date !== prefs.selectedDate;
+      const until = span ? (M.dateFromKey(item.date)||new Date()).toLocaleDateString('es-ES',{day:'numeric',month:'short'}).replace('.','') : '';
+      return '<div class="desk-task-row' + (item.done?' is-done':'') + (span?' is-span':'') +
+        '" draggable="' + (!item.done&&!span) + '" data-desk-row-id="' + E(item.id) +
         '" data-desk-drag-task="' + E(item.id) + '">' +
         '<button class="desk-task-check" type="button" data-desk-complete="' + E(item.id) +
         '" aria-label="' + E(item.done?'Reabrir':'Completar') + ' ' + E(item.title) +
@@ -209,6 +212,7 @@
         '<button class="desk-task-detail" type="button" data-desk-task="' + E(item.id) + '">' +
         '<strong>' + E(item.title) + '</strong><small>' +
         E(project?.name || category?.name || '') +
+        (span?' · en curso hasta '+E(until):'') +
         (estimate?' · estimado '+formatMinutes(estimate):'') +
         (reserved?' · reservado '+formatMinutes(reserved):'') +
         '</small></button>' +
@@ -216,8 +220,8 @@
         '" title="Estimar duración" aria-label="Estimar duración de ' + E(item.title) + '">'+deskIcon('clock')+'</button>' +
         '<button type="button" class="desk-plan-task" data-desk-plan-task="' + E(item.id) +
         '" title="Reservar tiempo" aria-label="Reservar tiempo para ' + E(item.title) + '">'+deskIcon('plus')+'</button>' +
-        '<button type="button" class="desk-task-handle" data-desk-sort-handle="' + E(item.id) +
-        '" title="Arrastrar para ordenar" aria-label="Arrastrar para ordenar ' + E(item.title) + '">⠿</button>':'')+
+        (span?'':'<button type="button" class="desk-task-handle" data-desk-sort-handle="' + E(item.id) +
+        '" title="Arrastrar para ordenar" aria-label="Arrastrar para ordenar ' + E(item.title) + '">⠿</button>'):'')+
         '</div>';
     }).join('');
     return '<div class="desk-today-toolbar"><span class="desk-subtitle">' + E(dateName) + '</span>' +
