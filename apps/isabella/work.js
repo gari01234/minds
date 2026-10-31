@@ -1015,5 +1015,5 @@ async function sendThreadMessage(thread,overrideMessage=null){
 }
 
 window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
-if(document.body.dataset.section==='work')setTimeout(()=>{if(!bound)void render()},0);
+if(document.body.dataset.section==='work'&&typeof setTimeout==='function')setTimeout(()=>{if(!bound)void render()},0);
 })();
