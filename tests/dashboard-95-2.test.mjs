@@ -10,7 +10,7 @@ const part=(begin,end)=>{
  return app.slice(i,j);
 };
 test('Hoy offers a one-click canonical manual task editor and an always-visible add button',()=>{
- assert.match(dash,/data-desk-add-task>＋ Añadir tarea/);
+ assert.match(dash,/data-desk-add-task>.*deskIcon\('plus'\).*Añadir tarea/);
  assert.match(dash,/app\(\)\?\.openNewItem\?\.\(prefs.selectedDate\)/);
  assert.match(app,/openNewItem:\(date\)=>newPanel\(date\)/);
  assert.match(css,/\.desk-add-task/);
