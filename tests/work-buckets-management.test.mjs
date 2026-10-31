@@ -35,5 +35,5 @@ test('Bucket menu can be opened with accessible controls, CSS is scoped and serv
  assert.match(css,/\.work-bucket \.work-bucket-menu\[hidden\]/);
  assert.match(css,/\.work-bucket\.is-bucket-drop-before/);
  assert.match(html,/work-buckets\.css\?v=1/);
- assert.match(html,/work\.js\?v=34/);
+ assert.match(html,/work\.js\?v=33/);
 });
