@@ -838,7 +838,7 @@ async function runIdeaWorkspace(message,{kickoff=false}={}){
     }
     ideaWorkspaces=[{...w,messages:undefined},...ideaWorkspaces.filter(x=>x.id!==w.id)];
   }catch(e){
-    const content='No pude avanzar este trabajo ahora mismo. Inténtalo otra vez.';
+    const content=/créditos|OpenAI|limitando/.test(String(e?.message||''))?String(e.message):'No pude avanzar este trabajo ahora mismo. Inténtalo otra vez.';
     if(session){try{const {data}=await sb.from('minds_idea_messages').insert({workspace_id:w.id,user_id:session.user.id,role:'assistant',content,sources:[]}).select('id,role,content,sources,created_at').single();if(data)w.messages.push(data)}catch{}}
     else w.messages.push({id:uid(),role:'assistant',content,sources:[],created_at:new Date().toISOString()});
   }finally{

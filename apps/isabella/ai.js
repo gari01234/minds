@@ -9,6 +9,20 @@ function localTemporal(){
     current_daypart:h<5?'night':h<12?'morning':h<18?'afternoon':h<22?'evening':'night'
   };
 }
+// Edge Function failures carry a JSON body ({error,status,detail}). Read it so the chat
+// says what actually happened instead of a generic "non-2xx status code".
+async function functionErrorMessage(error){
+  let body=null;
+  try{const res=error?.context;if(res&&typeof res.clone==='function')body=await res.clone().json()}catch{}
+  if(!body||typeof body!=='object')return '';
+  const status=Number(body.status||0),detail=String(body.detail||body.message||'');
+  if(body.error==='openai_error'&&status===429&&/credit|quota|billing/i.test(detail))
+    return 'No puedo responder ahora: la cuenta de OpenAI que uso se quedó sin créditos. En cuanto se recargue el saldo (platform.openai.com → Billing), vuelve a enviarme el mensaje.';
+  if(body.error==='openai_error'&&status===429)return 'OpenAI está limitando las solicitudes en este momento. Inténtalo de nuevo en un minuto.';
+  if(body.error==='openai_error')return 'El servicio de IA no respondió'+(status?' ('+status+')':'')+'. Inténtalo de nuevo en un momento.';
+  if(body.error==='another_chat_turn_in_progress')return String(body.message||'Estoy terminando la respuesta anterior. Espera un momento.');
+  return String(body.message||body.detail||body.error||'');
+}
 function compact(state){
   const td=dateISO(),temporal=localTemporal();
   const catName=id=>(state.categories||[]).find(x=>x.id===id)?.name||id||null;
@@ -234,6 +248,8 @@ async function ask(message,state,options={}){
       const recovered=await window.MINDS_CHAT_STREAM_RECOVERY(options.durableRequestId,{attempts:85,intervalMs:1400});
       if(recovered?.reply)return {...recovered,proposal:null,proposals:[],question:null,memory_candidates:[]};
     }
+    const readable=await functionErrorMessage(error);
+    if(readable)throw new Error(readable);
     throw error;
   }
   if(data?.error)throw new Error(data.message||data.detail||data.error);
@@ -449,7 +465,7 @@ async function ideaWork(workspace,message,history=[],state=null){
     context:state?compact(state):{},
     message:String(message||''),history:(history||[]).slice(-16)
   }});
-  if(error)throw error;
+  if(error){const readable=await functionErrorMessage(error);if(readable)throw new Error(readable);throw error}
   if(data?.error)throw new Error(data.detail||data.error);
   const result=data||{reply:'',artifact:null,sources:[]};
   // A complete JSON answer that arrived as text is split into prose + draft before it is stored.
