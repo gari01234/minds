@@ -10,7 +10,7 @@ function extract(start,end){
   return source.slice(a,b).trim();
 }
 const loadPlannerSource=extract('async function loadPlanner(){','function localIso(){');
-const persistSource=extract('async function persistWorkTaskOrder(','async function addBucket(');
+const persistSource=extract('async function persistWorkTaskOrder(','function closeBucketMenus(');
 
 test('90.6 Planner canonical query has a stable UUID tie-break after Work and calendar sort',async()=>{
   const requests=[];
