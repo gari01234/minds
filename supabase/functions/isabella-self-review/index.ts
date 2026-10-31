@@ -40,7 +40,12 @@ Deno.serve(async(req:Request)=>{
     instructions:SELF_REVIEW_INSTRUCTIONS,text:{format:{type:"json_schema",name:"isabella_daily_review",strict:true,schema:selfReviewSchema}},
     input:[{role:"user",content:JSON.stringify({window:{start:since,end:until,key:job.review_key},...packet,existing_proposals:existing})}]
    })});
-   const payload=await response.json();if(!response.ok)throw Error("review_model_http_"+response.status);
+   const payload=await response.json();
+   // Every model call is counted in the owner's usage log, so the credit estimate sees Window too.
+   if(payload?.usage){const u=payload.usage,input=Number(u.input_tokens||0),output=Number(u.output_tokens||0);
+    try{await sb.from("minds_ai_usage").insert({user_id:job.user_id,feature:"window_review",model:String(payload.model||Deno.env.get("OPENAI_REVIEW_MODEL")||Deno.env.get("OPENAI_MODEL")||"gpt-5.6"),
+     input_tokens:input,cached_input_tokens:Number(u.input_tokens_details?.cached_tokens||0),output_tokens:output,total_tokens:Number(u.total_tokens||input+output),metadata:{report_id:job.id,review_key:job.review_key}})}catch{}}
+   if(!response.ok)throw Error("review_model_http_"+response.status);
    const output=(payload.output||[]).filter((o:any)=>o.type==="message").flatMap((o:any)=>o.content||[]).filter((c:any)=>c.type==="output_text").map((c:any)=>c.text).join("");
    report=validateSelfReview(JSON.parse(output),packet.evidence,existing);
    packet.coverage.model={model:payload.model,usage:payload.usage||{},independent_verification:false};

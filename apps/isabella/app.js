@@ -3571,6 +3571,7 @@ async function artifactsPanel(){
   }catch{$('#modalBody').innerHTML='<div class=\"small\">No pude cargar los artefactos ahora mismo.</div>'}
 }
 async function aiUsagePanel(){
+  if(window.MINDS_CREDIT?.panel)return window.MINDS_CREDIT.panel(modal);
   const sb=window.MINDS_SUPABASE;if(!sb){modal('Uso IA','<div class="small">Conecta la memoria para medir el uso de MINDS.</div>');return}
   modal('Uso IA','<div class="surface-loading">Leyendo consumo…</div>');
   try{
@@ -4538,6 +4539,7 @@ window.ISABELLA_APP={
   addAssistantMessage:(text)=>say('assistant',text),
   addUserMessage:(text)=>say('user',text),
   refresh:()=>{renderMessages();renderToday();renderCalendar()},
+  openAiUsage:()=>void aiUsagePanel(),
   editTaskById:(id)=>editItem('task',id),
   editEventById:(id)=>editItem('event',id),
   toggleTaskById:(id)=>toggleTaskDone(id),

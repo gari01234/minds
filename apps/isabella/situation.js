@@ -16,6 +16,13 @@ function section(label,items,zero,key,ok){
   const rows=items.length?items.map(x=>key==='task'&&x.id?'<button type="button" class="situation-item situation-task situation-editable" data-situation-task="'+esc(x.id)+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></button>':'<div class="situation-item situation-'+key+'"><strong>'+esc(x.title)+'</strong><small>'+esc(x.detail)+'</small></div>').join(''):'<p class="situation-zero">'+esc(ok?zero:'Esta fuente no pudo comprobarse.')+'</p>';
   return '<section class="situation-group"><h3>'+esc(label)+'</h3>'+rows+'</section>';
 }
+function creditHtml(s){
+  const M=window.MINDS_CREDIT_MODEL;
+  if(!s||!M||!['low','critical','empty'].includes(s.level))return '';
+  const title=s.level==='empty'?'Saldo de OpenAI agotado (estimado)':s.level==='critical'?'Saldo de OpenAI casi agotado':'Saldo de OpenAI bajo';
+  const detail=s.level==='empty'?'Recárgalo en OpenAI → Billing y actualiza el saldo':'≈ '+M.money(s.remaining)+(s.daysLeft!==Infinity?' · unos '+M.daysText(s.daysLeft)+' al ritmo actual':'')+' · Ver uso';
+  return '<section class="situation-group situation-credit-group"><h3>Saldo de IA</h3><button type="button" class="situation-item situation-credit is-'+esc(s.level)+'" data-situation-credit><strong>'+esc(title)+'</strong><small>'+esc(detail)+'</small></button></section>';
+}
 async function render(){
   const el=$('#situationLedger');if(!el)return;
   const version=++generation;
@@ -36,7 +43,10 @@ async function render(){
     // Multi-day tasks already running today (start_date <= today < due_date).
     sb.from('isabella_tasks').select('id,title,due_date,start_date,project_id').eq('user_id',user).is('completed_at',null).is('archived_at',null).not('start_date','is',null).lte('start_date',today).order('due_date',{ascending:true}).limit(CAP*3)
   ];
+  // The credit estimate is a MINDS signal too: shown only when it needs attention.
+  const creditCheck=Promise.resolve(window.MINDS_CREDIT?.status?.()).catch(()=>null);
   const [a,b,c,d,pj,sp]=await Promise.allSettled(queries);
+  const credit=await creditCheck;
   if(version!==generation)return;
   const tasks=normalized(a),expectations=normalized(b),attention=normalized(c),reviews=normalized(d);
   const projects=normalized(pj);
@@ -56,6 +66,7 @@ async function render(){
   const noSignals=allChecked&&!rowsTask.length&&!rowsExpect.length&&!rowsAttention.length&&!pendingReviews;
   el.innerHTML='<div class="situation-heading"><div><span class="situation-kicker">REGISTROS DE MINDS</span><h2>Ahora</h2></div><button type="button" data-situation-calendar>Calendario ↗</button></div>'+
     '<p class="situation-coverage">'+esc(note+(truncated?' · Hay más resultados que los mostrados':'')+' · '+now.toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}))+'</p>'+
+    creditHtml(credit)+
     (rowsTask.length||!tasks.ok?section('Tareas para hoy y vencidas',rowsTask,'Sin tareas fechadas en esta consulta.','task',tasks.ok):'')+
     (rowsExpect.length||!expectations.ok?section('Respuestas por comprobar',rowsExpect,'Sin Expectations próximas o sin confirmar.','expectation',expectations.ok):'')+
     (rowsAttention.length||!attention.ok?section('Atención que requiere respuesta',rowsAttention,'Sin avisos sin consumir en esta consulta.','attention',attention.ok):'')+
@@ -63,6 +74,7 @@ async function render(){
     (noSignals?'<p class="situation-clear">Sin tareas vencidas ni solicitudes pendientes en las fuentes comprobadas.</p>':noRequests?'<p class="situation-clear">Sin otras solicitudes pendientes en las fuentes comprobadas.</p>':'')+
     '<details class="situation-scope"><summary>Alcance de la consulta</summary><p>Cobertura limitada a tareas fechadas hasta hoy, tareas de varios días en curso, Expectations próximas, avisos que requieren respuesta y propuestas de acción pendientes. No incluye todas las conversaciones, obligaciones sin fecha ni fuentes externas no conectadas. Una omisión de MINDS no equivale a ausencia de obligaciones.</p></details>';
   el.querySelector('[data-situation-calendar]')?.addEventListener('click',()=>document.querySelector('.main-nav-item[data-nav="calendar"]')?.click());
+  el.querySelector('[data-situation-credit]')?.addEventListener('click',()=>window.ISABELLA_APP?.openAiUsage?.());
   (el.querySelectorAll?.('[data-situation-task]')||[]).forEach(button=>button.addEventListener('click',()=>window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.situationTask)));
 }
 window.MINDS_SITUATION={render};

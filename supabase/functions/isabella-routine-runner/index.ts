@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked} from "../_shared/cognitive.ts";
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
+import CREDIT from "../_shared/credit-model.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -51,6 +52,39 @@ async function finishRun(sb:any,run:any,status:string,metadata:any={},error?:str
 async function recordUsage(sb:any,userId:string,model:string,usage:any){
   if(!usage)return;const input=Number(usage.input_tokens||0),cached=Number(usage?.input_tokens_details?.cached_tokens||0),output=Number(usage.output_tokens||0),total=Number(usage.total_tokens||input+output);
   try{await sb.from("minds_ai_usage").insert({user_id:userId,feature:"routine",model,input_tokens:input,cached_input_tokens:cached,output_tokens:output,total_tokens:total})}catch{}
+}
+// Same estimate as Uso IA: last balance Gari entered minus MINDS' metered spend since then.
+async function creditStatus(sb:any,userId:string,tz:string){
+  const pref=await sb.from("isabella_preferences").select("value").eq("user_id",userId).eq("preference_key","ai_credit").maybeSingle();
+  if(pref.error||!pref.data?.value)return null;
+  const credit=pref.data.value,balance=CREDIT.readBalance(credit);
+  if(!balance)return null;
+  const floor=new Date(Date.now()-7*864e5),from=(balance.at<floor?balance.at:floor).toISOString();
+  const usage:any[]=[];
+  for(let page=0;page<10;page++){
+    const {data,error}=await sb.from("minds_ai_usage").select("feature,model,input_tokens,cached_input_tokens,output_tokens,total_tokens,metadata,created_at")
+      .eq("user_id",userId).gte("created_at",from).order("created_at",{ascending:true}).range(page*1000,page*1000+999);
+    if(error)return null;
+    usage.push(...(data||[]));
+    if(!data||data.length<1000)break;
+  }
+  const reports=await sb.from("minds_self_review_reports").select("id,coverage,created_at,completed_at").eq("user_id",userId).gte("created_at",from).limit(200);
+  const rows=[...usage,...CREDIT.reviewRows(reports.error?[]:(reports.data||[]),usage)];
+  return {credit,summary:CREDIT.summarize(rows,{credit,timeZone:tz})};
+}
+// At most one credit sentence per day, appended by MINDS rather than left to the model.
+async function withCreditNotice(sb:any,userId:string,tz:string,today:string,message:string){
+  try{
+    const status=await creditStatus(sb,userId,tz);
+    const line=status?CREDIT.alertSentence(status.summary):"";
+    if(!line||status!.credit.last_alert_date===today)return message;
+    await sb.from("isabella_preferences").update({value:{...status!.credit,last_alert_date:today},updated_at:new Date().toISOString()})
+      .eq("user_id",userId).eq("preference_key","ai_credit");
+    return message+"\n\n"+line;
+  }catch{return message}
+}
+function outOfCredit(response:Response,payload:any){
+  return response.status===429&&/credit|quota|billing/i.test(String(payload?.error?.message||"")+" "+String(payload?.error?.code||""));
 }
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -158,13 +192,21 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       });
       const payload=await response.json();
       await recordUsage(sb,routine.user_id,Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna",payload?.usage);
-      if(!response.ok)throw new Error(payload?.error?.message||"OpenAI request failed");
-      const message=extractText(payload);
-      if(!message)throw new Error("empty_response");
-      const sources=extractSources(payload);
+      let message:string,sources:any[]=[],usedModel=Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna";
+      if(!response.ok&&outOfCredit(response,payload)){
+        // Without credit no retry can succeed: say so plainly instead of failing silently.
+        message="No pude preparar «"+String(routine.title||"tu rutina")+"»: la cuenta de OpenAI que uso se quedó sin créditos. Recárgala en platform.openai.com → Billing y, si quieres, actualiza el saldo en Uso IA.";
+        usedModel="none";attentionEventIds=[];
+      }else{
+        if(!response.ok)throw new Error(payload?.error?.message||"OpenAI request failed");
+        message=extractText(payload);
+        if(!message)throw new Error("empty_response");
+        sources=extractSources(payload);
+        message=await withCreditNotice(sb,routine.user_id,tz,today,message);
+      }
 
       phase="generated";
-      checked(await sb.from("minds_routine_deliveries").update({output:message,sources,model:Deno.env.get("OPENAI_MODEL")||"gpt-5.6-luna",status:"generated",generated_at:new Date().toISOString(),attention_event_ids:attentionEventIds}).eq("id",deliveryId),"routine_save_output");
+      checked(await sb.from("minds_routine_deliveries").update({output:message,sources,model:usedModel,status:"generated",generated_at:new Date().toISOString(),attention_event_ids:attentionEventIds}).eq("id",deliveryId),"routine_save_output");
       }else if(attentionDigest&&deliveryId){
         const saved=checked(await sb.from("minds_routine_deliveries").select("attention_event_ids").eq("id",deliveryId).maybeSingle(),"routine_attention_restore");
         attentionEventIds=Array.isArray(saved?.attention_event_ids)?saved.attention_event_ids.map((x:any)=>String(x)):[];
