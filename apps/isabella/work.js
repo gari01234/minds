@@ -558,6 +558,56 @@ async function archiveBucket(id){
   await renderPlanner();setStatus('');
   setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
+
+async function openArchivedBuckets(){
+  if(!project)return;
+  const {data:archived,error}=await sb.from('minds_work_buckets')
+    .select('id,name,updated_at').eq('project_id',project.id).eq('archived',true)
+    .order('updated_at',{ascending:false}).limit(100);
+  if(error){setStatus('Archivierte Buckets konnten nicht geladen werden.');return}
+  const ids=(archived||[]).map(b=>b.id);
+  let history=[];
+  if(ids.length){
+    const {data,error:taskError}=await sb.from('isabella_tasks')
+      .select('id,title,completed_at,work_bucket_id')
+      .eq('project_id',project.id).in('work_bucket_id',ids).limit(1000);
+    if(taskError){setStatus('Aufgabenverlauf konnte nicht geladen werden.');return}
+    history=data||[];
+  }
+  const markup=archived?.length
+    ?archived.map(bucket=>{
+      const associated=history.filter(task=>task.work_bucket_id===bucket.id);
+      const finished=associated.filter(task=>!!task.completed_at);
+      const unfinished=associated.length-finished.length;
+      const taskPreview=associated.slice(0,40).map(task=>
+        `<li>${esc(task.title)} <small>${task.completed_at?'Erledigt':'Offen'}</small></li>`).join('');
+      return `<section class="work-bucket-archive-item">
+        <details><summary><strong>${esc(bucket.name)}</strong><small>${finished.length} erledigt${unfinished?', '+unfinished+' offen':''}</small></summary>
+          ${associated.length?`<ul>${taskPreview}</ul>`:'<p>Keine zugeordneten Aufgaben.</p>'}
+          ${associated.length>40?'<p>Weitere Aufgaben bleiben im Archiv erhalten.</p>':''}
+        </details>
+        <button type="button" data-work-restore-bucket="${bucket.id}">Wiederherstellen</button>
+      </section>`;
+    }).join('')
+    :'<p>Keine archivierten Buckets vorhanden.</p>';
+  window.ISABELLA_APP?.openModal?.('Archivierte Buckets',
+    `<div class="work-bucket-archive">${markup}</div>`);
+  $('[data-work-restore-bucket]').forEach(button=>
+    button.onclick=()=>void restoreArchivedBucket(button.dataset.workRestoreBucket,button));
+}
+async function restoreArchivedBucket(id,button){
+  if(!project||!id)return;
+  if(button)button.disabled=true;
+  const {data,error}=await sb.rpc('minds_work_bucket_restore',
+    {p_project_id:project.id,p_bucket_id:id});
+  if(error||data!==true){
+    if(button)button.disabled=false;
+    setStatus('Bucket konnte nicht wiederhergestellt werden.');return;
+  }
+  window.ISABELLA_APP?.closeModal?.();
+  await renderPlanner();setStatus('');
+}
+
 function checklistRows(items=[]){return (items||[]).map(x=>`<div class="work-check-row" data-check-id="${esc(x?.id||'')}"><input type="checkbox" data-work-check-done ${x?.done?'checked':''}><input data-work-check-text value="${esc(x?.text||'')}" placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button></div>`).join('')}
 function bindChecklist(){$$('[data-work-check-remove]').forEach(b=>b.onclick=()=>b.closest('.work-check-row')?.remove())}
 function attachmentEditorMarkup(){
