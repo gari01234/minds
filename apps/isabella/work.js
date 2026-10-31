@@ -565,14 +565,14 @@ function archiveBucketDialog(id){
     ?`${unfinished} offene Aufgabe${unfinished===1?'':'n'} ${unfinished===1?'wird':'werden'} nach <strong>Ohne Bucket</strong> verschoben.`
     :'Keine offenen Aufgaben müssen verschoben werden.';
   const completedText=completed
-    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} als Verlauf diesem archivierten Bucket zugeordnet — ohne Verschiebung nach Ohne Bucket.`
+    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} im Archiv.`
     :'';
-  window.ISABELLA_APP?.openModal?.('Bucket entfernen',`<div class="form work-bucket-editor">
-    <p>Möchtest du <strong>${esc(bucket.name)}</strong> aus dem aktiven Planner entfernen?</p>
-    <p>${pendingText}</p>
+  window.ISABELLA_APP?.openModal?.('Bucket entfernen?',`<div class="form work-bucket-editor">
+    <p class="work-bucket-confirm-subject"><strong>${esc(bucket.name)}</strong></p>
     ${completedText?`<p>${completedText}</p>`:''}
-    <p>Im <strong>Archiv</strong> bleibt der Bucket wiederherstellbar. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
-    <div class="work-bucket-dialog-actions"><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Bucket entfernen</button><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button></div>
+    <p>${pendingText}</p>
+    <p class="work-bucket-recoverable">Später wiederherstellbar.</p>
+    <div class="work-bucket-dialog-actions"><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Entfernen</button></div>
   </div>`);
   $('#workBucketArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
   $('#workBucketArchive').onclick=()=>void archiveBucket(id);
