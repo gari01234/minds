@@ -34,9 +34,9 @@ test('UX A.5 mobile Planner layout toggles without changing its canonical action
 test('UX A.5 is last stylesheet and SW keeps versioned assets offline',()=>{
   assert.ok(html.includes('./mobile-refinement.css?v=1'));
   assert.ok(sw.includes('./mobile-refinement.css?v=1'));
-  assert.ok(html.includes('./work.js?v=32'));
-  assert.ok(sw.includes('./work.js?v=32'));
-  assert.ok(sw.includes('isabella-shell-v170'));
+  assert.ok(html.includes('./work.js?v=33'));
+  assert.ok(sw.includes('./work.js?v=33'));
+  assert.ok(sw.includes('isabella-shell-v171'));
   assert.ok(html.indexOf('./mobile-refinement.css?v=1')>html.indexOf('./dashboard-workload.css?v=1'));
   for(const route of ['assistant','feed','calendar','work','readings','thoughts'])
     assert.ok(shell.includes('data-nav="'+route+'"'),'Missing destination '+route);

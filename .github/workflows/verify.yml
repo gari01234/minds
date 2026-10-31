@@ -127,6 +127,7 @@ jobs:
       - name: Apply code preparation and verify job authority
         run: |
           psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030184102_minds_window_code_preparation.sql
+          psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261030185501_minds_window_code_retry.sql
           psql -X -v ON_ERROR_STOP=1 -f tests/sql/window-code-acceptance.sql
 
   browser-daily-workspace:

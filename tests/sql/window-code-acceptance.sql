@@ -18,6 +18,13 @@ begin
  update public.minds_window_code_jobs set lease_until=now()-interval '1 minute' where id=(j->>'id')::uuid;
  perform public.minds_claim_window_code_v1(repeat('a',40),'125');
  if (select status from public.minds_window_code_jobs where id=(j->>'id')::uuid)<>'failed' then raise exception 'expired job hidden';end if;
+ perform public.minds_retry_window_code_v1((j->>'id')::uuid);
+ j:=public.minds_claim_window_code_v1(repeat('b',40),'126');
+ if j->>'status'<>'preparing' or (j->>'attempts')::int<>2 or jsonb_array_length(j->'history')<>1 then raise exception 'retry lost attempt history';end if;
+ if (select count(*) from public.minds_window_code_jobs)<>1 then raise exception 'retry duplicated job';end if;
+ update public.minds_window_code_jobs set attempts=3,status='failed' where id=(j->>'id')::uuid;
+ begin perform public.minds_retry_window_code_v1((j->>'id')::uuid);raise exception 'unbounded retries';
+ exception when raise_exception then if SQLERRM<>'retry_not_available' then raise;end if;end;
 end $$;
 set local role authenticated;
 do $$begin

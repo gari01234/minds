@@ -25,3 +25,9 @@ export function validateEdits(patch,sources){
  }
  return [...current].filter(([path,content])=>sources.find(f=>f.path===path)?.content!==content).map(([path,content])=>({path,content}));
 }
+
+export function testDiagnostics(run){
+ const lines=String(run.stdout||'').split('\n'),chunks=[];
+ for(let i=0;i<lines.length;i++)if(/^not ok |^# Error:|^Error:/.test(lines[i]))chunks.push(lines.slice(i,i+35).join('\n'));
+ return (chunks.join('\n\n')+'\n'+String(run.stderr||'').slice(-3000)+(run.error?'\n'+run.error.message:'')).slice(0,12000);
+}
