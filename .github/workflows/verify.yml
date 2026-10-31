@@ -149,6 +149,8 @@ jobs:
           sleep 2
       - name: Measure layout and verify original More menu
         run: node tests/browser-daily-workspace.cjs
+      - name: Verify Work task detail modal typography and scroll geometry
+        run: node tests/browser-work-modal-polish.cjs
 
   window-sandbox:
     name: Window credential-free test sandbox
