@@ -161,3 +161,37 @@ jobs:
         run: |
           docker build -t minds-window-sandbox -f scripts/window-code.Dockerfile .
           docker run --rm --network=none --cap-drop=ALL --security-opt=no-new-privileges --pids-limit=128 --memory=2g --cpus=2 --read-only --user=1000:1000 --tmpfs /tmp:rw,exec,size=768m --mount type=bind,source="$PWD",target=/source,readonly --env GITHUB_SHA="$GITHUB_SHA" minds-window-sandbox sh -c 'cp -R /source /tmp/work && cd /tmp/work && node --test --test-reporter=tap tests/*.test.mjs && node scripts/build.mjs'
+
+
+  work-buckets-postgres:
+    name: Work Bucket lifecycle SQL (PostgreSQL 17)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: minds_work_bucket_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d minds_work_bucket_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: '5432'
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: minds_work_bucket_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+      - name: Seed isolated owner-scoped fixture
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/work-buckets-fixture.sql
+      - name: Apply exact migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261031120000_minds_work_bucket_lifecycle_v1.sql
+      - name: Verify atomic order, safe archive and negative ownership cases
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/work-buckets-acceptance.sql
