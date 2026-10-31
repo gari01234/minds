@@ -5,7 +5,7 @@ const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
 let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null,draggedWorkBucketId=null;
 const workSignedCache=new Map();
-let team=[],reviewSettings=null,reviewReportLimit=20;
+let team=[],reviewSettings=null,reviewReportLimit=20,workRenderVersion=0;
 /* Purely visual preferences and labels; no task statuses are rewritten. */
 const WORK_MOBILE_LAYOUT_KEY='minds-work-mobile-planner-layout-v1';
 
@@ -13,13 +13,14 @@ function setStatus(t=''){const el=$('#workStatus');if(el)el.textContent=t}
 function safeName(name){return String(name||'file').replace(/[^a-zA-Z0-9._-]+/g,'-').replace(/^-+|-+$/g,'').slice(0,150)||'file'}
 function sourceKind(file){const n=String(file?.name||'').toLowerCase(),m=String(file?.type||'');if(n.endsWith('.eml')||n.endsWith('.msg')||m==='message/rfc822')return'email';if(m.startsWith('image/'))return'image';if(/\.(pdf|doc|docx|xls|xlsx|ppt|pptx|txt|rtf)$/i.test(n))return'document';return'file'}
 async function getSession(){if(!sb)return null;const {data}=await sb.auth.getSession();return data?.session||null}
-async function loadProject(){const session=await getSession();if(!session)return null;const {data,error}=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('client_key',projectKey).maybeSingle();if(error)throw error;return data||null}
+async function loadProject(knownSession=null){const session=knownSession||await getSession();if(!session)return null;const {data,error}=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('client_key',projectKey).maybeSingle();if(error)throw error;return data||null}
 function bindStatic(){
   if(bound)return;bound=true;
   $('.work-project-switch')?.addEventListener('click',e=>{const b=e.target.closest('[data-work-project]');if(!b)return;projectKey=b.dataset.workProject;localStorage.setItem('minds-work-project',projectKey);folderId=null;activeThreadId=null;reviewReportLimit=20;void render()});
-  $$('[data-work-view]').forEach(b=>b.onclick=()=>{view=b.dataset.workView;localStorage.setItem('minds-work-view',view);void render()});
+  $$('[data-work-view]').forEach(b=>b.onclick=()=>{view=b.dataset.workView;localStorage.setItem('minds-work-view',view);paintChrome();void render()});
   const input=$('#workFileInput');if(input)input.onchange=()=>{const fs=[...(input.files||[])];input.value='';if(fs.length)void uploadFiles(fs)};
   const body=$('#workBody');
+  body?.addEventListener('click',e=>{if(e.target.closest('[data-work-retry]'))void render()});
   body?.addEventListener('dragover',e=>{if(view!=='desktop')return;e.preventDefault();body.classList.add('is-dragging')});
   body?.addEventListener('dragleave',()=>body.classList.remove('is-dragging'));
   body?.addEventListener('drop',e=>{if(view!=='desktop')return;e.preventDefault();body.classList.remove('is-dragging');const fs=[...(e.dataTransfer?.files||[])];if(fs.length)void uploadFiles(fs)});
@@ -29,23 +30,73 @@ function paintChrome(){
   $$('[data-work-project]').forEach(b=>b.classList.toggle('active',b.dataset.workProject===projectKey));
   $$('[data-work-view]').forEach(b=>b.classList.toggle('active',b.dataset.workView===view));
 }
-async function render(){
-  bindStatic();setStatus('');
-  $('#workBody')?.classList.toggle('work-overview-host',view==='overview');
+async function waitForWork(promise,stage,ms=14000){
+  let timeoutId;
   try{
-    const session=await getSession();
-    if(!session){$('#workBody').innerHTML='<div class="work-empty">Conecta la memoria de MINDS para abrir Work.</div>';return}
-    const catalog=await sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('archived',false).order('name');
+    return await Promise.race([
+      Promise.resolve(promise),
+      new Promise((_,reject)=>{timeoutId=setTimeout(()=>reject(new Error('Work '+stage+' timeout')),ms)})
+    ]);
+  }finally{clearTimeout(timeoutId)}
+}
+function workBootFailure(message,switchLabel=''){
+  const body=$('#workBody');
+  if(body)body.innerHTML='<div class="work-empty" role="status"><p>'+esc(message)+'</p><button type="button" data-work-retry class="secondary">Reintentar</button></div>';
+  const switcher=$('.work-project-switch');
+  if(switcher&&switchLabel)switcher.textContent=switchLabel;
+}
+async function render(){
+  const current=++workRenderVersion;
+  bindStatic();setStatus('');
+  paintChrome();
+  $('#workBody')?.classList.toggle('work-overview-host',view==='overview');
+  const latest=()=>current===workRenderVersion;
+  try{
+    const session=await waitForWork(getSession(),'session');
+    if(!latest())return;
+    if(!session){
+      project=null;
+      workBootFailure('No hay una sesión activa de MINDS. Inicia sesión y vuelve a intentarlo.','Sesión no disponible');
+      return;
+    }
+    const catalog=await waitForWork(
+      sb.from('isabella_projects').select('id,client_key,name').eq('user_id',session.user.id).eq('archived',false).order('name'),
+      'project catalog'
+    );
+    if(!latest())return;
     if(catalog.error)throw catalog.error;
     const switcher=$('.work-project-switch');
-    if(switcher)switcher.innerHTML=(catalog.data||[]).map(p=>`<button data-work-project="${esc(p.client_key)}">${esc(p.name)}</button>`).join('');
-    if(!(catalog.data||[]).some(p=>p.client_key===projectKey)&&catalog.data?.length)projectKey=catalog.data[0].client_key;
-    project=await loadProject();paintChrome();
-    const settings=project?await sb.from('minds_self_review_settings').select('enabled,timezone,local_hour,code_preparation_enabled').eq('project_id',project.id).eq('user_id',session.user.id).maybeSingle():null;
+    if(switcher)switcher.innerHTML=(catalog.data||[]).length
+      ?catalog.data.map(p=>'<button data-work-project="'+esc(p.client_key)+'">'+esc(p.name)+'</button>').join('')
+      :'<span class="small">Sin proyectos disponibles</span>';
+    if(!(catalog.data||[]).some(p=>p.client_key===projectKey)&&catalog.data?.length)
+      projectKey=catalog.data[0].client_key;
+    const loadedProject=await waitForWork(loadProject(session),'project');
+    if(!latest())return;
+    project=loadedProject;
+    paintChrome();
+    const settings=project?await waitForWork(
+      sb.from('minds_self_review_settings').select('enabled,timezone,local_hour,code_preparation_enabled')
+        .eq('project_id',project.id).eq('user_id',session.user.id).maybeSingle(),
+      'project settings'
+    ):null;
+    if(!latest())return;
     reviewSettings=settings?.data||null;
-    if(!project){$('#workBody').innerHTML='<div class="work-empty">No encontré este proyecto en MINDS.</div>';return}
-    if(view==='overview'&&reviewSettings)await renderSelfReview();else if(view==='overview')await renderOverview();else if(view==='threads')await renderThreads();else if(view==='knowledge')await renderKnowledge();else if(view==='planner')await renderPlanner();else await renderDesktop();
-  }catch(e){console.error(e);$('#workBody').innerHTML='<div class="work-empty">No pude abrir Work ahora mismo.</div>'}
+    if(!project){
+      workBootFailure('No encontré este proyecto en MINDS.');
+      return;
+    }
+    const scene=view==='overview'&&reviewSettings?renderSelfReview()
+      :view==='overview'?renderOverview()
+      :view==='threads'?renderThreads()
+      :view==='knowledge'?renderKnowledge()
+      :view==='planner'?renderPlanner():renderDesktop();
+    await waitForWork(scene,'view');
+  }catch(e){
+    if(!latest())return;
+    console.error('Work initialization failed:',e);
+    workBootFailure('No pude cargar Work. Comprueba la conexión o tu sesión y vuelve a intentarlo.','No se pudieron cargar proyectos');
+  }
 }
 async function renderSelfReview(){
   const body=$('#workBody');
@@ -964,4 +1015,5 @@ async function sendThreadMessage(thread,overrideMessage=null){
 }
 
 window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
+if(document.body.dataset.section==='work')setTimeout(()=>{if(!bound)void render()},0);
 })();
