@@ -12,6 +12,17 @@
   const KEY = 'isabella-adaptive-desk-v1';
   const LABELS = {chat:'Isabella',calendar:'Calendario',today:'Hoy',plan:'Plan de trabajo'};
   const ICONS = {chat:'◇',calendar:'▦',today:'☷',plan:'▤'};
+
+  const DESK_ICONS={
+    expand:'<path d="M8 5h11v11M19 5 9 15"/><path d="M17 19H5V7"/>',
+    minimize:'<path d="M5 12h14"/>',
+    left:'<path d="m14.5 18-6-6 6-6"/>',
+    right:'<path d="m9.5 18 6-6-6-6"/>',
+    plus:'<path d="M12 5v14M5 12h14"/>',
+    arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>'
+  };
+  const deskIcon=name=>'<svg class="desk-ui-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(DESK_ICONS[name]||'')+'</svg>';
+
   const E = M.escapeHtml;
   const q = (parent,selector) => parent.querySelector(selector);
   const load = () => {
@@ -82,8 +93,8 @@
       '<span class="desk-panel-grip" title="Arrastrar para ordenar" aria-hidden="true">⋮⋮</span>' +
       '<span class="desk-panel-title">' + LABELS[key] + '</span>' +
       '<span class="desk-panel-actions">' +
-      '<button type="button" data-desk-focus="' + key + '" aria-label="Ampliar ' + LABELS[key] + '" title="Ampliar">↗</button>' +
-      '<button type="button" data-desk-minimize="' + key + '" aria-label="Minimizar ' + LABELS[key] + '" title="Minimizar">−</button></span>');
+      '<button type="button" data-desk-focus="' + key + '" aria-label="Ampliar ' + LABELS[key] + '" title="Ampliar">'+deskIcon('expand')+'</button>' +
+      '<button type="button" data-desk-minimize="' + key + '" aria-label="Minimizar ' + LABELS[key] + '" title="Minimizar">'+deskIcon('minimize')+'</button></span>');
     head.draggable = true;
     head.addEventListener('dragstart', event => {
       dragged = key;
@@ -156,7 +167,7 @@
   };
   const calendarHtml = state => {
     const date = M.dateFromKey(prefs.selectedDate) || new Date();
-    const month = date.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+    const month = date.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).replace(/^./,letter=>letter.toLocaleUpperCase('es-ES'));
     const grid = M.monthCells(prefs.selectedDate);
     const now = M.dayKey(new Date());
     const cells = grid.map(cell => {
@@ -169,8 +180,8 @@
         (cell.key===now?'aria-current="date"':'') + '><span>' + cell.day +
         '</span><span class="desk-month-dots">' + dots + '</span></button>';
     }).join('');
-    return '<div class="desk-month-bar"><button type="button" data-desk-month="-1" aria-label="Mes anterior">‹</button>' +
-      '<strong>' + E(month) + '</strong><button type="button" data-desk-month="1" aria-label="Mes siguiente">›</button></div>' +
+    return '<div class="desk-month-bar"><button type="button" data-desk-month="-1" aria-label="Mes anterior">'+deskIcon('left')+'</button>' +
+      '<strong>' + E(month) + '</strong><button type="button" data-desk-month="1" aria-label="Mes siguiente">'+deskIcon('right')+'</button></div>' +
       '<div class="desk-month-weekdays" aria-hidden="true">' +
       ['L','M','X','J','V','S','D'].map(d=>'<span>'+d+'</span>').join('') +
       '</div><div class="desk-month-grid">' + cells + '</div>';
@@ -209,12 +220,12 @@
         '</div>';
     }).join('');
     return '<div class="desk-today-toolbar"><span class="desk-subtitle">' + E(dateName) + '</span>' +
-      '<button type="button" class="desk-add-task" data-desk-add-task>＋ Añadir tarea</button></div>' +
+      '<button type="button" class="desk-add-task" data-desk-add-task>'+deskIcon('plus')+'Añadir tarea</button></div>' +
       '<div class="desk-task-list" data-desk-task-list>' +
       (rows || '<p class="desk-empty">No hay tareas para esta fecha.</p>') + '</div>' +
       '<div class="desk-panel-footer">' +
       '<span>' + items.filter(x=>!x.done).length + ' pendientes · ' + meetings.length + ' eventos</span>' +
-      '<button type="button" data-desk-open-time>Ver en Tiempo →</button></div>';
+      '<button type="button" data-desk-open-time>Ver en Tiempo '+deskIcon('arrow')+'</button></div>';
   };
   // One read-only weekly view inside the existing Plan, never another calendar.
   const planToolbarHtml = () => '<div class="desk-plan-view-switch" role="group" aria-label="Vista del plan">'+
@@ -355,7 +366,7 @@
       '<div class="desk-week-backlogs"><details open><summary>Vencidas anteriormente · '+overdue.length+'</summary>'+taskSet(overdue)+'</details>'+ 
       '<details open><summary>Sin fechas completas · '+unscheduled.length+'</summary>'+taskSet(unscheduled)+'</details></div>'+ 
       '<div class="desk-panel-footer"><span>Una tarea puede tener varias sesiones sin duplicarse.</span>'+ 
-      '<button type="button" data-desk-open-time>Tiempo →</button></div>';
+      '<button type="button" data-desk-open-time>Tiempo '+deskIcon('arrow')+'</button></div>';
   };
   const planHtml = state => {
     if(prefs.planMode==='week')return planToolbarHtml()+planWeekHtml(state);
@@ -393,7 +404,7 @@
       '<div class="desk-plan-tasks-head">Planificación consciente · tareas sin completar</div>' +
       (rows||'<p class="desk-empty">No hay tareas pendientes para esta fecha.</p>')+
       '<div class="desk-panel-footer"><span>Las sesiones están vinculadas a las tareas originales.</span>' +
-      '<button type="button" data-desk-open-time>Tiempo →</button></div>';
+      '<button type="button" data-desk-open-time>Tiempo '+deskIcon('arrow')+'</button></div>';
   };
   const render = () => {
     if (!shell || !app()) return;

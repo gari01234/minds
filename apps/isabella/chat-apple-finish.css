@@ -1,0 +1,487 @@
+/* MINDS · Isabella / Chat finish · 2026-10-31
+   Single native-system visual language with Work Planner.
+   Presentation only. Existing conversation, calendar and task controls stay wired.
+*/
+body[data-section="assistant"].desk-enabled{
+  --desk-text:#1d1d1f;
+  --desk-subtle:#626b77;
+  --desk-tertiary:#858c97;
+  --desk-edge:rgba(37,45,59,.09);
+  --desk-tint:#f3f5f8;
+  --desk-accent:#007aff;
+}
+body[data-section="assistant"].desk-enabled :is(
+  .desk-shell,.desk-panel,.desk-panel button,.desk-panel input,.desk-panel select,
+  .desk-panel textarea,.desk-panel strong,.desk-panel span,.desk-panel small,
+  .desk-panel p,.desk-panel label,.desk-panel time,.desk-nav-collapse){
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+  font-synthesis:none;
+  -webkit-font-smoothing:antialiased;
+}
+body[data-section="assistant"].desk-enabled .desk-shell{
+  background:#fff!important;
+  gap:10px;
+}
+body[data-section="assistant"].desk-enabled .desk-layout{
+  min-height:0;
+}
+body[data-section="assistant"].desk-enabled .desk-panel{
+  border:1px solid rgba(38,47,60,.10);
+  border-radius:19px;
+  background:#fff;
+  box-shadow:0 2px 13px rgba(30,38,52,.034);
+}
+body[data-section="assistant"].desk-enabled .desk-panel-head{
+  height:46px;
+  min-height:46px;
+  gap:9px;
+  padding:0 15px;
+  border-bottom:1px solid #edf0f4;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-title{
+  color:#292e38;
+  font-size:13px;
+  font-weight:670;
+  line-height:1.25;
+  letter-spacing:-.017em;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-grip{
+  color:#a1a8b2;
+  font-size:14px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions{
+  gap:4px;
+  align-items:center;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button,
+body[data-section="assistant"].desk-enabled .desk-month-bar button{
+  display:inline-grid;
+  place-items:center;
+  padding:0;
+  width:32px;
+  height:32px;
+  min-height:32px;
+  border:1px solid transparent;
+  border-radius:10px;
+  background:transparent;
+  color:#697380;
+  font-size:0;
+  box-shadow:none;
+  cursor:pointer;
+  transition:background-color .15s ease,color .15s ease,border-color .15s ease;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button:hover,
+body[data-section="assistant"].desk-enabled .desk-month-bar button:hover{
+  background:#edf3fc;
+  color:#006bdc;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button:active,
+body[data-section="assistant"].desk-enabled .desk-month-bar button:active{
+  background:#deebfd;
+}
+body[data-section="assistant"].desk-enabled .desk-ui-icon{
+  width:16px;height:16px;display:inline-block;
+  flex:none;pointer-events:none;
+  stroke:currentColor;vertical-align:middle;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions .desk-ui-icon{
+  width:15px;height:15px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-content{
+  padding:15px 17px 17px;
+}
+body[data-section="assistant"].desk-enabled .desk-rail{
+  gap:12px;
+  padding-right:2px;
+  scrollbar-color:#d0d5dd transparent;
+  scrollbar-width:thin;
+}
+body[data-section="assistant"].desk-enabled .desk-rail::-webkit-scrollbar,
+body[data-section="assistant"].desk-enabled .desk-panel-content::-webkit-scrollbar,
+body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll::-webkit-scrollbar{
+  width:7px;height:7px;
+}
+body[data-section="assistant"].desk-enabled .desk-rail::-webkit-scrollbar-thumb,
+body[data-section="assistant"].desk-enabled .desk-panel-content::-webkit-scrollbar-thumb,
+body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll::-webkit-scrollbar-thumb{
+  border-radius:7px;background:#ced3db;
+}
+body[data-section="assistant"].desk-enabled .desk-rail::-webkit-scrollbar-button,
+body[data-section="assistant"].desk-enabled .desk-panel-content::-webkit-scrollbar-button,
+body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll::-webkit-scrollbar-button{
+  display:none;width:0;height:0;
+}
+/* Calendar: clearly legible date grid, single-case Spanish month,
+   subtle hover, real selected vs today states, and same controls as Work. */
+body[data-section="assistant"].desk-enabled .desk-rail>.desk-panel--calendar{
+  min-height:324px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel--calendar .desk-panel-content{
+  padding:14px 15px 17px;
+}
+body[data-section="assistant"].desk-enabled .desk-month-bar{
+  margin:0 0 12px;
+  align-items:center;
+  min-height:32px;
+  gap:8px;
+}
+body[data-section="assistant"].desk-enabled .desk-month-bar strong{
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif!important;
+  text-transform:none!important;
+  letter-spacing:-.012em;
+  font-weight:670;
+  font-size:13px;
+  color:#282d37;
+  white-space:nowrap;
+  text-align:center;
+}
+body[data-section="assistant"].desk-enabled .desk-month-weekdays{
+  margin:0 0 5px;
+  font-size:11px;
+  font-weight:530;
+  color:#69727f;
+}
+body[data-section="assistant"].desk-enabled .desk-month-weekdays span{
+  padding:4px 0;
+}
+body[data-section="assistant"].desk-enabled .desk-month-grid{
+  row-gap:1px;
+}
+body[data-section="assistant"].desk-enabled .desk-month-day{
+  height:33px;
+  width:min(100%,35px);
+  justify-self:center;
+  gap:3px;
+  padding:2px 0;
+  border:1px solid transparent;
+  border-radius:11px;
+  background:transparent;
+  color:#303640;
+  font-size:12px;
+  font-weight:520;
+  font-variant-numeric:tabular-nums;
+  line-height:1;
+  cursor:pointer;
+}
+body[data-section="assistant"].desk-enabled .desk-month-day.is-outside:not(.is-selected){
+  color:#949ba5;
+}
+body[data-section="assistant"].desk-enabled .desk-month-day:hover:not(.is-selected){
+  background:#eef4fd;
+  color:#0866cf;
+}
+body[data-section="assistant"].desk-enabled .desk-month-day.is-selected{
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  background:#007aff;
+  color:#fff;
+  border-color:#007aff;
+  font-weight:700;
+  box-shadow:0 2px 5px rgba(0,122,255,.15);
+}
+body[data-section="assistant"].desk-enabled .desk-month-day.is-today:not(.is-selected){
+  color:#c33c4a;
+  box-shadow:inset 0 0 0 1px rgba(195,60,74,.35);
+  font-weight:700;
+}
+body[data-section="assistant"].desk-enabled .desk-month-dots{
+  display:flex;align-items:center;justify-content:center;
+  gap:2.5px;height:4px;min-height:4px;
+}
+body[data-section="assistant"].desk-enabled .desk-month-dots i{
+  width:3.5px;height:3.5px;border-radius:50%;
+}
+body[data-section="assistant"].desk-enabled .desk-month-day.is-selected .desk-month-dots i{
+  outline:1px solid rgba(255,255,255,.75);
+  outline-offset:0;
+}
+/* Today and planning details: useful hierarchy without tiny gray typography. */
+body[data-section="assistant"].desk-enabled .desk-today-toolbar{
+  position:sticky;
+  min-height:44px;
+  margin:0 0 8px;
+  padding:5px 0 10px;
+  border-bottom:1px solid #edf0f4;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-subtitle,.desk-plan-date){
+  color:#69717c;
+  font-size:11.5px;
+  line-height:1.5;
+  font-weight:470;
+}
+body[data-section="assistant"].desk-enabled .desk-add-task{
+  display:inline-flex;
+  justify-content:center;
+  align-items:center;
+  gap:6px;
+  min-height:34px;
+  padding:7px 12px;
+  border:1px solid rgba(0,122,255,.10);
+  border-radius:10px;
+  background:#eef5ff;
+  color:#0665c9;
+  font-size:11.5px;
+  font-weight:620;
+  white-space:nowrap;
+}
+body[data-section="assistant"].desk-enabled .desk-add-task:hover{
+  background:#e1efff;
+  border-color:rgba(0,122,255,.27);
+}
+body[data-section="assistant"].desk-enabled .desk-add-task .desk-ui-icon{
+  width:15px;height:15px;stroke-width:2;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row{
+  min-height:42px;
+  border-bottom:1px solid #eef0f3;
+}
+body[data-section="assistant"].desk-enabled .desk-task-detail strong{
+  font-size:12.2px;
+  line-height:1.38;
+  letter-spacing:-.008em;
+  color:#333945;
+  font-weight:590;
+}
+body[data-section="assistant"].desk-enabled .desk-task-detail small{
+  font-size:11px;
+  color:#717a87;
+  line-height:1.4;
+}
+body[data-section="assistant"].desk-enabled .desk-task-check{
+  display:grid;place-items:center;
+  flex:none;
+  width:19px;height:19px;
+  border:1.6px solid #919aa7;
+  border-radius:50%;
+  background:#fff;
+  padding:0;
+  font-size:11px;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row.is-done .desk-task-check{
+  background:#007aff;border-color:#007aff;
+  color:#fff;
+}
+body[data-section="assistant"].desk-enabled .desk-task-check:hover{
+  border-color:#007aff;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer{
+  align-items:center;
+  gap:9px;
+  border-top:1px solid #edf0f4;
+  padding-top:9px;
+  margin-top:10px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer span{
+  color:#6e7681;
+  font-size:11px;
+  font-weight:475;
+  line-height:1.4;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button{
+  display:inline-flex;align-items:center;justify-content:center;gap:5px;
+  min-height:33px;
+  padding:6px 9px;
+  flex:none;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:#0870db;
+  font-size:11.5px;
+  font-weight:625;
+  text-decoration:none;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button:hover{
+  background:#eef5ff;
+  border-color:rgba(0,122,255,.09);
+  color:#005dbc;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer .desk-ui-icon{
+  width:14px;height:14px;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-empty,.desk-small){
+  font-size:11.5px;
+  line-height:1.5;
+  color:#6b7480;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch{
+  display:inline-flex;
+  gap:3px;
+  margin:0 0 13px;
+  padding:3px;
+  background:#f0f2f6;
+  border:1px solid #e8ebf1;
+  border-radius:12px;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button{
+  min-height:30px;
+  padding:7px 14px;
+  border-radius:9px;
+  background:transparent;
+  border:1px solid transparent;
+  color:#626b78;
+  font-size:11.5px;
+  font-weight:570;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button.is-selected{
+  background:#fff;
+  color:#1663b4;
+  border-color:#e7ebf1;
+  box-shadow:0 1px 4px rgba(26,37,55,.065);
+  font-weight:650;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button:hover:not(.is-selected){
+  color:#1971d2;
+  background:#e9eef8;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-plan-date,.desk-plan-metrics,.desk-plan-tasks-head){
+  font-size:11.5px;
+  color:#68717e;
+  line-height:1.5;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-metrics strong{
+  color:#282e37;
+  font-weight:665;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-hours{
+  color:#6a7482;
+  font-size:10px;
+  font-variant-numeric:tabular-nums;
+  gap:3px;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-note{
+  color:#677180;
+  font-size:11px;
+}
+body[data-section="assistant"].desk-enabled .desk-time-track{
+  background:repeating-linear-gradient(to right,transparent 0,transparent calc(14.2857% - 1px),#e9edf2 calc(14.2857% - 1px),#e9edf2 14.2857%);
+}
+/* Weekly planning and filters use the same form controls and focus language. */
+body[data-section="assistant"].desk-enabled :is(.desk-week-dates button,.desk-week-filters select,.desk-week-grouping button){
+  min-height:32px;
+  border:1px solid #e2e6ec;
+  border-radius:10px;
+  background:#fff;
+  font-size:11px;
+  color:#3f4855;
+}
+body[data-section="assistant"].desk-enabled .desk-week-grouping button[aria-pressed="true"]{
+  background:#edf5ff;
+  color:#0566ce;
+  border-color:#bad6f6;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-week-dates button,.desk-week-grouping button):hover{
+  background:#edf5ff;
+}
+body[data-section="assistant"].desk-enabled .desk-week-filters label{
+  color:#697480;
+  font-size:11px;
+}
+body[data-section="assistant"].desk-enabled .desk-week-explainer{
+  color:#69727e;font-size:11px;
+}
+/* Composer: original DOM and all actions retained; symbols now proper vectors.
+   Balanced capsule, clear click targets and one consistent primary color. */
+body[data-section="assistant"] .composer .chat-ui-icon{
+  width:19px;height:19px;
+  display:block;pointer-events:none;
+  stroke:currentColor;flex:none;
+}
+body[data-section="assistant"] .composer :is(.attach,.mic,.send){
+  display:inline-grid;
+  place-items:center;
+  border-radius:50%;
+  font-size:0!important;
+  flex-shrink:0;
+  box-sizing:border-box;
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer{
+  gap:7px;
+  min-height:61px;
+  padding:7px 8px;
+  border:1px solid #dce2ea;
+  border-radius:30px;
+  background:#fff;
+  box-shadow:0 1px 6px rgba(32,42,57,.03);
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic,.send){
+  width:44px;min-width:44px;height:44px;min-height:44px;
+  flex-basis:44px;
+  margin:0;
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic){
+  background:#f1f4f8!important;
+  color:#4b5461!important;
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send{
+  background:#007aff!important;color:#fff!important;
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic):hover{
+  background:#e6eef9!important;
+}
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send:hover{
+  background:#0069db!important;
+}
+body[data-section="assistant"].desk-enabled .desk-panel--chat .composer textarea{
+  min-height:39px;
+  padding-block:9px;
+  font-size:14px;
+  line-height:1.5;
+  color:#2a3039;
+}
+body[data-section="assistant"].desk-enabled .desk-panel--chat .composer textarea::placeholder{
+  color:#687380;
+  opacity:1;
+}
+body[data-section="assistant"].desk-enabled .desk-panel--chat .composer:focus-within{
+  border-color:rgba(0,122,255,.5)!important;
+  box-shadow:0 0 0 3px rgba(0,122,255,.085)!important;
+}
+/* Never let a narrow docked conversation inherit full-width 42px buttons. */
+body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer :is(.attach,.send){
+  width:34px;min-width:34px;height:34px;min-height:34px;
+  flex-basis:34px;
+}
+body[data-section="assistant"].desk-enabled .desk-rail .desk-panel--chat .composer .chat-ui-icon{
+  width:16px;height:16px;
+}
+@media(min-width:950px) and (max-height:720px){
+  body[data-section="assistant"].desk-enabled .desk-rail>.desk-panel--calendar{
+    min-height:301px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day{
+    height:30px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-selected{
+    height:30px;width:30px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel--calendar .desk-panel-content{
+    padding:10px 12px 12px;
+  }
+}
+@media(max-width:949px){
+  body[data-section="assistant"] .composer :is(.attach,.mic,.send){
+    min-width:42px;min-height:42px;
+    width:42px;height:42px;
+  }
+  body[data-section="assistant"] .composer .chat-ui-icon{
+    width:18px;height:18px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button,
+  body[data-section="assistant"].desk-enabled .desk-month-bar button{
+    transition:none!important;
+  }
+}
+@media(prefers-contrast:more){
+  body[data-section="assistant"].desk-enabled .desk-panel{
+    border-color:#7e8792;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day{
+    color:#1d1d1f;
+  }
+  body[data-section="assistant"].desk-enabled .desk-month-day.is-selected{
+    color:#fff;
+  }
+}

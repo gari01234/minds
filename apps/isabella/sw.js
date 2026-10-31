@@ -13,6 +13,7 @@ const SHELL = [
   './work-apple.css?v=1',
   './work-polish.css?v=1',
   './minds-unified-surface.css?v=1',
+  './chat-apple-finish.css?v=1',
   './task-detail.css?v=1',
   './task-team.css?v=1',
   './time-plan.css?v=1',
