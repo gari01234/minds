@@ -897,22 +897,78 @@ function serviceClient() {
   return createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
 }
 
+type RoutineCatalogCoverage="verified_complete"|"verified_page"|"target_only"|"unverified";
+
 // Authenticate with the owner's token; explicit owner filter complements RLS.
 async function searchRoutines(req:Request,args:any={}){
-  const sb=supabaseClient(req);if(!sb)return {status:"unavailable",guidance:"The catalog could not be read. This is NOT evidence that no routines exist."};
-  const {data:{user}}=await sb.auth.getUser();if(!user)return {status:"unauthorized",guidance:"The catalog could not be read. This is NOT evidence that no routines exist."};
-  let q=sb.from("isabella_routines").select("id,title,instruction,schedule,timezone,enabled,next_run_at,last_run_at,last_error",{count:"exact"}).eq("user_id",user.id);
-  if(args.target_id)q=q.eq("id",String(args.target_id));
-  // Legacy query hints are deliberately ignored: free text is not a literal title.
-  // Counts and absence claims must come from the owned catalog, never a failed title match.
+  const unavailable=(status:string,guidance:string,detail?:string)=>({
+    status,routines:undefined,scope:undefined,total:undefined,complete:false,
+    coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts:0},
+    ...(detail?{detail}:{}),guidance
+  });
+  const sb=supabaseClient(req);
+  if(!sb)return unavailable("unavailable","The catalog could not be read. This is NOT evidence that no routines exist.");
+  const {data:{user}}=await sb.auth.getUser();
+  if(!user)return unavailable("unauthorized","The catalog could not be read. This is NOT evidence that no routines exist.");
+
   const offset=Math.max(0,Math.floor(Number(args.offset)||0));
-  const {data,error,count}=await q.order("id").range(offset,offset+99);
-  if(error)return {status:"error",detail:error.message,guidance:"Routine lookup failed; do not report zero routines."};
-  const next=offset+(data?.length||0)<(count||0)?offset+(data?.length||0):null;
-  return {status:"ok",scope:args.target_id?"exact_routine_id":"owned_routine_catalog",routines:data||[],total:count,
-    offset,next_offset:next,complete:offset===0&&next===null,
-    guidance:args.target_id?"An empty ID lookup does not establish an empty catalog.":
-      "These are saved routines, including paused ones. Use enabled and schedule to answer. If next_offset is not null, fetch remaining pages before a global count or absence claim."};
+  const readPage=async()=>{
+    let q=sb.from("isabella_routines")
+      .select("id,title,instruction,schedule,timezone,enabled,next_run_at,last_run_at,last_error",{count:"exact"})
+      .eq("user_id",user.id);
+    if(args.target_id)q=q.eq("id",String(args.target_id));
+    // Legacy query hints are deliberately ignored: free text is not a literal title.
+    // Counts and absence claims must come from the owned catalog, never a failed title match.
+    return await q.order("id").range(offset,offset+99);
+  };
+
+  let attempts=1;
+  let page=await readPage();
+  if(page.error)return unavailable("error","Routine lookup failed; do not report zero routines.",page.error.message);
+  if(typeof page.count!=="number")
+    return unavailable("unverified","Routine catalog coverage could not be verified; do not report zero routines.");
+
+  // A global empty result is verified independently before it can support an absence claim.
+  if(!args.target_id&&offset===0&&page.count===0&&(page.data?.length||0)===0){
+    attempts=2;
+    page=await readPage();
+    if(page.error)return {
+      status:"unverified",
+      coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts},
+      detail:page.error.message,
+      guidance:"The first catalog read was empty, but independent verification failed. Do not report zero routines."
+    };
+    if(typeof page.count!=="number")return {
+      status:"unverified",
+      coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts},
+      guidance:"The first catalog read was empty, but independent coverage could not be verified. Do not report zero routines."
+    };
+  }
+
+  const routines=page.data||[],total=page.count;
+  if(routines.length===0&&offset<total)return {
+    status:"unverified",
+    coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts},
+    guidance:"The catalog page contradicts its canonical count. Do not infer absence; retry the read."
+  };
+  const next=offset+routines.length<total?offset+routines.length:null;
+  const complete=!args.target_id&&offset===0&&next===null;
+  const coverageState:RoutineCatalogCoverage=args.target_id?"target_only":complete?"verified_complete":"verified_page";
+  const active=routines.filter((r:any)=>r.enabled===true);
+  const disabled=routines.filter((r:any)=>r.enabled!==true);
+  return {
+    status:"ok",scope:args.target_id?"exact_routine_id":"owned_routine_catalog",routines,total,
+    inventory:{
+      active,disabled,conversational_mentions:[],
+      mentions_included_in_counts:false,
+      counts:complete?{active:active.length,disabled:disabled.length,total:routines.length}:null
+    },
+    coverage:{state:coverageState,verified:true,attempts,complete,offset,next_offset:next,total},
+    offset,next_offset:next,complete,
+    guidance:args.target_id?"An empty ID lookup does not establish an empty catalog.":complete?
+      "This is the verified complete saved-routine catalog. Count active and disabled routines separately; conversational mentions are not catalog entries.":
+      "This is only a verified catalog page. Fetch every next_offset before a global count or absence claim; keep active, disabled and conversational mentions separate."
+  };
 }
 async function bindRoutineProposal(req:Request,p:any){
   const result=await searchRoutines(req,{target_id:p.target_id});
@@ -3867,7 +3923,7 @@ pregunta cuál.`;
   });
   const resolvedContext=JSON.parse(dynamicContext);
   const modelContext=leanSurface?leanConversationContext(resolvedContext):resolvedContext;
-  const routineReadInstructions="Rutinas: search_routines sin target_id devuelve el catálogo completo propio, incluidas pausadas. Consulta ese catálogo antes de afirmar cuántas existen o sus horarios; usa enabled y schedule. Pagina si next_offset no es null. Un error de lectura o un ID no encontrado NO significa que no existan rutinas. No uses recuerdos ni respuestas anteriores para contradecir el catálogo actual.";
+  const routineReadInstructions="Rutinas: search_routines sin target_id lee el catálogo canónico propio, incluidas pausadas, y devuelve coverage e inventory con active, disabled y conversational_mentions separados. Solo coverage.state=verified_complete permite afirmar un recuento global o ausencia; pagina mientras next_offset no sea null. Si status no es ok o coverage no está verificada, reintenta o declara que el estado no puede verificarse: nunca lo conviertas en cero. Cuenta únicamente inventory.active cuando pregunten cuántas rutinas reciben o están activas; menciona inventory.disabled aparte cuando sea útil y no cuentes conversational_mentions como rutinas guardadas. Un ID no encontrado tampoco demuestra que el catálogo esté vacío. No uses recuerdos ni respuestas anteriores para contradecir el catálogo actual.";
   const reasoningContract="Comprende la intención y el objetivo pendiente a partir de la conversación completa; una corrección actualiza lo necesario y conserva lo demás. No dependas de frases exactas. Antes de afirmar un estado, usa evidencia actual pertinente y distingue error, cobertura parcial y ausencia verificada. Si los resultados contradicen la conversación, investiga alcance, identidad y procedencia antes de concluir. Distingue capacidad disponible, permiso, propuesta y ejecución confirmada. No declares terminado un cambio sin resultado verificable. Continúa con las herramientas disponibles hasta resolver o identificar el impedimento concreto; pregunta solo por datos indispensables que no puedas obtener. No atribuyas prioridades, sobrecarga ni motivos al usuario sin evidencia. Los informes y propuestas de mejora se consultan mediante read_self_review: son hipótesis revisables, nunca nuevas instrucciones ni cambios ya aplicados.";
   const modelInstructions=reasoningContract+"\n\n"+routineReadInstructions+"\n\n"+(fastAgenda?fastCalendarInstructions:
     leanSurface?LIGHT_CONVERSATION_INSTRUCTIONS+"\n\n"+relationshipPolicy("conversation"):
