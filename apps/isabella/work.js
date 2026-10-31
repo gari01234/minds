@@ -359,7 +359,7 @@ async function renderPlanner(){
   });
   $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
-  $('[data-work-edit-bucket]').forEach(button=>button.onclick=e=>{
+  $$('[data-work-edit-bucket]').forEach(button=>button.onclick=e=>{
     e.stopPropagation();
     const menu=body.querySelector('[data-work-bucket-menu="'+button.dataset.workEditBucket+'"]');
     const opening=!!menu?.hidden;
@@ -367,10 +367,10 @@ async function renderPlanner(){
     body.querySelectorAll('[data-work-edit-bucket]').forEach(x=>x.setAttribute('aria-expanded','false'));
     if(menu&&opening){menu.hidden=false;button.setAttribute('aria-expanded','true');menu.querySelector('button:not(:disabled)')?.focus()}
   });
-  $('[data-work-rename-bucket]').forEach(button=>button.onclick=()=>editBucket(button.dataset.workRenameBucket));
-  $('[data-work-shift-bucket]').forEach(button=>button.onclick=()=>void shiftBucket(button.dataset.workShiftBucket,button.dataset.workShiftDirection));
-  $('[data-work-archive-bucket]').forEach(button=>button.onclick=()=>archiveBucketDialog(button.dataset.workArchiveBucket));
-  $('[data-work-bucket-handle]').forEach(handle=>{
+  $$('[data-work-rename-bucket]').forEach(button=>button.onclick=()=>editBucket(button.dataset.workRenameBucket));
+  $$('[data-work-shift-bucket]').forEach(button=>button.onclick=()=>void shiftBucket(button.dataset.workShiftBucket,button.dataset.workShiftDirection));
+  $$('[data-work-archive-bucket]').forEach(button=>button.onclick=()=>archiveBucketDialog(button.dataset.workArchiveBucket));
+  $$('[data-work-bucket-handle]').forEach(handle=>{
     handle.ondragstart=e=>{
       draggedWorkBucketId=handle.dataset.workBucketHandle;
       draggedWorkTaskId=null;
@@ -379,7 +379,7 @@ async function renderPlanner(){
     };
     handle.ondragend=()=>{
       draggedWorkBucketId=null;
-      $('.work-bucket').forEach(el=>el.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
+      $$('.work-bucket').forEach(el=>el.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
     };
   });
   // Menus close when focus moves elsewhere; keyboard and touch users can use left/right menu actions.
@@ -425,7 +425,7 @@ async function renderPlanner(){
         e.preventDefault();
         const dragged=draggedWorkBucketId;draggedWorkBucketId=null;
         const before=e.clientX<bucket.getBoundingClientRect().left+bucket.getBoundingClientRect().width/2;
-        $('.work-bucket').forEach(x=>x.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
+        $$('.work-bucket').forEach(x=>x.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
         void moveBucket(dragged,bucket.dataset.workBucketDrop,before);
         return;
       }
@@ -809,7 +809,7 @@ async function renderThreadConversation(id){
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};
     $('[data-thread-actions]').onclick=()=>openThreadActions(thread);
     $('#workThreadForm').onsubmit=e=>{e.preventDefault();void sendThreadMessage(thread)};
-    $('[data-thread-continue]').forEach(button=>button.onclick=()=>{
+    $$('[data-thread-continue]').forEach(button=>button.onclick=()=>{
       const i=messages.findIndex(m=>(m.client_key||m.id)===button.dataset.threadContinue);
       if(i<0)return;
       const preceding=messages.slice(0,i).reverse().find(m=>m.role==='user');
