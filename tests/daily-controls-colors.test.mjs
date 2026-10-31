@@ -45,7 +45,7 @@ test('Bootstrap y Service Worker mantienen orden y cache coherentes',()=>{
     assert.ok(index.includes('./'+asset));
     assert.ok(sw.includes("'./"+asset+"'"));
   }
-  assert.match(sw,/isabella-shell-v171/);
+  assert.match(sw,/isabella-shell-v172/);
   assert.match(index,/<link rel="stylesheet" href="\.\/daily-controls\.css\?v=1">/);
   assert.ok(index.indexOf('daily-controls.css?v=1')>index.indexOf('dashboard-daily-polish.css?v=1'));
 });

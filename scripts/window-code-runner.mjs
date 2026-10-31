@@ -38,7 +38,7 @@ try{
   writeFileSync(target,f.content);
  }
  // No credentials, no host sockets, no network, read-only source, nonroot user.
- const runChecks=()=>spawnSync('docker',['run','--rm','--network=none','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=128','--memory=2g','--cpus=2','--read-only','--user=1000:1000','--tmpfs','/tmp:rw,exec,size=768m','--mount','type=bind,source='+dir+',target=/source,readonly','--env','GITHUB_SHA='+sha,'minds-window-sandbox','sh','-c','cp -R /source /tmp/work && cd /tmp/work && node --test --test-reporter=tap tests/*.test.mjs && node scripts/build.mjs'],{encoding:'utf8',timeout:480000,maxBuffer:12000000});
+ const runChecks=()=>spawnSync('docker',['run','--rm','--network=none','--cap-drop=ALL','--security-opt=no-new-privileges','--pids-limit=128','--memory=2g','--cpus=2','--read-only','--user=1000:1000','--tmpfs','/tmp:rw,exec,size=1536m','--mount','type=bind,source='+dir+',target=/source,readonly','--env','GITHUB_SHA='+sha,'minds-window-sandbox','sh','-c','cp -R /source /tmp/work && cp -R /opt/deno-cache /tmp/deno-cache && export DENO_DIR=/tmp/deno-cache && cd /tmp/work && node /opt/window-code-checks.mjs'],{encoding:'utf8',timeout:480000,maxBuffer:12000000});
  let run=runChecks();testExit=run.status??-1;diagnostics=testDiagnostics(run);
  if(testExit!==0){
   const current=new Map(sources.map(f=>[f.path,f.content]));for(const f of changed)current.set(f.path,f.content);
@@ -59,7 +59,7 @@ try{
   const commit=await github('/git/commits',{message:'Window: prepare reviewed improvement '+job.id,tree:tree.sha,parents:[sha]});commitSha=commit.sha;
   const branch='isabella/window-'+job.id;
   await github('/git/refs',{ref:'refs/heads/'+branch,sha:commitSha});
-  const pr=await github('/pulls',{title:'Window: proposed code improvement '+job.id.slice(0,8),head:branch,base:'main',draft:true,body:'Prepared by the Window code runner. The private proposal and evaluation remain in Work.\n\nValidation: Node regression suite and PWA build passed in a container without network or credentials. This is not an authenticated acceptance test; Deno and SQL integration have not been run by this preparation job.\n\nReview the diff and its intended behavior before merging. No automatic merge or deployment is configured.\n\nPreparation run: https://github.com/'+REPOSITORY+'/actions/runs/'+process.env.GITHUB_RUN_ID});
+  const pr=await github('/pulls',{title:'Window: proposed code improvement '+job.id.slice(0,8),head:branch,base:'main',draft:true,body:'Prepared by the Window code runner. The private proposal and evaluation remain in Work.\n\nValidation: Deno type checks, Node regression suite and PWA build passed in a container without network or credentials. This is not an authenticated acceptance test; SQL integration has not been run by this preparation job.\n\nReview the diff and its intended behavior before merging. No automatic merge or deployment is configured.\n\nPreparation run: https://github.com/'+REPOSITORY+'/actions/runs/'+process.env.GITHUB_RUN_ID});
   await api('finish',{...binding,status:'review_ready',test_exit_code:0,commit_sha:commitSha,pr_number:pr.number,diagnostics,reason:'Borrador preparado. Requiere revisión y las comprobaciones adicionales indicadas.'});
   console.log('Window draft: '+pr.html_url);
  }

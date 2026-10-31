@@ -61,10 +61,10 @@ test('Work preserves legacy names and writes validated person ID only on explici
 });
 
 test('PWA installs the private team UI before Work with matching cache pins',()=>{
-  assert.ok(html.indexOf('work-team.js?v=1')<html.indexOf('work.js?v=33'));
-  for(const asset of ['work-team.js?v=1','work.js?v=33','work-team.css?v=1','sync.js?v=pwa39']){
+  assert.ok(html.indexOf('work-team.js?v=1')<html.indexOf('work.js?v=34'));
+  for(const asset of ['work-team.js?v=1','work.js?v=34','work-team.css?v=1','sync.js?v=pwa39']){
     assert.ok(html.includes(asset),'HTML: '+asset);
     assert.ok(sw.includes(asset),'SW: '+asset);
   }
-  assert.match(sw,/isabella-shell-v171/);
+  assert.match(sw,/isabella-shell-v172/);
 });
