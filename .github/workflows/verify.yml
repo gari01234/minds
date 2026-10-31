@@ -155,6 +155,8 @@ jobs:
         run: node tests/browser-work-boot.cjs
       - name: Verify unified Chat and Work surfaces in Chromium
         run: node tests/browser-unified-chat-work.cjs
+      - name: Verify final Chat calendar, panels and controls in Chromium
+        run: node tests/browser-chat-apple-finish.cjs
 
   window-sandbox:
     name: Window credential-free test sandbox
