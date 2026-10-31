@@ -1,0 +1,378 @@
+/* MINDS Work · finishing pass (2026-10-31)
+   UI refinements only. The shared task detail is intentionally styled the
+   same way whichever MINDS surface opens it. No task or bucket semantics change. */
+
+/* One precise native-system type system for Planner, task detail and its controls. */
+body[data-section="work"] .work-shell,
+body[data-section="work"] .work-shell button,
+body[data-section="work"] .work-shell input,
+body[data-section="work"] .work-shell select,
+body[data-section="work"] .work-shell textarea,
+#modal:has(.minds-task-detail),
+#modal:has(.minds-task-detail) button,
+#modal:has(.minds-task-detail) input,
+#modal:has(.minds-task-detail) select,
+#modal:has(.minds-task-detail) textarea,
+#modal:has(.work-bucket-editor),
+#modal:has(.work-bucket-editor) button,
+#modal:has(.work-bucket-editor) input,
+#modal:has(.work-bucket-archive),
+#modal:has(.work-bucket-archive) button {
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
+  font-synthesis:none;
+}
+body[data-section="work"] .work-head h1{font-weight:690;letter-spacing:-.035em}
+body[data-section="work"] .work-tabs button,
+body[data-section="work"] .work-planner-toolbar button{font-weight:560}
+body[data-section="work"] .work-task-title-row strong{
+  font-size:14px;font-weight:625;line-height:1.42;letter-spacing:-.011em}
+body[data-section="work"] .work-bucket header strong{font-weight:650}
+body[data-section="work"] .work-task-chips{font-variant-numeric:tabular-nums}
+
+/* Clear separation of nested surfaces without overly strong shadow. */
+body[data-section="work"] .work-screen{background:#f7f8fa}
+body[data-section="work"] .work-bucket{
+  background:#f0f2f5;
+  border:1px solid rgba(48,51,62,.055);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.64)}
+body[data-section="work"] .work-task-card{
+  border:1px solid rgba(42,48,59,.085);
+  border-radius:17px;
+  overflow:hidden;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(30,35,48,.034),0 4px 14px rgba(30,35,48,.038)}
+body[data-section="work"] .work-task-card footer{
+  border-top:1px solid rgba(39,44,54,.068)}
+body[data-section="work"] .work-bucket .work-bucket-header{
+  padding-inline:6px;
+  align-items:center}
+body[data-section="work"] .work-bucket-count{font-weight:600}
+
+/* Native-like completion control: no inner glyph in pending state. */
+body[data-section="work"] .work-task-toggle,
+#modal:has(.minds-task-detail) .minds-task-complete{
+  appearance:none;
+  box-sizing:border-box;
+  display:grid;place-items:center;
+  flex:none;
+  width:24px;height:24px;min-width:24px;min-height:24px;
+  padding:0;margin:0;
+  border:1.6px solid #9ba1aa;
+  border-radius:50%;
+  background:#fff;
+  color:#fff;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);
+  font-size:0;
+  line-height:1;
+  cursor:pointer;
+  transition:background-color .14s ease,border-color .14s ease,box-shadow .14s ease;
+}
+body[data-section="work"] .work-task-toggle:hover,
+#modal:has(.minds-task-detail) .minds-task-complete:hover{
+  border-color:#007aff;
+  background:#f2f8ff;
+}
+body[data-section="work"] .work-task-toggle.is-checked,
+#modal:has(.minds-task-detail) .minds-task-complete.is-done{
+  background:#007aff;
+  color:#fff;
+  border-color:#007aff;
+  box-shadow:none;
+  font-size:13px;
+  font-weight:750;
+}
+#modal:has(.minds-task-detail) .minds-task-complete svg{
+  width:15px;height:15px;
+  display:block;
+  fill:none;
+  stroke:currentColor;
+  stroke-width:2.6;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+  pointer-events:none;
+}
+body[data-section="work"] .work-task-toggle:focus-visible,
+#modal:has(.minds-task-detail) .minds-task-complete:focus-visible{
+  outline:3px solid rgba(0,122,255,.27);outline-offset:3px}
+body[data-section="work"] .work-task-title-row{
+  grid-template-columns:24px minmax(0,1fr);
+  gap:11px;align-items:start}
+body[data-section="work"] .work-task-toggle{margin-top:1px}
+
+/* Shell clips both right and left corners identically. ONLY body scrolls. */
+#modal:has(.minds-task-detail){
+  width:min(870px,calc(100vw - 36px));
+  height:auto;
+  max-height:min(870px,calc(100dvh - 40px));
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  padding:0;
+  border-radius:26px;
+  border:1px solid rgba(255,255,255,.89);
+  background:#fff;
+  box-shadow:0 26px 75px rgba(17,21,31,.20),0 7px 18px rgba(17,21,31,.065);
+  color:#1d1d1f;
+  isolation:isolate;
+}
+#modal:has(.minds-task-detail) .modal-head{
+  margin:0;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex:0 0 auto;
+  gap:15px;
+  padding:24px 28px 17px;
+  background:#fff;
+  border-bottom:1px solid rgba(30,35,50,.055);
+}
+#modal:has(.minds-task-detail) .modal-title{
+  font-family:inherit;
+  font-size:22px;
+  line-height:1.25;
+  letter-spacing:-.027em;
+  font-weight:690;
+  color:#1d1d1f;
+}
+#modal:has(.minds-task-detail) #closeModal{
+  display:grid;place-items:center;
+  flex:none;
+  width:34px;height:34px;
+  border:0;border-radius:50%;
+  padding:0;
+  background:#f2f3f5;
+  color:#4c515a;
+  font-size:24px;
+  line-height:1;
+  box-shadow:none;
+}
+#modal:has(.minds-task-detail) #closeModal:hover{
+  background:#e9ebef;color:#1d1d1f}
+#modal:has(.minds-task-detail) #modalBody{
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+  scrollbar-color:rgba(106,113,127,.30) transparent;
+  scrollbar-gutter:stable;
+  padding:20px 24px 26px 28px;
+}
+#modal:has(.minds-task-detail) #modalBody::-webkit-scrollbar{width:8px}
+#modal:has(.minds-task-detail) #modalBody::-webkit-scrollbar-thumb{
+  border-radius:10px;
+  border:2px solid transparent;
+  background:rgba(117,125,140,.35);
+  background-clip:padding-box}
+#modal:has(.minds-task-detail) #modalBody::-webkit-scrollbar-track{background:transparent}
+#modal:has(.minds-task-detail) #modalBody::-webkit-scrollbar-button{display:none;height:0}
+
+/* Compact, evenly weighted detail title and actions. */
+#modal:has(.minds-task-detail) .minds-task-detail{gap:19px;min-width:0}
+#modal:has(.minds-task-detail) .minds-task-detail-top{
+  display:grid;
+  grid-template-columns:24px minmax(0,1fr) 32px;
+  align-items:start;
+  column-gap:13px;
+  min-height:43px;
+  position:relative;
+}
+#modal:has(.minds-task-detail) .minds-task-detail-top>input{
+  min-width:0;
+  margin:0;
+  padding:1px 0 7px;
+  border:0!important;
+  box-shadow:none!important;
+  font-family:inherit!important;
+  font-size:19px!important;
+  font-weight:635!important;
+  line-height:1.38!important;
+  letter-spacing:-.02em;
+  color:#22242a;
+  background:transparent!important;
+}
+#modal:has(.minds-task-detail) .minds-task-detail-top>input:focus{
+  outline:0;border-bottom:1px solid #a3c7f8!important}
+#modal:has(.minds-task-detail) .minds-task-more{
+  display:grid;place-items:center;
+  width:32px;height:32px;
+  padding:0;
+  border:0;border-radius:9px;
+  background:#f4f5f7;
+  color:#717783;font-size:19px;line-height:1}
+#modal:has(.minds-task-detail) .minds-task-more:hover{
+  background:#eaedf2;color:#24272f}
+#modal:has(.minds-task-detail) .minds-task-menu{
+  margin-left:auto;
+  padding:5px;
+  border-radius:13px;
+  border:1px solid rgba(27,34,48,.09);
+  background:rgba(250,251,253,.97);
+  box-shadow:0 12px 34px rgba(30,37,51,.14);
+  backdrop-filter:blur(18px);
+  -webkit-backdrop-filter:blur(18px)}
+#modal:has(.minds-task-detail) .minds-task-menu button{
+  border-radius:8px;
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:540}
+#modal:has(.minds-task-detail) .minds-task-menu button:hover{background:#eaf2ff}
+
+/* Consistent field hierarchy, labels, dates, and all native controls. */
+#modal:has(.minds-task-detail) .minds-task-fields{
+  gap:16px 18px;
+  grid-template-columns:repeat(2,minmax(0,1fr))}
+#modal:has(.minds-task-detail) .minds-task-fields label,
+#modal:has(.minds-task-detail) .minds-task-long-field,
+#modal:has(.minds-task-detail) .minds-task-team-field,
+#modal:has(.minds-task-detail) .minds-team-allocations label{
+  min-width:0;
+  gap:7px;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:560;
+  line-height:1.4;
+  color:#6b707a;
+}
+#modal:has(.minds-task-detail) .minds-task-fields input:not([type="checkbox"]),
+#modal:has(.minds-task-detail) .minds-task-fields select,
+#modal:has(.minds-task-detail) .minds-task-long-field input,
+#modal:has(.minds-task-detail) .minds-task-long-field textarea,
+#modal:has(.minds-task-detail) .minds-team-alloc-form input,
+#modal:has(.minds-task-detail) .minds-team-alloc-form select{
+  min-height:42px;
+  width:100%;
+  padding:10px 12px;
+  border:1px solid #dfe2e8;
+  border-radius:11px;
+  box-shadow:0 1px 1px rgba(21,28,40,.016);
+  background:#fcfcfd;
+  color:#292d35;
+  font-family:inherit!important;
+  font-size:13px!important;
+  font-weight:520;
+  line-height:1.45;
+}
+#modal:has(.minds-task-detail) input[type="date"],
+#modal:has(.minds-task-detail) input[type="time"]{
+  color-scheme:light;
+  font-variant-numeric:tabular-nums;
+}
+#modal:has(.minds-task-detail) .minds-task-long-field textarea{
+  min-height:89px;resize:vertical}
+#modal:has(.minds-task-detail) .minds-task-fields input:focus,
+#modal:has(.minds-task-detail) .minds-task-fields select:focus,
+#modal:has(.minds-task-detail) .minds-task-long-field input:focus,
+#modal:has(.minds-task-detail) .minds-task-long-field textarea:focus,
+#modal:has(.minds-task-detail) .minds-team-alloc-form input:focus,
+#modal:has(.minds-task-detail) .minds-team-alloc-form select:focus{
+  outline:3px solid rgba(0,122,255,.13);
+  border-color:rgba(0,122,255,.55);
+  background:#fff;
+}
+#modal:has(.minds-task-detail) .minds-task-team-choice{
+  display:flex;flex-wrap:wrap;gap:7px;align-items:center;min-height:42px}
+#modal:has(.minds-task-detail) .minds-task-team-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  min-height:34px;
+  padding:7px 12px;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:560;
+  border:1px solid #e0e3e9;
+  border-radius:999px;
+  background:#f8f9fb;
+  color:#474c56;
+}
+#modal:has(.minds-task-detail) .minds-task-team-chip.is-selected{
+  border-color:rgba(0,122,255,.23);
+  color:#075cbe;
+  background:#eaf3ff}
+#modal:has(.minds-task-detail) .minds-task-team-chip.is-selected:before{
+  content:"✓";font-size:11px;font-weight:760}
+#modal:has(.minds-task-detail) .minds-task-team-chip:hover{
+  border-color:rgba(0,122,255,.42)}
+#modal:has(.minds-task-detail) .minds-task-section{
+  padding-top:17px;
+  gap:12px;
+  border-top:1px solid #eceef1}
+#modal:has(.minds-task-detail) .minds-task-section-head strong{
+  color:#30343b;font-size:13px;font-weight:640}
+#modal:has(.minds-task-detail) .minds-task-section-head>span,
+#modal:has(.minds-task-detail) .minds-task-muted{font-size:12px;color:#858993}
+#modal:has(.minds-task-detail) .minds-task-inline-add{
+  padding:6px 7px;
+  margin:-6px -7px;
+  border-radius:8px;
+  color:#076bcf;
+  font-size:12px;
+  font-weight:560}
+#modal:has(.minds-task-detail) .minds-task-inline-add:hover{
+  background:#eef5ff;color:#005dbd}
+#modal:has(.minds-task-detail) .minds-task-check-row{gap:10px;min-height:34px}
+#modal:has(.minds-task-detail) .minds-task-check-row input[type="checkbox"]{
+  appearance:none;width:19px;height:19px;
+  min-width:19px;min-height:19px;
+  padding:0;border:1.5px solid #a1a6b0;
+  background:#fff;border-radius:50%;cursor:pointer}
+#modal:has(.minds-task-detail) .minds-task-check-row input[type="checkbox"]:checked{
+  background:#007aff;border-color:#007aff}
+#modal:has(.minds-task-detail) .minds-task-check-row input[type="checkbox"]:checked:after{
+  content:"✓";color:white;font-size:12px;font-weight:800;line-height:17px}
+#modal:has(.minds-task-detail) .minds-task-check-row input[type="text"]{
+  font-family:inherit;font-size:13px;color:#343740}
+#modal:has(.minds-task-detail) .minds-task-footer{
+  margin-top:7px;
+  padding-top:16px;
+  border-top:1px solid #eceef1}
+#modal:has(.minds-task-detail) .minds-task-footer span{font-size:11px;color:#8b9099}
+#modal:has(.minds-task-detail) .minds-task-create{
+  background:#007aff;border-radius:10px;
+  color:#fff;border:0;padding:10px 15px;
+  font-family:inherit;font-size:12px;font-weight:650}
+#modal:has(.minds-task-detail) .minds-task-create:hover{background:#006bdc}
+#modal:has(.minds-task-detail) .minds-task-reload{
+  border-radius:10px;font-family:inherit;font-size:12px}
+#modal:has(.minds-task-detail) :is(button,input,select,textarea):focus-visible{
+  outline-offset:2px}
+
+/* Bucket confirmation follows the same compact typography and controls. */
+#modal:has(.work-bucket-editor){
+  width:min(450px,calc(100vw - 32px));
+  border-radius:22px;
+  overflow:hidden;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+}
+#modal:has(.work-bucket-editor) .modal-title{
+  font:650 21px/1.25 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+  letter-spacing:-.025em}
+#modal:has(.work-bucket-editor) .work-bucket-editor p{font-size:13px;line-height:1.5}
+#modal:has(.work-bucket-editor) .work-bucket-dialog-actions button{
+  min-height:38px;padding:9px 14px;
+  font-size:12px;font-weight:630;border-radius:10px}
+
+/* Small screens: rounded shell, internal scrolling, easy touch targets. */
+@media(max-width:640px){
+  #modal:has(.minds-task-detail){
+    width:calc(100vw - 18px);
+    max-height:calc(100dvh - 22px);
+    border-radius:22px}
+  #modal:has(.minds-task-detail) .modal-head{padding:17px 18px 13px}
+  #modal:has(.minds-task-detail) .modal-title{font-size:19px}
+  #modal:has(.minds-task-detail) #modalBody{padding:15px 15px 24px 18px}
+  #modal:has(.minds-task-detail) .minds-task-fields{grid-template-columns:1fr;gap:13px}
+  #modal:has(.minds-task-detail) .minds-task-detail-top>input{font-size:16px!important}
+  #modal:has(.minds-task-detail) .minds-task-detail{gap:16px}
+}
+@media(prefers-reduced-motion:reduce){
+  #modal:has(.minds-task-detail) button,
+  body[data-section="work"] .work-task-toggle{transition:none!important}
+}
+@media(prefers-contrast:more){
+  #modal:has(.minds-task-detail) .minds-task-fields input,
+  #modal:has(.minds-task-detail) .minds-task-fields select,
+  body[data-section="work"] .work-task-card{border-color:#737984}
+}
