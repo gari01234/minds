@@ -21,7 +21,7 @@ test('Window UI loads dynamic projects, renders escaped evidence and reports rea
  let fail=false;const calls=[];
  const rows={isabella_projects:[{id:'p',name:'Window',client_key:'window'}],minds_self_review_settings:{enabled:true,timezone:'Europe/Berlin',local_hour:4},minds_self_review_reports:[{id:'r',review_key:'baseline',status:'completed',window_start:'2026-01-01',window_end:'2026-01-02',report:{summary:'<script>bad()</script>',what_worked:'Read receipt',limitations:'Partial'},coverage:{},evidence:[]}],minds_self_review_proposals:[]};
  const sb={auth:{getSession:async()=>({data:{session:{user:{id:'owner'}}}})},from:t=>{calls.push(t);let single=false;const q={then:(a,b)=>Promise.resolve({data:single&&Array.isArray(rows[t])?rows[t][0]:rows[t],count:Array.isArray(rows[t])?rows[t].length:1,error:fail&&t==='minds_self_review_reports'?{message:'offline'}:null}).then(a,b)};for(const m of ['select','eq','order','limit'])q[m]=()=>q;q.maybeSingle=()=>{single=true;return q};return q}};
- const c=vm.createContext({window:{MINDS_SUPABASE:sb},document:{querySelector:node,querySelectorAll:()=>[],body:{dataset:{section:'work'}}},localStorage:{getItem:()=>null,setItem(){}},console:{error(){}},Date,Map,Set});
+ const c=vm.createContext({window:{MINDS_SUPABASE:sb},document:{querySelector:node,querySelectorAll:()=>[],body:{dataset:{section:'work'}}},localStorage:{getItem:()=>null,setItem(){}},console:{error(){}},Date,Map,Set,setTimeout,clearTimeout});
  vm.runInContext(readFileSync(new URL('../apps/isabella/work.js',import.meta.url),'utf8'),c);
  await c.window.MINDS_WORK.render();
  assert.match(node('.work-project-switch').innerHTML,/Window/);assert.match(node('#workBody').innerHTML,/Revisión inicial/);

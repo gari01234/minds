@@ -13,7 +13,7 @@ test('Build 78 adds Threads as a fourth Work surface',()=>{
   const shell=read('apps/isabella/shell.js');
   const work=read('apps/isabella/work.js');
   assert.ok(shell.includes('data-work-view="threads"'));
-  assert.ok(work.includes("if(view==='threads')await renderThreads()"));
+  assert.ok(work.includes("view==='threads'?renderThreads()"));
   assert.ok(work.includes("from('minds_work_threads')"));
   assert.ok(work.includes("minds_ensure_work_thread_conversation"));
   assert.ok(work.includes('const result=await window.ISABELLA_AI.ask(message,state,{'));

@@ -8,7 +8,7 @@ test('Build 90.3 makes Panorama the first Work lens while preserving established
  assert.ok(shell.includes('data-work-view="overview" class="active"'));
  for(const name of ['desktop','planner','knowledge','threads'])assert.ok(shell.includes('data-work-view="'+name+'"'));
  assert.ok(work.includes("localStorage.getItem('minds-work-view')||'overview'"));
- assert.ok(work.includes("if(view==='overview')await renderOverview()"));
+ assert.ok(work.includes("view==='overview'?renderOverview()"));
 });
 test('Build 90.3 Project understanding reads the canonical project data and never creates buckets or accepted facts',()=>{
  const work=read('apps/isabella/work.js');

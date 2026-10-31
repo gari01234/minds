@@ -151,6 +151,8 @@ jobs:
         run: node tests/browser-daily-workspace.cjs
       - name: Verify Work task detail modal typography and scroll geometry
         run: node tests/browser-work-modal-polish.cjs
+      - name: Verify Work projects boot and tabs react in browser
+        run: node tests/browser-work-boot.cjs
 
   window-sandbox:
     name: Window credential-free test sandbox
