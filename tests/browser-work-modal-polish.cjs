@@ -7,7 +7,7 @@ const {chromium}=require('playwright');
   const context=await browser.newContext({viewport:{width:1366,height:900},deviceScaleFactor:1});
   const page=await context.newPage();
   await page.goto('http://127.0.0.1:8765/isabella/',{waitUntil:'domcontentloaded'});
-  await page.waitForSelector('#modalBody',{timeout:15000});
+  await page.waitForSelector('#modalBody',{state:'attached',timeout:15000});
   await page.evaluate(()=>{
     const block='<div class="minds-task-section"><div class="minds-task-section-head"><strong>Checklist</strong></div><p>Test content for scrolling and typography</p></div>';
     const contents='<div class="minds-task-detail"><header class="minds-task-detail-top">'+
