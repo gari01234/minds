@@ -29,7 +29,7 @@ test('A visually empty Bucket explains completed history and zero tasks moved',(
  assert.equal(modalHTML.length,1);
  assert.match(modalHTML[0].html,/8 erledigte Aufgaben bleiben/);
  assert.match(modalHTML[0].html,/Keine offenen Aufgaben müssen verschoben werden/);
- assert.match(modalHTML[0].html,/archivierten Bucket/);
+ assert.match(modalHTML[0].html,/im Archiv/);
  assert.doesNotMatch(modalHTML[0].html,/8 Aufgabe.*nach.*Ohne Bucket/);
 });
 test('Pending work still moves to Ohne Bucket and completed history stays intact',()=>{
@@ -45,7 +45,7 @@ test('Pending work still moves to Ohne Bucket and completed history stays intact
  };
  vm.runInNewContext('('+extract('function archiveBucketDialog(id){','async function archiveBucket(id){')+')',ctx)('bucket');
  assert.match(modalHTML[0],/1 offene Aufgabe wird nach <strong>Ohne Bucket<\/strong> verschoben/);
- assert.match(modalHTML[0],/1 erledigte Aufgabe bleibt als Verlauf/);
+ assert.match(modalHTML[0],/1 erledigte Aufgabe bleibt im Archiv/);
 });
 test('Archived Bucket access and restoration are part of the actual Planner',()=>{
  assert.match(js,/data-work-show-bucket-archive/);
