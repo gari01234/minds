@@ -1,0 +1,579 @@
+/* MINDS · Section parity · 2026-10-31
+   Hoy (Ahora, Ideas), Calendario (Día, Semana, Mes), Work (Panorama, Desktop,
+   Conocimiento, Threads) and the Lecturas shell speak the Planner language:
+     tabs        13/560, active #007aff with a 2px rule on one full-width hairline
+     segment     #f1f3f6 track, white thumb, dark label (Work project switch)
+     quiet btn   36px · r11 · white · hairline border · 12/560
+     primary btn the one blue action per toolbar (Planner "+ Bucket")
+     card        r16 · hairline · soft double shadow · 1px lift on hover
+     eyebrow     10.5/650 · .07em tracking · #8a8f98
+   Layout is desktop only (body.desk-enabled); icon sizing, the reaction badge and
+   picker apply at every width. Presentation only: every hook stays wired.
+*/
+
+:root{
+  --m-calendar-selected:#007aff;
+  --m-calendar-today:#c33c4a;
+}
+
+/* 1 · Shell ─ one full-height sidebar edge and one active-item style everywhere. */
+@media(min-width:950px){
+  body.desk-enabled .app::before{
+    content:"";
+    grid-column:1;grid-row:1;
+    justify-self:end;align-self:stretch;
+    width:1px;
+    background:rgba(37,45,59,.09);
+    z-index:25;
+    pointer-events:none;
+  }
+  body.desk-enabled #desktopLenses{
+    border-right-color:rgba(37,45,59,.09)!important;
+  }
+  body.desk-enabled .lens-nav-item{
+    border-radius:12px;
+    color:#646a74;
+    transition:background-color .15s ease,color .15s ease;
+  }
+  body.desk-enabled .lens-nav-item:hover{
+    background:#f5f6f8;color:#1d1d1f;
+  }
+  body.desk-enabled .lens-nav-item.active{
+    background:#eff2f7;color:#202329;
+  }
+  body.desk-enabled .lens-nav-item .lens-glyph{color:#646a74}
+  body.desk-enabled .lens-nav-item.active .lens-glyph{color:#007aff}
+}
+
+/* 2 · Shared controls ───────────────────────────────────────────────────── */
+/* Quiet button (Planner "Team · 0" / "Archiv"). */
+body.desk-enabled .app :is(.situation-heading button,.work-toolbar-actions button,.work-overview-section-head button,
+  .work-overview-footer button,.work-thread-toolbar-actions button,.knowledge-actions button,.work-empty button,
+  .situation-tools .surface-text-action,.cal-toolbar-right .text-btn,.readings-top-actions .sofia-button){
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:36px;
+  padding:8px 13px;
+  border:1px solid rgba(25,28,36,.086);
+  border-radius:11px;
+  background:#fff;
+  color:#42454b;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:560;
+  letter-spacing:-.006em;
+  line-height:1.2;
+  white-space:nowrap;
+  box-shadow:0 1px 2px rgba(20,24,35,.025);
+  cursor:pointer;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease;
+}
+body.desk-enabled .app :is(.situation-heading button,.work-toolbar-actions button,.work-overview-section-head button,
+  .work-overview-footer button,.work-thread-toolbar-actions button,.knowledge-actions button,.work-empty button,
+  .situation-tools .surface-text-action,.cal-toolbar-right .text-btn,.readings-top-actions .sofia-button):hover{
+  background:#fafbfc;
+  border-color:rgba(45,55,70,.17);
+  color:#1d1d1f;
+}
+body.desk-enabled .app :is(#feedSettings,#generateIdeas,#todayButton,#openSofiaButton){
+  min-height:36px;padding:8px 13px;font-size:12px;font-weight:560;color:#42454b;
+  background:#fff;border:1px solid rgba(25,28,36,.086);border-radius:11px;
+}
+body.desk-enabled .app :is(#feedSettings,#generateIdeas,#todayButton,#openSofiaButton):hover{
+  background:#fafbfc;border-color:rgba(45,55,70,.17);color:#1d1d1f;
+}
+/* Primary: the single blue action of each toolbar (Planner "+ Bucket").
+   .app.app outranks the quiet list above, whose :is() takes its most specific member. */
+body.desk-enabled .app.app :is(.calendar-create-row button,[data-work-upload],[data-work-new-thread],[data-knowledge-new]){
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;
+  min-height:36px;
+  padding:8px 14px;
+  border:1px solid transparent;
+  border-radius:11px;
+  background:#007aff;
+  color:#fff;
+  font-family:inherit;
+  font-size:12px;
+  font-weight:600;
+  letter-spacing:-.006em;
+  line-height:1.2;
+  white-space:nowrap;
+  box-shadow:0 2px 6px rgba(0,122,255,.17);
+  cursor:pointer;
+  transition:background-color .15s ease;
+}
+body.desk-enabled .app.app :is(.calendar-create-row button,[data-work-upload],[data-work-new-thread],[data-knowledge-new]):hover{
+  background:#0069db;color:#fff;
+}
+/* Tabs (Work tabs): one hairline across the toolbar, blue active rule. */
+body.desk-enabled .app .situation-toolbar{
+  width:min(100%,810px);
+  padding:0 15px;
+  border-bottom:1px solid rgba(26,29,36,.1);
+  margin-bottom:22px;
+}
+body.desk-enabled .app .situation-tabs{
+  gap:3px;
+  margin-left:-15px;
+  border-bottom:0;
+  align-self:stretch;
+}
+body.desk-enabled .app .situation-tabs button{
+  margin-bottom:-1px;
+  min-height:44px;
+  padding:10px 15px 12px;
+  border:0;
+  border-bottom:2px solid transparent;
+  border-radius:0;
+  background:transparent;
+  color:#6b6c73;
+  font-size:13px;
+  font-weight:560;
+  letter-spacing:-.006em;
+}
+body.desk-enabled .app .situation-tabs button:hover:not(.active){color:#23252a}
+body.desk-enabled .app .situation-tabs button.active{
+  color:#007aff;
+  border-bottom-color:#007aff;
+}
+/* Eyebrow labels: one size, one tracking, one grey. */
+body.desk-enabled .app :is(.surface-card-agent,.idea-workspace-card-state,.idea-deliverable span,
+  .work-overview-intro .eyebrow,.situation-context-label){
+  font-size:10.5px;
+  font-weight:650;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  color:#8a8f98;
+}
+
+/* 3 · Hoy · Ahora ───────────────────────────────────────────────────────── */
+body.desk-enabled .app :is(#feedScreen,#ideasScreen) .surface-scroll{
+  padding:25px 38px 52px;
+}
+/* Weather: vector symbols sized to the type they sit in. */
+.app .situation-weather :is(.weather-location-symbol,.weather-condition-symbol){
+  display:inline-flex;
+  align-items:center;
+  width:auto;
+  margin-right:.3em;
+  font-size:1em;
+  vertical-align:-.14em;
+}
+.app .situation-weather .weather-location-symbol .minds-weather-icon{width:1.05em;height:1.05em}
+.app .situation-weather .weather-condition-symbol .minds-weather-icon{width:1.18em;height:1.18em}
+.app .weather-row-symbol{
+  display:inline-flex;vertical-align:-4px;margin-right:6px;
+}
+.app .weather-row-symbol .minds-weather-icon{width:18px;height:18px}
+body.desk-enabled .app .situation-weather .weather-card .weather-toggle{
+  font-size:12.5px;font-weight:560;color:#5d626a;
+}
+/* Ledger: "Calendario ↗" sits on the coverage line instead of a row of its own. */
+body.desk-enabled .app .situation-heading{
+  position:relative;
+  height:0;
+  overflow:visible;
+}
+body.desk-enabled .app .situation-heading>button{
+  position:absolute;
+  right:0;top:-8px;
+}
+body.desk-enabled .app .situation-coverage{
+  padding-right:140px;
+  min-height:20px;
+}
+body.desk-enabled .app .situation-item{
+  transition:background-color .15s ease,box-shadow .15s ease;
+}
+body.desk-enabled .app .situation-item:hover{
+  background:#f7f8fa;
+  box-shadow:-10px 0 0 #f7f8fa,10px 0 0 #f7f8fa;
+}
+/* Suggestion cards: calm agent dot, accent link, quiet secondary actions. */
+body.desk-enabled .app .surface-icon{font-size:18px;min-width:24px}
+.app .surface-card .surface-icon.surface-icon-dot{
+  display:inline-block;
+  flex:none;
+  width:7px;height:7px;min-width:7px;
+  margin:0 4px 0 1px;
+  border-radius:50%;
+  background:#007aff;
+  font-size:0;
+}
+.app [data-agent="sofia"] .surface-icon-dot{background:#8a72c7}
+.app .surface-icon-dot.is-news{background:#9ba1aa}
+body.desk-enabled .app .surface-state{
+  padding:2px 7px;
+  border-radius:6px;
+  background:#eef5ff;
+  color:#0a6ad6;
+  font-size:10px;
+  font-weight:650;
+  letter-spacing:.06em;
+}
+body.desk-enabled .app .surface-card-actions{gap:4px;margin-top:6px}
+body.desk-enabled .app :is(.surface-readmore,.surface-discuss,.surface-why){
+  display:inline-flex;align-items:center;
+  min-height:32px;
+  padding:6px 9px;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  font-family:inherit;
+  font-size:12.5px;
+  font-weight:600;
+  line-height:1.2;
+  cursor:pointer;
+  transition:background-color .15s ease,color .15s ease;
+}
+body.desk-enabled .app .surface-card-actions>:is(.surface-readmore,.surface-discuss,.surface-why):first-child{margin-left:-9px}
+body.desk-enabled .app :is(.surface-readmore,.surface-discuss){color:#007aff}
+body.desk-enabled .app :is(.surface-readmore,.surface-discuss)::after{content:"›";margin-left:4px;color:inherit;opacity:.7}
+body.desk-enabled .app .surface-why{color:#5d626a;font-weight:560}
+body.desk-enabled .app :is(.surface-readmore,.surface-discuss,.surface-why):hover{background:#f1f3f6}
+body.desk-enabled .app .surface-why:hover{color:#1d1d1f}
+body.desk-enabled .app .surface-why-copy{
+  border-radius:12px;background:#f5f6f8;color:#5d626a;font-size:12.5px;
+}
+body.desk-enabled .app .surface-feedback{gap:2px;border-top-color:rgba(37,45,59,.09)}
+body.desk-enabled .app .surface-feedback button{
+  margin:0;
+  padding:5px 8px;
+  border-radius:8px;
+  font-size:12px;
+  color:#6b7079;
+  transition:background-color .15s ease,color .15s ease;
+}
+body.desk-enabled .app .surface-feedback button:first-child{margin-left:-8px}
+body.desk-enabled .app .surface-feedback button:hover{background:#f1f3f6;color:#1d1d1f}
+body.desk-enabled .app .surface-feedback button.active{color:#007aff;font-weight:600}
+body.desk-enabled .app .surface-feedback .danger-text:hover{background:#fff2f3;color:#c32231}
+
+/* 4 · Hoy · Ideas ─ same column, same rhythm as Ahora. */
+body.desk-enabled .app #ideasList{
+  width:min(100%,780px);
+  max-width:780px;
+  margin-left:auto;margin-right:auto;
+}
+body.desk-enabled .app .idea-workspace-card{
+  gap:4px;
+  transition:background-color .15s ease,box-shadow .15s ease;
+}
+body.desk-enabled .app .idea-workspace-card:hover{
+  background:#f7f8fa;
+  box-shadow:-10px 0 0 #f7f8fa,10px 0 0 #f7f8fa;
+}
+body.desk-enabled .app .idea-workspace-card>span:last-child{font-size:12px;color:#727680}
+body.desk-enabled .app .idea-deliverable{
+  border-radius:12px;background:#f5f6f8;padding:12px 14px;
+}
+body.desk-enabled .app .idea-deliverable strong{font-size:13px;font-weight:600;color:#202126}
+
+/* 5 · Calendario ─ one compact segment, quiet chrome, blue selection. */
+body.desk-enabled .app .cal-toolbar{
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  gap:12px;
+  padding:14px 24px 4px;
+}
+body.desk-enabled .app .cal-toolbar>#backButton{justify-self:start}
+body.desk-enabled .app .cal-toolbar .segments{
+  justify-self:center;
+  display:inline-flex;
+  width:auto;
+  gap:3px;
+  padding:3px;
+  background:#f1f3f6;
+  border:1px solid rgba(37,45,59,.06);
+  border-radius:12px;
+}
+body.desk-enabled .app .cal-toolbar .segments button{
+  min-height:30px;
+  padding:6px 16px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:#5d626a;
+  font-size:12.5px;
+  font-weight:570;
+  box-shadow:none;
+}
+body.desk-enabled .app .cal-toolbar .segments button.active{
+  background:#fff;
+  color:#1d1d1f;
+  border-color:rgba(37,45,59,.086);
+  box-shadow:0 2px 8px rgba(37,45,59,.07);
+  font-weight:620;
+}
+body.desk-enabled .app .cal-toolbar .segments button:hover:not(.active){
+  color:#1d1d1f;background:rgba(255,255,255,.6);
+}
+body.desk-enabled .app .cal-toolbar-right{justify-self:end;display:flex;align-items:center;gap:8px}
+body.desk-enabled .app #backButton{
+  min-height:34px;
+  padding:7px 10px;
+  border:0;
+  border-radius:10px;
+  background:transparent;
+  color:#5d626a;
+  font-size:13px;
+  font-weight:560;
+  cursor:pointer;
+}
+body.desk-enabled .app #backButton:hover{background:#f1f3f6;color:#1d1d1f}
+body.desk-enabled .app .cal-nav{padding:8px 24px 6px}
+body.desk-enabled .app .cal-nav .round{
+  display:grid;place-items:center;
+  width:36px;height:36px;min-width:36px;min-height:36px;
+  padding:0 0 2px;
+  border:1px solid rgba(25,28,36,.086);
+  border-radius:11px;
+  background:#fff;
+  color:#42454b;
+  font-size:20px;
+  line-height:1;
+  box-shadow:0 1px 2px rgba(20,24,35,.025);
+}
+body.desk-enabled .app .cal-nav .round:hover{background:#fafbfc;border-color:rgba(45,55,70,.17);color:#1d1d1f}
+body.desk-enabled .app #calTitle{
+  font-size:20px;font-weight:650;letter-spacing:-.02em;color:#1d1d1f;
+}
+.app #calTitle::first-letter{text-transform:uppercase}
+body.desk-enabled .app .mc.selected .mn{
+  background:#007aff;color:#fff;
+  box-shadow:0 2px 5px rgba(0,122,255,.15);
+}
+body.desk-enabled .app .mc.today:not(.selected) .mn{
+  color:#c33c4a;
+  box-shadow:inset 0 0 0 1px rgba(195,60,74,.35);
+}
+body.desk-enabled .app .mc:hover:not(.selected) .mn{background:#f1f3f6}
+body.desk-enabled .app .minds-plan-controls{border-bottom-color:rgba(37,45,59,.09);padding:10px 24px 12px}
+body.desk-enabled .app .minds-plan-filter-row select{
+  min-height:34px;
+  padding:6px 28px 6px 11px;
+  border:1px solid rgba(25,28,36,.11);
+  border-radius:11px;
+  color:#42454b;
+  font-size:12px;
+  max-width:215px;
+}
+body.desk-enabled .app .minds-plan-controls>span{font-size:11.5px;color:#6b7079}
+/* Week/Day: "Añadir" joins the filter row instead of sitting on a row of its own;
+   the row below keeps its full-width hairline and reserves the button's room. */
+body.desk-enabled .app .calendar-content{position:relative}
+body.desk-enabled .app .calendar-content>.calendar-create-row:first-child{
+  position:absolute;
+  top:0;right:0;
+  z-index:3;
+  padding:10px 24px 0 12px;
+}
+body.desk-enabled .app .calendar-content>.calendar-create-row:first-child+*{
+  padding-right:230px;
+  min-height:57px;
+}
+body.desk-enabled .app .calendar-content>.calendar-create-row:not(:first-child){padding:12px 24px}
+body.desk-enabled .app .minds-native-plan-head{font-size:11.5px;color:#6b7079}
+body.desk-enabled .app .minds-plan-span-label{font-size:11.5px}
+body.desk-enabled .app .whead{font-size:13.5px;font-weight:650;color:#25262b;border-bottom-color:rgba(37,45,59,.09)}
+body.desk-enabled .app .wday{border-left-color:rgba(37,45,59,.07)}
+body.desk-enabled .app .witem{border-radius:10px;font-size:12px;line-height:1.4}
+/* Day events read from the top, like every calendar. */
+body.desk-enabled .app .hours .event{
+  display:flex;
+  flex-direction:column;
+  align-items:flex-start;
+  justify-content:flex-start;
+  gap:2px;
+  padding:7px 10px;
+  border-radius:9px;
+}
+body.desk-enabled .app .hours .event .meta{margin-top:0}
+
+/* 6 · Work ──────────────────────────────────────────────────────────────── */
+/* Panorama: status chips, not 8px outlined capsules. */
+body.desk-enabled .app .model-badge{
+  padding:3px 7px;
+  border:0;
+  border-radius:7px;
+  background:#fff4e5;
+  color:#9a5b00;
+  font-size:10.5px;
+  font-weight:620;
+  letter-spacing:.02em;
+}
+body.desk-enabled .app .model-badge.attention{background:#fff2f3;color:#c32231}
+body.desk-enabled .app .work-overview-item small{font-size:12px;color:#727680}
+/* Desktop: Finder-like tiles on the Planner card. */
+body.desk-enabled .app .work-breadcrumb{gap:2px}
+body.desk-enabled .app .work-breadcrumb button{
+  padding:6px 7px;
+  border-radius:8px;
+  color:#5d626a;
+  font-size:13px;
+  font-weight:560;
+}
+body.desk-enabled .app .work-breadcrumb button:last-of-type{color:#1d1d1f;font-weight:620}
+body.desk-enabled .app .work-breadcrumb button:hover{background:#f1f3f6}
+body.desk-enabled .app .work-breadcrumb span{color:#b4b9c1}
+body.desk-enabled .app .work-toolbar-actions{display:flex;gap:8px}
+body.desk-enabled .app .work-drop-hint{
+  margin:4px 0 16px;
+  padding:12px 15px;
+  border:1.5px dashed rgba(37,45,59,.16);
+  border-radius:14px;
+  background:#fafbfc;
+  color:#727680;
+  font-size:12px;
+}
+body.desk-enabled .app .work-files{
+  grid-template-columns:repeat(auto-fill,minmax(176px,1fr));
+  gap:14px;
+}
+body.desk-enabled .app .work-file{
+  min-height:150px;
+  padding:16px 15px 14px;
+  border:1px solid rgba(30,33,45,.09);
+  border-radius:16px;
+  background:#fff;
+  box-shadow:0 1px 2px rgba(15,19,30,.035),0 5px 16px rgba(27,32,45,.035);
+  transition:box-shadow .16s ease,border-color .16s ease,transform .16s ease;
+}
+body.desk-enabled .app .work-file:hover{
+  background:#fff;
+  border-color:rgba(35,44,63,.14);
+  box-shadow:0 4px 20px rgba(28,33,48,.09);
+  transform:translateY(-1px);
+}
+body.desk-enabled .app .work-file:focus-visible{outline:3px solid rgba(0,122,255,.38);outline-offset:3px}
+body.desk-enabled .app .work-file-icon,.app .work-file-icon:has(.work-tile-svg){
+  display:block;margin:0 0 auto;
+  font-size:0;line-height:0;color:inherit;
+}
+.app .work-tile-svg{display:block;width:46px;height:38px}
+body.desk-enabled .app .work-file strong{
+  display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-top:14px;
+  font-size:13.5px;font-weight:620;line-height:1.35;letter-spacing:-.008em;
+  color:#202126;word-break:break-word;
+}
+body.desk-enabled .app .work-file small{
+  display:-webkit-box;
+  -webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-top:4px;
+  font-size:11.5px;line-height:1.4;color:#727680;
+}
+/* Conocimiento: Planner cards and fields. */
+body.desk-enabled .app .knowledge-card{
+  padding:18px 20px;
+  border:1px solid rgba(30,33,45,.09);
+  border-radius:16px;
+  box-shadow:0 1px 2px rgba(15,19,30,.035),0 5px 16px rgba(27,32,45,.035);
+}
+body.desk-enabled .app .knowledge-meta{font-size:12px;color:#6b7079}
+body.desk-enabled .app .knowledge-meta b{color:#25262b;font-weight:620}
+body.desk-enabled .app .knowledge-actions{gap:8px}
+body.desk-enabled .app .knowledge-actions button{min-height:32px;padding:6px 12px}
+body.desk-enabled .app .knowledge-filters :is(input,select){
+  min-height:40px;
+  padding:9px 12px;
+  border:1px solid rgba(25,28,36,.11);
+  border-radius:11px;
+  font-size:13px;
+}
+body.desk-enabled .app .knowledge-filters :is(input,select):focus{
+  outline:3px solid rgba(0,122,255,.18);border-color:rgba(0,122,255,.55);
+}
+body.desk-enabled .app :is(.work-threads,.work-knowledge) .work-desktop-toolbar .small{
+  font-size:12px;color:#6b7079;
+}
+/* Threads: calm rows with a hover surface, quiet overflow control. */
+body.desk-enabled .app .work-thread-row{border-bottom-color:rgba(37,45,59,.09)}
+body.desk-enabled .app .work-thread-card{
+  padding:15px 10px;
+  border-radius:12px;
+  transition:background-color .15s ease;
+}
+body.desk-enabled .app .work-thread-card:hover{background:#f7f8fa}
+body.desk-enabled .app .work-thread-card-main strong{font-size:15px;font-weight:620;color:#202126}
+body.desk-enabled .app .work-thread-card-main span{font-size:13px;color:#727680}
+body.desk-enabled .app .work-thread-card-meta{color:#8a8f98}
+body.desk-enabled .app .work-thread-more{
+  align-self:center;
+  height:34px;min-width:38px;
+  border-radius:10px;
+  color:#5d626a;
+}
+body.desk-enabled .app .work-thread-more:hover{background:#f1f3f6;color:#151515}
+
+/* 7 · Lecturas shell ─ no hairline under the bar (no other section has one). */
+body.desk-enabled .app .readings-topline{border-bottom:0}
+
+/* 8 · Reactions ─ larger applied badge; roomier picker with vector tabs (all widths). */
+.message-reaction-badge{
+  min-width:38px;height:30px;
+  padding:0 7px;
+  bottom:16px;
+}
+.message-reaction-badge .reaction-native-emoji{font-size:18px;line-height:1}
+.message:has(.message-reaction-badge) .message-actions{padding-left:42px}
+@media(min-width:700px){
+  .emoji-reaction-sheet{
+    width:468px;
+    max-height:560px;
+    padding:14px 16px 16px;
+    border-radius:22px;
+    background:rgba(255,255,255,.985);
+    border:1px solid rgba(37,45,59,.08);
+    box-shadow:0 24px 64px rgba(23,29,42,.18),0 4px 14px rgba(28,35,49,.07);
+  }
+  .emoji-grid{grid-template-columns:repeat(9,minmax(0,1fr))}
+}
+.emoji-sheet-head strong{font-size:15px;font-weight:650;color:#25262b}
+.emoji-sheet-head button{
+  width:30px;height:30px;
+  background:#f1f3f6;color:#5d626a;font-size:18px;
+}
+.emoji-sheet-head button:hover{background:#e8ebf0;color:#151515}
+.emoji-sheet-tabs{
+  grid-template-columns:repeat(10,minmax(0,1fr));
+  gap:2px;
+  padding:2px 0 10px;
+  border-bottom-color:rgba(37,45,59,.08);
+}
+.emoji-sheet-tabs button{
+  display:grid;place-items:center;
+  height:34px;
+  border-radius:10px;
+  color:#8a8f98;
+  transition:background-color .15s ease,color .15s ease;
+}
+.emoji-sheet-tabs button:hover{background:#f1f3f6;color:#25262b}
+.emoji-sheet-tabs button.active{background:#eef5ff;color:#007aff}
+.emoji-tab-icon{width:18px;height:18px;display:block}
+.emoji-category-title{
+  padding:2px 4px 8px;
+  font-size:10.5px;font-weight:650;letter-spacing:.07em;text-transform:uppercase;color:#8a8f98;
+}
+.emoji-grid{gap:2px}
+.emoji-grid button{
+  height:44px;
+  border-radius:11px;
+  font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif;
+  font-size:28px;
+  line-height:1;
+  transition:background-color .12s ease,transform .12s ease;
+}
+.emoji-grid button:hover{background:#f1f3f6;transform:scale(1.08)}
+.emoji-grid button.selected{background:#eef5ff;box-shadow:inset 0 0 0 1.5px rgba(0,122,255,.45)}
+
+@media(prefers-reduced-motion:reduce){
+  body.desk-enabled .app :is(.work-file,.situation-item,.idea-workspace-card,.work-thread-card),
+  .emoji-grid button,.emoji-sheet-tabs button{transition:none!important}
+  body.desk-enabled .app .work-file:hover,.emoji-grid button:hover{transform:none}
+}
+@media(prefers-contrast:more){
+  body.desk-enabled .app :is(.work-file,.knowledge-card){border-color:#7e8792}
+  body.desk-enabled .app .surface-feedback button,body.desk-enabled .app .surface-why{color:#3c4049}
+}

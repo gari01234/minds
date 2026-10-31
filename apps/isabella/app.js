@@ -517,6 +517,26 @@ function recordFeedSignal(kind,item,extra={}){
   const signal={id:uid(),kind,at:new Date().toISOString(),title:String(item?.title||''),source_url:String(item?.source_url||item?.metadata?.source_url||''),entities:feedEntities(item).map(x=>x.name),...extra};
   state.feedSignals=[...(state.feedSignals||[]),signal].slice(-80);save();
 }
+// Weather symbols as small multicolour vectors: identical on every OS and size.
+function weatherSymbolSvg(symbol){
+  const key=String(symbol||'').replace(/️/g,'');
+  const cloud='<path d="M6.8 18h10.4a3.8 3.8 0 0 0 .55-7.56A5.4 5.4 0 0 0 7.4 11.3a3.35 3.35 0 0 0-.6 6.7z" fill="#e9eef4" stroke="#7d8898" stroke-width="1.35" stroke-linejoin="round"/>';
+  const high='<g transform="translate(0 -3)">'+cloud+'</g>';
+  const sun=(cx,cy,r)=>{let rays='';for(let i=0;i<8;i++){const a=i*Math.PI/4,c=Math.cos(a),n=Math.sin(a);rays+='<path d="M'+(cx+c*(r+1.6)).toFixed(2)+' '+(cy+n*(r+1.6)).toFixed(2)+'L'+(cx+c*(r+3.1)).toFixed(2)+' '+(cy+n*(r+3.1)).toFixed(2)+'"/>'}
+    return '<g stroke="#ffb020" stroke-width="1.7" stroke-linecap="round">'+rays+'</g><circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="#ffb020"/>'};
+  const art={
+    '☀':sun(12,12,4.3),
+    '⛅':sun(9,8.6,3)+'<g transform="translate(1.6 1.2)">'+cloud+'</g>',
+    '☁':cloud,
+    '🌧':high+'<g stroke="#2d8cff" stroke-width="1.7" stroke-linecap="round"><path d="M8.5 18.2l-.9 2.6M12.3 18.2l-.9 2.6M16.1 18.2l-.9 2.6"/></g>',
+    '❄':high+'<g fill="#5fb3ff"><circle cx="8.3" cy="19.4" r="1.1"/><circle cx="12" cy="21" r="1.1"/><circle cx="15.7" cy="19.4" r="1.1"/></g>',
+    '⛈':high+'<path d="M12.6 15.6l-2.7 4.1h2.3l-1.2 3.3 3.6-4.6h-2.4l1.4-2.8z" fill="#ffc21a" stroke="#e39b00" stroke-width=".6" stroke-linejoin="round"/>',
+    '🌫':high+'<g stroke="#a3abb6" stroke-width="1.6" stroke-linecap="round"><path d="M5.5 18.6h13M7.5 21.3h9"/></g>',
+    '🌡':'<path d="M10 4.8a2 2 0 0 1 4 0v8.4a3.9 3.9 0 1 1-4 0z" fill="#fff" stroke="#8e98a6" stroke-width="1.3"/><circle cx="12" cy="16.4" r="2.1" fill="#ff453a"/><path d="M12 9v6" stroke="#ff453a" stroke-width="1.6" stroke-linecap="round"/>',
+    '📍':'<path d="M12 21.6s-6.2-5.7-6.2-10.8a6.2 6.2 0 0 1 12.4 0c0 5.1-6.2 10.8-6.2 10.8z" fill="#ff3b30"/><circle cx="12" cy="10.8" r="2.3" fill="#fff"/>'
+  };
+  return '<svg class="minds-weather-icon" viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true" focusable="false">'+(art[key]||art['🌡'])+'</svg>';
+}
 function weatherConditionEmoji(description){
   const text=String(description||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
   if(/torment|truen|gewitter|thunder|storm/.test(text))return '⛈️';
@@ -536,7 +556,7 @@ function surfaceCard(item,surface){
   const sourceTitle=String(item.source_title||item.metadata?.source_title||'Fuente').trim()||'Fuente';
   const why=String(item.why||item.metadata?.why||'').trim();
   const deliverable=String(item.deliverable||item.metadata?.deliverable||'').trim();
-  const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${esc(d.value||d.summary||'')}</b></div>`).join('')}</div>`:'';
+  const detailHtml=weather&&details.length?`<div class="weather-week hidden">${details.slice(0,8).map(d=>`<div class="weather-row"><span>${esc(d.label||d.day||'')}</span><b>${(()=>{const v=String(d.value||d.summary||''),sym=weatherConditionEmoji(v);return (sym==='🌡️'?'':`<span class="weather-row-symbol" aria-hidden="true">${weatherSymbolSvg(sym)}</span>`)+esc(v.replace(/^\p{Extended_Pictographic}\uFE0F?\s*/u,''))})()}</b></div>`).join('')}</div>`:'';
   const storyKey=feedStoryKey(item),itemKey=String(item.id||storyKey||item.title||'');
   const operational=weather||kind==='commitment'||kind==='pending';
   const feedStory=surface==='feed'&&!operational;
@@ -545,8 +565,8 @@ function surfaceCard(item,surface){
   const feedback=String(item.user_feedback||'');
   const lifecycle=String(item.lifecycle_state||'new');
   return `<article class="surface-card ${weather?'weather-card':''} ${news?'news-card':''} ${feedback==='liked'?'liked':''}" data-agent="${esc(agent)}" data-surface-item="${esc(itemKey)}">
-    <div class="surface-card-top"><span class="surface-icon">${esc(icon||(news?'◫':agent==='sofia'?'◌':'○'))}</span><span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span>${surface==='feed'&&!operational&&lifecycle==='new'?'<span class="surface-state">NUEVO</span>':''}</div>
-    <h2>${weather?'<span class="weather-location-symbol" aria-hidden="true">📍</span>':''}${esc(item.title||'')}</h2><p>${weather?'<span class="weather-condition-symbol" aria-hidden="true">'+weatherSymbol+'</span>':''}${esc(item.body||'')}</p>${detailHtml}${idea&&deliverable?`<div class="idea-deliverable"><span>RESULTADO</span><strong>${esc(deliverable)}</strong></div>`:''}
+    <div class="surface-card-top">${icon?`<span class="surface-icon">${esc(icon)}</span>`:`<span class="surface-icon surface-icon-dot${news?' is-news':''}" aria-hidden="true"></span>`}<span class="surface-card-agent">${improvement?'ISABELLA · AUTOEVALUACIÓN':surfaceAgentLabel(agent)}</span>${surface==='feed'&&!operational&&lifecycle==='new'?'<span class="surface-state">NUEVO</span>':''}</div>
+    <h2>${weather?'<span class="weather-location-symbol" aria-hidden="true">'+weatherSymbolSvg('📍')+'</span>':''}${esc(item.title||'')}</h2><p>${weather?'<span class="weather-condition-symbol" aria-hidden="true">'+weatherSymbolSvg(weatherSymbol)+'</span>':''}${esc(item.body||'')}</p>${detailHtml}${idea&&deliverable?`<div class="idea-deliverable"><span>RESULTADO</span><strong>${esc(deliverable)}</strong></div>`:''}
     ${why?`<div class="surface-why-copy hidden" data-why-copy="${esc(itemKey)}">${esc(why)}</div>`:''}
     <div class="surface-card-actions">
       ${weather&&details.length?'<button class="weather-toggle">Ver semana</button>':''}
@@ -1196,7 +1216,7 @@ function closeReactionPicker(){
 }
 function applyReaction(id,reaction){
   const m=state.messages.find(x=>x.id===id);if(!m)return;
-  m.reaction=m.reaction===reaction?null:(reaction||null);save();closeReactionPicker();renderMessages();
+  m.reaction=m.reaction===reaction?null:(reaction||null);if(m.reaction)rememberReaction(m.reaction);save();closeReactionPicker();renderMessages();
   const patch={reaction:m.reaction||null};
   if(window.ISABELLA_SYNC_MESSAGE_META)setTimeout(()=>window.ISABELLA_SYNC_MESSAGE_META(id,patch),0);
   else setTimeout(()=>window.ISABELLA_SYNC_NOW?.({pushOnly:true}),0);
@@ -1232,17 +1252,50 @@ function typographicReaction(value,compact=false){
   const r=REACTION_QUICK.find(x=>x.value===value);
   if(!r)return `<span class="reaction-native-emoji">${esc(value||'')}</span>`;
   const art=REACTION_ART[r.tone];if(!art)return esc(r.label);
-  const scale=compact?.21:.42;
+  const scale=compact?.27:.42;
   const width=Math.max(12,Math.round(art.w*scale)),height=Math.max(12,Math.round(art.h*scale));
   return `<svg class="minds-reaction-art tone-${r.tone} ${compact?'is-compact':''}" width="${width}" height="${height}" viewBox="0 0 ${art.w} ${art.h}" aria-hidden="true" focusable="false"><path fill="${art.color}" fill-rule="evenodd" d="${art.path}"></path></svg>`;
 }
 const REACTION_CATEGORIES=[
   {id:'recent',label:'Recientes',icon:'🕘',items:['👍','❤️','😂','👏','🙏','🔥','✨','✅','👀','💯','🎉','🤝']},
-  {id:'faces',label:'Caras',icon:'☺︎',items:['😀','😃','😄','😁','😆','😅','😂','🤣','😊','🙂','😉','😍','🥰','🤩','🥳','😎','🤔','😮','😯','😲','🥹','😢','😭','😤','😡','😱','😴','🫠','🫡']},
-  {id:'gestures',label:'Gestos',icon:'👍',items:['👍','👎','👌','🤌','✌️','🤞','🫶','👏','🙌','👐','🤝','🙏','💪','👀','👉','👈','☝️','✋']},
-  {id:'hearts',label:'Corazones',icon:'♥︎',items:['❤️','🩷','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','💕','💞','💓','💗','💖','💘']},
-  {id:'symbols',label:'Símbolos',icon:'✨',items:['‼️','❓','❗','❔','✅','❌','💯','⭐','✨','🔥','💡','📌','🎉','🚀','🧠','🏗️','📚','📝','📎','⏰']}
+  {id:'faces',label:'Caras',icon:'☺︎',items:['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','🥹','☺️','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😋','😛','😜','🤪','🤨','🧐','🤓','😎','🥸','🤩','🥳','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🫣','🤭','🫢','🫡','🤫','🫠','🤥','😶','🫥','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕','🤑','🤠','😈','👻','💀','🤖','👽','💩']},
+  {id:'gestures',label:'Gestos y personas',icon:'👍',items:['👍','👎','👌','🤌','🤏','✌️','🤞','🫰','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋','🤚','🖐️','🖖','👋','🫶','👏','🙌','👐','🤲','🤝','🙏','✍️','💪','🫵','👀','🧠','🙋','🙆','🙅','🤷','🤦','🙇','💁','🧑‍💻','👷','🧑‍🎨','🧑‍🏫','🕺','💃','🏃','🚶']},
+  {id:'hearts',label:'Corazones',icon:'♥︎',items:['❤️','🩷','🧡','💛','💚','🩵','💙','💜','🖤','🩶','🤍','🤎','💔','❤️‍🔥','❤️‍🩹','❣️','💕','💞','💓','💗','💖','💘','💝','💌']},
+  {id:'nature',label:'Naturaleza',icon:'🌿',items:['🌱','🌿','☘️','🍀','🌵','🌲','🌳','🌴','🍁','🍂','🌾','🌷','🌸','🌹','🌻','🌼','💐','🌞','🌙','⭐','🌟','⚡','🌈','☀️','⛅','☁️','🌧️','❄️','🌊','🐶','🐱','🦊','🐻','🐼','🐨','🦁','🐯','🐸','🐵','🦉','🐝','🦋','🐢','🐳']},
+  {id:'food',label:'Comida y bebida',icon:'☕',items:['☕','🍵','🧉','🍷','🍺','🥂','🍾','🥐','🥖','🥨','🧀','🍳','🥗','🍝','🍕','🍔','🌮','🍣','🍜','🥟','🍰','🎂','🍪','🍫','🍩','🍦','🍎','🍋','🍓','🥑','🌶️','🍿']},
+  {id:'activities',label:'Actividades',icon:'🏆',items:['🎉','🎊','🎈','🎁','🏆','🥇','🎯','🎨','🎬','🎧','🎵','🎹','🎸','📷','⚽','🏀','🎾','🚴','🏊','⛷️','🧘','🎮','♟️','🎲','🧩']},
+  {id:'places',label:'Lugares y arquitectura',icon:'🏛️',items:['🏗️','🏛️','🏠','🏡','🏢','🏬','🏭','🏰','⛪','🗼','🌉','🏔️','⛰️','🏕️','🏖️','🏙️','🌆','🌃','🚗','🚆','🚇','✈️','🚀','🚲','⛵','🗺️','🧭','📍']},
+  {id:'objects',label:'Objetos y trabajo',icon:'💡',items:['💡','📌','📎','📏','📐','✏️','✒️','🖊️','📝','📒','📓','📚','📖','🗂️','📁','📂','🗃️','📅','🗓️','⏰','⏳','⌛','💻','🖥️','⌨️','🖱️','🖨️','📱','☎️','✉️','📧','📦','🔑','🔒','🔓','🔧','🔨','🪛','🧰','🧱','🪜','🧲','🔍','💰','🧾','📊','📈','📉']},
+  {id:'symbols',label:'Símbolos',icon:'✨',items:['‼️','⁉️','❓','❔','❗','❕','✅','☑️','✔️','❌','❎','➕','➖','💯','⭐','✨','💫','🔥','💥','⚠️','🚫','⛔','🔴','🟠','🟡','🟢','🔵','🟣','⚫','⚪','🔺','🔻','♻️','🆗','🆕','🔝','🔜','➡️','⬅️','⬆️','⬇️','🔁','🔄','⏸️','▶️','💤','💬','💭','🗯️']}
 ];
+// Category tabs use one line-icon family (same stroke as the app), not mixed emoji/glyphs.
+const REACTION_TAB_ICONS={
+  recent:'<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/>',
+  faces:'<circle cx="12" cy="12" r="8.5"/><path d="M8.6 14.2a4.2 4.2 0 0 0 6.8 0"/><path d="M9.2 9.6h.01M14.8 9.6h.01" stroke-width="2.6"/>',
+  gestures:'<path d="M8 11V6.5a1.5 1.5 0 0 1 3 0V11m0-1.5V5a1.5 1.5 0 0 1 3 0v5m0-3.5a1.5 1.5 0 0 1 3 0V14a6 6 0 0 1-6 6h-.6a5.4 5.4 0 0 1-4.3-2.1L4.7 14.6a1.6 1.6 0 0 1 2.5-2L8 13.6"/>',
+  hearts:'<path d="M12 19.5s-7.5-4.4-7.5-10a4.2 4.2 0 0 1 7.5-2.6 4.2 4.2 0 0 1 7.5 2.6c0 5.6-7.5 10-7.5 10z"/>',
+  nature:'<path d="M5 19c0-8 5.5-13.5 14-14 .2 8.6-5.4 14-13 14"/><path d="M5 19c3.5-4.2 6.5-6.6 10-8.4"/>',
+  food:'<path d="M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5z"/><path d="M16 10.5h1.5a2.5 2.5 0 0 1 0 5H16M8.5 3.8c-.6.8.6 1.6 0 2.4M12 3.8c-.6.8.6 1.6 0 2.4"/>',
+  activities:'<path d="M8 4.5h8v4.5a4 4 0 0 1-8 0z"/><path d="M8 6H5.5a2.5 2.5 0 0 0 2.6 3.6M16 6h2.5a2.5 2.5 0 0 1-2.6 3.6M12 13v3.5M8.5 19.5h7M10 16.5h4v3h-4z"/>',
+  places:'<path d="M4.5 20.5h15M6.5 20.5V8.5l5.5-4 5.5 4v12"/><path d="M10 20.5v-4.5h4v4.5M9.5 11h.01M14.5 11h.01"/>',
+  objects:'<path d="M9 17.5h6M10 20.5h4M12 3.5a5.5 5.5 0 0 0-3.3 9.9c.6.5 1 1.2 1 2V16h4.6v-.6c0-.8.4-1.5 1-2A5.5 5.5 0 0 0 12 3.5z"/>',
+  symbols:'<path d="M9.5 4.5 8 19.5M16 4.5l-1.5 15M5 9h14.5M4.5 15H19"/>'
+};
+function reactionTabIcon(id){
+  return '<svg class="emoji-tab-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(REACTION_TAB_ICONS[id]||'')+'</svg>';
+}
+// "Recientes" is what the person actually used last, per device; the defaults fill the gaps.
+const REACTION_RECENT_KEY='isabella-recent-reactions';
+function recentReactions(){
+  let used=[];try{used=JSON.parse(localStorage.getItem(REACTION_RECENT_KEY)||'[]')}catch{}
+  used=Array.isArray(used)?used.filter(x=>typeof x==='string'&&x.length<=16):[];
+  return [...new Set([...used,...REACTION_CATEGORIES[0].items])].slice(0,24);
+}
+function rememberReaction(value){
+  if(!value)return;
+  try{const used=JSON.parse(localStorage.getItem(REACTION_RECENT_KEY)||'[]');
+    localStorage.setItem(REACTION_RECENT_KEY,JSON.stringify([value,...(Array.isArray(used)?used:[]).filter(x=>x!==value)].slice(0,24)))}catch{}
+}
 
 function closeEmojiReactionSheet(){
   document.querySelector('.emoji-reaction-sheet')?.remove();
@@ -1256,12 +1309,12 @@ function openEmojiReactionSheet(id){
   const sheet=document.createElement('section');sheet.className='emoji-reaction-sheet';sheet.setAttribute('role','dialog');sheet.setAttribute('aria-modal','true');sheet.setAttribute('aria-label','Reaccionar con un emoji');
   sheet.innerHTML=`<div class="emoji-sheet-grabber"></div>
     <div class="emoji-sheet-head"><strong>Reaccionar</strong><button type="button" data-emoji-close aria-label="Cerrar">×</button></div>
-    <div class="emoji-sheet-tabs" role="tablist">${REACTION_CATEGORIES.map((c,i)=>`<button type="button" role="tab" data-emoji-category="${c.id}" class="${i===0?'active':''}" aria-label="${esc(c.label)}">${c.icon}</button>`).join('')}</div>
+    <div class="emoji-sheet-tabs" role="tablist">${REACTION_CATEGORIES.map((c,i)=>`<button type="button" role="tab" data-emoji-category="${c.id}" class="${i===0?'active':''}" aria-label="${esc(c.label)}" title="${esc(c.label)}">${reactionTabIcon(c.id)}</button>`).join('')}</div>
     <div class="emoji-sheet-body"></div>`;
   document.body.append(backdrop,sheet);document.body.classList.add('emoji-reaction-sheet-open');
   const body=sheet.querySelector('.emoji-sheet-body');
   const paint=cat=>{
-    body.innerHTML=`<div class="emoji-category-title">${esc(cat.label)}</div><div class="emoji-grid">${cat.items.map(x=>`<button type="button" data-emoji-reaction="${x}" class="${m.reaction===x?'selected':''}" aria-label="Reaccionar ${x}">${x}</button>`).join('')}</div>`;
+    body.innerHTML=`<div class="emoji-category-title">${esc(cat.label)}</div><div class="emoji-grid">${(cat.id==='recent'?recentReactions():cat.items).map(x=>`<button type="button" data-emoji-reaction="${x}" class="${m.reaction===x?'selected':''}" aria-label="Reaccionar ${x}">${x}</button>`).join('')}</div>`;
     body.querySelectorAll('[data-emoji-reaction]').forEach(b=>b.onclick=()=>{applyReaction(id,b.dataset.emojiReaction||null);closeEmojiReactionSheet()});
   };
   paint(REACTION_CATEGORIES[0]);
