@@ -70,5 +70,29 @@ const {chromium}=require('playwright');
   assert.ok(recovered.selected);
   console.log('WORK_FAKE_SESSION_ACCEPTED',JSON.stringify(recovered));
 
+  // Reproduce a restored Work screen where its script arrives after app.js.
+  // Previously app.js's one-off timer could fire before window.MINDS_WORK exists,
+  // leaving the initial splash and inert tabs indefinitely.
+  const delayed=await browser.newContext({viewport:{width:1280,height:800}});
+  await delayed.addInitScript(()=>{
+    localStorage.setItem('isabella-staging-v03',JSON.stringify({screen:'work'}));
+  });
+  const latePage=await delayed.newPage();
+  await latePage.route('**/isabella/work.js?v=33',async route=>{
+    await new Promise(resolve=>setTimeout(resolve,1200));
+    await route.continue();
+  });
+  await latePage.goto('http://127.0.0.1:8765/isabella/',{waitUntil:'domcontentloaded'});
+  await latePage.waitForFunction(()=>{
+    const loaded=!!window.MINDS_WORK;
+    const tab=document.querySelector('[data-work-view="planner"]');
+    return loaded&&typeof tab?.onclick==='function' &&
+      document.body.dataset.section==='work' &&
+      !document.querySelector('#workBody')?.innerText.includes('Abriendo Work');
+  },null,{timeout:8000});
+  console.log('WORK_RESTORED_LATE_JS_ACCEPTED');
+  await delayed.close();
+
+
  }finally{await browser.close()}
 })().catch(e=>{console.error(e.stack||e);process.exitCode=1});
