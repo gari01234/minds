@@ -592,7 +592,7 @@ async function openArchivedBuckets(){
     :'<p>Keine archivierten Buckets vorhanden.</p>';
   window.ISABELLA_APP?.openModal?.('Archivierte Buckets',
     `<div class="work-bucket-archive">${markup}</div>`);
-  $('[data-work-restore-bucket]').forEach(button=>
+  $$('[data-work-restore-bucket]').forEach(button=>
     button.onclick=()=>void restoreArchivedBucket(button.dataset.workRestoreBucket,button));
 }
 async function restoreArchivedBucket(id,button){
