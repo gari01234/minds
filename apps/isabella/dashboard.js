@@ -19,7 +19,8 @@
     left:'<path d="m14.5 18-6-6 6-6"/>',
     right:'<path d="m9.5 18 6-6-6-6"/>',
     plus:'<path d="M12 5v14M5 12h14"/>',
-    arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>'
+    arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>',
+    clock:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.6 1.6"/>'
   };
   const deskIcon=name=>'<svg class="desk-ui-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">'+(DESK_ICONS[name]||'')+'</svg>';
 
@@ -90,7 +91,7 @@
     node.dataset.deskPanel = key;
     node.setAttribute('aria-label',LABELS[key]);
     const head = elt('header','desk-panel-head',
-      '<span class="desk-panel-grip" title="Arrastrar para ordenar" aria-hidden="true">⋮⋮</span>' +
+      '<span class="desk-panel-grip" title="Arrastrar para ordenar" aria-hidden="true">⠿</span>' +
       '<span class="desk-panel-title">' + LABELS[key] + '</span>' +
       '<span class="desk-panel-actions">' +
       '<button type="button" data-desk-focus="' + key + '" aria-label="Ampliar ' + LABELS[key] + '" title="Ampliar">'+deskIcon('expand')+'</button>' +
@@ -212,11 +213,11 @@
         (reserved?' · reservado '+formatMinutes(reserved):'') +
         '</small></button>' +
         (!item.done?'<button type="button" class="desk-task-estimate" data-desk-estimate="' + E(item.id) +
-        '" title="Estimar duración" aria-label="Estimar duración de ' + E(item.title) + '">◷</button>' +
+        '" title="Estimar duración" aria-label="Estimar duración de ' + E(item.title) + '">'+deskIcon('clock')+'</button>' +
         '<button type="button" class="desk-plan-task" data-desk-plan-task="' + E(item.id) +
-        '" title="Reservar tiempo" aria-label="Reservar tiempo para ' + E(item.title) + '">＋</button>' +
+        '" title="Reservar tiempo" aria-label="Reservar tiempo para ' + E(item.title) + '">'+deskIcon('plus')+'</button>' +
         '<button type="button" class="desk-task-handle" data-desk-sort-handle="' + E(item.id) +
-        '" title="Arrastrar para ordenar" aria-label="Arrastrar para ordenar ' + E(item.title) + '">⋮⋮</button>':'')+
+        '" title="Arrastrar para ordenar" aria-label="Arrastrar para ordenar ' + E(item.title) + '">⠿</button>':'')+
         '</div>';
     }).join('');
     return '<div class="desk-today-toolbar"><span class="desk-subtitle">' + E(dateName) + '</span>' +
