@@ -92,8 +92,8 @@ function render(ctx){
     '<button type="button" data-task-link-remove="'+i+'" title="Quitar enlace">×</button></div>').join('');
   const estimate=Number(t.metadata?.planning?.estimated_minutes||0);
   const body='<div class="minds-task-detail" data-task-detail>'+
-    '<header class="minds-task-detail-top"><button type="button" class="minds-task-complete" id="taskDetailComplete" aria-label="Marcar como completada">'+
-    (t.completed_at?'✓':'○')+'</button><input id="taskDetailTitle" aria-label="Título" placeholder="Nombre de la tarea" value="'+E(t.title||ctx.opts.title||'')+'">'+
+    '<header class="minds-task-detail-top"><button type="button" class="minds-task-complete'+(t.completed_at?' is-done':'')+'" id="taskDetailComplete" aria-pressed="'+!!t.completed_at+'" aria-label="'+(t.completed_at?'Reabrir tarea':'Marcar como completada')+'">'+
+    (t.completed_at?'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4 10-10"/></svg>':'')+'</button><input id="taskDetailTitle" aria-label="Título" placeholder="Nombre de la tarea" value="'+E(t.title||ctx.opts.title||'')+'">'+
     '<button class="minds-task-more" type="button" id="taskDetailMore" aria-label="Opciones de tarea">···</button></header>'+
     '<div id="taskDetailMenu" class="minds-task-menu hidden">'+
     '<button type="button" data-task-action="archive">Archivar</button>'+
