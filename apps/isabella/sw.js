@@ -11,6 +11,7 @@ const SHELL = [
   './work-team.css?v=1',
   './work-buckets.css?v=1',
   './work-apple.css?v=1',
+  './work-polish.css?v=1',
   './task-detail.css?v=1',
   './task-team.css?v=1',
   './time-plan.css?v=1',
