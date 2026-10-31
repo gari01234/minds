@@ -195,3 +195,7 @@ jobs:
         run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261031120000_minds_work_bucket_lifecycle_v1.sql
       - name: Verify atomic order, safe archive and negative ownership cases
         run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/work-buckets-acceptance.sql
+      - name: Apply completed-task preservation and restore migration
+        run: psql -X -v ON_ERROR_STOP=1 -f supabase/migrations/20261031165000_minds_work_bucket_completed_history_v2.sql
+      - name: Verify completed tasks remain in historical Buckets
+        run: psql -X -v ON_ERROR_STOP=1 -f tests/sql/work-buckets-history-v2-acceptance.sql
