@@ -331,7 +331,7 @@ async function hydratePlannerImages(root=document){
 async function renderPlanner(){
   await loadPlanner();team=await window.MINDS_WORK_TEAM.members(project.id);const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
   const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)!=='columns';
-  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
+  body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button><button type="button" data-work-show-bucket-archive title="Archivierte Buckets und erledigte Aufgaben ansehen">Archiv</button></span></div>
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header class="work-bucket-header">${b.virtual
         ?`<strong>${esc(b.name)}</strong>`
@@ -359,6 +359,7 @@ async function renderPlanner(){
   });
   $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
+  $('[data-work-show-bucket-archive]')?.addEventListener('click',()=>void openArchivedBuckets());
   $$('[data-work-edit-bucket]').forEach(button=>button.onclick=e=>{
     e.stopPropagation();
     const menu=body.querySelector('[data-work-bucket-menu="'+button.dataset.workEditBucket+'"]');
@@ -527,10 +528,20 @@ function editBucket(id){const bucket=buckets.find(x=>x.id===id);if(bucket)bucket
 function archiveBucketDialog(id){
   const bucket=buckets.find(x=>x.id===id);if(!bucket)return;
   closeBucketMenus($('#workBody'));
-  const count=tasks.filter(t=>t.work_bucket_id===id).length;
+  const matching=tasks.filter(t=>t.work_bucket_id===id);
+  const unfinished=matching.filter(t=>!t.completed_at).length;
+  const completed=matching.filter(t=>!!t.completed_at).length;
+  const pendingText=unfinished
+    ?`${unfinished} offene Aufgabe${unfinished===1?'':'n'} ${unfinished===1?'wird':'werden'} nach <strong>Ohne Bucket</strong> verschoben.`
+    :'Keine offenen Aufgaben müssen verschoben werden.';
+  const completedText=completed
+    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} als Verlauf diesem archivierten Bucket zugeordnet — ohne Verschiebung nach Ohne Bucket.`
+    :'';
   window.ISABELLA_APP?.openModal?.('Bucket entfernen',`<div class="form work-bucket-editor">
-    <p>Möchtest du <strong>${esc(bucket.name)}</strong> entfernen?</p>
-    <p>${count} Aufgabe${count===1?'':'n'} werden nach <strong>Ohne Bucket</strong> verschoben. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
+    <p>Möchtest du <strong>${esc(bucket.name)}</strong> aus dem aktiven Planner entfernen?</p>
+    <p>${pendingText}</p>
+    ${completedText?`<p>${completedText}</p>`:''}
+    <p>Im <strong>Archiv</strong> bleibt der Bucket wiederherstellbar. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
     <div class="work-bucket-dialog-actions"><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Bucket entfernen</button><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button></div>
   </div>`);
   $('#workBucketArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
