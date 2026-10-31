@@ -38,7 +38,7 @@ test('Completion indicator is clean pending circle and explicit blue check on do
 });
 test('Updated detail JS parses and keeps create/update/deletion authority unchanged',()=>{
   assert.doesNotThrow(()=>new Function(task));
-  for(const pattern of [/async function perform\(ctx,patch/,/async function deleteTask/,/taskDetailComplete/,/MINDS_TASK_TEAM\.selectorHtml/,/data-task-action="archive"/,/data-task-action="delete"/]){
+  for(const pattern of [/async function perform\(ctx,patch/,/async function doAction\(ctx,action\)/,/taskDetailComplete/,/MINDS_TASK_TEAM\.selectorHtml/,/data-task-action="archive"/,/data-task-action="delete"/]){
     assert.match(task,pattern);
   }
 });
