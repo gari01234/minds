@@ -1,0 +1,414 @@
+/* MINDS · Detail parity Chat desk ↔ Work Planner · 2026-10-31
+   One type scale, one control language, one hover language.
+   Reference: Work Planner (work-apple.css + work-polish.css).
+     section title 15/650 · item title 14/625 · body 12–12.5 · badge 11
+     quiet control 34×32 r11 · neutral hover #f1f3f6 · completion 24px circle
+   Presentation only. Every existing hook, handler and panel behaviour stays wired.
+*/
+
+/* 1 · Chrome ─ Work has no hairline under the top bar; Chat now matches. */
+@media(min-width:950px){
+  body[data-section="assistant"].desk-enabled .topbar{
+    border-bottom-color:transparent!important;
+  }
+}
+
+/* 2 · Panel header = bucket header: same grip, title and quiet controls. */
+body[data-section="assistant"].desk-enabled .desk-panel-head{
+  gap:9px;
+  padding:0 12px 0 17px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-grip{
+  flex:none;
+  padding:0;
+  font-size:16px;
+  line-height:1;
+  letter-spacing:-4px;
+  color:#9b9da4;
+  transform:translateX(-2px);
+  transition:color .15s ease;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-head:hover .desk-panel-grip{
+  color:#555e68;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-title{
+  font-size:15px;
+  font-weight:650;
+  line-height:1.35;
+  letter-spacing:-.015em;
+  color:#25262b;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions{
+  gap:2px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button,
+body[data-section="assistant"].desk-enabled .desk-month-bar button{
+  width:34px;
+  height:32px;
+  min-height:32px;
+  border-radius:11px;
+  color:#5d626a;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button:hover:not(:disabled),
+body[data-section="assistant"].desk-enabled .desk-month-bar button:hover{
+  background:#f1f3f6;
+  border-color:transparent;
+  color:#151515;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-actions button:active:not(:disabled),
+body[data-section="assistant"].desk-enabled .desk-month-bar button:active{
+  background:#e8ebf0;
+}
+/* The panel already in the stage cannot be enlarged: no greyed-out icon. */
+body[data-section="assistant"].desk-enabled .desk-panel-actions button[data-desk-focus]:disabled{
+  display:none;
+}
+
+/* 3 · Calendar ─ month label joins the 650 weight family. */
+body[data-section="assistant"].desk-enabled .desk-month-bar strong{
+  font-weight:650;
+  color:#25262b;
+}
+
+/* 4 · Hoy ─ "Añadir tarea" is the Planner add row, rows follow card type. */
+body[data-section="assistant"].desk-enabled .desk-today-toolbar{
+  flex-direction:column;
+  align-items:stretch;
+  justify-content:flex-start;
+  gap:9px;
+  min-height:0;
+  top:-15px;
+  margin:0 0 4px;
+  padding:2px 0 8px;
+  border-bottom:0;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-subtitle,.desk-plan-date){
+  font-size:12px;
+  font-weight:500;
+  line-height:1.45;
+  color:#6b7079;
+}
+body[data-section="assistant"].desk-enabled .desk-add-task{
+  display:flex;
+  justify-content:flex-start;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  min-height:42px;
+  padding:11px 12px;
+  border:1px solid transparent;
+  border-radius:12px;
+  background:#f5f6f8;
+  color:#727680;
+  font-size:12.5px;
+  font-weight:480;
+  letter-spacing:-.006em;
+  text-align:left;
+  box-shadow:none;
+  transition:background-color .15s ease,border-color .15s ease,color .15s ease;
+}
+body[data-section="assistant"].desk-enabled .desk-add-task:hover{
+  background:#f1f3f6;
+  border-color:rgba(37,45,59,.075);
+  color:#007aff;
+}
+body[data-section="assistant"].desk-enabled .desk-add-task .desk-ui-icon{
+  width:17px;height:17px;stroke-width:1.8;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row{
+  position:relative;
+  align-items:flex-start;
+  gap:11px;
+  min-height:50px;
+  padding:10px 0;
+  border-bottom:1px solid #eef0f3;
+}
+/* The footer rule already closes the list: never two parallel lines. */
+body[data-section="assistant"].desk-enabled .desk-task-list>.desk-task-row:last-child,
+body[data-section="assistant"].desk-enabled .desk-plan-task-row:has(+ .desk-panel-footer){
+  border-bottom:0;
+}
+body[data-section="assistant"].desk-enabled .desk-task-check{
+  flex:0 0 24px!important;
+  width:24px!important;height:24px!important;
+  min-width:24px!important;min-height:24px!important;
+  line-height:21px!important;
+  border:1.6px solid #9ba1aa;
+  background:#fff;
+  color:#fff;
+  font-size:13px;
+  font-weight:750;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.7);
+  margin-top:-2px;
+  cursor:pointer;
+  transition:background-color .14s ease,border-color .14s ease;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done) .desk-task-check:hover{
+  border-color:#007aff;
+  background:#f2f8ff;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row.is-done .desk-task-check{
+  background:#007aff;
+  border-color:#007aff;
+  color:#fff;
+  box-shadow:none;
+}
+body[data-section="assistant"].desk-enabled .desk-task-detail{
+  align-self:flex-start;
+  gap:2px;
+}
+/* Completion circle sits on the title's first line (20px line box), as in Reminders. */
+body[data-section="assistant"].desk-enabled .desk-task-detail strong{
+  font-size:14px;
+  font-weight:625;
+  line-height:1.42;
+  letter-spacing:-.011em;
+  color:#202126;
+}
+body[data-section="assistant"].desk-enabled .desk-task-detail small{
+  font-size:12px;
+  line-height:1.4;
+  color:#727680;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row.is-done .desk-task-detail strong{
+  color:#96999f;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-task-estimate,.desk-plan-task,.desk-task-handle){
+  flex:0 0 28px;
+  display:grid;
+  place-items:center;
+  width:28px;min-width:28px;
+  height:28px;min-height:28px;
+  padding:0;
+  border:0;
+  border-radius:9px;
+  background:transparent;
+  color:#9ba1aa;
+  font-size:16px;
+  line-height:1;
+  letter-spacing:normal;
+  box-shadow:none;
+  transition:background-color .15s ease,color .15s ease,opacity .14s ease;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-task-estimate,.desk-plan-task,.desk-task-handle):hover{
+  background:#f1f3f6;
+  color:#25262b;
+}
+body[data-section="assistant"].desk-enabled .desk-task-row .desk-ui-icon{
+  width:15px;height:15px;
+}
+/* With a mouse, row tools appear on hover/focus like a calm Planner card,
+   and the title gets the full row width. Touch keeps them always visible. */
+@media(hover:hover) and (pointer:fine){
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done) :is(.desk-task-estimate,.desk-plan-task,.desk-task-handle){
+    position:absolute;
+    top:50%;
+    z-index:1;
+    transform:translateY(-50%);
+    opacity:0;
+  }
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done) .desk-task-estimate{right:60px}
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done) .desk-plan-task{right:30px}
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done) .desk-task-handle{right:0}
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done)::after{
+    content:"";
+    position:absolute;
+    top:1px;bottom:1px;right:0;
+    width:122px;
+    background:linear-gradient(90deg,rgba(255,255,255,0),#fff 30%);
+    opacity:0;
+    pointer-events:none;
+    transition:opacity .14s ease;
+  }
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done):is(:hover,:focus-within) :is(.desk-task-estimate,.desk-plan-task,.desk-task-handle),
+  body[data-section="assistant"].desk-enabled .desk-task-row:not(.is-done):is(:hover,:focus-within)::after{
+    opacity:1;
+  }
+  body[data-section="assistant"].desk-enabled .desk-task-row.desk-is-dragging::after{
+    display:none;
+  }
+}
+
+/* 5 · Footer, empty states and plan text on the Planner type scale. */
+body[data-section="assistant"].desk-enabled .desk-panel-footer{
+  margin-top:8px;
+  padding-top:10px;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer span{
+  font-size:12px;
+  font-weight:480;
+  color:#6b7079;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button{
+  border-radius:10px;
+  font-size:12px;
+  font-weight:600;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button:hover{
+  background:#f1f3f6;
+  border-color:transparent;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-empty,.desk-small){
+  font-size:12px;
+  color:#727680;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-metrics{
+  font-size:12px;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-tasks-head{
+  font-size:12px;
+  font-weight:620;
+  color:#5d626a;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-hours{
+  font-size:11px;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-task-row{
+  padding:9px 0;
+  border-bottom-color:#eef0f3;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-task-row span{
+  font-size:13px;
+  line-height:1.4;
+  color:#2d3037;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-task-row button{
+  min-height:30px;
+  margin-right:-8px;
+  padding:6px 8px;
+  border-radius:9px;
+  font-size:12px;
+  color:#5d626a;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-task-row button:hover{
+  background:#f1f3f6;
+  color:#007aff;
+  text-decoration:none;
+}
+
+/* 6 · Segmented control = Work project switch: dark label on a white thumb. */
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch{
+  background:#f1f3f6;
+  border-color:rgba(37,45,59,.06);
+  border-radius:12px;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button{
+  font-size:12px;
+  color:#5d626a;
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button.is-selected{
+  color:#1d1d1f;
+  font-weight:620;
+  border-color:rgba(37,45,59,.086);
+  box-shadow:0 2px 8px rgba(37,45,59,.07);
+}
+body[data-section="assistant"].desk-enabled .desk-plan-view-switch button:hover:not(.is-selected){
+  color:#1d1d1f;
+  background:rgba(255,255,255,.6);
+}
+
+/* Week view: "Por fechas / Por responsable" is the same segment as Día/Semana,
+   and the week arrows are the same quiet controls as the month arrows. */
+body[data-section="assistant"].desk-enabled .desk-week-grouping{
+  display:inline-flex;
+  gap:3px;
+  padding:3px;
+  background:#f1f3f6;
+  border:1px solid rgba(37,45,59,.06);
+  border-radius:12px;
+}
+body[data-section="assistant"].desk-enabled .desk-week-grouping button{
+  min-height:30px;
+  padding:6px 12px;
+  border:1px solid transparent;
+  border-radius:9px;
+  background:transparent;
+  color:#5d626a;
+  font-size:12px;
+  font-weight:570;
+}
+body[data-section="assistant"].desk-enabled .desk-week-grouping button[aria-pressed="true"]{
+  background:#fff;
+  color:#1d1d1f;
+  border-color:rgba(37,45,59,.086);
+  box-shadow:0 2px 8px rgba(37,45,59,.07);
+  font-weight:620;
+}
+body[data-section="assistant"].desk-enabled .desk-week-grouping button:hover:not([aria-pressed="true"]){
+  background:rgba(255,255,255,.6);
+  color:#1d1d1f;
+}
+body[data-section="assistant"].desk-enabled .desk-week-dates button{
+  width:34px;
+  height:32px;
+  min-height:32px;
+  padding:0;
+  border-color:transparent;
+  border-radius:11px;
+  background:transparent;
+  color:#5d626a;
+  font-size:18px;
+  line-height:1;
+}
+body[data-section="assistant"].desk-enabled .desk-week-dates button:hover{
+  background:#f1f3f6;
+  color:#151515;
+}
+body[data-section="assistant"].desk-enabled .desk-week-filters select{
+  border-radius:11px;
+  font-size:12px;
+}
+body[data-section="assistant"].desk-enabled :is(.desk-week-filters label,.desk-week-explainer){
+  font-size:12px;
+}
+
+/* 7 · Work Planner ─ a card without date, checklist or owner ends at its title. */
+body[data-section="work"] .work-task-chips:not(:has(*)){
+  display:none;
+}
+body[data-section="work"] .work-task-card footer:not(:has(.work-task-chips *,.work-card-assignee)){
+  display:none;
+}
+body[data-section="work"] .work-task-card:not(:has(footer .work-task-chips *,footer .work-card-assignee,.work-card-checks,.work-task-cover)) .work-task-title-row{
+  padding-bottom:16px;
+}
+
+/* Same rule in Planner: the 24px circle centres on the 14px title's first line. */
+body[data-section="work"] .work-task-toggle{
+  margin-top:-2px;
+}
+
+/* 8 · Work Panorama ─ open movements were native buttons with default borders. */
+body[data-section="work"] .work-overview-task{
+  border:0;
+  border-top:1px solid rgba(37,45,59,.09);
+  border-radius:0;
+  padding:12px 0;
+  transition:background-color .15s ease,box-shadow .15s ease;
+}
+/* Hover tint bleeds 10px past the text column without moving the rules. */
+body[data-section="work"] .work-overview-task:hover{
+  background:#f5f6f8;
+  box-shadow:-10px 0 0 #f5f6f8,10px 0 0 #f5f6f8;
+}
+body[data-section="work"] .work-overview-task:focus-visible{
+  outline:3px solid rgba(0,122,255,.36);
+  outline-offset:-3px;
+}
+
+@media(prefers-reduced-motion:reduce){
+  body[data-section="assistant"].desk-enabled :is(.desk-panel-grip,.desk-add-task,.desk-task-check,
+    .desk-task-estimate,.desk-plan-task,.desk-task-handle),
+  body[data-section="assistant"].desk-enabled .desk-task-row::after,
+  body[data-section="work"] .work-overview-task{
+    transition:none!important;
+  }
+}
+@media(prefers-contrast:more){
+  body[data-section="assistant"].desk-enabled .desk-task-check{
+    border-color:#5d626a;
+  }
+  body[data-section="assistant"].desk-enabled :is(.desk-task-estimate,.desk-plan-task,.desk-task-handle,.desk-add-task){
+    color:#3c4049;
+  }
+}
