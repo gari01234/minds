@@ -902,7 +902,8 @@ type RoutineCatalogCoverage="verified_complete"|"verified_page"|"target_only"|"u
 // Authenticate with the owner's token; explicit owner filter complements RLS.
 async function searchRoutines(req:Request,args:any={}){
   const unavailable=(status:string,guidance:string,detail?:string)=>({
-    status,coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts:0},
+    status,routines:undefined,scope:undefined,total:undefined,complete:false,
+    coverage:{state:"unverified" as RoutineCatalogCoverage,verified:false,attempts:0},
     ...(detail?{detail}:{}),guidance
   });
   const sb=supabaseClient(req);
