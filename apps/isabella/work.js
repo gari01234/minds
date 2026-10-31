@@ -365,20 +365,20 @@ async function renderPlanner(){
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header class="work-bucket-header">${b.virtual
         ?`<strong>${esc(b.name)}</strong>`
-        :`<span class="work-bucket-grab" draggable="true" data-work-bucket-handle="${b.id}" title="Bucket ziehen, um die Reihenfolge zu ändern"><span class="work-bucket-grip" aria-hidden="true">⠿</span><strong>${esc(b.name)}</strong></span>
+        :`<span class="work-bucket-grab" draggable="true" data-work-bucket-handle="${b.id}" title="Bucket ziehen, um die Reihenfolge zu ändern"><span class="work-bucket-grip" aria-hidden="true">⠿</span><strong>${esc(b.name)}</strong><span class="work-bucket-count" aria-label="${open.length} offene Aufgaben">${open.length}</span></span>
           <div class="work-bucket-actions">
             <button type="button" class="work-bucket-more" data-work-edit-bucket="${b.id}" aria-label="Aktionen für ${esc(b.name)}" aria-haspopup="menu" aria-expanded="false">•••</button>
             <div class="work-bucket-menu" data-work-bucket-menu="${b.id}" role="menu" hidden>
-              <button type="button" role="menuitem" data-work-rename-bucket="${b.id}">Umbenennen</button>
-              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="left" ${buckets[0]?.id===b.id?'disabled':''}>Nach links verschieben</button>
-              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="right" ${buckets.at(-1)?.id===b.id?'disabled':''}>Nach rechts verschieben</button>
-              <button type="button" role="menuitem" class="work-bucket-danger" data-work-archive-bucket="${b.id}">Bucket entfernen</button>
+              <button type="button" role="menuitem" data-work-rename-bucket="${b.id}">${workIcon('pencil')}Umbenennen</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="left" ${buckets[0]?.id===b.id?'disabled':''}>${workIcon('left')}Nach links</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="right" ${buckets.at(-1)?.id===b.id?'disabled':''}>${workIcon('right')}Nach rechts</button>
+              <button type="button" role="menuitem" class="work-bucket-danger" data-work-archive-bucket="${b.id}">${workIcon('trash')}Entfernen</button>
             </div>
           </div>`}
       </header>
+      ${b.virtual?'':`<button type="button" class="work-add-task" data-work-add-task="${b.id}">${workIcon('plus')}Aufgabe hinzufügen</button>`}
       <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
       ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
-      ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
     </section>`}).join('')}</div>`;
   $('[data-work-layout-toggle]')?.addEventListener('click',e=>{
     const board=body.querySelector('.work-board');if(!board)return;
