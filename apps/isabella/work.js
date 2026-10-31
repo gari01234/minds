@@ -95,7 +95,7 @@ async function render(){
   }catch(e){
     if(!latest())return;
     console.error('Work initialization failed:',e);
-    workBootFailure('No pude cargar Work. Comprueba la conexión o tu sesión y vuelve a intentarlo.','No se pudieron cargar proyectos');
+    workBootFailure('No pude abrir Work ahora mismo. Comprueba la conexión o tu sesión y vuelve a intentarlo.','No se pudieron cargar proyectos');
   }
 }
 async function renderSelfReview(){
