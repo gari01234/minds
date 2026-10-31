@@ -9,6 +9,7 @@ const SHELL = [
   './dashboard-fixes.css?v=1',
   './dashboard-95-2.css?v=3',
   './work-team.css?v=1',
+  './work-buckets.css?v=1',
   './task-detail.css?v=1',
   './task-team.css?v=1',
   './time-plan.css?v=1',

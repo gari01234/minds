@@ -3,7 +3,7 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const sb=window.MINDS_SUPABASE;
 const DEFAULT_BUCKETS=['Projektorganisation','Entwurf','Genehmigung','Ausführungsplanung','Ausschreibung/Vergabe','Baustelle','Dokumentation'];
-let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null;
+let projectKey=localStorage.getItem('minds-work-project')||'bernried',view=localStorage.getItem('minds-work-view')||'overview',folderId=null,project=null,folders=[],files=[],buckets=[],tasks=[],threads=[],activeThreadId=null,bound=false,pendingTaskFiles=[],editingAttachments=[],draggedWorkTaskId=null,draggedWorkBucketId=null;
 const workSignedCache=new Map();
 let team=[],reviewSettings=null,reviewReportLimit=20;
 /* Purely visual preferences and labels; no task statuses are rewritten. */
@@ -266,8 +266,18 @@ async function uploadFiles(list){
 }
 async function openFile(id){const f=files.find(x=>x.id===id);if(!f)return;const {data,error}=await sb.storage.from('minds-work').createSignedUrl(f.storage_path,900);if(error||!data?.signedUrl){setStatus('No pude abrir el archivo.');return}window.open(data.signedUrl,'_blank','noopener')}
 async function loadPlanner(){
-  let {data:b,error:be}=await sb.from('minds_work_buckets').select('id,name,sort_order,archived').eq('project_id',project.id).eq('archived',false).order('sort_order');if(be)throw be;
-  if(!b?.length){const rows=DEFAULT_BUCKETS.map((name,i)=>({project_id:project.id,name,sort_order:i*10}));const ins=await sb.from('minds_work_buckets').insert(rows).select('id,name,sort_order,archived');if(ins.error)throw ins.error;b=ins.data||[]}
+  let {data:b,error:be}=await sb.from('minds_work_buckets').select('id,name,sort_order,archived').eq('project_id',project.id).eq('archived',false).order('sort_order').order('id');if(be)throw be;
+  if(!b?.length){
+    // Defaults are only seeded for brand-new projects. Archiving the last Bucket must not recreate them.
+    const existing=await sb.from('minds_work_buckets').select('id').eq('project_id',project.id).limit(1);
+    if(existing.error)throw existing.error;
+    if(!existing.data?.length){
+      const rows=DEFAULT_BUCKETS.map((name,i)=>({project_id:project.id,name,sort_order:i*10}));
+      const ins=await sb.from('minds_work_buckets').insert(rows).select('id,name,sort_order,archived');
+      if(ins.error)throw ins.error;
+      b=ins.data||[];
+    }
+  }
   buckets=b||[];
   const {data:t,error:te}=await sb.from('isabella_tasks').select('id,client_key,title,due_date,completed_at,notes,work_bucket_id,work_status,priority,start_date,assignee,labels,checklist,attachments,links,sort_order,work_sort_order,assignee_person_id').eq('project_id',project.id).is('archived_at',null).order('work_sort_order',{ascending:true,nullsFirst:false}).order('sort_order').order('id');if(te)throw te;tasks=t||[];
   if(tasks.length){
@@ -323,7 +333,19 @@ async function renderPlanner(){
   const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)!=='columns';
   body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button></span></div>
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
-      <header><strong>${esc(b.name)}</strong>${b.virtual?'':`<button data-work-edit-bucket="${b.id}" aria-label="Bucket bearbeiten">•••</button>`}</header>
+      <header class="work-bucket-header">${b.virtual
+        ?`<strong>${esc(b.name)}</strong>`
+        :`<span class="work-bucket-grab" draggable="true" data-work-bucket-handle="${b.id}" title="Bucket ziehen, um die Reihenfolge zu ändern"><span class="work-bucket-grip" aria-hidden="true">⠿</span><strong>${esc(b.name)}</strong></span>
+          <div class="work-bucket-actions">
+            <button type="button" class="work-bucket-more" data-work-edit-bucket="${b.id}" aria-label="Aktionen für ${esc(b.name)}" aria-haspopup="menu" aria-expanded="false">•••</button>
+            <div class="work-bucket-menu" data-work-bucket-menu="${b.id}" role="menu" hidden>
+              <button type="button" role="menuitem" data-work-rename-bucket="${b.id}">Umbenennen</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="left" ${buckets[0]?.id===b.id?'disabled':''}>Nach links verschieben</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="right" ${buckets.at(-1)?.id===b.id?'disabled':''}>Nach rechts verschieben</button>
+              <button type="button" role="menuitem" class="work-bucket-danger" data-work-archive-bucket="${b.id}">Bucket entfernen</button>
+            </div>
+          </div>`}
+      </header>
       <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
       ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
       ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
@@ -337,16 +359,52 @@ async function renderPlanner(){
   });
   $('[data-work-team]')?.addEventListener('click',()=>void window.MINDS_WORK_TEAM.open(project,()=>renderPlanner()).catch(e=>setStatus('Team: '+(e?.message||e))));
   $('[data-work-add-bucket]')?.addEventListener('click',()=>void addBucket());
-  $$('[data-work-edit-bucket]').forEach(b=>b.onclick=e=>{e.stopPropagation();void editBucket(b.dataset.workEditBucket)});
+  $('[data-work-edit-bucket]').forEach(button=>button.onclick=e=>{
+    e.stopPropagation();
+    const menu=body.querySelector('[data-work-bucket-menu="'+button.dataset.workEditBucket+'"]');
+    const opening=!!menu?.hidden;
+    body.querySelectorAll('[data-work-bucket-menu]').forEach(x=>x.hidden=true);
+    body.querySelectorAll('[data-work-edit-bucket]').forEach(x=>x.setAttribute('aria-expanded','false'));
+    if(menu&&opening){menu.hidden=false;button.setAttribute('aria-expanded','true');menu.querySelector('button:not(:disabled)')?.focus()}
+  });
+  $('[data-work-rename-bucket]').forEach(button=>button.onclick=()=>editBucket(button.dataset.workRenameBucket));
+  $('[data-work-shift-bucket]').forEach(button=>button.onclick=()=>void shiftBucket(button.dataset.workShiftBucket,button.dataset.workShiftDirection));
+  $('[data-work-archive-bucket]').forEach(button=>button.onclick=()=>archiveBucketDialog(button.dataset.workArchiveBucket));
+  $('[data-work-bucket-handle]').forEach(handle=>{
+    handle.ondragstart=e=>{
+      draggedWorkBucketId=handle.dataset.workBucketHandle;
+      draggedWorkTaskId=null;
+      handle.closest('.work-bucket')?.classList.add('is-bucket-dragging');
+      if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('application/x-minds-bucket',draggedWorkBucketId)}
+    };
+    handle.ondragend=()=>{
+      draggedWorkBucketId=null;
+      $('.work-bucket').forEach(el=>el.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
+    };
+  });
+  // Menus close when focus moves elsewhere; keyboard and touch users can use left/right menu actions.
+  body.onclick=e=>{
+    if(e.target.closest('[data-work-edit-bucket],[data-work-bucket-menu]'))return;
+    closeBucketMenus(body);
+  };
+  body.onkeydown=e=>{if(e.key==='Escape')closeBucketMenus(body)};
   $$('[data-work-add-task]').forEach(b=>b.onclick=()=>editTask(null,b.dataset.workAddTask));
   $$('[data-work-task]').forEach(card=>{
     card.onclick=e=>{if(card.dataset.justDragged==='1'){card.dataset.justDragged='0';return}if(e.target.closest('[data-work-toggle]'))return;editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)};
     card.onkeydown=e=>{if((e.key==='Enter'||e.key===' ')&&!e.target.closest('[data-work-toggle]')){e.preventDefault();editTask(tasks.find(t=>t.id===card.dataset.workTask)||null,null)}};
-    card.ondragstart=e=>{draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
+    card.ondragstart=e=>{draggedWorkBucketId=null;draggedWorkTaskId=card.dataset.workTask;card.dataset.justDragged='1';card.classList.add('is-dragging');if(e.dataTransfer){e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',draggedWorkTaskId||'')}};
     card.ondragend=()=>{draggedWorkTaskId=null;card.classList.remove('is-dragging');$$('.work-bucket.is-drop-target').forEach(x=>x.classList.remove('is-drop-target'));setTimeout(()=>{card.dataset.justDragged='0'},120)};
   });
   $$('[data-work-bucket-drop]').forEach(bucket=>{
     bucket.ondragover=e=>{
+      if(draggedWorkBucketId){
+        if(!bucket.dataset.workBucketDrop||draggedWorkBucketId===bucket.dataset.workBucketDrop)return;
+        e.preventDefault();if(e.dataTransfer)e.dataTransfer.dropEffect='move';
+        const before=e.clientX<bucket.getBoundingClientRect().left+bucket.getBoundingClientRect().width/2;
+        bucket.classList.toggle('is-bucket-drop-before',before);
+        bucket.classList.toggle('is-bucket-drop-after',!before);
+        return;
+      }
       if(!draggedWorkTaskId)return;
       const task=tasks.find(x=>x.id===draggedWorkTaskId);if(!task)return;
       const kind=task.completed_at?'done':'open';
@@ -360,8 +418,17 @@ async function renderPlanner(){
         targetList.insertBefore(dragged,e.clientY<r.top+r.height/2?over:over.nextSibling);
       }else if(dragged.parentNode!==targetList)targetList.appendChild(dragged);
     };
-    bucket.ondragleave=e=>{if(!bucket.contains(e.relatedTarget))bucket.classList.remove('is-drop-target')};
+    bucket.ondragleave=e=>{if(!bucket.contains(e.relatedTarget))bucket.classList.remove('is-drop-target','is-bucket-drop-before','is-bucket-drop-after')};
     bucket.ondrop=e=>{
+      if(draggedWorkBucketId){
+        if(!bucket.dataset.workBucketDrop)return;
+        e.preventDefault();
+        const dragged=draggedWorkBucketId;draggedWorkBucketId=null;
+        const before=e.clientX<bucket.getBoundingClientRect().left+bucket.getBoundingClientRect().width/2;
+        $('.work-bucket').forEach(x=>x.classList.remove('is-bucket-dragging','is-bucket-drop-before','is-bucket-drop-after'));
+        void moveBucket(dragged,bucket.dataset.workBucketDrop,before);
+        return;
+      }
       e.preventDefault();bucket.classList.remove('is-drop-target');
       const id=draggedWorkTaskId||e.dataTransfer?.getData('text/plain'),task=tasks.find(x=>x.id===id);if(!task)return;
       const kind=task.completed_at?'done':'open';
@@ -391,8 +458,95 @@ async function persistWorkTaskOrder(id,bucketId,list){
   if(failed){setStatus('No pude guardar el nuevo orden de las Aufgaben.');await renderPlanner();return}
   setStatus('');await renderPlanner();setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
 }
-async function addBucket(){const name=window.prompt('Nombre del Bucket');if(!name?.trim())return;const next=(buckets.at(-1)?.sort_order||0)+10;const {error}=await sb.from('minds_work_buckets').insert({project_id:project.id,name:name.trim(),sort_order:next});if(!error)await renderPlanner()}
-async function editBucket(id){const b=buckets.find(x=>x.id===id);if(!b)return;const name=window.prompt('Nombre del Bucket',b.name);if(!name?.trim()||name.trim()===b.name)return;const {error}=await sb.from('minds_work_buckets').update({name:name.trim(),updated_at:new Date().toISOString()}).eq('id',id);if(!error)await renderPlanner()}
+function closeBucketMenus(root=document){
+  root.querySelectorAll('[data-work-bucket-menu]').forEach(menu=>menu.hidden=true);
+  root.querySelectorAll('[data-work-edit-bucket]').forEach(button=>button.setAttribute('aria-expanded','false'));
+}
+async function persistBucketOrder(ids){
+  if(!project||ids.length!==buckets.length||new Set(ids).size!==ids.length||
+     ids.some(id=>!buckets.some(b=>b.id===id)))return;
+  const {data,error}=await sb.rpc('minds_work_bucket_reorder',{p_project_id:project.id,p_bucket_ids:ids});
+  if(error||Number(data)!==ids.length){
+    setStatus('Bucket-Reihenfolge konnte nicht gespeichert werden. Bitte erneut versuchen.');
+    await renderPlanner();return;
+  }
+  await renderPlanner();
+  setStatus('');
+}
+async function moveBucket(id,targetId,before=true){
+  if(!id||id===targetId)return;
+  const ids=buckets.map(b=>b.id),from=ids.indexOf(id);
+  if(from<0)return;
+  ids.splice(from,1);
+  const at=ids.indexOf(targetId);
+  if(at<0)return;
+  ids.splice(at+(before?0:1),0,id);
+  if(ids.every((x,i)=>x===buckets[i].id))return;
+  await persistBucketOrder(ids);
+}
+async function shiftBucket(id,direction){
+  const ids=buckets.map(b=>b.id),index=ids.indexOf(id);
+  const next=index+(direction==='left'?-1:1);
+  if(index<0||next<0||next>=ids.length)return;
+  [ids[index],ids[next]]=[ids[next],ids[index]];
+  await persistBucketOrder(ids);
+}
+function bucketNameDialog(bucket){
+  closeBucketMenus($('#workBody'));
+  window.ISABELLA_APP?.openModal?.(bucket?'Bucket umbenennen':'Neuer Bucket',`<div class="form work-bucket-editor">
+    <label>Bucket-Name<input id="workBucketName" maxlength="120" value="${esc(bucket?.name||'')}" placeholder="Name"></label>
+    <div class="work-bucket-dialog-actions"><button id="workBucketSave" type="button" class="primary">Speichern</button><button id="workBucketCancel" type="button" class="secondary">Abbrechen</button></div>
+  </div>`);
+  $('#workBucketCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
+  $('#workBucketSave').onclick=()=>void saveBucketName(bucket);
+  $('#workBucketName').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();void saveBucketName(bucket)}};
+  $('#workBucketName').focus();
+}
+async function saveBucketName(bucket){
+  const field=$('#workBucketName'),name=field?.value.trim();
+  if(!name||name.length>120){setStatus('Der Bucket-Name muss zwischen 1 und 120 Zeichen enthalten.');field?.focus();return}
+  if(buckets.some(b=>b.id!==bucket?.id&&b.name.toLocaleLowerCase()===name.toLocaleLowerCase())){
+    setStatus('Ein Bucket mit diesem Namen ist bereits vorhanden.');field?.focus();return;
+  }
+  if(bucket?.name===name){window.ISABELLA_APP?.closeModal?.();return}
+  const button=$('#workBucketSave');if(button)button.disabled=true;
+  const {data,error}=bucket
+    ?await sb.from('minds_work_buckets').update({name,updated_at:new Date().toISOString()})
+        .eq('id',bucket.id).eq('project_id',project.id).eq('archived',false).select('id')
+    :await sb.from('minds_work_buckets').insert({project_id:project.id,name,
+        sort_order:Math.max(0,...buckets.map(b=>Number(b.sort_order)||0))+10}).select('id');
+  if(error||data?.length!==1){
+    if(button)button.disabled=false;
+    setStatus('Bucket konnte nicht gespeichert werden.');return;
+  }
+  window.ISABELLA_APP?.closeModal?.();
+  await renderPlanner();setStatus('');
+}
+function addBucket(){bucketNameDialog(null)}
+function editBucket(id){const bucket=buckets.find(x=>x.id===id);if(bucket)bucketNameDialog(bucket)}
+function archiveBucketDialog(id){
+  const bucket=buckets.find(x=>x.id===id);if(!bucket)return;
+  closeBucketMenus($('#workBody'));
+  const count=tasks.filter(t=>t.work_bucket_id===id).length;
+  window.ISABELLA_APP?.openModal?.('Bucket entfernen',`<div class="form work-bucket-editor">
+    <p>Möchtest du <strong>${esc(bucket.name)}</strong> entfernen?</p>
+    <p>${count} Aufgabe${count===1?'':'n'} werden nach <strong>Ohne Bucket</strong> verschoben. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
+    <div class="work-bucket-dialog-actions"><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Bucket entfernen</button><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button></div>
+  </div>`);
+  $('#workBucketArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
+  $('#workBucketArchive').onclick=()=>void archiveBucket(id);
+}
+async function archiveBucket(id){
+  const button=$('#workBucketArchive');if(button)button.disabled=true;
+  const {data,error}=await sb.rpc('minds_work_bucket_archive',{p_project_id:project.id,p_bucket_id:id});
+  if(error||!Number.isInteger(Number(data))){
+    if(button)button.disabled=false;
+    setStatus('Bucket konnte nicht entfernt werden. Aufgaben wurden nicht gelöscht.');return;
+  }
+  window.ISABELLA_APP?.closeModal?.();
+  await renderPlanner();setStatus('');
+  setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
+}
 function checklistRows(items=[]){return (items||[]).map(x=>`<div class="work-check-row" data-check-id="${esc(x?.id||'')}"><input type="checkbox" data-work-check-done ${x?.done?'checked':''}><input data-work-check-text value="${esc(x?.text||'')}" placeholder="Punto de checklist"><button type="button" data-work-check-remove>×</button></div>`).join('')}
 function bindChecklist(){$$('[data-work-check-remove]').forEach(b=>b.onclick=()=>b.closest('.work-check-row')?.remove())}
 function attachmentEditorMarkup(){
