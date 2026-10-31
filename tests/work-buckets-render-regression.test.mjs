@@ -22,7 +22,7 @@ test('Planner initializes Bucket action menu when querySelector returns a normal
     window:{MINDS_WORK_TEAM:{members:async()=>[]}},
     $:selector=>selector==='#workBody'?body:null,
     $$:()=>[],
-    esc:str=>String(str),hydratePlannerImages:async()=>{},
+    esc:str=>String(str),taskCard:()=>'',hydratePlannerImages:async()=>{},
     console
   };
   const run=vm.runInNewContext('('+planner+')',ctx);
