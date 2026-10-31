@@ -153,6 +153,8 @@ jobs:
         run: node tests/browser-work-modal-polish.cjs
       - name: Verify Work projects boot and tabs react in browser
         run: node tests/browser-work-boot.cjs
+      - name: Verify unified Chat and Work surfaces in Chromium
+        run: node tests/browser-unified-chat-work.cjs
 
   window-sandbox:
     name: Window credential-free test sandbox
