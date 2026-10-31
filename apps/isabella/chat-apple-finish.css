@@ -405,8 +405,8 @@ body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .compo
   box-shadow:0 1px 6px rgba(32,42,57,.03);
 }
 body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic,.send){
-  width:42px;min-width:42px;height:42px;min-height:42px;
-  flex-basis:42px;
+  width:44px;min-width:44px;height:44px;min-height:44px;
+  flex-basis:44px;
   margin:0;
 }
 body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer :is(.attach,.mic){
