@@ -167,7 +167,7 @@
   };
   const calendarHtml = state => {
     const date = M.dateFromKey(prefs.selectedDate) || new Date();
-    const month = date.toLocaleDateString('es-ES',{month:'long',year:'numeric'});
+    const month = date.toLocaleDateString('es-ES',{month:'long',year:'numeric'}).replace(/^./,letter=>letter.toLocaleUpperCase('es-ES'));
     const grid = M.monthCells(prefs.selectedDate);
     const now = M.dayKey(new Date());
     const cells = grid.map(cell => {
