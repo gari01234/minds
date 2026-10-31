@@ -1,0 +1,71 @@
+/* MINDS Work · Bucket controls / reorder UX (31 Oct 2026).
+   Scoped to the Work board. Preserves task drag/drop and mobile list layout. */
+.work-bucket .work-bucket-header{position:relative;gap:8px;padding:3px 4px 9px;align-items:center;min-width:0}
+.work-bucket .work-bucket-grab{display:flex;align-items:center;gap:7px;min-width:0;flex:1;cursor:grab;user-select:none;-webkit-user-select:none}
+.work-bucket .work-bucket-grab:active{cursor:grabbing}
+.work-bucket .work-bucket-grab strong{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.35}
+.work-bucket .work-bucket-grip{font-size:17px;color:#a9adb4;line-height:1;flex:none;letter-spacing:-4px;transform:translateX(-2px)}
+.work-bucket .work-bucket-grab:hover .work-bucket-grip{color:#555e68}
+.work-bucket .work-bucket-actions{position:relative;flex:none;display:flex}
+.work-bucket .work-bucket-more{cursor:pointer;border:0;border-radius:8px;background:transparent;padding:5px 8px;color:#73777d;font-size:13px;line-height:1.2}
+.work-bucket .work-bucket-more:hover,.work-bucket .work-bucket-more[aria-expanded="true"]{background:#e9e9ec;color:#27292d}
+.work-bucket .work-bucket-menu{
+ position:absolute;right:0;top:calc(100% + 5px);z-index:30;min-width:210px;
+ padding:5px;border:1px solid rgba(28,29,34,.11);border-radius:13px;
+ box-shadow:0 12px 40px rgba(16,20,28,.17),0 2px 8px rgba(16,20,28,.06);
+ background:rgba(255,255,255,.98);display:grid;gap:2px;
+ backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+}
+.work-bucket .work-bucket-menu[hidden]{display:none!important}
+.work-bucket .work-bucket-menu button{
+ display:block;width:100%;padding:10px 11px;text-align:left;border:0;
+ background:transparent!important;border-radius:8px;font-size:12px;
+ font-weight:500;color:#25272b;cursor:pointer;
+}
+.work-bucket .work-bucket-menu button:hover:not(:disabled),
+.work-bucket .work-bucket-menu button:focus-visible{background:#f0f1f3!important}
+.work-bucket .work-bucket-menu button:disabled{opacity:.35;cursor:default}
+.work-bucket .work-bucket-menu .work-bucket-danger{color:#bd3540;border-top:1px solid #eeeef0;border-radius:0 0 8px 8px;margin-top:4px;padding-top:12px}
+.work-bucket.is-bucket-dragging{opacity:.52}
+.work-bucket.is-bucket-drop-before{box-shadow:inset 4px 0 0 #4e7ed3}
+.work-bucket.is-bucket-drop-after{box-shadow:inset -4px 0 0 #4e7ed3}
+.work-bucket-editor{display:grid;gap:13px;min-width:min(380px,80vw)}
+.work-bucket-editor label{display:grid;gap:7px;font-size:12px;color:#4e5157}
+.work-bucket-editor input{width:100%;font:inherit;font-size:14px;border:1px solid #dadde2;padding:11px 12px;border-radius:11px;background:white}
+.work-bucket-editor p{font-size:13px;line-height:1.5;color:#4e5157;margin:0}
+.work-bucket-dialog-actions{display:flex;gap:8px;flex-wrap:wrap;padding-top:3px}
+.work-bucket-dialog-actions button{font-size:12px;border-radius:10px!important;padding:10px 13px!important}
+.work-bucket-dialog-actions .work-bucket-confirm-danger{background:#b73440;color:white;border:0;cursor:pointer}
+.work-bucket-dialog-actions button:disabled{opacity:.5;cursor:default}
+.work-bucket .work-bucket-more:focus-visible,
+.work-bucket .work-bucket-menu button:focus-visible,
+.work-bucket-editor input:focus-visible{outline:3px solid rgba(70,116,203,.4);outline-offset:2px}
+@media(max-width:520px){
+ .work-bucket .work-bucket-menu{min-width:185px}
+ .work-bucket .work-bucket-grip{display:none}
+ .work-bucket .work-bucket-header{padding-top:6px}
+}
+@media(prefers-reduced-motion:reduce){
+ .work-bucket .work-bucket-menu{backdrop-filter:none;-webkit-backdrop-filter:none}
+}
+
+
+/* Historical Buckets remain accessible without showing their completed tasks
+   as active work in "Ohne Bucket". */
+.work-bucket-archive{display:grid;gap:10px;max-height:60dvh;overflow:auto;padding:3px 1px}
+.work-bucket-archive-item{display:flex;align-items:flex-start;justify-content:space-between;
+ gap:12px;border:1px solid #e9e9ec;border-radius:13px;padding:12px}
+.work-bucket-archive-item details{min-width:0;flex:1}
+.work-bucket-archive-item summary{display:flex;align-items:center;gap:10px;cursor:pointer;list-style:revert}
+.work-bucket-archive-item summary strong{font-size:13px;overflow-wrap:anywhere}
+.work-bucket-archive-item summary small{font-size:11px;color:#74777e;white-space:nowrap}
+.work-bucket-archive-item ul{margin:10px 0 4px;padding-left:19px;display:grid;gap:6px;
+ font-size:12px;color:#40434a}
+.work-bucket-archive-item li small{font-size:11px;color:#8b8e95;margin-left:5px}
+.work-bucket-archive-item>button{flex:none;border:1px solid #dfdfe4;border-radius:10px;
+ background:#f8f8fa;color:#32363e;padding:9px 11px;font-size:12px;cursor:pointer}
+.work-bucket-archive-item>button:hover{background:#eeeef1}
+.work-bucket-archive-item>button:disabled{opacity:.4;cursor:default}
+@media(max-width:520px){.work-bucket-archive-item{flex-direction:column;align-items:stretch}
+ .work-bucket-archive-item>button{align-self:flex-start}
+ .work-bucket-archive-item summary{flex-wrap:wrap}}
