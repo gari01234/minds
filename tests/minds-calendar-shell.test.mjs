@@ -84,7 +84,10 @@ test('Every send button is the blue Chat send with the vector arrow and a calm w
   assert.ok(!work.includes('<button class="send" aria-label="Enviar">↑</button>'));
   assert.equal((shell.match(/class="send"[^>]*><svg class="chat-ui-icon"/g)||[]).length,3);
   assert.match(css,/:is\(\.idea-workspace-form,\.feed-thread-form,\.work-thread-composer\) \.send\{[^}]*background:#007aff!important;/);
-  assert.match(css,/\.send\.is-working::before,\.surface-refresh\.is-working::before\{[^}]*-webkit-mask:none;mask:none;[^}]*animation:minds-send-spin/);
+  assert.match(css,/\.send\.is-working::before,\.surface-refresh\.is-working::before\{\s*content:none;/);
+  assert.doesNotMatch(css,/conic-gradient|minds-send-spin/);
+  assert.match(css,/\.composer \.send\.is-working,[^{]*\.composer \.send\.is-working:hover\{\s*background:#9ec9ff!important;/);
+  assert.match(css,/\.app \.chat-activity:not\(\[hidden\]\):not\(:empty\)::before\{[^}]*animation:minds-dots-soft/);
   assert.match(css,/prefers-reduced-motion:reduce/);
 });
 
@@ -106,4 +109,14 @@ test('Server agenda and briefing include multi-day tasks (needs function deploy)
   assert.match(chat,/tq\.or\(`due_date\.lte\.\$\{to\},start_date\.lte\.\$\{to\}`\)/);
   assert.match(routine,/select\("title,due_date,start_date,completed_at/);
   assert.match(routine,/in_progress_today:true/);
+});
+
+test('Edge Function errors reach the chat as a clear sentence (e.g. OpenAI without credits)',async()=>{
+  const start=ai.indexOf('async function functionErrorMessage('),end=ai.indexOf('function compact(state){');
+  const readable=new Function(ai.slice(start,end)+';return functionErrorMessage;')();
+  const err=body=>({name:'FunctionsHttpError',context:new Response(JSON.stringify(body),{status:502})});
+  assert.match(await readable(err({error:'openai_error',status:429,detail:'You have no credits remaining. Add credits…'})),/se quedó sin créditos/);
+  assert.match(await readable(err({error:'openai_error',status:429,detail:'Rate limit reached'})),/limitando las solicitudes/);
+  assert.equal(await readable({name:'FunctionsFetchError'}),'');
+  assert.match(ai,/const readable=await functionErrorMessage\(error\);\s*if\(readable\)throw new Error\(readable\);/);
 });

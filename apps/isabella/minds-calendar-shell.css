@@ -3,7 +3,7 @@
    2 Week: proportional time grid; event cards, chips and day pills share one card.
    3 Month agenda rows, plan bars and the shared modal on the Planner language.
    4 Ideas workspace: formatted replies and drafts; every send is the blue Chat send.
-   5 Working state: a calm spinner inside the send button instead of a colour ring.
+   5 Working state: three soft "typing" dots; the send button rests while Isabella works.
    Presentation only; markup hooks stay as the JavaScript renders them. */
 
 /* 1 · Shell ─────────────────────────────────────────────────────────────── */
@@ -370,42 +370,87 @@ body .app .month-session-link{
 }
 .idea-draft-cut{margin:10px 0 0;font-size:12px;color:#9a5b00}
 
-/* 5 · Working state: spinner inside the send button, no colour ring ──────── */
-.send.is-working,.surface-refresh.is-working{color:transparent!important}
-.send.is-working>svg,.surface-refresh.is-working>svg{opacity:0}
+/* 5 · Working state ─ Isabella "typing": three soft dots, never a spinner or colour ring.
+   Chat: the status line becomes a typing bubble where the reply will appear and the
+   send button simply rests (dimmed). Other composers show the dots inside their send. */
 .send.is-working::before,.surface-refresh.is-working::before{
+  content:none;
+  animation:none;
+  -webkit-mask:none;mask:none;
+}
+.composer .send.is-working,
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send.is-working,
+body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .composer .send.is-working:hover{
+  background:#9ec9ff!important;
+  color:#fff!important;
+  box-shadow:none!important;
+  cursor:default;
+}
+:is(.idea-workspace-form,.feed-thread-form,.work-thread-composer) .send.is-working{color:transparent!important}
+:is(.idea-workspace-form,.feed-thread-form,.work-thread-composer) .send.is-working>svg{opacity:0}
+:is(.idea-workspace-form,.feed-thread-form,.work-thread-composer) .send.is-working::after{
   content:"";
   position:absolute;
-  inset:auto;
   left:50%;top:50%;
-  width:18px;height:18px;
-  margin:-9px 0 0 -9px;
-  padding:0;
-  border:2px solid rgba(255,255,255,.38);
-  border-top-color:#fff;
+  width:4px;height:4px;
+  margin:-2px 0 0 -2px;
   border-radius:50%;
-  background:none;
-  -webkit-mask:none;mask:none;
-  animation:minds-send-spin .75s linear infinite;
+  background:rgba(255,255,255,.4);
+  box-shadow:-7px 0 0 #fff,7px 0 0 rgba(255,255,255,.4);
+  animation:minds-dots-light 1.2s ease-in-out infinite;
 }
-.surface-refresh.is-working::before{border-color:rgba(37,45,59,.16);border-top-color:#5d626a}
-.surface-text-action.is-working::before{
+.app .chat-activity:not(:empty){
+  display:inline-flex;
+  align-items:center;
+  gap:10px;
+  width:max-content;
+  max-width:100%;
+  margin:8px 0 4px;
+  padding:9px 14px 9px 13px;
+  border-radius:18px;
+  background:#f2f4f7;
+  color:#6b7079;
+  font-size:12.5px;
+  line-height:1.35;
+}
+.app .chat-activity:not([hidden]):not(:empty)::before{
+  content:"";
+  flex:0 0 auto;
+  width:5px;height:5px;
+  margin-right:16px;
+  border-radius:50%;
+  background:#c3c8cf;
+  box-shadow:8px 0 0 #c3c8cf,16px 0 0 #c3c8cf;
+  opacity:1;
+  animation:minds-dots-soft 1.2s ease-in-out infinite;
+}
+.app .surface-text-action.is-working::before{
   content:"";
   display:inline-block;
-  width:12px;height:12px;
-  margin-right:7px;
-  border:1.5px solid rgba(37,45,59,.16);
-  border-top-color:#5d626a;
+  width:4px;height:4px;
+  margin:0 17px 0 1px;
   border-radius:50%;
-  vertical-align:-2px;
-  animation:minds-send-spin .75s linear infinite;
+  background:#c3c8cf;
+  box-shadow:6px 0 0 #c3c8cf,12px 0 0 #c3c8cf;
+  vertical-align:2px;
+  animation:minds-dots-soft 1.2s ease-in-out infinite;
 }
-@keyframes minds-send-spin{to{transform:rotate(360deg)}}
-@keyframes minds-send-breathe{from{opacity:.35}to{opacity:1}}
+/* One dot lifts at a time, left to right (dot = element, then its two shadows). */
+@keyframes minds-dots-soft{
+  0%,100%{background:#7d848f;box-shadow:8px 0 0 #c3c8cf,16px 0 0 #c3c8cf}
+  33%{background:#c3c8cf;box-shadow:8px 0 0 #7d848f,16px 0 0 #c3c8cf}
+  66%{background:#c3c8cf;box-shadow:8px 0 0 #c3c8cf,16px 0 0 #7d848f}
+}
+@keyframes minds-dots-light{
+  0%,100%{box-shadow:-7px 0 0 #fff,7px 0 0 rgba(255,255,255,.4);background:rgba(255,255,255,.4)}
+  33%{box-shadow:-7px 0 0 rgba(255,255,255,.4),7px 0 0 rgba(255,255,255,.4);background:#fff}
+  66%{box-shadow:-7px 0 0 rgba(255,255,255,.4),7px 0 0 #fff;background:rgba(255,255,255,.4)}
+}
 
 @media(prefers-reduced-motion:reduce){
-  .send.is-working::before,.surface-refresh.is-working::before,.surface-text-action.is-working::before{
-    animation:minds-send-breathe 1.2s ease-in-out infinite alternate;
+  .app .chat-activity::before,.app .surface-text-action.is-working::before,
+  :is(.idea-workspace-form,.feed-thread-form,.work-thread-composer) .send.is-working::after{
+    animation:none!important;
   }
   body .app :is(.week-timegrid .wk-event,.hours .event,.week-timegrid .wk-chip,.day-all .pill),
   body.desk-enabled #desktopLenses .lens-menu-slot .dots{transition:none!important}
