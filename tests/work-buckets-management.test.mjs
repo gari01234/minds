@@ -26,7 +26,7 @@ test('Archiving preserves tasks, including completed and archived',()=>{
  assert.match(sql,/update public\.minds_work_buckets[\s\S]*?set archived = true/);
  assert.match(sql,/where user_id = v_uid and project_id = p_project_id/);
  assert.match(js,/rpc\('minds_work_bucket_archive'/);
- assert.match(js,/Keine Aufgabe und keine Checkliste wird gelöscht/);
+ assert.match(js,/Später wiederherstellbar/);
  assert.match(js,/if\(!existing\.data\?\.length\)/);
 });
 test('Bucket menu can be opened with accessible controls, CSS is scoped and served',()=>{

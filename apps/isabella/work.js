@@ -309,21 +309,51 @@ function taskMeta(t){
 }
 function taskChecklist(t){return Array.isArray(t.checklist)?t.checklist:[]}
 function taskAttachments(t){return Array.isArray(t.attachments)?t.attachments:[]}
+
+const WORK_ICON={
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18"/>',
+ checklist:'<rect x="3" y="3" width="18" height="18" rx="3"/><path d="m7 9 2 2 3-3M14 10h3M7 16h10"/>',
+ attachment:'<path d="m20.8 11.6-8.9 8.8a5.2 5.2 0 0 1-7.4-7.4l9.3-9.2a3.5 3.5 0 0 1 5 5L9.5 18a1.8 1.8 0 0 1-2.6-2.6l8.2-8.2"/>',
+ pencil:'<path d="m16 5 3 3M4 20l4.3-1 11-11a2.1 2.1 0 0 0-3-3l-11 11L4 20Z"/>',
+ trash:'<path d="M4 7h16M10 11v6M14 11v6M6 7l1 14h10l1-14M9 7V4h6v3"/>',
+ left:'<path d="M20 12H4m7-7-7 7 7 7"/>',
+ right:'<path d="M4 12h16m-7-7 7 7-7 7"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>'
+};
+function workIcon(name){
+ return '<svg class="work-ui-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(WORK_ICON[name]||'')+'</svg>'
+}
+function workAssigneeName(t){
+ const ids=t.assignee_person_ids||[];
+ return ids.length?ids.map(id=>team.find(p=>p.id===id)?.name||'Unbekannt').join(', '):String(t.assignee||'').trim()
+}
+function workAvatarInitials(name){
+ return String(name||'').split(/[\s,]+/).filter(Boolean).slice(0,2).map(s=>s[0]?.toLocaleUpperCase('de-DE')).join('')||'–'
+}
 function taskCard(t){
   const checks=taskChecklist(t),done=checks.filter(x=>x?.done).length,attachments=taskAttachments(t);
   const firstImage=attachments.find(a=>a?.path&&String(a?.mime||a?.type||'').startsWith('image/')),cached=firstImage?cachedWorkUrl(firstImage.path):'';
-  const due=t.due_date?new Date(t.due_date+'T12:00:00').toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'}):'';
+  const due=t.due_date?new Date(t.due_date+'T12:00:00').toLocaleDateString('de-DE',{day:'numeric',month:'short'}):'';
   const overdue=!!(t.due_date&&t.due_date<localIso()&&!t.completed_at);
+  const name=workAssigneeName(t);
+  const priority=t.priority&&t.priority!=='normal'
+    ?t.priority==='urgent'?'Dringend':t.priority==='important'?'Wichtig':'Niedrig':'';
   return `<article class="work-task-card ${t.completed_at?'is-done':''}" draggable="true" data-work-task="${t.id}" tabindex="0">
-    ${firstImage?`<img class="work-task-cover" ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-work-task-image="${esc(firstImage.path)}" alt="${esc(firstImage.name||t.title)}">`:''}
-    <div class="work-task-title-row"><button class="work-task-toggle" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}">${t.completed_at?'✓':'○'}</button><strong>${esc(t.title)}</strong></div>
-    ${checks.length?`<div class="work-card-checks">${checks.slice(0,5).map(x=>`<div class="${x.done?'done':''}"><span>${x.done?'●':'○'}</span><span>${esc(x.text||'')}</span></div>`).join('')}${checks.length>5?`<div class="work-check-more">+${checks.length-5} weitere</div>`:''}</div>`:''}
+    <div class="work-task-title-row"><button type="button" class="work-task-toggle ${t.completed_at?'is-checked':''}" data-work-toggle="${t.id}" aria-label="${t.completed_at?'Reabrir':'Completar'}: ${esc(t.title)}" aria-pressed="${!!t.completed_at}">${t.completed_at?'✓':''}</button><strong>${esc(t.title)}</strong></div>
+    ${firstImage?`<img class="work-task-cover" loading="lazy" ${cached?`src="${esc(cached)}" data-loaded="1"`:''} data-work-task-image="${esc(firstImage.path)}" alt="${esc(firstImage.name||t.title)}">`:''}
+    ${checks.length?`<div class="work-card-checks">${checks.slice(0,5).map(x=>`<div class="${x.done?'done':''}"><span class="work-subcheck" aria-hidden="true">${x.done?'✓':''}</span><span>${esc(x.text||'')}</span></div>`).join('')}${checks.length>5?`<div class="work-check-more">+${checks.length-5} weitere</div>`:''}</div>`:''}
     <footer>
-      <div class="work-task-chips">${due?`<span class="work-due ${overdue?'is-overdue':''}">▣ ${esc(due)}</span>`:''}${checks.length?`<span>☑ ${done}/${checks.length}</span>`:''}${attachments.length?`<span>⌕ ${attachments.length}</span>`:''}</div>
-      ${taskMeta(t)?`<small>${esc(taskMeta(t))}</small>`:''}
+      <div class="work-task-chips">
+        ${due?`<span class="work-due ${overdue?'is-overdue':''}" title="Fällig am ${esc(t.due_date)}">${workIcon('calendar')}<time datetime="${esc(t.due_date)}">${esc(due)}</time></span>`:''}
+        ${checks.length?`<span class="work-meta-chip" title="Checkliste">${workIcon('checklist')}${done}/${checks.length}</span>`:''}
+        ${attachments.length?`<span class="work-meta-chip" title="${attachments.length} Anlagen">${workIcon('attachment')}${attachments.length}</span>`:''}
+        ${priority?`<span class="work-meta-priority">${priority}</span>`:''}
+      </div>
+      ${name?`<div class="work-card-assignee" aria-label="Verantwortlich: ${esc(name)}" title="Verantwortlich: ${esc(name)}"><span class="work-assignee-avatar" aria-hidden="true">${esc(workAvatarInitials(name))}</span><span class="work-assignee-name">${esc(name)}</span></div>`:''}
     </footer>
   </article>`
 }
+
 async function hydratePlannerImages(root=document){
   const imgs=[...root.querySelectorAll?.('[data-work-task-image],[data-work-edit-image]')||[]].filter(x=>!x.dataset.loaded);
   await Promise.all(imgs.map(async img=>{const path=img.dataset.workTaskImage||img.dataset.workEditImage;if(!path)return;const url=await workSignedUrl(path);if(url&&img.isConnected){img.src=url;img.dataset.loaded='1'}}));
@@ -335,20 +365,20 @@ async function renderPlanner(){
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header class="work-bucket-header">${b.virtual
         ?`<strong>${esc(b.name)}</strong>`
-        :`<span class="work-bucket-grab" draggable="true" data-work-bucket-handle="${b.id}" title="Bucket ziehen, um die Reihenfolge zu ändern"><span class="work-bucket-grip" aria-hidden="true">⠿</span><strong>${esc(b.name)}</strong></span>
+        :`<span class="work-bucket-grab" draggable="true" data-work-bucket-handle="${b.id}" title="Bucket ziehen, um die Reihenfolge zu ändern"><span class="work-bucket-grip" aria-hidden="true">⠿</span><strong>${esc(b.name)}</strong><span class="work-bucket-count" aria-label="${open.length} offene Aufgaben">${open.length}</span></span>
           <div class="work-bucket-actions">
             <button type="button" class="work-bucket-more" data-work-edit-bucket="${b.id}" aria-label="Aktionen für ${esc(b.name)}" aria-haspopup="menu" aria-expanded="false">•••</button>
             <div class="work-bucket-menu" data-work-bucket-menu="${b.id}" role="menu" hidden>
-              <button type="button" role="menuitem" data-work-rename-bucket="${b.id}">Umbenennen</button>
-              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="left" ${buckets[0]?.id===b.id?'disabled':''}>Nach links verschieben</button>
-              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="right" ${buckets.at(-1)?.id===b.id?'disabled':''}>Nach rechts verschieben</button>
-              <button type="button" role="menuitem" class="work-bucket-danger" data-work-archive-bucket="${b.id}">Bucket entfernen</button>
+              <button type="button" role="menuitem" data-work-rename-bucket="${b.id}">${workIcon('pencil')}Umbenennen</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="left" ${buckets[0]?.id===b.id?'disabled':''}>${workIcon('left')}Nach links</button>
+              <button type="button" role="menuitem" data-work-shift-bucket="${b.id}" data-work-shift-direction="right" ${buckets.at(-1)?.id===b.id?'disabled':''}>${workIcon('right')}Nach rechts</button>
+              <button type="button" role="menuitem" class="work-bucket-danger" data-work-archive-bucket="${b.id}">${workIcon('trash')}Entfernen</button>
             </div>
           </div>`}
       </header>
+      ${b.virtual?'':`<button type="button" class="work-add-task" data-work-add-task="${b.id}">${workIcon('plus')}Aufgabe hinzufügen</button>`}
       <div class="work-bucket-scroll"><div class="work-task-list" data-work-task-list="open" data-work-list-bucket="${b.virtual?'':b.id}">${open.map(taskCard).join('')}</div>
       ${done.length?`<details class="work-completed"><summary>Erledigte Aufgaben <span>${done.length}</span></summary><div class="work-task-list" data-work-task-list="done" data-work-list-bucket="${b.virtual?'':b.id}">${done.map(taskCard).join('')}</div></details>`:''}</div>
-      ${b.virtual?'':`<button class="work-add-task" data-work-add-task="${b.id}">＋ Aufgabe hinzufügen</button>`}
     </section>`}).join('')}</div>`;
   $('[data-work-layout-toggle]')?.addEventListener('click',e=>{
     const board=body.querySelector('.work-board');if(!board)return;
@@ -535,14 +565,14 @@ function archiveBucketDialog(id){
     ?`${unfinished} offene Aufgabe${unfinished===1?'':'n'} ${unfinished===1?'wird':'werden'} nach <strong>Ohne Bucket</strong> verschoben.`
     :'Keine offenen Aufgaben müssen verschoben werden.';
   const completedText=completed
-    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} als Verlauf diesem archivierten Bucket zugeordnet — ohne Verschiebung nach Ohne Bucket.`
+    ?`${completed} erledigte Aufgabe${completed===1?' bleibt':'n bleiben'} im Archiv.`
     :'';
-  window.ISABELLA_APP?.openModal?.('Bucket entfernen',`<div class="form work-bucket-editor">
-    <p>Möchtest du <strong>${esc(bucket.name)}</strong> aus dem aktiven Planner entfernen?</p>
-    <p>${pendingText}</p>
+  window.ISABELLA_APP?.openModal?.('Bucket entfernen?',`<div class="form work-bucket-editor">
+    <p class="work-bucket-confirm-subject"><strong>${esc(bucket.name)}</strong></p>
     ${completedText?`<p>${completedText}</p>`:''}
-    <p>Im <strong>Archiv</strong> bleibt der Bucket wiederherstellbar. Keine Aufgabe und keine Checkliste wird gelöscht.</p>
-    <div class="work-bucket-dialog-actions"><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Bucket entfernen</button><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button></div>
+    <p>${pendingText}</p>
+    <p class="work-bucket-recoverable">Später wiederherstellbar.</p>
+    <div class="work-bucket-dialog-actions"><button id="workBucketArchiveCancel" type="button" class="secondary">Abbrechen</button><button id="workBucketArchive" type="button" class="work-bucket-confirm-danger">Entfernen</button></div>
   </div>`);
   $('#workBucketArchiveCancel').onclick=()=>window.ISABELLA_APP?.closeModal?.();
   $('#workBucketArchive').onclick=()=>void archiveBucket(id);

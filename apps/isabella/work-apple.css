@@ -1,0 +1,295 @@
+/* MINDS Work · 2026-10-31 · Apple-inspired functional surface v1
+   The content layer stays opaque and legible; translucent materials are reserved
+   for navigation, the Bucket menu and dialogs. No fonts, photos or dependencies. */
+body[data-section="work"]{
+  --work-accent:#007aff;
+  --work-accent-soft:rgba(0,122,255,.10);
+  --work-ink:#1d1d1f;
+  --work-muted:#68686d;
+  --work-muted-soft:#86868b;
+  --work-stroke:rgba(25,28,36,.085);
+  --work-canvas:#f6f7f9;
+  --work-white:#fff;
+  --work-danger:#d92d38;
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  color:var(--work-ink);
+  -webkit-font-smoothing:antialiased;
+}
+body[data-section="work"] .work-screen{background:var(--work-canvas)}
+body[data-section="work"] .work-shell{background:var(--work-canvas);gap:0}
+body[data-section="work"] .work-head h1{
+  font-family:inherit;font-size:clamp(24px,2.5vw,34px);font-weight:700;
+  letter-spacing:-.036em;line-height:1.2;color:var(--work-ink)}
+body[data-section="work"] .work-head{gap:16px}
+body[data-section="work"] .work-head button,
+body[data-section="work"] .work-tabs button,
+body[data-section="work"] .work-planner-toolbar button,
+body[data-section="work"] .work-add-task,
+.modal:has(.work-bucket-editor) button{
+  font-family:inherit;font-weight:550;letter-spacing:-.006em;
+  -webkit-tap-highlight-color:transparent;
+  transition:background-color .16s ease,color .16s ease,border-color .16s ease,box-shadow .16s ease,transform .16s ease;
+}
+body[data-section="work"] .work-project-switch{flex-wrap:wrap;gap:5px}
+body[data-section="work"] .work-project-switch button{
+  padding:9px 15px;background:transparent;color:#62636a;
+  font-size:13px;border:1px solid transparent;border-radius:999px}
+body[data-section="work"] .work-project-switch button.active{
+  color:var(--work-ink);background:rgba(255,255,255,.87);
+  border-color:var(--work-stroke);
+  box-shadow:0 2px 10px rgba(25,25,30,.065)}
+body[data-section="work"] .work-project-switch button:not(.active):hover{background:rgba(255,255,255,.6)}
+body[data-section="work"] .work-tabs{
+  gap:3px;margin-top:12px;padding-bottom:0;
+  border-bottom:1px solid rgba(26,29,36,.1)}
+body[data-section="work"] .work-tabs button{
+  font-size:13px;border-radius:0;padding:10px 15px 12px;
+  border:0;border-bottom:2px solid transparent;
+  color:#6b6c73;background:transparent}
+body[data-section="work"] .work-tabs button.active{
+  color:var(--work-accent);background:transparent;
+  border-bottom-color:var(--work-accent)}
+body[data-section="work"] .work-tabs button:hover:not(.active){color:#23252a;background:rgba(255,255,255,.52)}
+body[data-section="work"] .work-status{font-size:12px;color:#676a72;min-height:15px;margin-top:6px}
+body[data-section="work"] .work-planner-toolbar{
+  padding:14px 2px 14px;gap:12px;flex-wrap:wrap}
+body[data-section="work"] .work-planner-toolbar>div{
+  gap:10px;display:flex;align-items:baseline;flex-wrap:wrap}
+body[data-section="work"] .work-planner-toolbar strong{
+  font-size:16px;letter-spacing:-.025em;font-weight:690}
+body[data-section="work"] .work-planner-toolbar>div span{
+  font-size:12px;color:var(--work-muted-soft)}
+body[data-section="work"] .work-planner-actions{
+  display:flex;gap:7px;align-items:center;flex-wrap:wrap}
+body[data-section="work"] .work-planner-toolbar button{
+  min-height:36px;border:1px solid var(--work-stroke);
+  border-radius:11px;padding:8px 12px;font-size:12px;color:#42454b;
+  background:rgba(255,255,255,.91);
+  box-shadow:0 1px 2px rgba(20,24,35,.025)}
+body[data-section="work"] .work-planner-toolbar button:hover{
+  background:#fff;border-color:rgba(45,55,70,.17)}
+body[data-section="work"] .work-planner-toolbar [data-work-add-bucket]{
+  border-color:transparent;color:#fff;background:var(--work-accent);
+  box-shadow:0 2px 6px rgba(0,122,255,.17)}
+body[data-section="work"] .work-planner-toolbar [data-work-add-bucket]:hover{
+  background:#0069db;color:#fff}
+body[data-section="work"] .work-planner-toolbar [data-work-show-bucket-archive]{
+  background:rgba(255,255,255,.66)}
+body[data-section="work"] .work-board{
+  gap:14px;padding:5px 4px 20px;scrollbar-color:#c8cbd0 transparent}
+body[data-section="work"] .work-bucket{
+  flex-basis:328px;min-width:288px;
+  background:#f1f2f5;border:1px solid rgba(20,25,35,.055);
+  border-radius:21px;padding:12px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.67)}
+body[data-section="work"] .work-bucket .work-bucket-header{
+  padding:3px 3px 11px;gap:8px;min-height:44px}
+body[data-section="work"] .work-bucket .work-bucket-grab{gap:9px;min-width:0}
+body[data-section="work"] .work-bucket header strong{
+  font-size:15px;font-weight:680;letter-spacing:-.015em;color:#25262b}
+body[data-section="work"] .work-bucket-grip{font-size:16px;color:#9b9da4}
+body[data-section="work"] .work-bucket-count{
+  flex:none;display:inline-grid;place-items:center;min-width:25px;height:25px;
+  padding:0 6px;border-radius:99px;background:#e3e5eb;color:#696b75;
+  font-size:11px;font-weight:620;font-variant-numeric:tabular-nums}
+body[data-section="work"] .work-bucket .work-bucket-more{
+  width:34px;height:32px;display:grid;place-items:center;
+  background:rgba(255,255,255,.8);border:1px solid rgba(25,27,32,.07);
+  box-shadow:0 1px 2px rgba(20,24,35,.03);
+  border-radius:11px;color:#5d626a;font-size:16px;padding:0}
+body[data-section="work"] .work-bucket .work-bucket-more:hover,
+body[data-section="work"] .work-bucket .work-bucket-more[aria-expanded="true"]{
+  background:#fff;color:#151515;box-shadow:0 3px 10px rgba(40,43,56,.09)}
+body[data-section="work"] .work-bucket .work-bucket-menu{
+  z-index:200;min-width:222px;
+  padding:6px;border-radius:15px;
+  background:rgba(251,251,253,.93);
+  border:1px solid rgba(255,255,255,.75);
+  box-shadow:0 15px 45px rgba(23,29,42,.14),0 3px 10px rgba(28,35,49,.07);
+  backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%)}
+body[data-section="work"] .work-bucket .work-bucket-menu button{
+  display:flex;align-items:center;gap:11px;
+  min-height:38px;padding:9px 10px;font-size:12.5px;font-weight:530;
+  color:#282a2e;border-radius:9px}
+body[data-section="work"] .work-bucket .work-bucket-menu button:hover:not(:disabled){
+  background:rgba(0,122,255,.09)!important}
+body[data-section="work"] .work-bucket .work-bucket-menu .work-bucket-danger{
+  color:var(--work-danger);margin-top:5px;padding-top:10px;
+  border-top:1px solid rgba(30,33,38,.09);border-radius:8px}
+body[data-section="work"] .work-ui-icon{flex:none;display:inline-block;width:15px;height:15px;vertical-align:middle;pointer-events:none}
+body[data-section="work"] .work-bucket-scroll{
+  padding:1px 3px 7px 1px;scrollbar-color:rgba(120,127,139,.3) transparent}
+body[data-section="work"] .work-add-task{
+  display:flex;align-items:center;gap:8px;
+  margin:0 0 12px;padding:11px 12px;
+  border:1px solid transparent;
+  border-radius:12px;background:rgba(255,255,255,.48);
+  color:#727680;font-size:12.5px;font-weight:480;text-align:left;
+  width:100%;min-height:42px}
+body[data-section="work"] .work-add-task:hover{
+  color:var(--work-accent);background:rgba(255,255,255,.9);
+  border-color:var(--work-stroke)}
+body[data-section="work"] .work-add-task .work-ui-icon{width:17px;height:17px}
+body[data-section="work"] .work-task-list{gap:10px}
+body[data-section="work"] .work-task-card{
+  border-radius:16px;border:1px solid rgba(30,33,45,.09);
+  background:var(--work-white);margin-bottom:10px;
+  box-shadow:0 1px 2px rgba(15,19,30,.035),0 5px 16px rgba(27,32,45,.035);
+  transition:box-shadow .16s ease,border-color .16s ease,transform .16s ease}
+body[data-section="work"] .work-task-card:hover{
+  border-color:rgba(35,44,63,.14);
+  box-shadow:0 4px 20px rgba(28,33,48,.09);
+  transform:translateY(-1px)}
+body[data-section="work"] .work-task-card:focus-visible{
+  outline:3px solid rgba(0,122,255,.38);outline-offset:3px;box-shadow:none}
+body[data-section="work"] .work-task-card.is-done{opacity:.75}
+body[data-section="work"] .work-task-title-row{
+  display:grid;grid-template-columns:23px minmax(0,1fr);
+  gap:11px;align-items:start;padding:16px 15px 10px}
+body[data-section="work"] .work-task-title-row strong{
+  font-size:14px;font-weight:650;line-height:1.42;letter-spacing:-.012em;
+  color:#202126;overflow-wrap:anywhere}
+body[data-section="work"] .work-task-toggle{
+  width:22px;height:22px;display:grid;place-items:center;
+  padding:0;background:#fff;border:1.6px solid #858a94;border-radius:50%;
+  color:#fff;font-size:12px;line-height:1;transition:background .16s ease,border-color .16s ease}
+body[data-section="work"] .work-task-toggle:hover{border-color:var(--work-accent)}
+body[data-section="work"] .work-task-toggle.is-checked{
+  background:var(--work-accent);border-color:var(--work-accent)}
+body[data-section="work"] .work-task-cover{
+  display:block;width:calc(100% - 28px);height:145px;
+  margin:0 14px 11px;border-radius:11px;
+  object-fit:cover;background:#e9eaee}
+body[data-section="work"] .work-card-checks{gap:8px;padding:1px 16px 13px 48px}
+body[data-section="work"] .work-card-checks>div{
+  display:grid;grid-template-columns:17px minmax(0,1fr);
+  gap:8px;align-items:center;font-size:12px;line-height:1.4;color:#494d56}
+body[data-section="work"] .work-card-checks>div.done{color:#7b7e86;text-decoration:none}
+body[data-section="work"] .work-card-checks>div.done span:last-child{text-decoration:line-through}
+body[data-section="work"] .work-subcheck{
+  display:grid;place-items:center;width:16px;height:16px;
+  border:1.3px solid #9297a1;border-radius:50%;font-size:11px;color:#fff;line-height:1}
+body[data-section="work"] .work-card-checks>div.done .work-subcheck{
+  background:var(--work-accent);border-color:var(--work-accent)}
+body[data-section="work"] .work-task-card footer{
+  display:grid;gap:10px;
+  border-top:1px solid rgba(30,33,43,.075);
+  padding:11px 14px 13px}
+body[data-section="work"] .work-task-chips{
+  display:flex;align-items:center;flex-wrap:wrap;gap:7px;
+  font-size:12px;color:var(--work-muted)}
+body[data-section="work"] .work-due{
+  display:inline-flex;align-items:center;gap:6px;min-height:28px;
+  padding:4px 8px;background:#f4f5f7;border:1px solid #e4e6ea;
+  border-radius:9px;color:#464951;font-size:12px;font-weight:590;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+body[data-section="work"] .work-due.is-overdue{
+  color:#c32231;background:#fff2f3;border-color:#f5c5c9;border-radius:9px;padding:4px 8px}
+body[data-section="work"] .work-meta-chip{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 2px;color:#737784;font-weight:480}
+body[data-section="work"] .work-meta-priority{
+  padding:4px 7px;border-radius:7px;background:#fff1e8;color:#aa5424;
+  font-size:11px;font-weight:570}
+body[data-section="work"] .work-card-assignee{
+  display:flex;align-items:center;gap:9px;min-height:30px;
+  color:#2d3037;font-size:12px;font-weight:620;max-width:100%;min-width:0}
+body[data-section="work"] .work-assignee-avatar{
+  display:grid;place-items:center;flex:none;width:29px;height:29px;
+  border-radius:50%;background:#e8e5f8;color:#585087;
+  font-size:10px;font-weight:740;letter-spacing:-.02em}
+body[data-section="work"] .work-assignee-name{
+  min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:12px;font-weight:600;color:#303138}
+body[data-section="work"] .work-completed{
+  margin:8px 0 0;border-top:1px solid rgba(35,40,52,.1);padding-top:8px}
+body[data-section="work"] .work-completed summary{
+  font-size:12px;color:#62656d;font-weight:520;padding:8px 4px}
+body[data-section="work"] .work-completed summary span{
+  font-size:11px;background:#e3e5e9;border-radius:8px;padding:2px 7px}
+body[data-section="work"] .work-bucket.is-drop-target{
+  background:#e9f1ff;outline:2px dashed rgba(0,122,255,.55)}
+/* Work-specific forms and buttons share a precise visual system */
+.modal:has(.work-bucket-editor),
+.modal:has(.work-task-form){
+  border:1px solid rgba(255,255,255,.9);
+  border-radius:24px;background:#fff;
+  box-shadow:0 28px 90px rgba(14,19,30,.19),0 4px 20px rgba(16,22,34,.07);
+  padding:26px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif}
+.modal:has(.work-bucket-editor){width:min(450px,calc(100vw - 28px));max-height:82dvh}
+.modal:has(.work-bucket-editor) .modal-title,
+.modal:has(.work-task-form) .modal-title{
+  font-family:inherit;font-size:23px;line-height:1.2;font-weight:720;
+  letter-spacing:-.03em;color:#17181c}
+.modal:has(.work-bucket-editor) .modal-head{margin-bottom:20px}
+.modal:has(.work-bucket-editor) #closeModal,
+.modal:has(.work-task-form) #closeModal{
+  width:34px;height:34px;border-radius:50%;background:#f3f3f5;color:#595e67;border:0}
+.modal:has(.work-bucket-editor) #closeModal:hover,
+.modal:has(.work-task-form) #closeModal:hover{background:#e8eaf0}
+.modal:has(.work-bucket-editor) .work-bucket-editor{min-width:0;gap:9px}
+.modal:has(.work-bucket-editor) .work-bucket-editor p{
+  margin:0;color:#484c57;font-size:13px;line-height:1.52}
+.modal:has(.work-bucket-editor) .work-bucket-confirm-subject strong{
+  color:#212329;font-weight:650;font-size:14px}
+.modal:has(.work-bucket-editor) .work-bucket-recoverable{
+  margin-top:8px;color:#868a94;font-size:12px}
+.modal:has(.work-bucket-editor) .work-bucket-dialog-actions{
+  display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap;
+  margin-top:17px;padding:0}
+.modal:has(.work-bucket-editor) .work-bucket-dialog-actions button,
+.modal:has(.work-task-form) button{
+  min-height:39px;padding:9px 15px;border-radius:11px;
+  border:1px solid rgba(18,23,34,.07);font-size:13px;font-weight:620;
+  font-family:inherit;transition:background-color .15s ease,box-shadow .15s ease}
+.modal:has(.work-bucket-editor) .work-bucket-dialog-actions .secondary{
+  background:#f1f2f4;color:#32353b}
+.modal:has(.work-bucket-editor) .work-bucket-dialog-actions .secondary:hover{background:#e9eaf0}
+.modal:has(.work-bucket-editor) .work-bucket-confirm-danger{
+  border:0;color:#fff;background:#dd3643}
+.modal:has(.work-bucket-editor) .work-bucket-confirm-danger:hover{background:#c42834}
+.modal:has(.work-bucket-editor) .work-bucket-editor input,
+.modal:has(.work-task-form) input,
+.modal:has(.work-task-form) textarea,
+.modal:has(.work-task-form) select{
+  border:1px solid #dadde4;border-radius:11px;padding:11px 12px;
+  background:#fbfbfd;color:#1d1d1f;font-size:14px;font-family:inherit}
+.modal:has(.work-bucket-editor) .work-bucket-editor input:focus,
+.modal:has(.work-task-form) input:focus,
+.modal:has(.work-task-form) textarea:focus,
+.modal:has(.work-task-form) select:focus{
+  outline:3px solid rgba(0,122,255,.18);border-color:rgba(0,122,255,.55)}
+.modal:has(.work-task-form) .primary{background:var(--work-accent,#007aff);color:white}
+body[data-section="work"] button:focus-visible,
+.modal:has(.work-bucket-editor) button:focus-visible,
+.modal:has(.work-task-form) button:focus-visible{
+  outline:3px solid rgba(0,122,255,.36);outline-offset:2px}
+body[data-section="work"] button:disabled,
+.modal:has(.work-bucket-editor) button:disabled{opacity:.48;cursor:not-allowed}
+@media(min-width:900px){
+ body[data-section="work"] .work-bucket{flex:0 0 328px}
+}
+@media(max-width:899px){
+ body[data-section="work"] .work-bucket{flex-basis:300px;min-width:270px}
+ body[data-section="work"] .work-task-cover{height:132px}
+}
+@media(max-width:520px){
+ body[data-section="work"] .work-shell{padding:12px 14px 16px}
+ body[data-section="work"] .work-head h1{font-size:25px}
+ body[data-section="work"] .work-planner-toolbar{align-items:flex-start}
+ body[data-section="work"] .work-planner-actions{gap:5px}
+ body[data-section="work"] .work-planner-toolbar button{min-height:37px}
+ body[data-section="work"] .work-board.mobile-stack .work-bucket{width:100%;max-width:none;min-width:0}
+ body[data-section="work"] .work-task-cover{height:154px}
+ .modal:has(.work-bucket-editor){padding:20px}
+}
+@media(prefers-reduced-motion:reduce){
+ body[data-section="work"] .work-task-card,
+ body[data-section="work"] button{transition:none!important}
+ body[data-section="work"] .work-task-card:hover{transform:none}
+}
+@media(prefers-contrast:more){
+ body[data-section="work"] .work-task-card{border-color:#777}
+ body[data-section="work"] .work-due{border-color:#666}
+ body[data-section="work"] .work-assignee-name{color:#000}
+}
