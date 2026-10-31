@@ -1,0 +1,300 @@
+/* MINDS · one visual language across Isabella Chat and Work · 2026-10-31
+   Presentation only: no new components, data flows, permissions or layout state.
+   Apple-inspired system typography, restrained blue accent, white canvas,
+   soft grouped content and consistent controls.
+*/
+body[data-section="work"],
+body[data-section="assistant"]{
+  --minds-ui-accent:#007aff;
+  --minds-ui-accent-hover:#0069da;
+  --minds-ui-accent-wash:rgba(0,122,255,.085);
+  --minds-ui-ink:#1d1d1f;
+  --minds-ui-secondary:#626771;
+  --minds-ui-tertiary:#858b94;
+  --minds-ui-line:rgba(37,45,59,.09);
+  --minds-ui-soft:#f1f3f6;
+  --minds-ui-paper:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;
+  font-synthesis:none;
+  -webkit-font-smoothing:antialiased;
+}
+body[data-section="work"] .app,
+body[data-section="assistant"] .app,
+body[data-section="work"] #swipeArea,
+body[data-section="assistant"] #swipeArea{
+  background:var(--minds-ui-paper);
+  color:var(--minds-ui-ink);
+}
+body[data-section="work"] .app button,
+body[data-section="assistant"] .app button,
+body[data-section="work"] .app input,
+body[data-section="assistant"] .app input,
+body[data-section="work"] .app textarea,
+body[data-section="assistant"] .app textarea,
+body[data-section="work"] .app select,
+body[data-section="assistant"] .app select{
+  font-family:inherit;
+  -webkit-tap-highlight-color:transparent;
+}
+body[data-section="work"] .app :is(button,input,textarea,select):focus-visible,
+body[data-section="assistant"] .app :is(button,input,textarea,select):focus-visible{
+  outline-color:rgba(0,122,255,.60);
+  outline-offset:2px;
+}
+/* Work: the large gray background is now pure white; preserve a quiet
+   light-gray grouping ONLY within the buckets themselves. */
+body[data-section="work"] #workScreen.work-screen,
+body[data-section="work"] #workScreen .work-shell,
+body[data-section="work"] #workScreen .work-body,
+body[data-section="work"] #workScreen .work-board{
+  background:#fff;
+}
+body[data-section="work"] #workScreen .work-bucket{
+  background:#f1f3f6;
+  border-color:rgba(37,45,59,.075);
+}
+body[data-section="work"] #workScreen .work-task-card{
+  background:#fff;
+  box-shadow:0 1px 3px rgba(25,33,50,.04),0 5px 16px rgba(25,33,50,.04);
+}
+body[data-section="work"] #workScreen .work-project-switch button.active{
+  border-color:rgba(37,45,59,.085);
+  box-shadow:0 2px 10px rgba(37,45,59,.055);
+}
+body[data-section="work"] #workScreen .work-tabs{
+  border-bottom-color:var(--minds-ui-line);
+}
+body[data-section="work"] #workScreen .work-tabs button.active{
+  color:var(--minds-ui-accent);
+  border-bottom-color:var(--minds-ui-accent);
+}
+body[data-section="work"] #workScreen .work-bucket-count{
+  background:#e4e7ec;
+  color:#5d6570;
+}
+/* Shared desktop chrome: same navigation, contrast, feedback and corner rules. */
+@media(min-width:950px){
+  body[data-section="assistant"].desk-enabled .topbar{
+    background:#fff!important;
+    border-bottom:1px solid var(--minds-ui-line)!important;
+  }
+  body[data-section="assistant"].desk-enabled #desktopLenses,
+  body[data-section="work"] #desktopLenses{
+    background:#fff;
+    border-right:1px solid var(--minds-ui-line);
+  }
+  body[data-section="assistant"].desk-enabled .lens-nav-item,
+  body[data-section="work"] .lens-nav-item{
+    border-radius:12px;
+    color:#646a74;
+    transition:background-color .15s ease,color .15s ease;
+  }
+  body[data-section="assistant"].desk-enabled .lens-nav-item:hover,
+  body[data-section="work"] .lens-nav-item:hover{
+    background:#f5f6f8;color:var(--minds-ui-ink);
+  }
+  body[data-section="assistant"].desk-enabled .lens-nav-item.active,
+  body[data-section="work"] .lens-nav-item.active{
+    color:#202329;
+    background:#eff2f7;
+  }
+  body[data-section="assistant"].desk-enabled .lens-nav-item.active .lens-glyph,
+  body[data-section="work"] .lens-nav-item.active .lens-glyph{
+    color:var(--minds-ui-accent);
+  }
+  body[data-section="assistant"].desk-enabled .lens-copy strong,
+  body[data-section="work"] .lens-copy strong{
+    font-size:12px;font-weight:650;letter-spacing:-.012em;
+  }
+  body[data-section="assistant"].desk-enabled .lens-copy small,
+  body[data-section="work"] .lens-copy small{
+    color:#737a86;font-size:10px;
+  }
+  /* Keep the dashboard architecture and all resizable/movable panels intact. */
+  body[data-section="assistant"].desk-enabled .desk-shell{
+    background:#fff!important;
+    color:var(--minds-ui-ink);
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel{
+    background:#fff;
+    border:1px solid rgba(33,43,59,.105);
+    border-radius:18px;
+    box-shadow:0 2px 13px rgba(25,31,44,.035);
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-head{
+    min-height:45px;
+    height:45px;
+    padding-inline:16px;
+    border-bottom:1px solid rgba(30,40,55,.07);
+    background:#fff;
+    color:var(--minds-ui-ink);
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-title{
+    font-size:13px;font-weight:665;letter-spacing:-.016em;
+    color:#282c34;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-grip{color:#a1a8b2}
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button{
+    width:32px;height:32px;
+    border-radius:10px;
+    color:#757c88;
+    font-size:17px;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button:hover{
+    background:#f1f3f6;color:#212730;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel-actions button:active{
+    background:#e8edf3;
+  }
+  body[data-section="assistant"].desk-enabled .desk-rail{
+    gap:11px;
+    scrollbar-color:#d0d4dc transparent;
+  }
+  body[data-section="assistant"].desk-enabled .desk-splitter:before{
+    border-left-color:#d7dce4;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .assistant-scroll{
+    scrollbar-color:#c6ccd5 transparent;
+  }
+  body[data-section="assistant"].desk-enabled .desk-panel--chat .composer-wrap{
+    background:#fff!important;
+    border-top:1px solid rgba(33,43,59,.075);
+  }
+}
+/* Chat content: the same legible hierarchy as task cards. */
+body[data-section="assistant"] .message{
+  color:#252930;
+  font-size:14px;
+  line-height:1.55;
+  letter-spacing:-.004em;
+}
+body[data-section="assistant"] .message.assistant{
+  background:#fff;
+}
+body[data-section="assistant"] .message.user{
+  color:#272b32;
+  background:#f2f4f7!important;
+  border-radius:18px;
+  padding:11px 15px;
+}
+body[data-section="assistant"] .message-text strong{
+  font-weight:665;
+}
+body[data-section="assistant"] .message-sources a,
+body[data-section="assistant"] .message-quick-replies button{
+  color:#4a515d;
+  background:#fff;
+  border:1px solid #e3e7ee;
+  border-radius:12px;
+  font-weight:550;
+}
+body[data-section="assistant"] .message-sources a:hover,
+body[data-section="assistant"] .message-quick-replies button:hover{
+  border-color:#b9d6fb;
+  background:#f6faff;
+}
+body[data-section="assistant"] .chat-activity{
+  color:#6a707c;
+  font-size:12px;
+}
+/* Unified input capsule and compact system-style controls.
+   Their dimensions and focus behavior remain as tested by the daily workspace. */
+body[data-section="assistant"] .composer{
+  border:1px solid #dce1e8;
+  border-radius:27px;
+  background:#fff;
+  box-shadow:0 1px 5px rgba(35,44,60,.035);
+}
+body[data-section="assistant"] .composer:focus-within{
+  border-color:rgba(0,122,255,.52)!important;
+  box-shadow:0 0 0 3px rgba(0,122,255,.09)!important;
+}
+body[data-section="assistant"] .composer textarea{
+  color:#242830;
+  font-size:14px;
+  line-height:1.48;
+}
+body[data-section="assistant"] .composer textarea::placeholder{
+  color:#757b85;
+  opacity:1;
+}
+body[data-section="assistant"] .composer :is(.attach,.mic){
+  background:#f2f4f7!important;
+  color:#454c58!important;
+  border-radius:50%;
+}
+body[data-section="assistant"] .composer :is(.attach,.mic):hover{
+  background:#e7ecf3!important;
+}
+body[data-section="assistant"] .composer .send{
+  background:var(--minds-ui-accent)!important;
+  color:#fff!important;
+  border-radius:50%;
+}
+body[data-section="assistant"] .composer .send:hover{
+  background:var(--minds-ui-accent-hover)!important;
+}
+body[data-section="assistant"] .composer .send:active{
+  transform:scale(.96);
+}
+/* Dashboard micro-controls use the same tactile radius and muted surfaces
+   as Work menus; preserve actual semantic calendar state colors. */
+body[data-section="assistant"].desk-enabled .desk-month-bar button{
+  border-radius:10px;
+  color:#5f6672;
+}
+body[data-section="assistant"].desk-enabled .desk-month-bar button:hover{
+  background:#f0f3f7;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button{
+  border-radius:9px;
+  color:#4d5664;
+  font-weight:570;
+}
+body[data-section="assistant"].desk-enabled .desk-panel-footer button:hover{
+  color:var(--minds-ui-accent);
+  text-decoration:none;
+}
+body[data-section="assistant"].desk-enabled .desk-subtitle,
+body[data-section="assistant"].desk-enabled .desk-plan-date,
+body[data-section="assistant"].desk-enabled .desk-empty,
+body[data-section="assistant"].desk-enabled .desk-small,
+body[data-section="assistant"].desk-enabled .desk-panel-footer span{
+  color:#68717d;
+}
+body[data-section="assistant"].desk-enabled .desk-task-detail strong{
+  color:#29303a;
+  font-weight:625;
+}
+body[data-section="assistant"].desk-enabled .desk-panel :is(button,input,select,textarea):focus-visible{
+  outline:2px solid rgba(0,122,255,.65);
+  outline-offset:2px;
+}
+@media(max-width:949px){
+  body[data-section="assistant"] #assistantScreen{
+    background:#fff;
+  }
+  body[data-section="assistant"] .composer-wrap{
+    background:linear-gradient(to top,#fff 80%,rgba(255,255,255,0));
+  }
+  body[data-section="assistant"] #todayCard{
+    border-radius:14px;
+  }
+}
+@media(prefers-reduced-motion:reduce){
+  body[data-section="assistant"] .composer :is(.send,.mic,.attach),
+  body[data-section="assistant"] .lens-nav-item{
+    transition:none!important;
+  }
+}
+@media(prefers-contrast:more){
+  body[data-section="assistant"].desk-enabled .desk-panel{
+    border-color:#848a95;
+  }
+  body[data-section="assistant"] .composer{
+    border-color:#777e89;
+  }
+  body[data-section="work"] #workScreen .work-bucket{
+    border-color:#8a909b;
+  }
+}
