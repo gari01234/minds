@@ -147,7 +147,8 @@ test('Steckbrief, search and fetch',async()=>{
 test('Server: 14 lean tools, German titles, one-click prompts, German Akte rule',()=>{
   const fn=read('supabase/functions/window-mcp/index.ts');
   assert.equal((fn.match(/registerTool\(/g)||[]).length,14);
-  for(const p of ['thema_fortsetzen','sitzung_abschliessen','emails_ablegen','jour_fixe_vorbereiten','protokoll_erstellen'])assert.ok(fn.includes('registerPrompt("'+p+'"'),p);
+  // Prompts come from the shared Projektakte skill library (tests/window-akte-skills.test.mjs covers the names).
+  assert.match(fn,/for\(const skill of AKTE_SKILLS\)\{[\s\S]*server\.registerPrompt\(skill\.prompt,/);
   assert.match(fn,/Everything you WRITE into Window[\s\S]*is in German/);
   assert.match(fn,/title:"Sitzung abschließen"/);
   assert.match(fn,/const akte=createAkteTools\(\{sb,userId:data\.user\.id,base:tools\}\);/);

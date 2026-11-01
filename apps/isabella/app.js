@@ -138,6 +138,8 @@ function canonicalAttentionPreferences(value={}){
     imminentEvent:route(p.imminentEvent,'interrupt'),
     overdueTasks:route(p.overdueTasks,'ambient'),
     routineFailure:route(p.routineFailure,'briefing'),
+    akteFristen:route(p.akteFristen,'ambient'),
+    akteOffen:route(p.akteOffen,'ambient'),
     maxInterruptionsPerHour:Math.max(0,Math.min(12,Number(p.maxInterruptionsPerHour??3))),
     quietHoursEnabled:p.quietHoursEnabled===true,
     quietStart:/^([01]\d|2[0-3]):[0-5]\d$/.test(String(p.quietStart||''))?String(p.quietStart):'22:00',
@@ -4112,6 +4114,10 @@ function assistantPreferencesPanel(){
     <label>Evento próximo<select id="attentionImminentEvent">${attentionRouteOptions(attention.imminentEvent)}</select></label>
     <label>Tareas vencidas<select id="attentionOverdueTasks">${attentionRouteOptions(attention.overdueTasks)}</select></label>
     <label>Fallo de una rutina<select id="attentionRoutineFailure">${attentionRouteOptions(attention.routineFailure)}</select></label>
+    <div class="small section-label">Proyectos (Projektakte)</div>
+    <label>Un plazo del registro vence hoy, mañana o pasado<select id="attentionAkteFristen">${attentionRouteOptions(attention.akteFristen)}</select></label>
+    <label>Hay entradas por confirmar (decisiones, plazos, tareas)<select id="attentionAkteOffen">${attentionRouteOptions(attention.akteOffen)}</select></label>
+    <div class="small">Solo entre las 8 y las 20 h. Lo confirmas en Proyecto → Panorama.</div>
     <label>Máximo de avisos no urgentes por hora<select id="attentionMaxInterruptions">${[0,1,2,3,4,6].map(n=>`<option value="${n}" ${Number(attention.maxInterruptionsPerHour)===n?'selected':''}>${n===0?'Ninguna':n}</option>`).join('')}</select></label>
     <label class="settings-check"><input id="attentionQuietEnabled" type="checkbox" ${attention.quietHoursEnabled?'checked':''}><span>Usar horas silenciosas para avisos que pueden esperar</span></label>
     <div class="two-col"><label>Desde<input id="attentionQuietStart" type="time" value="${esc(attention.quietStart)}"></label><label>Hasta<input id="attentionQuietEnd" type="time" value="${esc(attention.quietEnd)}"></label></div>
@@ -4128,6 +4134,8 @@ function assistantPreferencesPanel(){
       imminentEvent:$('#attentionImminentEvent').value,
       overdueTasks:$('#attentionOverdueTasks').value,
       routineFailure:$('#attentionRoutineFailure').value,
+      akteFristen:$('#attentionAkteFristen').value,
+      akteOffen:$('#attentionAkteOffen').value,
       maxInterruptionsPerHour:Number($('#attentionMaxInterruptions').value||3),
       quietHoursEnabled:$('#attentionQuietEnabled').checked,
       quietStart:$('#attentionQuietStart').value,
@@ -4363,8 +4371,17 @@ async function skillsPanel(){
   modal('Habilidades','<div class="small">Cargando habilidades…</div>');
   try{
     const list=await window.ISABELLA_AI.listSkills();
-    modal('Habilidades',`<button id="newPersonalSkill" class="secondary">＋ Crear habilidad personal</button>${list.map((s,i)=>`<div class="skill-row"><div class="row-main"><div class="skill-agent-label">${s.agent==='sofia'?'SOFÍA':'ISABELLA'}${s.source==='personal'?' · PERSONAL':''}</div><b>${esc(s.name)}</b><div class="small">${esc(s.description)}</div><div class="skill-meta">v${Number(s.version||1)} · ${s.enabled===false?'Pausada':'Activa'}</div>${s.source==='personal'?`<div class="skill-controls"><button data-skill-edit="${i}">Editar y revisar</button><button data-skill-toggle="${i}">${s.enabled===false?'Activar':'Pausar'}</button><button data-skill-history="${i}">Versiones</button></div>`:''}</div></div>`).join('')}`);
+    const pack=window.MINDS_AKTE_SKILLS,packRows=pack?pack.akteSkillRows():[];
+    const installed=new Set(list.filter(s=>s.source==='personal'&&s.agent==='isabella').map(s=>s.slug));
+    const missing=packRows.filter(r=>!installed.has(r.slug));
+    const packHtml=pack?`<div class="skill-pack"><div class="row-main"><div class="skill-agent-label">PAQUETE · PROJEKTAKTE (ALEMÁN)</div><b>Protokoll, Jour fixe, Schriftverkehr, E-Mails, Fristen…</b><div class="small">${packRows.length} habilidades de trabajo en alemán ligadas a la Akte. Isabella las usa aquí y Claude las ofrece en el menú «+» → Window. Si editas una aquí, Claude usa tu versión.</div></div>${missing.length?`<button id="installAktePack" class="primary">${missing.length===packRows.length?'Instalar':'Instalar las '+missing.length+' que faltan'}</button>`:'<div class="skill-meta">Instalado</div>'}</div>`:'';
+    modal('Habilidades',`${packHtml}<button id="newPersonalSkill" class="secondary">＋ Crear habilidad personal</button>${list.map((s,i)=>`<div class="skill-row"><div class="row-main"><div class="skill-agent-label">${s.agent==='sofia'?'SOFÍA':'ISABELLA'}${s.source==='personal'?' · PERSONAL':''}</div><b>${esc(s.name)}</b><div class="small">${esc(s.description)}</div><div class="skill-meta">v${Number(s.version||1)} · ${s.enabled===false?'Pausada':'Activa'}</div>${s.source==='personal'?`<div class="skill-controls"><button data-skill-edit="${i}">Editar y revisar</button><button data-skill-toggle="${i}">${s.enabled===false?'Activar':'Pausar'}</button><button data-skill-history="${i}">Versiones</button></div>`:''}</div></div>`).join('')}`);
     $('#newPersonalSkill').onclick=()=>window.MINDS_PROPOSALS.edit({kind:'skill_proposal',agent:'isabella',preferred_tools:[]});
+    const installPack=$('#installAktePack');
+    if(installPack)installPack.onclick=async()=>{installPack.disabled=true;installPack.textContent='Instalando…';
+      const {error}=await window.MINDS_SUPABASE.from('minds_user_skills').insert(missing);
+      if(error){installPack.disabled=false;installPack.textContent='Reintentar';say('assistant','No pude instalar el paquete de habilidades: '+error.message);return}
+      void skillsPanel()};
     $$('[data-skill-edit]').forEach(b=>b.onclick=()=>window.MINDS_PROPOSALS.edit({...list[Number(b.dataset.skillEdit)],kind:'skill_proposal',request_id:crypto.randomUUID()}));
     $$('[data-skill-toggle]').forEach(b=>b.onclick=async()=>{b.disabled=true;const x=list[Number(b.dataset.skillToggle)];const {error}=await window.MINDS_SUPABASE.from('minds_user_skills').update({enabled:x.enabled===false,updated_at:new Date().toISOString()}).eq('id',x.id);if(error){b.disabled=false;say('assistant','No pude cambiar la habilidad: '+error.message)}else void skillsPanel()});
     $$('[data-skill-history]').forEach(b=>b.onclick=async()=>{

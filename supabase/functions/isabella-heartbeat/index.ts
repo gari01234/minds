@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {cleanLegacyConversation,closeConversation} from "../_shared/conversations.ts";
 import {checked} from "../_shared/cognitive.ts";
 import {runSituationalReview} from "../_shared/situational-review-runner.mjs";
+import {runAkteAttention} from "../_shared/akte-attention.mjs";
 
 function json(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
 function localDateISO(tz:string,date=new Date()){
@@ -223,10 +224,12 @@ Deno.serve(async(req:Request)=>{
       const watchChecks=await runWatchChecks(sb,userId,routineTz);
       const contextMaintenance=await maintainConversationContext(sb,userId);
       const situationalReview=await runSituationalReview(sb,userId,routineTz,now,(candidate:any)=>publishCandidate(sb,userId,candidate));
+      // Projektakte: Fristen due within two days and entries awaiting confirmation (daytime only, never throws).
+      const akteAttention=await runAkteAttention(sb,userId,{now,tz:routineTz});
       const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0||situationalReview.status==="error";
       await finishRun(sb,run,heartbeatError?"error":"success",{
         timezone:routineTz,candidates:candidates.length,new_events:created,
-        prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,context_maintenance:contextMaintenance,situational_review:situationalReview
+        prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,context_maintenance:contextMaintenance,situational_review:situationalReview,akte_attention:akteAttention
       },contextMaintenance.status==="error"?contextMaintenance.detail:(watchChecks.errors?String(watchChecks.errors)+" watch checks failed":undefined));
       results.push({user_id:userId,status:heartbeatError?"error":"success",candidates:candidates.length,new_events:created,prospective_memory_expiry:expirySweep,review_economy_expiry:reviewExpiry,watch_checks:watchChecks,situational_review:situationalReview});
     }catch(e){

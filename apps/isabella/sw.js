@@ -46,6 +46,7 @@ const SHELL = [
   './dashboard-model.js?v=5',
   './credit-model.js?v=1',
   './credit.js?v=1',
+  './akte-skills.js?v=1',
   './calendar-colors.js?v=1',
   './dashboard.js?v=7',
   './manifest.webmanifest?v=2',
