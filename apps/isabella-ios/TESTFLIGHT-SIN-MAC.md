@@ -1,6 +1,8 @@
 # Window · Primera instalación mediante TestFlight (sin Mac)
 
-**Estado 29/10/2026, tras los runs #5 y #6:** archivo y exportación App Store Connect correctos, pero los tres targets exportados incumplen su requisito designado. El nombre exigido por ese requisito y la autoridad del certificado mostrada por `codesign` difieren y solo coinciden tras normalización Unicode NFC. El control de la PR #235 lo detecta y detiene la subida. La causa coincide con el fallo reproducido por Apple DTS en el reporte existente **FB24633162**; ver sección C.1. **No hay un build aceptado ni probado en iPhone.** El siguiente paso es contactar con Developer Programs por el nombre técnico del equipo y el certificado afectado. No repetir el mismo upload ni regenerar la API key. App IDs, App Group, ficha Window y clave Admin ya están configurados; el icono sigue siendo provisional.
+**Estado 1/11/2026, run #7 ([41333720687](https://github.com/gari01234/minds/actions/runs/41333720687)), modo `upload-local-signing`:** firma en el runner con un certificado Apple Distribution creado por API (sección C.2). Los tres targets cumplen su requisito designado con el requisito por defecto (no hizo falta el respaldo por Team ID), el verificador `distribution` pasó y Apple aceptó la subida: `UPLOAD SUCCEEDED with no errors`, build **0.1.0 (7)**, Delivery UUID `0f61197a-7810-44bc-83ba-b60bb24bb8de`. Pendiente: procesamiento en App Store Connect, cumplimiento de exportación, grupo de Internal Testing e instalación real en iPhone. El modo cloud (`upload`) sigue bloqueado por FB24633162 (sección C.1); para próximas subidas usar `upload-local-signing`.
+
+**Estado anterior (29/10/2026, runs #5 y #6):** archivo y exportación correctos, pero los tres targets exportados con firma cloud incumplían su requisito designado por una diferencia de normalización Unicode en el nombre del equipo (sección C.1).
 
 ## A. Prueba de compilación (superada el 28/10/2026)
 
