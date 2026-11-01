@@ -1,12 +1,6 @@
 name: Window code preparation
+# On demand only (Actions → Run workflow): each run makes several calls to a large model.
 on:
-  push:
-    branches: [main]
-    paths:
-      - '.github/workflows/window-code.yml'
-      - 'scripts/window-code-runner.mjs'
-  schedule:
-    - cron: '35 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
