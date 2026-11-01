@@ -17,7 +17,7 @@ test('Work Panorama binds all buttons and does not throw on successful source re
     sb:{from:q,rpc:async()=>({data:{},error:null})},
     $:selector=>selector==='#workBody'?body:null,
     $$:selector=>selector==='[data-work-go]'?go:selector==='[data-work-edit-task]'?task:[],
-    esc:x=>String(x),projectModelPanel:()=>'<div>Model</div>',
+    esc:x=>String(x),projectModelPanel:()=>'<div>Model</div>',projektakteMarkup:rows=>Array.isArray(rows)?'<section>Akte</section>':'',
     window:{ISABELLA_APP:{openCanonicalTaskById:()=>{}}},
     document:{querySelector:()=>({click(){}})}
   };

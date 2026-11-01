@@ -150,7 +150,7 @@ test('The connector answers 401 with a metadata pointer and runs without the gat
   assert.match(fn,/authorization_servers:\[SUPABASE_URL\+"\/auth\/v1"\]/);
   assert.match(fn,/await sb\.auth\.getUser\(token\)/);
   assert.match(cfg,/\[functions\.window-mcp\]\s*\nverify_jwt = false\nentrypoint = "\.\/functions\/window-mcp\/index\.ts"/);
-  for(const name of ['overview','list_projects','project_context','search_files','read_file','list_tasks','list_events','list_threads','read_thread','create_task','update_task','save_to_thread'])
+  for(const name of ['overview','open_project','open_topic','search','fetch','list_tasks','list_events','create_task','update_task','close_session','record_decision','file_document','update_project_brief','rename_topic'])
     assert.ok(fn.includes('registerTool("'+name+'"'),name);
 });
 
