@@ -145,21 +145,44 @@ let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnap
 
 /* Build 90.3 — Project as a usable, source-bound understanding lens.
    Read-only projection: no bucket creation, canonical mutation or secondary model. */
+// Proposed register entries wait for Gari: one tap confirms or discards them.
+async function decideAkteEntry(id,decision){
+  if(!id||!['confirmed','rejected'].includes(decision))return;
+  const patch={status:decision,updated_at:new Date().toISOString(),...(decision==='confirmed'?{confirmed_at:new Date().toISOString()}:{})};
+  const {error}=await sb.from('minds_work_memory').update(patch).eq('id',id).eq('status','proposed');
+  if(error){setStatus('No pude guardar la decisión. Inténtalo de nuevo.');return}
+  await renderOverview();
+}
+function projektakteMarkup(rows){
+  if(!Array.isArray(rows))return '';
+  const brief=rows.find(r=>r.memory_type==='document_state'&&r.metadata?.kind==='projektsteckbrief');
+  const register=rows.filter(r=>r.memory_type==='decision'||r.memory_type==='deadline');
+  if(!brief&&!register.length)return '';
+  const pending=register.filter(r=>r.status==='proposed'),done=register.filter(r=>r.status==='confirmed').slice(0,8);
+  const row=r=>'<article class="work-akte-entry'+(r.status==='proposed'?' is-proposed':'')+'"><span class="work-akte-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(akteDate(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+
+    ((r.metadata?.quelle||r.metadata?.thema)?'<small>'+esc([r.metadata?.thema,r.metadata?.quelle].filter(Boolean).join(' · '))+'</small>':'')+
+    (r.status==='proposed'?'<div class="work-akte-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div>':'')+'</article>';
+  return '<section class="work-akte"><div class="work-akte-grid">'+
+    (brief?'<div class="work-akte-brief"><div class="work-overview-section-head"><h3>Projektsteckbrief</h3><small>'+esc('aktualisiert '+akteDate(brief.updated_at))+'</small></div><div class="work-akte-brief-text">'+esc(brief.body)+'</div></div>':'')+
+    (register.length?'<div class="work-akte-register"><div class="work-overview-section-head"><h3>Entscheidungen & Fristen</h3>'+(pending.length?'<small>'+pending.length+' zu bestätigen</small>':'')+'</div>'+pending.map(row).join('')+done.map(row).join('')+'</div>':'')+
+    '</div></section>';
+}
 async function renderOverview(){
   const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
   function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
   const body=$('#workBody'),projectId=project.id;
   body.classList.add('work-overview-host');
   body.innerHTML='<div class="work-empty">Leyendo el estado del proyecto…</div>';
-  const [t,c,f,m]=await Promise.allSettled([
+  const [t,c,f,m,a]=await Promise.allSettled([
     sb.from('isabella_tasks').select('id,title,due_date,assignee,work_status').eq('project_id',projectId).is('completed_at',null).is('archived_at',null).order('due_date',{ascending:true,nullsFirst:false}).limit(80),
     sb.from('minds_work_claims').select('id,statement,status,provenance_class,claim_type').eq('project_id',projectId).in('status',['proposed','disputed']).order('updated_at',{ascending:false}).limit(40),
     sb.from('minds_work_files').select('id',{count:'exact',head:true}).eq('project_id',projectId),
-    sb.rpc('minds_project_model_snapshot',{p_project_id:projectId})
+    sb.rpc('minds_project_model_snapshot',{p_project_id:projectId}),
+    sb.from('minds_work_memory').select('id,memory_type,title,body,status,occurred_at,metadata,updated_at,created_at').eq('project_id',projectId).in('memory_type',['document_state','decision','deadline']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(60)
   ]);
   if(view!=='overview'||project?.id!==projectId)return;
   const norm=r=>r.status==='fulfilled'&&!r.value?.error?r.value:null;
-  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m);
+  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m),akteResult=norm(a);
   const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
   projectModelSnapshot=modelResult?.data||null;
   const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
@@ -171,6 +194,7 @@ async function renderOverview(){
   body.innerHTML='<div class="work-overview">'+
     '<div class="work-overview-intro"><div class="eyebrow">MINDS · PROJECT</div><h2>Panorama de '+esc(project.name)+'</h2><p>Lectura operativa del proyecto. Los hechos, inferencias y decisiones conservan su procedencia y autoridad propias.</p></div>'+
     '<div class="work-overview-coverage">'+esc('Fuentes consultadas: '+known+'/4 · '+filesLabel+' · '+revLabel)+(known<4?'<p>La lectura es parcial: alguna fuente no respondió.</p>':'')+'</div>'+
+    projektakteMarkup(akteResult?.data||null)+
     '<div class="work-overview-columns">'+
     '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Movimientos abiertos</h3><button data-work-go="planner">Abrir Planner ↗</button></div>'+
     (taskResult?taskText:'<p class="small">No pude consultar las tareas de este proyecto.</p>')+
@@ -183,8 +207,8 @@ async function renderOverview(){
     '</div>';
   $$('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
   $$('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
+  $$('[data-akte-decide]').forEach(button=>button.onclick=()=>void decideAkteEntry(button.dataset.akteId,button.dataset.akteDecide));
 }
-
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
 const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
 function knowledgeFlags(c){
@@ -788,7 +812,7 @@ async function saveTask(existing){
 
 async function loadThreads(){
   const {data,error}=await sb.from('minds_work_threads')
-    .select('id,project_id,conversation_id,title,summary,status,capability_profile,sort_order,last_activity_at,updated_at')
+    .select('id,project_id,conversation_id,title,summary,status,capability_profile,sort_order,last_activity_at,updated_at,metadata')
     .eq('project_id',project.id).in('status',['active','archived'])
     .order('sort_order',{ascending:true}).order('updated_at',{ascending:false});
   if(error)throw error;threads=data||[];
@@ -931,7 +955,7 @@ function threadMessageMarkup(m){
   const deliverables=groups.deliverables.length?`<div class="work-thread-artifacts">${groups.deliverables.slice(0,8).map(a=>a?.storage_path?`<a href="#" data-thread-artifact="${esc(a.storage_path)}"><span>${esc(threadArtifactLabel(a.kind))}</span>${esc(a.title||'Archivo')}</a>`:'').join('')}</div>`:'';
   // Messages Claude saved through the Window connector carry their author.
   const author=m.metadata?.source==='claude_connector'&&role==='assistant'?'<div class="work-thread-author">Claude</div>':'';
-  return `<article class="work-thread-message ${role}${author?' from-claude':''}">${author}${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}${role==='assistant'&&!sources.length?'<div class="work-thread-source-boundary">Esta respuesta no incluye fuentes citadas verificables.</div>':''}${role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-thread-continue="${esc(m.client_key||m.id||'')}">Continuar respuesta</button></div>`:''}</article>`;
+  return `<article class="work-thread-message ${role}${author?' from-claude':''}">${author}${copy?`<div class="work-thread-message-copy">${window.ISABELLA_APP?.formatMessageText?.(copy)||esc(copy).replace(/\n/g,'<br>')}</div>`:''}${previews}${deliverables}${sources.length?`<details><summary>Fuentes</summary>${sources.slice(0,6).map(s=>`<div class="small">${esc(s.title||s.url||'Fuente')}</div>`).join('')}</details>`:''}${role==='assistant'&&!sources.length&&!author?'<div class="work-thread-source-boundary">Esta respuesta no incluye fuentes citadas verificables.</div>':''}${role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-thread-continue="${esc(m.client_key||m.id||'')}">Continuar respuesta</button></div>`:''}</article>`;
 }
 async function hydrateThreadArtifacts(root=document){
   const files=[...root.querySelectorAll?.('[data-thread-artifact]')||[]],images=[...root.querySelectorAll?.('[data-thread-artifact-image]')||[]];
@@ -961,14 +985,30 @@ function setThreadProgress(id,phase,label){
   const form=$('#workThreadForm');
   if(form&&activeThreadId===id)form.classList.toggle('is-busy',threadInFlight.has(id));
 }
+// Projektakte (German): the topic's Themenblatt as written by Claude through the Window connector.
+function akteDate(iso){const m=String(iso||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]+'.'+m[1]:''}
+function themenblattMarkup(thread){
+  const t=thread?.metadata?.themenblatt;if(!t||!t.stand)return '';
+  const items=(arr,fn)=>Array.isArray(arr)&&arr.length?'<ul>'+arr.map(x=>'<li>'+fn(x)+'</li>').join('')+'</ul>':'';
+  const decisions=items(t.entscheidungen,e=>esc((e.datum?akteDate(e.datum)+' · ':'')+e.text)+(e.quelle?' <small>'+esc(e.quelle)+'</small>':'')+(e.bestaetigt?'':' <em>vorgeschlagen</em>'));
+  return `<details class="work-themenblatt" open><summary><span>Themenblatt</span><small>${esc(['aktualisiert '+akteDate(t.aktualisiert_am),t.aktualisiert_von].filter(Boolean).join(' · '))}</small></summary>
+    <div class="work-themenblatt-body"><p class="work-themenblatt-stand">${esc(t.stand)}</p>
+    ${decisions?'<h4>Entscheidungen</h4>'+decisions:''}
+    ${items(t.offene_fragen,x=>esc(x))?'<h4>Offene Fragen</h4>'+items(t.offene_fragen,x=>esc(x)):''}
+    ${items(t.naechste_schritte,x=>esc(x))?'<h4>Nächste Schritte</h4>'+items(t.naechste_schritte,x=>esc(x)):''}
+    ${Array.isArray(t.dokumente)&&t.dokumente.length?'<p class="work-themenblatt-docs"><small>Dokumente: '+esc(t.dokumente.map(d=>d?.name||d).join(', '))+'</small></p>':''}</div></details>`;
+}
+function claudeContinueUrl(thread){
+  return 'https://claude.ai/new?q='+encodeURIComponent('Retoma en Window el proyecto '+project.name+', tema «'+thread.title+'»: abre el tema y dime dónde estamos.');
+}
 async function renderThreadConversation(id){
   const thread=threads.find(x=>x.id===id);if(!thread){activeThreadId=null;await renderThreads();return}
   const body=$('#workBody');body.innerHTML='<div class="surface-loading">Abriendo Thread…</div>';
   try{
     const messages=await loadThreadMessages(thread);
     body.innerHTML=`<section class="work-thread-conversation">
-      <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div><button data-thread-actions class="work-thread-head-more" aria-label="Opciones del Thread">•••</button></header>
-      <div class="work-thread-log" id="workThreadLog">${messages.map(threadMessageMarkup).join('')||'<div class="work-thread-empty">Este Thread está vacío. Empieza con la primera pregunta o tarea.</div>'}</div>
+      <header class="work-thread-head"><button data-thread-back class="text-btn">‹ Threads</button><div><strong>${esc(thread.title)}</strong><span>${esc(project.name)}</span></div><a class="work-thread-claude" href="${esc(claudeContinueUrl(thread))}" target="_blank" rel="noopener" title="Abrir este tema en Claude con el conector Window">Continuar en Claude</a><button data-thread-actions class="work-thread-head-more" aria-label="Opciones del Thread">•••</button></header>
+      ${themenblattMarkup(thread)}<div class="work-thread-log" id="workThreadLog">${messages.map(threadMessageMarkup).join('')||'<div class="work-thread-empty">Este Thread está vacío. Empieza con la primera pregunta o tarea.</div>'}</div>
       <div class="work-thread-compose-region"><div id="workThreadProgress" class="chat-activity work-thread-progress" role="status" aria-live="polite" data-phase="${esc(threadProgress.phase)}" ${threadProgress.id===thread.id&&threadProgress.label?'':'hidden'}>${threadProgress.id===thread.id?esc(threadProgress.label):''}</div><form class="work-thread-composer ${threadInFlight.has(thread.id)?'is-busy':''}" id="workThreadForm"><textarea id="workThreadInput" rows="1" placeholder="Preguntar en ${esc(thread.title)}…"></textarea><button class="send" aria-label="Enviar"><svg class="chat-ui-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 19V5m-6 6 6-6 6 6"/></svg></button></form></div>
     </section>`;
     $('[data-thread-back]').onclick=()=>{activeThreadId=null;void renderThreads()};

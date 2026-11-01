@@ -11,13 +11,13 @@ export function localDay(date=new Date(),tz=TZ){
   return g('year')+'-'+g('month')+'-'+g('day');
 }
 export function addDays(iso,n){const d=new Date(iso+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
-const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
-const clip=(s,n)=>{const t=String(s||'');return t.length>n?t.slice(0,n)+'…':t};
-const isDay=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))&&!isNaN(Date.parse(String(s)+'T12:00:00Z'));
+export const norm=s=>String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+export const clip=(s,n)=>{const t=String(s||'');return t.length>n?t.slice(0,n)+'…':t};
+export const isDay=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))&&!isNaN(Date.parse(String(s)+'T12:00:00Z'));
 
 // A message the model can show Gari as-is.
 export class ToolError extends Error{constructor(message){super(message);this.name='ToolError'}}
-function must(res,label){
+export function must(res,label){
   if(res&&res.error)throw new Error(label+': '+(res.error.message||res.error.code||'query_failed'));
   return res?res.data:null;
 }
@@ -182,7 +182,7 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
   }
 
   async function threadById(id){
-    const t=must(await sb.from('minds_work_threads').select('id,title,summary,status,project_id,conversation_id').eq('user_id',userId).eq('id',String(id||'')).maybeSingle(),'thread');
+    const t=must(await sb.from('minds_work_threads').select('id,title,summary,status,project_id,conversation_id,metadata').eq('user_id',userId).eq('id',String(id||'')).maybeSingle(),'thread');
     if(!t)throw new ToolError('No encuentro ese thread en Window.');
     return t;
   }
@@ -261,5 +261,5 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
     return {saved:{thread_id:thread.id,thread:thread.title,project:names.get(thread.project_id)||null,messages:rows.length,summary_updated:!!patch.summary}};
   }
 
-  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,createTask,updateTask,saveToThread,resolveProject};
+  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,createTask,updateTask,saveToThread,resolveProject,projectList,threadById};
 }
