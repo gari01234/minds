@@ -19,11 +19,13 @@ test('Build 90.3 Project understanding reads the canonical project data and neve
  assert.ok(body.includes("sb.from('isabella_tasks').select("));
  assert.ok(body.includes("sb.from('minds_work_claims').select("));
  assert.ok(body.includes("sb.from('minds_work_files').select("));
- assert.ok(body.includes("sb.rpc('minds_project_model_snapshot'"));
- assert.ok(body.includes('projectModelPanel()'));
+ // Cockpit (Nov 2026): the project model reading lives in Conocimiento, not in Panorama.
+ assert.ok(body.includes("sb.from('minds_work_memory').select("));
+ assert.ok(body.includes("sb.from('minds_work_threads').select("));
+ assert.ok(body.includes("sb.from('isabella_events').select("));
+ assert.ok(!body.includes('minds_project_model_snapshot'));
  assert.ok(body.includes("project?.id!==projectId"));
- assert.ok(body.includes('No pude consultar las tareas de este proyecto.'));
- assert.ok(body.includes('no demuestra cobertura completa'));
+ assert.ok(work.includes('No pude consultar las tareas de este proyecto.'));
  assert.ok(!body.includes('await loadPlanner()'),'Overview must not create default buckets as a side effect');
  assert.ok(!body.includes('.insert('));
  assert.ok(!body.includes('.update('));

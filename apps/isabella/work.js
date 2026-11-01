@@ -143,7 +143,7 @@ async function renderSelfReview(){
     catch(e){b.disabled=false;setStatus('No pude guardar tu revisión: '+(e.message||String(e)))}
   });
 }
-let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnapshot=null;
+let knowledgeRows=[],knowledgeFilter='review',knowledgeQuery='',projectModelSnapshot=null;
 
 /* Build 90.3 — Project as a usable, source-bound understanding lens.
    Read-only projection: no bucket creation, canonical mutation or secondary model. */
@@ -178,82 +178,163 @@ async function undoSteckbrief(id){
   setStatus('Projektsteckbrief: vorherige Version wiederhergestellt.');
   await renderOverview();
 }
-function aktePflegeLine(state){
-  const run=state?.projects?.[project?.id]?.letzter_lauf;if(!run)return '';
-  const when=akteDate(run.am);
-  if(run.status==='fehler')return '<p class="work-akte-pflege">Isabella no pudo revisar la Akte la última noche ('+esc(when)+'). Lo vuelve a intentar esta noche.</p>';
-  if(run.status==='nichts_neu')return '<p class="work-akte-pflege">Akte-Pflege · '+esc(when)+' · nada nuevo desde la última revisión.</p>';
-  const parts=[run.steckbrief?'Steckbrief aktualisiert':'',run.fristen?run.fristen+' Frist(en)':'',run.entscheidungen?run.entscheidungen+' Entscheidung(en)':'',run.aufgaben?run.aufgaben+' Aufgabe(n)':'',run.widersprueche?run.widersprueche+' Widerspruch/-sprüche':''].filter(Boolean);
-  return '<p class="work-akte-pflege">Akte-Pflege · '+esc(when)+' · '+esc(run.zusammenfassung||(parts.length?parts.join(', '):'nada relevante en lo nuevo'))+(parts.length&&run.zusammenfassung?' <small>('+esc(parts.join(', '))+')</small>':'')+'</p>';
+async function completeTaskFromPanorama(id){
+  const {error}=await sb.from('isabella_tasks').update({completed_at:new Date().toISOString(),work_status:'completed',updated_at:new Date().toISOString()}).eq('id',id);
+  if(error){setStatus('No pude marcar la tarea como hecha.');return}
+  await renderOverview();
 }
-function projektakteMarkup(rows,pflege){
-  if(!Array.isArray(rows))return '';
-  const brief=rows.find(r=>r.memory_type==='document_state'&&r.metadata?.kind==='projektsteckbrief');
-  const register=rows.filter(r=>r.memory_type==='decision'||r.memory_type==='deadline');
-  const tasksProposed=rows.filter(r=>r.memory_type==='commitment'&&r.status==='proposed'&&r.metadata?.kind==='aufgabe');
-  const conflicts=rows.filter(r=>r.memory_type==='open_question'&&r.status==='proposed'&&r.metadata?.kind==='widerspruch');
-  const line=aktePflegeLine(pflege);
-  if(!brief&&!register.length&&!tasksProposed.length&&!conflicts.length&&!line)return '';
-  const pending=register.filter(r=>r.status==='proposed'),done=register.filter(r=>r.status==='confirmed').slice(0,8);
-  const source=r=>(r.metadata?.quelle||r.metadata?.thema)?'<small>'+esc([r.metadata?.thema,r.metadata?.quelle].filter(Boolean).join(' · '))+(r.metadata?.source==='isabella_akte_pflege'?' · Isabella':'')+'</small>':'';
-  const row=r=>'<article class="work-akte-entry'+(r.status==='proposed'?' is-proposed':'')+'"><span class="work-akte-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(akteDate(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+source(r)+
-    (r.status==='proposed'?'<div class="work-akte-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div>':'')+'</article>';
-  const taskRow=r=>'<article class="work-akte-entry is-proposed"><span class="work-akte-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(akteDate(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+source(r)+
-    '<div class="work-akte-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>';
-  const conflictRow=r=>'<article class="work-akte-entry is-proposed is-conflict"><span class="work-akte-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="work-akte-detail">'+esc(r.body)+'</small>':'')+
-    '<div class="work-akte-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>';
-  const canUndo=brief&&Array.isArray(brief.metadata?.versionen)&&brief.metadata.versionen.length;
-  const by=brief?.metadata?.aktualisiert_von;
-  return '<section class="work-akte">'+line+'<div class="work-akte-grid">'+
-    (brief?'<div class="work-akte-brief"><div class="work-overview-section-head"><h3>Projektsteckbrief</h3><small>'+esc(['aktualisiert '+akteDate(brief.updated_at),by].filter(Boolean).join(' · '))+'</small>'+(canUndo?'<button type="button" class="work-akte-undo" data-akte-undo="'+esc(brief.id)+'">Rückgängig</button>':'')+'</div><div class="work-akte-brief-text">'+esc(brief.body)+'</div></div>':'')+
-    ((register.length||tasksProposed.length||conflicts.length)?'<div class="work-akte-register"><div class="work-overview-section-head"><h3>Entscheidungen & Fristen</h3>'+((pending.length+tasksProposed.length+conflicts.length)?'<small>'+(pending.length+tasksProposed.length+conflicts.length)+' zu bestätigen</small>':'')+'</div>'+
-      conflicts.map(conflictRow).join('')+pending.map(row).join('')+tasksProposed.map(taskRow).join('')+done.map(row).join('')+'</div>':'')+
-    '</div></section>';
+// Panorama cockpit (pure markup): what needs Gari, the next 14 days, the Steckbrief, topics, register and new documents.
+let paraTiExpanded=false;
+const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
+function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
+const COCKPIT_DAY=864e5;
+function cockpitDayDiff(from,to){return Math.round((Date.parse(to+'T12:00:00Z')-Date.parse(from+'T12:00:00Z'))/COCKPIT_DAY)}
+function cockpitAddDays(day,n){const d=new Date(day+'T12:00:00Z');d.setUTCDate(d.getUTCDate()+n);return d.toISOString().slice(0,10)}
+function cockpitWeekday(day){try{return new Date(day+'T12:00:00Z').toLocaleDateString('es-ES',{weekday:'short',timeZone:'UTC'}).replace('.','')}catch{return ''}}
+function cockpitShort(day){const m=String(day||'').match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[3]+'.'+m[2]+'.':''}
+function cockpitAgo(iso,today){
+  const day=String(iso||'').slice(0,10);if(!day)return '';
+  const n=cockpitDayDiff(day,today);
+  return n<=0?'hoy':n===1?'ayer':n<14?'hace '+n+' días':n<60?'hace '+Math.round(n/7)+' semanas':'hace '+Math.round(n/30)+' meses';
+}
+function cockpitIn(n){return n===0?'hoy':n===1?'mañana':n===-1?'ayer':n>1?'en '+n+' días':'hace '+(-n)+' días'}
+function cockpitPflegeLine(state){
+  const run=state?.projects?.[project?.id]?.letzter_lauf;if(!run)return '';
+  const when=run.am?akteDate(run.am):'';
+  if(run.status==='fehler')return '<p class="cockpit-pflege"><b>Isabella:</b> no pudo revisar la Akte la última noche ('+esc(when)+'). Lo vuelve a intentar esta noche.</p>';
+  if(run.status==='nichts_neu')return '<p class="cockpit-pflege"><b>Isabella, '+esc(when)+':</b> nada nuevo desde la última revisión.</p>';
+  const parts=[run.steckbrief?'Steckbrief actualizado':'',run.fristen?run.fristen+' Frist(en)':'',run.entscheidungen?run.entscheidungen+' Entscheidung(en)':'',run.aufgaben?run.aufgaben+' Aufgabe(n)':'',run.widersprueche?run.widersprueche+' Widerspruch/-sprüche':''].filter(Boolean);
+  return '<p class="cockpit-pflege"><b>Isabella, '+esc(when)+':</b> '+esc(run.zusammenfassung||(parts.length?'propuso '+parts.join(', ')+'.':'nada relevante en lo nuevo.'))+'</p>';
+}
+function cockpitSource(r){
+  const bits=[r.metadata?.thema,r.metadata?.quelle,r.metadata?.source==='isabella_akte_pflege'?'propuesta de Isabella':r.metadata?.source==='claude_connector'?'Claude':''].filter(Boolean);
+  return bits.length?'<small>'+esc(bits.join(' · '))+'</small>':'';
+}
+function cockpitParaTi(m){
+  const cards=[];
+  for(const r of m.conflicts)cards.push('<article class="cockpit-card is-conflict"><span class="cockpit-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="cockpit-detail">'+esc(r.body)+'</small>':'')+
+    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>');
+  for(const r of m.pending)cards.push('<article class="cockpit-card"><span class="cockpit-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(cockpitShort(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+
+    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
+  for(const r of m.proposedTasks)cards.push('<article class="cockpit-card"><span class="cockpit-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(cockpitShort(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+
+    '<div class="cockpit-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
+  for(const t of m.overdue)cards.push('<article class="cockpit-card is-overdue"><span class="cockpit-kind">Vencida · '+esc(cockpitIn(cockpitDayDiff(m.today,t.due_date)))+'</span><p>'+esc(t.title||'Sin título')+'</p>'+(t.assignee?'<small>'+esc(t.assignee)+'</small>':'')+
+    '<div class="cockpit-actions"><button type="button" class="secondary" data-work-edit-task="'+esc(t.id)+'">Abrir tarea</button><button type="button" class="secondary" data-cockpit-done="'+esc(t.id)+'">Hecho</button></div></article>');
+  const toConfirm=m.conflicts.length+m.pending.length+m.proposedTasks.length;
+  const head=[toConfirm?toConfirm+' por confirmar':'',m.overdue.length?m.overdue.length+(m.overdue.length===1?' vencida':' vencidas'):''].filter(Boolean).join(' · ');
+  const limit=8,shown=paraTiExpanded?cards:cards.slice(0,limit);
+  return '<section class="cockpit-section" aria-labelledby="cockpitParaTi"><div class="cockpit-head"><h2 id="cockpitParaTi">Para ti</h2><span>'+esc(head||'Nada pendiente')+'</span></div>'+
+    (cards.length?'<div class="cockpit-cards">'+shown.join('')+'</div>'+(cards.length>limit?'<button type="button" class="cockpit-more" data-cockpit-more>'+(paraTiExpanded?'Mostrar menos':'Mostrar '+(cards.length-limit)+' más')+'</button>':'')
+      :'<p class="cockpit-empty">Todo confirmado y nada vencido. Lo nuevo que encuentren Claude o Isabella aparecerá aquí.</p>')+'</section>';
+}
+function cockpitTimeline(m){
+  const end=cockpitAddDays(m.today,14),byDay=new Map(),add=(day,item)=>{if(!day||day<m.today||day>end)return;if(!byDay.has(day))byDay.set(day,[]);byDay.get(day).push(item)};
+  for(const x of m.tasks){const status=x.work_status&&x.work_status!=='not_started'?workStatusText(x.work_status):'';
+    add(String(x.due_date||'').slice(0,10),{order:2,html:'<button type="button" class="cockpit-line" data-work-edit-task="'+esc(x.id)+'"><span class="cockpit-chip">Aufgabe</span><span class="cockpit-line-title">'+esc(x.title||'Sin título')+'</span>'+((x.assignee||status)?'<small>'+esc([x.assignee,status].filter(Boolean).join(' · '))+'</small>':'')+'</button>'})}
+  for(const r of m.proposedTasks)add(String(r.metadata?.faellig||r.occurred_at||'').slice(0,10),{order:3,html:'<div class="cockpit-line"><span class="cockpit-chip is-proposed">Propuesta</span><span class="cockpit-line-title">'+esc(r.title)+'</span></div>'});
+  for(const r of m.deadlines)add(String(r.occurred_at||'').slice(0,10),{order:0,html:'<div class="cockpit-line"><span class="cockpit-chip is-frist">Frist</span><span class="cockpit-line-title"><b>'+esc(r.title)+'</b></span>'+(r.status==='proposed'?'<small>sin confirmar</small>':(r.metadata?.quelle?'<small>'+esc(r.metadata.quelle)+'</small>':''))+'</div>'});
+  for(const e of m.events)add(String(e.starts_at||'').slice(0,10),{order:1,html:'<div class="cockpit-line"><span class="cockpit-chip is-event">Termin</span><span class="cockpit-line-title">'+esc(e.title||'Termin')+'</span>'+(e.all_day?'':'<small>'+esc(new Date(e.starts_at).toLocaleTimeString('es-ES',{hour:'2-digit',minute:'2-digit'}))+'</small>')+'</div>'});
+  const days=[...byDay.keys()].sort();
+  const rows=days.map(day=>{const n=cockpitDayDiff(m.today,day);return '<div class="cockpit-day"><strong>'+esc(cockpitWeekday(day)+' '+cockpitShort(day))+'</strong>'+(n<=1||n%7===0||day===days[days.length-1]?'<span>'+esc(cockpitIn(n))+'</span>':'')+'</div><div class="cockpit-day-items">'+byDay.get(day).sort((a,b)=>a.order-b.order).map(x=>x.html).join('')+'</div>'}).join('');
+  return '<section class="cockpit-panel cockpit-wide" aria-labelledby="cockpitNext"><div class="cockpit-head"><h2 id="cockpitNext">Próximos 14 días</h2><button type="button" class="cockpit-link" data-work-go="planner">Abrir Planner</button></div>'+
+    (m.tasksError?'<p class="cockpit-empty">No pude consultar las tareas de este proyecto.</p>':rows?'<div class="cockpit-timeline">'+rows+'</div>':'<p class="cockpit-empty">Nada con fecha en los próximos 14 días.</p>')+'</section>';
+}
+function cockpitSteckbrief(m){
+  const b=m.brief;
+  if(!b)return '<section class="cockpit-panel cockpit-side" aria-labelledby="cockpitBrief"><div class="cockpit-head"><h2 id="cockpitBrief">Projektsteckbrief</h2></div><p class="cockpit-empty">Todavía no hay Steckbrief. Pídele a Claude que lo cree al abrir el proyecto: fase, hitos y Beteiligte.</p></section>';
+  const f=b.metadata?.felder||{},list=v=>Array.isArray(v)?v:[];
+  const block=(label,lines)=>lines.length?'<div class="cockpit-brief-block"><span>'+esc(label)+'</span><p>'+lines.join('<br>')+'</p></div>':'';
+  const structured=f&&(f.phase||list(f.beteiligte).length||list(f.meilensteine).length||list(f.prioritaeten).length);
+  const content=structured?
+    block('Beteiligte',list(f.beteiligte).map(x=>typeof x==='string'?esc(x):(x.rolle?'<em>'+esc(x.rolle)+'</em> ':'')+esc(x.name||'')))+
+    block('Meilensteine',list(f.meilensteine).map(x=>typeof x==='string'?esc(x):(x.datum?esc(cockpitShort(x.datum))+' ':'')+esc(x.was||x.text||'')))+
+    block('Prioritäten',list(f.prioritaeten).map(x=>esc(x)))+(f.notizen?block('Notizen',[esc(f.notizen)]):'')
+    :'<div class="cockpit-brief-text">'+esc(b.body||'')+'</div>';
+  const canUndo=Array.isArray(b.metadata?.versionen)&&b.metadata.versionen.length;
+  return '<section class="cockpit-panel cockpit-side" aria-labelledby="cockpitBrief"><div class="cockpit-head"><h2 id="cockpitBrief">Projektsteckbrief</h2>'+(canUndo?'<button type="button" class="cockpit-link" data-akte-undo="'+esc(b.id)+'">Rückgängig</button>':'')+'</div>'+content+
+    '<p class="cockpit-foot">Actualizado '+esc(akteDate(b.updated_at))+(b.metadata?.aktualisiert_von?' · '+esc(b.metadata.aktualisiert_von):'')+'</p></section>';
+}
+function cockpitTopics(m){
+  const fristen=new Map();for(const r of m.deadlines)if(r.metadata?.thema_id)fristen.set(r.metadata.thema_id,(fristen.get(r.metadata.thema_id)||0)+1);
+  const cards=m.threads.map(t=>{
+    const tb=t.metadata?.themenblatt,stand=tb?.stand||t.summary||'';
+    const q=Array.isArray(tb?.offene_fragen)?tb.offene_fragen.length:0,f=fristen.get(t.id)||0;
+    const meta=[q?q+(q===1?' offene Frage':' offene Fragen'):'',f?f+(f===1?' Frist':' Fristen'):''].filter(Boolean).join(' · ');
+    return '<article class="cockpit-topic'+(stand?'':' is-empty')+'"><div class="cockpit-topic-head"><button type="button" data-cockpit-thread="'+esc(t.id)+'">'+esc(t.title)+'</button><span>'+esc(cockpitAgo(tb?.aktualisiert_am||t.last_activity_at||t.updated_at,m.today))+'</span></div>'+
+      '<p>'+esc(stand||'Todavía sin Themenblatt. Se crea al cerrar la primera sesión en Claude.')+'</p>'+(meta?'<small>'+esc(meta)+'</small>':'')+
+      '<a class="cockpit-claude" href="'+esc(claudeContinueUrl(t))+'" target="_blank" rel="noopener noreferrer">'+(stand?'Continuar en Claude':'Empezar en Claude')+'</a></article>';
+  });
+  return '<section class="cockpit-section" aria-labelledby="cockpitTopics"><div class="cockpit-head"><h2 id="cockpitTopics">Temas</h2><button type="button" class="cockpit-link" data-work-go="threads">Todos los Threads</button></div>'+
+    (cards.length?'<div class="cockpit-topics">'+cards.join('')+'</div>':'<p class="cockpit-empty">Todavía no hay temas. Crea uno en Threads o cierra una sesión en Claude.</p>')+'</section>';
+}
+function cockpitRegister(m){
+  const rows=m.confirmed.slice(0,8).map(r=>'<div class="cockpit-register-row"><span class="cockpit-chip'+(r.memory_type==='deadline'?' is-frist':'')+'">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+'</span><div><p>'+esc(r.title)+'</p>'+cockpitSource(r)+'</div><span class="cockpit-date">'+esc(cockpitShort(r.occurred_at||r.confirmed_at||r.created_at))+'</span></div>').join('');
+  return '<section class="cockpit-panel cockpit-wide" aria-labelledby="cockpitRegister"><div class="cockpit-head"><h2 id="cockpitRegister">Entscheidungen &amp; Fristen</h2><span>'+(m.confirmed.length?m.confirmed.length+' bestätigt':'')+'</span></div>'+
+    (rows||'<p class="cockpit-empty">Todavía no hay entradas confirmadas. Lo que confirmes en «Para ti» queda aquí, con fecha y fuente.</p>')+'</section>';
+}
+function cockpitDocs(m){
+  const files=m.files.map(f=>'<button type="button" class="cockpit-file" data-cockpit-file="'+esc(f.id)+'"><span>'+esc(f.name)+'</span><small>'+esc([f.metadata?.art==='email'?'E-Mail':String(f.name||'').split('.').pop().toUpperCase().slice(0,5),f.metadata?.von,cockpitShort(f.created_at)].filter(Boolean).join(' · '))+'</small></button>').join('');
+  return '<div class="cockpit-side cockpit-stack"><section class="cockpit-panel" aria-labelledby="cockpitNew"><div class="cockpit-head"><h2 id="cockpitNew">Nuevo en el Desktop</h2><button type="button" class="cockpit-link" data-work-go="desktop">Abrir Desktop</button></div>'+
+    (files||'<p class="cockpit-empty">El Desktop está vacío.</p>')+(m.fileCount!=null?'<p class="cockpit-foot">'+esc(m.fileCount+' documentos en total')+'</p>':'')+'</section>'+
+    '<section class="cockpit-panel" aria-labelledby="cockpitDocs"><h2 id="cockpitDocs">De los documentos</h2><p class="cockpit-text">'+(m.claimsError?'No pude comprobar el conocimiento del proyecto.':m.claimsToReview?esc(m.claimsToReview+(m.claimsToReview===1?' afirmación espera':' afirmaciones esperan')+' revisión'+(m.claimDeadlines?'; '+m.claimDeadlines+(m.claimDeadlines===1?' parece un plazo.':' parecen plazos.'):'.')):'Nada pendiente de revisar en los documentos.')+'</p>'+
+    '<button type="button" class="cockpit-wide-button" data-work-go="knowledge">Revisar en Conocimiento</button></section></div>';
+}
+function cockpitHeader(m){
+  const f=m.brief?.metadata?.felder||{};
+  const phase=f.phase||'';
+  const milestones=[...(Array.isArray(f.meilensteine)?f.meilensteine:[]).filter(x=>x&&x.datum).map(x=>({day:String(x.datum).slice(0,10),title:x.was||x.text||''})),
+    ...m.deadlines.filter(r=>r.status==='confirmed'&&r.occurred_at).map(r=>({day:String(r.occurred_at).slice(0,10),title:r.title}))]
+    .filter(x=>x.day>=m.today&&x.title).sort((a,b)=>a.day.localeCompare(b.day));
+  const next=milestones[0];
+  const n=next?cockpitDayDiff(m.today,next.day):0;
+  return '<header class="cockpit-header"><div><span class="cockpit-eyebrow">Proyecto</span><h1>'+esc(project.name)+'</h1>'+(phase?'<p>'+esc(phase)+'</p>':'')+'</div>'+
+    (next?'<div class="cockpit-milestone"><div class="cockpit-countdown"><b>'+esc(String(n))+'</b><span>'+(n===1?'día':'días')+'</span></div><div><span class="cockpit-eyebrow">Próximo hito</span><strong>'+esc(next.title)+'</strong><small>'+esc(cockpitWeekday(next.day)+' '+akteDate(next.day))+'</small></div></div>':'')+'</header>';
+}
+function cockpitMarkup(m){
+  return '<div class="work-overview work-cockpit" aria-label="Panorama de '+esc(project.name)+'">'+cockpitHeader(m)+cockpitPflegeLine(m.pflege)+cockpitParaTi(m)+
+    '<div class="cockpit-row">'+cockpitTimeline(m)+cockpitSteckbrief(m)+'</div>'+cockpitTopics(m)+
+    '<div class="cockpit-row is-top">'+cockpitRegister(m)+cockpitDocs(m)+'</div>'+
+    (m.partial?'<p class="cockpit-foot">Lectura parcial: alguna fuente no respondió. Vuelve a abrir el Panorama en un momento.</p>':'')+'</div>';
 }
 async function renderOverview(){
-  const WORK_STATUS_LABELS=Object.freeze({not_started:'Sin empezar',in_progress:'En curso',waiting:'En espera',completed:'Completada'});
-  function workStatusText(value){if(!value)return '';return Object.prototype.hasOwnProperty.call(WORK_STATUS_LABELS,value)?WORK_STATUS_LABELS[value]:'Estado sin clasificar ('+String(value)+')'}
   const body=$('#workBody'),projectId=project.id;
   body.classList.add('work-overview-host');
   body.innerHTML='<div class="work-empty">Leyendo el estado del proyecto…</div>';
-  const [t,c,f,m,a,pf]=await Promise.allSettled([
-    sb.from('isabella_tasks').select('id,title,due_date,assignee,work_status').eq('project_id',projectId).is('completed_at',null).is('archived_at',null).order('due_date',{ascending:true,nullsFirst:false}).limit(80),
-    sb.from('minds_work_claims').select('id,statement,status,provenance_class,claim_type').eq('project_id',projectId).in('status',['proposed','disputed']).order('updated_at',{ascending:false}).limit(40),
-    sb.from('minds_work_files').select('id',{count:'exact',head:true}).eq('project_id',projectId),
-    sb.rpc('minds_project_model_snapshot',{p_project_id:projectId}),
-    sb.from('minds_work_memory').select('id,memory_type,title,body,status,occurred_at,metadata,updated_at,created_at').eq('project_id',projectId).in('memory_type',['document_state','decision','deadline','commitment','open_question']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(80),
-    sb.from('isabella_preferences').select('value').eq('preference_key','akte_pflege').limit(1)
+  const today=localIso(),horizon=cockpitAddDays(today,15);
+  const [t,c,f,a,pf,th,ev]=await Promise.allSettled([
+    sb.from('isabella_tasks').select('id,title,due_date,start_date,assignee,work_status').eq('project_id',projectId).is('completed_at',null).is('archived_at',null).order('due_date',{ascending:true,nullsFirst:false}).limit(150),
+    sb.from('minds_work_claims').select('id,claim_type,status').eq('project_id',projectId).in('status',['proposed','disputed']).limit(1000),
+    sb.from('minds_work_files').select('id,name,source_kind,created_at,storage_path,metadata',{count:'exact'}).eq('project_id',projectId).order('created_at',{ascending:false}).limit(5),
+    sb.from('minds_work_memory').select('id,memory_type,title,body,status,occurred_at,confirmed_at,metadata,updated_at,created_at').eq('project_id',projectId).in('memory_type',['document_state','decision','deadline','commitment','open_question']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(150),
+    sb.from('isabella_preferences').select('value').eq('preference_key','akte_pflege').limit(1),
+    sb.from('minds_work_threads').select('id,title,summary,metadata,last_activity_at,updated_at,conversation_id').eq('project_id',projectId).eq('status','active').order('updated_at',{ascending:false}).limit(12),
+    sb.from('isabella_events').select('id,title,starts_at,all_day').eq('project_id',projectId).gte('starts_at',today).lte('starts_at',horizon).order('starts_at',{ascending:true}).limit(40)
   ]);
   if(view!=='overview'||project?.id!==projectId)return;
-  const norm=r=>r.status==='fulfilled'&&!r.value?.error?r.value:null;
-  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m),akteResult=norm(a),pflegeResult=norm(pf);
-  const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
-  projectModelSnapshot=modelResult?.data||null;
-  const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
-  const taskText=taskRows.map(x=>'<button type="button" class="work-overview-item work-overview-task" data-work-edit-task="'+esc(x.id)+'"><strong>'+esc(x.title||'Sin título')+'</strong><small>'+esc([x.assignee||'Responsable sin indicar',x.due_date||'Sin fecha',workStatusText(x.work_status)].filter(Boolean).join(' · '))+'</small></button>').join('')||'<p class="small">No hay tareas abiertas en la consulta.</p>';
-  const claimText=claimRows.map(x=>'<article class="work-overview-item"><span class="model-badge '+(x.status==='disputed'?'attention':'')+'">'+esc(x.status==='disputed'?'En disputa':'Por revisar')+'</span><p>'+esc(x.statement||'')+'</p><small>'+esc(provenanceNames[x.provenance_class]||x.provenance_class||'Origen sin clasificar')+'</small></article>').join('')||'<p class="small">No hay claims propuestos o disputados en la consulta.</p>';
-  const filesLabel=fileResult?String(fileResult.count??0)+' documentos registrados':'Cobertura documental no comprobable';
-  const rev=projectModelSnapshot?.current_revision;
-  const revLabel=rev?'Revisión del Model: '+String(rev.id||'').slice(0,8):'Sin revisión del Project Model publicada';
-  body.innerHTML='<div class="work-overview">'+
-    '<div class="work-overview-intro"><div class="eyebrow">MINDS · PROJECT</div><h2>Panorama de '+esc(project.name)+'</h2><p>Lectura operativa del proyecto. Los hechos, inferencias y decisiones conservan su procedencia y autoridad propias.</p></div>'+
-    '<div class="work-overview-coverage">'+esc('Fuentes consultadas: '+known+'/4 · '+filesLabel+' · '+revLabel)+(known<4?'<p>La lectura es parcial: alguna fuente no respondió.</p>':'')+'</div>'+
-    projektakteMarkup(akteResult?.data||null,pflegeResult?.data?.[0]?.value||null)+
-    '<div class="work-overview-columns">'+
-    '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Movimientos abiertos</h3><button data-work-go="planner">Abrir Planner ↗</button></div>'+
-    (taskResult?taskText:'<p class="small">No pude consultar las tareas de este proyecto.</p>')+
-    (taskRows.length===80?'<p class="small">Puede haber más tareas abiertas; consulta Planner.</p>':'')+'</section>'+
-    '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Claims en revisión</h3><button data-work-go="knowledge">Ver Conocimiento ↗</button></div>'+
-    (claimResult?claimText:'<p class="small">No pude comprobar el conocimiento del proyecto.</p>')+
-    (claimRows.length===40?'<p class="small">Hay más registros; abre Conocimiento.</p>':'')+'</section></div>'+
-    '<div class="work-overview-model">'+projectModelPanel()+'</div>'+
-    '<div class="work-overview-footer"><button data-work-go="desktop">Abrir Desktop ↗</button><button data-work-go="threads">Abrir Threads ↗</button><p>Los documentos que todavía no están en el Desktop no forman parte de esta lectura. Un modelo sin lagunas registradas no demuestra cobertura completa.</p></div>'+
-    '</div>';
+  const ok=r=>r.status==='fulfilled'&&!r.value?.error?r.value:null;
+  const taskQ=ok(t),claimQ=ok(c),fileQ=ok(f),memQ=ok(a),pflegeQ=ok(pf),threadQ=ok(th),eventQ=ok(ev);
+  const mem=memQ?.data||[],tasks=taskQ?.data||[],claims=claimQ?.data||[];
+  const m={today,tasks,tasksError:!taskQ,claimsError:!claimQ,
+    overdue:tasks.filter(x=>x.due_date&&String(x.due_date).slice(0,10)<today),
+    brief:mem.find(r=>r.memory_type==='document_state'&&r.metadata?.kind==='projektsteckbrief')||null,
+    conflicts:mem.filter(r=>r.memory_type==='open_question'&&r.status==='proposed'&&r.metadata?.kind==='widerspruch'),
+    pending:mem.filter(r=>(r.memory_type==='decision'||r.memory_type==='deadline')&&r.status==='proposed'),
+    proposedTasks:mem.filter(r=>r.memory_type==='commitment'&&r.status==='proposed'&&r.metadata?.kind==='aufgabe'),
+    deadlines:mem.filter(r=>r.memory_type==='deadline'),
+    confirmed:mem.filter(r=>(r.memory_type==='decision'||r.memory_type==='deadline')&&r.status==='confirmed'),
+    threads:threadQ?.data||[],events:eventQ?.data||[],files:fileQ?.data||[],fileCount:fileQ?fileQ.count??null:null,
+    claimsToReview:claims.length,claimDeadlines:claims.filter(x=>x.claim_type==='deadline').length,
+    pflege:pflegeQ?.data?.[0]?.value||null,partial:[taskQ,claimQ,fileQ,memQ,threadQ].some(x=>!x)};
+  body.innerHTML=cockpitMarkup(m);
   $$('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
   $$('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
-  $$('[data-akte-decide]').forEach(button=>button.onclick=()=>void decideAkteEntry(button.dataset.akteId,button.dataset.akteDecide));
+  $$('[data-akte-decide]').forEach(button=>button.onclick=()=>{button.disabled=true;void decideAkteEntry(button.dataset.akteId,button.dataset.akteDecide)});
   $$('[data-akte-task]').forEach(button=>button.onclick=()=>{button.disabled=true;void akteEntryToTask(button.dataset.akteTask)});
   $$('[data-akte-undo]').forEach(button=>button.onclick=()=>{button.disabled=true;void undoSteckbrief(button.dataset.akteUndo)});
+  $$('[data-cockpit-done]').forEach(button=>button.onclick=()=>{button.disabled=true;void completeTaskFromPanorama(button.dataset.cockpitDone)});
+  $$('[data-cockpit-more]').forEach(button=>button.onclick=()=>{paraTiExpanded=!paraTiExpanded;void renderOverview()});
+  $$('[data-cockpit-thread]').forEach(button=>button.onclick=()=>{activeThreadId=button.dataset.cockpitThread;document.querySelector('[data-work-view="threads"]')?.click()});
+  $$('[data-cockpit-file]').forEach(button=>button.onclick=async()=>{const file=m.files.find(x=>x.id===button.dataset.cockpitFile);if(!file)return;const r=await sb.storage.from('minds-work').createSignedUrl(file.storage_path,900);if(r.error||!r.data?.signedUrl){setStatus('No pude abrir el archivo.');return}window.open(r.data.signedUrl,'_blank','noopener')});
 }
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
 const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
@@ -293,25 +374,124 @@ function projectModelPanel(){
     </details>
   </section>`;
 }
+// Conocimiento: triage by document. Quick ✓ / ✗, bulk confirm per document, and "A la Akte" for decisions and deadlines.
+const KN_TYPES={decision:['Entscheidung','Entscheidungen'],deadline:['Frist','Fristen'],requirement:['Anforderung','Anforderungen'],dependency:['Abhängigkeit','Abhängigkeiten'],open_question:['Offene Frage','Offene Fragen'],constraint:['Randbedingung','Randbedingungen'],assumption:['Annahme','Annahmen'],fact:['Fakt','Fakten'],other:['Sonstiges','Sonstiges']};
+const KN_STATES={review:['proposed','disputed'],confirmed:['confirmed'],history:['superseded','rejected','resolved']};
+let knowledgeType='all',knowledgeGroup='document',knowledgeGroupsShown=10,knowledgeOpenGroups=new Set(),knowledgeBusy=new Set();
+function knowledgeOrigin(x){return provenanceNames[x.provenance_class]||x.provenance_class||'Origen sin clasificar'}
+function knowledgeFileOf(c){const e=(c.minds_work_evidence||[]).find(x=>x.source_file_id);return e?e.source_file_id:null}
+function knowledgeDateIn(text){
+  const t=String(text||'');let m=t.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);if(m)return m[1]+'-'+m[2]+'-'+m[3];
+  m=t.match(/\b(\d{1,2})\.(\d{1,2})\.(\d{4})\b/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');
+  return null;
+}
+function knowledgeVisible(){
+  const q=knowledgeQuery.toLocaleLowerCase().trim(),states=KN_STATES[knowledgeFilter]||KN_STATES.review;
+  const fileName=id=>files.find(x=>x.id===id)?.name||'';
+  return knowledgeRows.filter(c=>states.includes(c.status)&&(!q||[c.statement,c.subject,c.topic,c.discipline,fileName(knowledgeFileOf(c))].join(' ').toLocaleLowerCase().includes(q)));
+}
+function knowledgeSummary(){
+  const m=projectModelSnapshot;if(!m)return '';
+  const claims=Array.isArray(m.claims)?m.claims:[],elements=Array.isArray(m.revision_elements)?m.revision_elements:[],perimeter=Array.isArray(m.perimeter)?m.perimeter:[];
+  const understood=claims.filter(x=>x.status==='confirmed'||x.author_kind==='isabella'||x.model_kind).slice(0,3).map(x=>x.statement).filter(Boolean);
+  const gaps=[...elements.filter(x=>x.element_kind==='gap').map(g=>g.metadata?.source_class||g.metadata?.verdict||''),...perimeter.filter(x=>['missing','unknown'].includes(x.coverage)).map(p=>p.source_class)].filter(Boolean).slice(0,3);
+  if(!understood.length&&!gaps.length)return '';
+  return '<section class="kn-summary"><div><h2>Lo que Isabella entiende del proyecto</h2>'+(understood.length?'<ul>'+understood.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ul>':'<p>Todavía no hay una lectura del proyecto.</p>')+'</div>'+
+    '<div><h2>Lo que no sabe</h2><p>'+esc(gaps.length?gaps.join(' · '):'No hay lagunas registradas.')+'</p><details class="kn-tech"><summary>Detalle técnico</summary>'+projectModelPanel()+'</details></div></section>';
+}
+function knowledgeRow(c,canAct){
+  const f=knowledgeFlags(c),type=KN_TYPES[c.claim_type]||KN_TYPES.other,busy=knowledgeBusy.has(c.id);
+  const evidence=c.minds_work_evidence||[];
+  const toAkte=c.claim_type==='deadline'?'Als Frist eintragen':c.claim_type==='decision'?'Als Entscheidung eintragen':'';
+  const actions=canAct?'<div class="kn-actions">'+(c.status==='proposed'?'<button type="button" class="kn-icon" aria-label="Confirmar" data-kn-review="confirmed" data-kn-id="'+esc(c.id)+'"'+(busy?' disabled':'')+'><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button>':'')+
+    '<button type="button" class="kn-icon is-reject" aria-label="Descartar" data-kn-review="rejected" data-kn-id="'+esc(c.id)+'"'+(busy?' disabled':'')+'><svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/></svg></button>'+
+    (toAkte?'<button type="button" class="kn-akte" data-kn-akte="'+esc(c.id)+'"'+(busy?' disabled':'')+'>'+toAkte+'</button>':'')+'</div>':'';
+  return '<div class="kn-row'+(c.claim_type==='deadline'&&canAct?' is-frist':'')+'"><span class="kn-type'+(c.claim_type==='deadline'?' is-frist':'')+'">'+esc(type[0])+'</span>'+
+    '<details class="kn-claim"><summary>'+esc(c.statement)+(f.contradiction?'<em class="kn-flag">Contradicción por revisar</em>':'')+(f.expired?'<em class="kn-flag">Vigencia vencida</em>':'')+'</summary>'+
+    (evidence.length?evidence.slice(0,4).map(e=>'<blockquote><span>'+esc(e.stance==='contradicts'?'Contradice':e.stance==='context'?'Contexto':'Apoya')+'</span> '+esc(e.excerpt||'Sin extracto')+(e.locator?.page?' <small>· S. '+esc(e.locator.page)+'</small>':'')+'</blockquote>').join(''):'<p class="small">Sin evidencia guardada.</p>')+
+    '<p class="kn-origin">'+esc('Origen: '+knowledgeOrigin(c)+(c.confirmed_at?' · revisada '+akteDate(c.confirmed_at):''))+'</p><div class="kn-more"><button type="button" data-knowledge-edit="'+esc(c.id)+'">Editar</button><button type="button" data-knowledge-replace="'+esc(c.id)+'">Proponer sustitución</button></div></details>'+actions+'</div>';
+}
 function paintKnowledge(){
-  const filtered=knowledgeRows.filter(c=>{
-    const f=knowledgeFlags(c),q=knowledgeQuery.toLocaleLowerCase();
-    return (!q||[c.statement,c.subject,c.topic,c.discipline].join(' ').toLocaleLowerCase().includes(q))&&(knowledgeFilter==='all'||knowledgeFilter==='review'&&(f.unreviewed||f.contradiction||f.expired)||knowledgeFilter==='active'&&!['superseded','rejected','resolved'].includes(c.status));
-  });
-  const knowledgeEmpty='<div class="work-empty">'+esc(knowledgeRows.length?'No hay conocimiento que coincida con este filtro.':'Todavía no hay Claims registrados para este proyecto. Desktop contiene '+files.length+' archivo(s) registrado(s); '+files.filter(f=>f.index_status==='indexed').length+' constan como indexados. Registrar un archivo no lo convierte automáticamente en conocimiento validado.')+'</div>';
-  $('#workBody').innerHTML=`<div class="work-knowledge"><div class="work-desktop-toolbar"><div><strong>Conocimiento de ${esc(project.name)}</strong><p class="small">Afirmaciones, decisiones y preguntas con su evidencia e historia. Confirmar una revisión no convierte una fuente en certeza.</p></div><button data-knowledge-new>＋ Añadir</button></div>
-    ${projectModelPanel()}
-    <div class="knowledge-filters"><input id="knowledgeSearch" aria-label="Buscar conocimiento" placeholder="Buscar tema, disciplina o decisión…" value="${esc(knowledgeQuery)}"><select id="knowledgeFilter" aria-label="Estado del conocimiento">${[['active','Activo'],['review','Por revisar'],['all','Todo e historial']].map(([v,l])=>`<option value="${v}" ${knowledgeFilter===v?'selected':''}>${l}</option>`).join('')}</select></div>
-    ${filtered.map(c=>{const f=knowledgeFlags(c);return `<article class="knowledge-card"><div class="knowledge-meta"><b>${esc(knowledgeStates[c.status]||c.status)}</b><span>${esc(c.claim_type)} · ${esc(provenanceNames[c.provenance_class]||c.provenance_class)}</span>${f.contradiction?'<span class="knowledge-attention">Contradicción por revisar</span>':''}${f.expired?'<span class="knowledge-attention">Vigencia vencida</span>':''}</div><p>${esc(c.statement)}</p><div class="small">${esc([c.discipline,c.topic,c.subject].filter(Boolean).join(' · '))}</div>
-      <details><summary>${(c.minds_work_evidence||[]).length} evidencias · Historia</summary>${(c.minds_work_evidence||[]).map(e=>`<blockquote><b>${esc(e.stance==='contradicts'?'Contradice':e.stance==='context'?'Contexto':'Apoya')}</b><p>${esc(e.excerpt||'Sin extracto')}</p><small>${esc(e.trust_level)} · ${esc(JSON.stringify(e.locator||{}))}</small>${e.source_file_id?`<button data-evidence-file="${esc(e.source_file_id)}">Abrir ${esc(files.find(x=>x.id===e.source_file_id)?.name||'fuente')}</button>`:''}</blockquote>`).join('')||'<p class="small">Sin evidencia vinculada.</p>'}
-      <p class="small">Revisado: ${c.confirmed_at?new Date(c.confirmed_at).toLocaleString('es-ES'):'Pendiente'}${c.valid_to?' · Válido hasta '+new Date(c.valid_to).toLocaleDateString('es-ES'):''}</p>${c.supersedes_id?'<p class="small">Sustituye una formulación anterior.</p>':''}${c.superseded_by?'<p class="small">Hay una formulación posterior.</p>':''}${(c.metadata?.previous_versions||[]).slice().reverse().map(v=>`<p class="small">${esc(knowledgeStates[v.status]||v.status)} · ${esc(v.statement)}</p>`).join('')}</details>
-      <div class="knowledge-actions"><button data-knowledge-edit="${c.id}">Revisar</button><button data-knowledge-replace="${c.id}">Proponer sustitución</button></div></article>`}).join('')||knowledgeEmpty}</div>`;
-  $('#knowledgeSearch').onchange=e=>{knowledgeQuery=e.target.value;paintKnowledge()};
-  $('#knowledgeFilter').onchange=e=>{knowledgeFilter=e.target.value;paintKnowledge()};
+  const visible=knowledgeVisible();
+  const typeCounts=new Map();for(const c of visible)typeCounts.set(c.claim_type,(typeCounts.get(c.claim_type)||0)+1);
+  const rows=knowledgeType==='all'?visible:visible.filter(c=>c.claim_type===knowledgeType);
+  const stateCount=k=>knowledgeRows.filter(c=>KN_STATES[k].includes(c.status)).length;
+  const groups=new Map();
+  for(const c of rows){const key=knowledgeGroup==='topic'?'t:'+(c.topic||c.discipline||''):'f:'+(knowledgeFileOf(c)||'');if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c)}
+  const ordered=[...groups.entries()].sort((a,b)=>b[1].length-a[1].length||String(b[1][0].updated_at||'').localeCompare(String(a[1][0].updated_at||'')));
+  const canAct=knowledgeFilter==='review';
+  const groupHtml=ordered.slice(0,knowledgeGroupsShown).map(([key,list])=>{
+    const fileId=key.startsWith('f:')?key.slice(2):'',file=files.find(x=>x.id===fileId);
+    const title=key.startsWith('t:')?(key.slice(2)||'Sin tema'):(file?.name||'Sin documento');
+    const confirmable=list.filter(c=>c.status==='proposed');
+    const open=knowledgeOpenGroups.has(key)||ordered.indexOf(ordered.find(x=>x[0]===key))<3;
+    return '<section class="kn-group"><div class="kn-group-head"><div><strong>'+esc(title)+'</strong><span>'+esc(list.length+(canAct?' por revisar':knowledgeFilter==='confirmed'?' confirmadas':' en el historial'))+'</span></div><div class="kn-group-actions">'+
+      (file?'<button type="button" class="kn-link" data-evidence-file="'+esc(file.id)+'">Abrir documento</button>':'')+
+      (canAct&&confirmable.length>1?'<button type="button" class="kn-primary" data-kn-bulk="'+esc(key)+'">Confirmar '+(confirmable.length===list.length?'las ':'')+confirmable.length+'</button>':'')+
+      (open?'':'<button type="button" class="kn-link" data-kn-open="'+esc(key)+'">Mostrar</button>')+'</div></div>'+
+      (open?list.slice(0,40).map(c=>knowledgeRow(c,canAct)).join('')+(list.length>40?'<p class="kn-note">'+esc((list.length-40)+' más en este grupo. Usa la búsqueda o el filtro por tipo.')+'</p>':''):'')+'</section>';
+  }).join('');
+  const empty=knowledgeRows.length?(canAct?'Nada por revisar. Todo lo que dicen los documentos está confirmado o descartado.':'No hay afirmaciones que coincidan.'):'Todavía no hay Claims registrados para este proyecto. Desktop contiene '+files.length+' archivo(s) registrado(s); '+files.filter(f=>f.index_status==='indexed').length+' constan como indexados. Registrar un archivo no lo convierte automáticamente en conocimiento validado.';
+  const typeButtons=Object.keys(KN_TYPES).filter(k=>typeCounts.get(k)).map(k=>'<button type="button" class="kn-filter'+(knowledgeType===k?' is-active':'')+'" data-kn-type="'+k+'">'+esc(KN_TYPES[k][1])+'<span>'+typeCounts.get(k)+'</span></button>').join('');
+  $('#workBody').innerHTML='<div class="kn-view"><div class="kn-header"><div><h1>Conocimiento de '+esc(project.name)+'</h1><p>Lo que dicen los documentos. Revísalo por documento y lleva lo importante a la Akte.</p></div><button type="button" data-knowledge-new>＋ Añadir</button></div>'+
+    '<label class="kn-search"><span class="kn-sr">Buscar en los documentos</span><svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><input id="knowledgeSearch" type="search" placeholder="Busca en las afirmaciones y en los nombres de documento…" value="'+esc(knowledgeQuery)+'"></label>'+
+    knowledgeSummary()+
+    '<div class="kn-layout"><aside class="kn-aside" aria-label="Filtros"><span class="kn-label">Estado</span>'+
+      [['review','Por revisar'],['confirmed','Confirmadas'],['history','Historial']].map(([k,l])=>'<button type="button" class="kn-filter'+(knowledgeFilter===k?' is-active':'')+'" data-kn-state="'+k+'">'+l+'<span>'+stateCount(k)+'</span></button>').join('')+
+      (typeButtons?'<span class="kn-label">Tipo</span><button type="button" class="kn-filter'+(knowledgeType==='all'?' is-active':'')+'" data-kn-type="all">Todos<span>'+visible.length+'</span></button>'+typeButtons:'')+
+      '<span class="kn-label">Agrupar por</span><div class="kn-segment"><button type="button" class="'+(knowledgeGroup==='document'?'is-active':'')+'" data-kn-group="document">Documento</button><button type="button" class="'+(knowledgeGroup==='topic'?'is-active':'')+'" data-kn-group="topic">Tema</button></div></aside>'+
+    '<div class="kn-main">'+(groupHtml||'<div class="work-empty">'+esc(empty)+'</div>')+(ordered.length>knowledgeGroupsShown?'<button type="button" class="kn-more-groups" data-kn-more>Mostrar '+Math.min(10,ordered.length-knowledgeGroupsShown)+' grupos más (quedan '+(ordered.length-knowledgeGroupsShown)+')</button>':'')+'</div></div></div>';
+  const search=$('#knowledgeSearch');if(search)search.oninput=e=>{knowledgeQuery=e.target.value;clearTimeout(paintKnowledge.t);paintKnowledge.t=setTimeout(()=>{paintKnowledge();const el=$('#knowledgeSearch');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}},250)};
+  $$('[data-kn-state]').forEach(b=>b.onclick=()=>{knowledgeFilter=b.dataset.knState;knowledgeType='all';knowledgeGroupsShown=10;paintKnowledge()});
+  $$('[data-kn-type]').forEach(b=>b.onclick=()=>{knowledgeType=b.dataset.knType;paintKnowledge()});
+  $$('[data-kn-group]').forEach(b=>b.onclick=()=>{knowledgeGroup=b.dataset.knGroup;knowledgeOpenGroups=new Set();paintKnowledge()});
+  $$('[data-kn-open]').forEach(b=>b.onclick=()=>{knowledgeOpenGroups.add(b.dataset.knOpen);paintKnowledge()});
+  $$('[data-kn-more]').forEach(b=>b.onclick=()=>{knowledgeGroupsShown+=10;paintKnowledge()});
+  $$('[data-kn-review]').forEach(b=>b.onclick=()=>void reviewKnowledge([b.dataset.knId],b.dataset.knReview));
+  $$('[data-kn-bulk]').forEach(b=>b.onclick=()=>{const list=groups.get(b.dataset.knBulk)||[];void reviewKnowledge(list.filter(c=>c.status==='proposed').map(c=>c.id),'confirmed')});
+  $$('[data-kn-akte]').forEach(b=>b.onclick=()=>void knowledgeToAkte(b.dataset.knAkte));
   $('[data-knowledge-new]').onclick=()=>window.MINDS_PROPOSALS?.edit({kind:'work_claim',project:project.name,status:'proposed',claim_type:'fact',provenance_class:'user'});
   $$('[data-knowledge-edit]').forEach(b=>b.onclick=()=>{const c=knowledgeRows.find(x=>x.id===b.dataset.knowledgeEdit);window.MINDS_PROPOSALS?.edit({...c,kind:'work_claim',project:project.name,evidence_excerpt:null})});
   $$('[data-knowledge-replace]').forEach(b=>b.onclick=()=>{const c=knowledgeRows.find(x=>x.id===b.dataset.knowledgeReplace);window.MINDS_PROPOSALS?.edit({kind:'work_claim',project:project.name,statement:c.statement,claim_type:c.claim_type,topic:c.topic,discipline:c.discipline,provenance_class:c.provenance_class,status:'confirmed',supersedes_id:c.id})});
   $$('[data-evidence-file]').forEach(b=>b.onclick=()=>void openFile(b.dataset.evidenceFile));
+}
+// Reviews go through minds_save_work_claim, so every change keeps its previous version and a receipt.
+async function saveClaimReview(c,status){
+  if(c.provenance_class==='system'){
+    const {error}=await sb.from('minds_work_claims').update({status,updated_at:new Date().toISOString(),...(status==='confirmed'?{confirmed_at:new Date().toISOString()}:{})}).eq('id',c.id);
+    return error;
+  }
+  const {error}=await sb.rpc('minds_save_work_claim',{p_claim:{id:c.id,project_id:project.id,statement:c.statement,claim_type:c.claim_type,subject:c.subject||'',topic:c.topic||'',discipline:c.discipline||'',
+    status,provenance_class:c.provenance_class,confidence:c.confidence,valid_from:c.valid_from||'',valid_to:c.valid_to||''},p_evidence:[],p_request_id:crypto.randomUUID(),p_confirmed:true});
+  return error;
+}
+async function reviewKnowledge(ids,status){
+  const list=ids.map(id=>knowledgeRows.find(x=>x.id===id)).filter(Boolean);if(!list.length)return;
+  list.forEach(c=>knowledgeBusy.add(c.id));paintKnowledge();
+  let failed=0;
+  for(const c of list){const error=await saveClaimReview(c,status);if(error)failed++;else c.status=status;knowledgeBusy.delete(c.id)}
+  paintKnowledge();
+  setStatus(failed?'No pude guardar '+failed+' de '+list.length+'. Inténtalo de nuevo.':(list.length===1?(status==='confirmed'?'Confirmada.':'Descartada.'):list.length+' confirmadas.'));
+}
+// A decision or deadline from a document goes straight into the project register (confirmed: Gari chose it).
+async function knowledgeToAkte(id){
+  const c=knowledgeRows.find(x=>x.id===id);if(!c)return;
+  knowledgeBusy.add(c.id);paintKnowledge();
+  const fileId=knowledgeFileOf(c),file=files.find(x=>x.id===fileId),type=c.claim_type==='deadline'?'deadline':'decision';
+  const title=String(c.statement||'').trim().slice(0,240);
+  const existing=await sb.from('minds_work_memory').select('id,title').eq('project_id',project.id).eq('memory_type',type).limit(500);
+  const norm=s=>String(s||'').toLocaleLowerCase().replace(/\s+/g,' ').trim();
+  let error=existing.error;
+  if(!error&&!(existing.data||[]).some(r=>norm(r.title)===norm(title))){
+    const day=knowledgeDateIn(c.statement)||knowledgeDateIn((c.minds_work_evidence||[]).map(e=>e.excerpt).join(' '));
+    const res=await sb.from('minds_work_memory').insert({project_id:project.id,memory_type:type,title,body:((c.minds_work_evidence||[])[0]?.excerpt||'').slice(0,4000),
+      status:'confirmed',confirmed_at:new Date().toISOString(),occurred_at:day?day+'T12:00:00Z':null,source_file_ids:fileId?[fileId]:[],
+      metadata:{source:'conocimiento',claim_id:c.id,quelle:file?.name||undefined,thema:c.topic||undefined},provenance:[{kind:'work_claim',claim_id:c.id,at:new Date().toISOString()}]});
+    error=res.error;
+  }
+  if(!error&&c.status!=='confirmed'){error=await saveClaimReview(c,'confirmed');if(!error)c.status='confirmed'}
+  knowledgeBusy.delete(c.id);paintKnowledge();
+  setStatus(error?'No pude llevarlo a la Akte.':(type==='deadline'?'Frist':'Entscheidung')+' eingetragen: '+title.slice(0,80));
 }
 async function loadFolders(){const {data,error}=await sb.from('minds_work_folders').select('id,parent_id,name,sort_order,created_at').eq('project_id',project.id).order('sort_order').order('name');if(error)throw error;folders=data||[]}
 function folderTrail(){const out=[];let id=folderId,guard=0;while(id&&guard++<30){const f=folders.find(x=>x.id===id);if(!f)break;out.unshift(f);id=f.parent_id}return out}
