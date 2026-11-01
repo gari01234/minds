@@ -29,9 +29,10 @@ Out of scope by design: Isabella's personal chat history and personal memories.
 
 ## One-time setup
 
-1. **Deploy** (from the repo root):
-   `supabase functions deploy window-mcp --no-verify-jwt`
-   (`config.toml` also sets `verify_jwt = false`: the function must answer the unauthenticated `401` itself.)
+1. **Deploy**: GitHub → Actions → **Deploy Supabase Edge Functions** → Run workflow with `window-mcp`
+   (needs the `SUPABASE_ACCESS_TOKEN` secret in the `supabase` environment). Equivalent CLI:
+   `supabase functions deploy window-mcp --no-verify-jwt`. `config.toml` sets `verify_jwt = false`:
+   the function must answer the unauthenticated `401` itself; the workflow checks that after deploying.
 2. **Supabase dashboard → Authentication → URL Configuration**: Site URL `https://gari01234.github.io/minds/isabella`.
 3. **Authentication → OAuth Server**: turn it on; Authorization Path `/oauth-consent.html`
    (Site URL + path must equal the consent page URL). Allow dynamic client registration, or create one

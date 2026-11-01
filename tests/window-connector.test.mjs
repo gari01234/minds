@@ -170,3 +170,14 @@ test('Work threads sign the replies Claude saved',()=>{
   const work=read('apps/isabella/work.js');
   assert.match(work,/m\.metadata\?\.source==='claude_connector'&&role==='assistant'\?'<div class="work-thread-author">Claude<\/div>'/);
 });
+
+test('Edge Functions deploy only by hand, from main, with the token scoped to one environment',()=>{
+  const wf=read('.github/workflows/deploy-functions.yml');
+  assert.match(wf,/on:\n  workflow_dispatch:/);
+  assert.doesNotMatch(wf,/\n  push:|\n  pull_request:|\n  schedule:/);
+  assert.match(wf,/github\.ref == 'refs\/heads\/main'/);
+  assert.match(wf,/environment: supabase/);
+  assert.match(wf,/\[\[ "\$f" =~ \^\[a-z0-9-\]\+\$ \]\]/);
+  assert.match(wf,/supabase functions deploy "\$f" --project-ref "\$PROJECT_REF" --use-api/);
+  assert.match(wf,/Expected 401 from window-mcp/);
+});
