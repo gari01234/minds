@@ -38,7 +38,14 @@ test('Native App, Share and Widget have distinct IDs and consistent App Group', 
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID)"'));
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).share"'));
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).widget"'));
-  assert.equal(project.split('group.$(MINDS_BUNDLE_ID)').length - 1, 6);
+  assert.equal(project.split('group.$(MINDS_BUNDLE_ID)').length - 1, 5);
+  const appInfo = read('apps/isabella-ios/Config/App-Info.plist');
+  for (const key of ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'MINDSAppGroupID', 'ITSAppUsesNonExemptEncryption'])
+    assert.ok(appInfo.includes('<key>' + key + '</key>'), 'App Info.plist lacks ' + key);
+  assert.ok(appInfo.includes('<string>group.$(MINDS_BUNDLE_ID)</string>'));
+  assert.ok(project.includes('INFOPLIST_FILE: Config/App-Info.plist'));
+  assert.ok(!project.includes('INFOPLIST_KEY_SUPABASE'), 'custom INFOPLIST_KEY_* settings are dropped by Xcode');
+  assert.ok(validator.includes('def validate_runtime_config('));
   assert.ok(project.includes('      - target: MINDSShare\n        embed: true'));
   assert.ok(project.includes('      - target: MINDSWidget\n        embed: true'));
   assert.ok(archive.includes('MINDS_BUNDLE_ID="$APP_BUNDLE_ID"'));

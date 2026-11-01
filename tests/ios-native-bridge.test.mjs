@@ -17,7 +17,8 @@ test("native owner auth is OTP and Keychain protected, with no silent signup", (
   assert.match(backend, /kSecAttrAccessibleWhenUnlockedThisDeviceOnly/);
   assert.match(backend, /status != errSecSuccess/);
   assert.doesNotMatch(backend, /UserDefaults|service_role|SUPABASE_SERVICE_ROLE_KEY/);
-  assert.match(project, /INFOPLIST_KEY_SUPABASE_ANON_KEY/);
+  assert.match(project, /INFOPLIST_FILE: Config\/App-Info.plist/);
+  assert.match(readFileSync(new URL('../apps/isabella-ios/Config/App-Info.plist', import.meta.url), 'utf8'), /<key>SUPABASE_ANON_KEY<\/key>\s*<string>\$\(SUPABASE_ANON_KEY\)<\/string>/);
 });
 
 test("native tool-capable chat never downgrades or retries an ambiguous turn", () => {
