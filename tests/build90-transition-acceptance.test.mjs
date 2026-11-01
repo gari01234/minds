@@ -41,7 +41,7 @@ test('90.4 manual calendar Guardar preserves category and project in one canonic
   assert.equal(state.tasks.length,0,'not a local-only task');
   assert.deepEqual([row.title,row.date,row.categoryKey,row.projectKey],
     ['Revisar Schnitt','2026-10-15','trabajo','bernried']);
-  assert.match(elements['#quickTaskStatus'].textContent,/verificada en Supabase/);
+  assert.match(elements['#quickTaskStatus'].textContent,/Tarea creada\./);
 });
 test('90.4 event creation also preserves explicit project and date',()=>{
   const elements={

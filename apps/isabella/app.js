@@ -1176,14 +1176,40 @@ function scrollAssistantToLatest(force=false){restoreAssistantScroll({nearBottom
 function resolvedReviewText(m){
   const state=m?.metadata?.review_state,items=m?.metadata?.review_proposals;
   if(!Array.isArray(items)||!items.length)return null;
-  if(state==='applied_verified'){
-    const item=items.length===1?items[0]:null;
-    const date=item?.kind==='task'&&item.action==='update'&&/^\d{4}-\d{2}-\d{2}$/.test(String(item.date||''))?item.date:null;
-    return 'Cambio confirmado y verificado en Supabase'+(date?' · '+date:'')+'.';
-  }
+  if(state==='applied_verified')return confirmationText(items);
   if(state==='rejected')return 'Propuesta cancelada. No se aplicó el cambio.';
-  if(state==='reviewed_locally')return 'Revisión completada. Comprueba el resultado de la operación.';
+  if(state==='reviewed_locally')return 'Hecho. Échale un vistazo para comprobar que quedó como querías.';
   return null;
+}
+// Isabella confirms like a person: one short sentence with what changed and when, in natural dates.
+function naturalDay(day,now=new Date()){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(day||'')))return '';
+  const [y,m,d]=String(day).split('-').map(Number),target=new Date(y,m-1,d),base=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  const diff=Math.round((target-base)/864e5);
+  if(diff===0)return 'hoy';if(diff===1)return 'mañana';if(diff===-1)return 'ayer';
+  const weekday=target.toLocaleDateString('es-ES',{weekday:'long'});
+  if(diff>1&&diff<7)return 'el '+weekday;
+  return 'el '+weekday+' '+d+' de '+target.toLocaleDateString('es-ES',{month:'long'})+(y!==now.getFullYear()?' de '+y:'');
+}
+function naturalList(values){const xs=values.filter(Boolean);return xs.length<2?(xs[0]||''):xs.slice(0,-1).join(', ')+' y '+xs[xs.length-1]}
+function confirmationText(items,now=new Date()){
+  const list=(Array.isArray(items)?items:[items]).filter(Boolean);
+  if(!list.length)return 'Listo.';
+  const title=p=>String(p.title||p.target_title||'').trim(),when=p=>naturalDay(p.date,now);
+  const isCreate=p=>(p.action||'create')==='create';
+  if(list.length===1){
+    const p=list[0],t=title(p),w=when(p);
+    if(isCreate(p))return p.kind==='event'?'Listo, «'+t+'» está en tu calendario'+(w?' '+w:'')+'.':'Listo, «'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
+    if(t)return w?'Listo, «'+t+'» queda para '+w+'.':'Listo, actualicé «'+t+'».';
+    return w?'Listo, la tarea queda para '+w+'.':'Listo, ya está actualizada.';
+  }
+  if(list.every(isCreate)){
+    const kinds=new Set(list.map(p=>p.kind)),noun=kinds.size===1&&kinds.has('event')?'eventos':kinds.size===1?'tareas':'elementos';
+    const days=new Set(list.map(when));
+    if(days.size===1){const w=[...days][0];return 'Listo, añadí '+list.length+' '+noun+(w?' para '+w:'')+': '+naturalList(list.map(title))+'.'}
+    return 'Listo, añadí '+list.length+' '+noun+': '+naturalList(list.map(p=>title(p)+(when(p)?' ('+when(p)+')':'')))+'.';
+  }
+  return 'Listo, guardé los '+list.length+' cambios.';
 }
 
 function renderMessages(forceBottom=false){
@@ -1673,7 +1699,7 @@ async function recoverReviewedTaskReceipts(){
 function finalizeInlineReview(proposals,status){
   const ids=new Set((Array.isArray(proposals)?proposals:[proposals])
     .map(p=>String(p?.request_id||'')).filter(Boolean));
-  if(!ids.size||!Array.isArray(state.messages))return;
+  if(!ids.size||!Array.isArray(state.messages))return false;
   let changed=false;
   for(const m of state.messages){
     const list=m?.metadata?.review_proposals;
@@ -1684,6 +1710,7 @@ function finalizeInlineReview(proposals,status){
     }
   }
   if(changed){save();renderMessages()}
+  return changed;
 }
 function confirmProposal(p){
   p={...p,request_id:p.request_id||crypto.randomUUID()};
@@ -1699,11 +1726,12 @@ function confirmProposal(p){
     // its canonical write receipt. The legacy feedback remains unchanged for
     // other kinds until each gains the same reviewed executor.
     if(!verified){state.pendingIntent=null;save();proposalFeedback('accepted',p);}
-    Promise.resolve().then(()=>applyProposal(p)).then(()=>{
+    Promise.resolve().then(()=>applyProposal(p,{quiet:true})).then(()=>{
       if(verified){state.pendingIntent=null;save();proposalFeedback('accepted',p);}
-      finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
+      const marked=finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
+      if(verified&&p.kind==='task'&&!marked)say('assistant',confirmationText([p]));
     }).catch(e=>{
-      say('assistant','No pude verificar la actualización en Supabase. No la marcaré como realizada: '+(e?.message||String(e)));
+      say('assistant','No pude guardar el cambio, así que no lo doy por hecho: '+(e?.message||String(e)));
       if(b.isConnected){b.disabled=false;b.textContent='Confirmar'}
     }).finally(()=>{if(b.isConnected&&b.disabled){b.disabled=false;b.textContent='Confirmar'}});
   };
@@ -1715,13 +1743,14 @@ function confirmProposals(list){
   modal('Confirmar cambios',`<div class="proposal-list">${items.map((p,i)=>`<div class="proposal-row"><span>${esc(proposalLabel(p))}${proposalDetails(p)}</span><button data-proposal-edit="${i}" class="proposal-inline-edit">Editar</button></div>`).join('')}</div><div class="small" style="margin-top:10px">Puedes revisar cada cambio antes de confirmar todos.</div><div class="confirm-actions" style="margin-top:18px"><button id="proposalBatchCancel" class="secondary">Cancelar</button><button id="proposalBatchConfirm" class="primary">Confirmar todo</button></div>`);
   $$('[data-proposal-edit]').forEach(b=>b.onclick=()=>{const i=Number(b.dataset.proposalEdit);proposalEditor(items[i],q=>{if(q)items[i]=reviewedProposal(items[i],q);confirmProposals(items)})});
   $('#proposalBatchCancel').onclick=()=>{state.pendingIntent=null;save();for(const p of items)proposalFeedback('rejected',p);finalizeInlineReview(items,'rejected');closeModal();say('assistant','De acuerdo, no hice ningún cambio.')};
-  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();try{for(const p of items){
+  $('#proposalBatchConfirm').onclick=async()=>{const b=$('#proposalBatchConfirm');if(b.disabled)return;b.disabled=true;b.textContent='Guardando…';state.pendingIntent=null;save();const appliedTasks=[];let marked=false;try{for(const p of items){
       const verified=p.kind==='routine'||(p.kind==='task'&&['update','create'].includes(p.action||'create'));
       if(!verified)proposalFeedback('accepted',p);
-      await Promise.resolve().then(()=>applyProposal(p));
+      await Promise.resolve().then(()=>applyProposal(p,{quiet:true}));
       if(verified)proposalFeedback('accepted',p);
-      finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally');
-    }closeModal()}catch(e){say('assistant','No pude aplicar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
+      if(verified&&p.kind==='task')appliedTasks.push(p);
+      marked=finalizeInlineReview(p,verified?'applied_verified':'reviewed_locally')||marked;
+    }closeModal();if(appliedTasks.length&&!marked)say('assistant',confirmationText(appliedTasks))}catch(e){if(appliedTasks.length)say('assistant',confirmationText(appliedTasks));say('assistant','No pude guardar todos los cambios: '+(e?.message||String(e)));if(b.isConnected){b.disabled=false;b.textContent='Confirmar todo'}}};
 }
 function findTarget(p){
   const list=p.kind==='task'?state.tasks:state.events;
@@ -1939,7 +1968,7 @@ function applyAssistantPreferencesProposal(p){
  * The RPC owns the transaction, shadow decision and idempotent receipt.
  * A second database read proves that the requested state was actually stored.
  */
-async function applyVerifiedTaskUpdate(p){
+async function applyVerifiedTaskUpdate(p,opts={}){
   const sb=window.MINDS_SUPABASE;
   if(!sb||!p?.request_id||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.request_id))
     throw new Error('Falta una propuesta registrada para confirmar.');
@@ -1973,14 +2002,13 @@ async function applyVerifiedTaskUpdate(p){
     item.updatedAt=canonical.updated_at;
   }
   save();renderCalendar();closeModal();
-  say('assistant','Listo. Confirmé en Supabase que “'+canonical.title+
-    '” quedó actualizada'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
+  if(!opts.quiet)say('assistant',confirmationText([{kind:'task',action:'update',title:canonical.title,date:canonical.due_date}]));
   return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
 }
 /* Reviewed create_task is an owned atomic database action, not a local
  * optimistic mutation. Exactly one immutable receipt per request is required.
  */
-async function applyVerifiedTaskCreate(p){
+async function applyVerifiedTaskCreate(p,opts={}){
   const sb=window.MINDS_SUPABASE;
   if(!sb||!p?.request_id||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(p.request_id))
     throw new Error('Falta una propuesta registrada para confirmar.');
@@ -2021,8 +2049,7 @@ async function applyVerifiedTaskCreate(p){
   if(original)Object.assign(original,item);
   else state.tasks.push(item);
   save();renderCalendar();closeModal();
-  say('assistant','Confirmé en Supabase que la tarea “'+canonical.title+
-    '” se creó'+(canonical.due_date?' para '+canonical.due_date:'')+'.');
+  if(!opts.quiet)say('assistant',confirmationText([{kind:'task',action:'create',title:canonical.title,date:canonical.due_date}]));
   return {receipt_id:receipt.receipt_id,entity_client_key:canonical.client_key};
 }
 /* The prior user instruction authorizes only an already admitted create action.
@@ -2066,7 +2093,8 @@ async function applyDirectCalendarCreate(p){
     try{await window.ISABELLA_SYNC_PULL_NOW()}catch(e){console.warn('direct create sync pending',e)}
   }
   return {receipt_id:receipt.receipt_id,request_id:p.request_id,
-    kind:p.kind,title:row.title,
+    kind:p.kind,title:row.title,action:'create',
+    date:p.kind==='task'?(row.due_date||null):new Date(row.starts_at).toLocaleDateString('sv-SE'),
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
     entity_client_key:receipt.entity_client_key};
 }
@@ -2084,11 +2112,11 @@ function directCreationBatch(result,integrity){
     throw new Error('La autorización directa no coincide con la propuesta registrada.');
   return proposals;
 }
-function applyProposal(p){
+function applyProposal(p,opts={}){
   if(p.kind==='task'&&(p.action||'create')==='update')
-    return applyVerifiedTaskUpdate(p);
+    return applyVerifiedTaskUpdate(p,opts);
   if(p.kind==='task'&&(p.action||'create')==='create')
-    return applyVerifiedTaskCreate(p);
+    return applyVerifiedTaskCreate(p,opts);
   if(p.kind==='routine')return createRoutineProposal(p)
   if(p.kind==='standing_intent')return createStandingIntentProposal(p)
   if(p.kind==='expectation')return createExpectationProposal(p)
@@ -2312,15 +2340,10 @@ async function handle(text,attachments=[],replyTo=null){
           try{committed.push(await applyDirectCalendarCreate(p))}
           catch(e){failed.push({proposal:p,reason:String(e?.message||e)})}
         }
-        const appliedNames=committed.map(x=>'“'+x.title+'” ('+x.when+')').join(', ');
-        const text=committed.length
-          ?'He guardado y verificado '+committed.length+
-            (committed.length===1?' elemento: ':' elementos: ')+appliedNames+'.'
-          :'No pude guardar ninguna creación verificable.';
+        const text=committed.length?confirmationText(committed):'';
+        const missing=failed.map(x=>'«'+String(x.proposal?.title||'sin título')+'»');
         const report=failed.length
-          ?text+' No pude confirmar '+failed.length+
-            (failed.length===1?' elemento. ':' elementos. ')+
-            'No los marcaré como realizados: '+failed.map(x=>x.reason).join('; ')
+          ?(text?text+' ':'')+'No pude guardar '+naturalList(missing)+', así que '+(failed.length===1?'no lo doy por hecho':'no los doy por hechos')+'. Puedes revisarlo abajo.'
           :text;
         say('assistant',report,{metadata:{exposure_scope:exposure,
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
@@ -2854,7 +2877,30 @@ async function nativePlanChangeDates(clientKey,edge,shift){
     });
   }catch(error){nativePlanToast('No se pudo cambiar el período: '+(error?.message||error))}
 }
-function renderCalendar(){$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
+// Confirmed Fristen from the project registers (Projektakte) show read-only in Tiempo.
+const akteFristen={at:0,rows:[],loading:false};
+function loadAkteFristen(force=false){
+  const sb=window.MINDS_SUPABASE;
+  if(!sb||akteFristen.loading||(!force&&Date.now()-akteFristen.at<5*60000))return;
+  akteFristen.loading=true;
+  Promise.resolve(sb.from('minds_work_memory').select('id,project_id,title,occurred_at,isabella_projects(name,client_key)')
+    .eq('memory_type','deadline').eq('status','confirmed').gte('occurred_at',iso(addDays(new Date(),-62))).order('occurred_at',{ascending:true}).limit(300))
+    .then(({data,error})=>{
+      akteFristen.loading=false;akteFristen.at=Date.now();if(error)return;
+      const rows=(data||[]).filter(r=>r.occurred_at).map(r=>({id:r.id,title:r.title,date:String(r.occurred_at).slice(0,10),project:r.isabella_projects?.name||'',projectKey:r.isabella_projects?.client_key||''}));
+      const changed=JSON.stringify(rows)!==JSON.stringify(akteFristen.rows);akteFristen.rows=rows;
+      if(changed&&state.screen==='calendar')renderCalendar();
+    },()=>{akteFristen.loading=false;akteFristen.at=Date.now()});
+}
+function akteFristenOn(day){return nativePlanFilters()?.personKey?[]:akteFristen.rows.filter(r=>r.date===day)}
+function fristAgendaRow(f){
+  return `<button type="button" class="agenda-item frist-item" data-frist-project="${esc(f.projectKey)}"><span class="frist-mark" aria-hidden="true"></span><div class="agenda-main"><strong>${esc(f.title)}</strong><div class="meta">Frist · ${esc(f.project||'Proyecto')}</div></div><div class="agenda-tail"><div class="atime">Plazo</div></div></button>`;
+}
+function fristChip(f){return `<button type="button" class="wk-chip frist-chip" data-frist-project="${esc(f.projectKey)}" title="Frist · ${esc(f.project)}"><span class="frist-mark" aria-hidden="true"></span><span class="wk-chip-label">${esc(f.title)}</span></button>`}
+function bindFristen(){
+  $$('[data-frist-project]').forEach(b=>b.onclick=e=>{e.stopPropagation();window.MINDS_WORK?.open?.(b.dataset.fristProject,'overview');document.querySelector('[data-nav="work"]')?.click()});
+}
+function renderCalendar(){loadAkteFristen();$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
 function taskSpansDay(task,key){return !!window.MINDS_DESK_MODEL?.spansDay?.(task,key)}
 function spanUntilLabel(task){const d=fromIso(task.date);return 'hasta '+d.toLocaleDateString('es-ES',{day:'numeric',month:'short'}).replace('.','')}
 function workSessionPresentation(event){
@@ -2883,7 +2929,7 @@ function month(){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
       const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
-      const colors=dayColors(di,nativePlanFilters());
+      const colors=[...dayColors(di,nativePlanFilters()),...(akteFristenOn(di).length?['#d93025']:[])];
       const teammateMinutes=nativePlanTeamAllocations(di,nativePlanFilters()).reduce((n,a)=>n+Number(a.minutes||0),0);
       h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span>${teammateMinutes?`<span class="minds-team-month-time">${Math.round(teammateMinutes/60*10)/10} h equipo</span>`:''}</button>`;
     }
@@ -2899,7 +2945,9 @@ function month(){
     events:filters.personKey?[]:state.events.filter(e=>!filters.projectId||e.projectId===filters.projectId)};
   const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(visibleState,state.date);
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
-  if(!ev.length&&!ta.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
+  const fristen=akteFristenOn(state.date);
+  if(!ev.length&&!ta.length&&!fristen.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
+  for(const f of fristen)h+=fristAgendaRow(f);
   for(const e of ev)h+=agendaRow('event',e);
   for(const {task,sessions} of ta){
     h+=agendaRow('task',task);
@@ -2908,7 +2956,7 @@ function month(){
   h+='</div>';
   $('#calendarContent').innerHTML=h;
   $$('[data-date]').forEach(b=>b.onclick=()=>{state.date=b.dataset.date;save();month()});
-  bindCalendarItems();bindNativePlanControls();
+  bindCalendarItems();bindNativePlanControls();bindFristen();
 }
 function week(){
   const s=startWeek(fromIso(state.date)),filters=nativePlanFilters();
@@ -2935,7 +2983,7 @@ function week(){
   const check=t=>'<span class="wk-check" aria-hidden="true"></span>';
   let h=nativePlanToolbar()+nativePlanBand(projection.weeks[0])+`<div class="week week-timegrid" style="--wk-hour:${HOUR}px;--wk-hours:${hours}">`;
   h+='<div class="wk-head"><div class="wk-gutter"></div>'+days.map(x=>`<div class="wk-dayhead ${x.di===today()?'is-today':''}"><span>${esc(x.d.toLocaleDateString('es-ES',{weekday:'short'}).replace('.',''))}</span><strong>${x.d.getDate()}</strong></div>`).join('')+'</div>';
-  h+='<div class="wk-allday"><div class="wk-gutter wk-allday-label">Todo el día</div>'+days.map(x=>`<div class="wday" data-week-date="${x.di}">${
+  h+='<div class="wk-allday"><div class="wk-gutter wk-allday-label">Todo el día</div>'+days.map(x=>`<div class="wday" data-week-date="${x.di}">${akteFristenOn(x.di).map(fristChip).join('')}${
     x.untimed.map(e=>{const p=workSessionPresentation(e);return `<button class="calendar-entry event-item wk-chip wk-chip-event ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}">${esc(p.title)}</button>`}).join('')}${
     x.ta.map(t=>`<button class="calendar-entry task-item wk-chip ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${check(t)}<span class="wk-chip-label">${esc(t.title)}</span></button>`).join('')}${
     x.teamPlan.map(a=>`<button type="button" class="wk-chip minds-team-day-entry" data-team-task="${esc(a.task.id)}" title="Horas previstas, no calendario confirmado">${esc(a.person)} · ${esc(a.task.title)} · ${Number(a.minutes)} min previstos</button>`).join('')}</div>`).join('')+'</div>';
@@ -2953,21 +3001,22 @@ function week(){
     if(x.di===today()&&nowMin>=fromH*60&&nowMin<=toH*60)h+=`<div class="wk-now" style="top:${((nowMin-fromH*60)*PX).toFixed(1)}px" aria-hidden="true"></div>`;
     h+='</div>';
   }
-  h+='</div></div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();
+  h+='</div></div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();bindFristen();
 }
 function day(){
   const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt)
     .sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
   const spans=state.tasks.filter(x=>taskSpansDay(x,state.date)).sort(taskOrder);
   const lanes=window.MINDS_DAY_LAYOUT?.layout(ev)||new Map();
-  let h='<div class="day-all"><b>Todo el día</b><div>'+
+  const dayFristen=akteFristenOn(state.date);
+  let h='<div class="day-all"><b>Todo el día</b><div>'+dayFristen.map(fristChip).join('')+
     (ta.length||spans.length?ta.map(t=>'<button class="pill calendar-entry task-item '+(t.done?'task-done':'')+
       '" data-kind="task" data-id="'+esc(t.id)+'" data-date="'+esc(t.date)+
       '" style="--item-color:'+itemColor(t)+'"><span class="wk-check" aria-hidden="true"></span>'+esc(t.title)+'</button>').join('')+
       spans.map(t=>'<button class="pill calendar-entry is-span" data-kind="task" data-id="'+esc(t.id)+
       '" style="--item-color:'+itemColor(t)+'" title="Tarea en curso '+esc(spanUntilLabel(t))+'"><span class="wk-check" aria-hidden="true"></span>'+esc(t.title)+
       '<span class="pill-span">'+esc(spanUntilLabel(t))+'</span></button>').join(''):
-      '<span class="meta">Sin tareas</span>')+'</div></div><div class="hours">';
+      (dayFristen.length?'':'<span class="meta">Sin tareas</span>'))+'</div></div><div class="hours">';
   for(let hr=7;hr<=22;hr++)h+='<div class="hrow"><div class="hlabel">'+pad(hr)+':00</div><div></div></div>';
   for(const e of ev){
     const slot=lanes.get(e.id);
@@ -2986,7 +3035,7 @@ function day(){
       '" aria-valuemin="15" aria-valuemax="720" aria-valuenow="'+Number(e.duration||60)+
       '" title="Arrastra para ajustar duración (15 minutos)"></span></button>';
   }
-  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindDayResize();
+  h+='</div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindDayResize();bindFristen();
 }
 function bindCalendarItems(){
   const calendarBody=$('#calendarContent');
@@ -3645,11 +3694,11 @@ function newPanel(presetDate=null){
         }
       }else attempt={...values,clientKey:crypto.randomUUID()};
       saving=true;button.disabled=true;button.textContent='Guardando…';
-      status.textContent='Guardando en Supabase…';
+      status.textContent='Guardando…';
       try{
         const task=await window.MINDS_TASK_DETAIL.createQuick(attempt);
         if(!task?.id||task.title!==attempt.title)throw new Error('No se pudo verificar la tarea.');
-        status.textContent='Tarea creada y verificada en Supabase.';
+        status.textContent='Tarea creada.';
         void Promise.resolve(window.ISABELLA_SYNC_PULL_NOW?.()).then(()=>renderCalendar()).catch(()=>{});
         setTimeout(()=>{if($('#newSave')===button)closeModal()},650);
       }catch(error){

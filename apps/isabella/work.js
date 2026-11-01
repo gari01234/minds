@@ -282,13 +282,13 @@ function cockpitDocs(m){
 function cockpitHeader(m){
   const f=m.brief?.metadata?.felder||{};
   const phase=f.phase||'';
-  const milestones=[...(Array.isArray(f.meilensteine)?f.meilensteine:[]).filter(x=>x&&x.datum).map(x=>({day:String(x.datum).slice(0,10),title:x.was||x.text||''})),
-    ...m.deadlines.filter(r=>r.status==='confirmed'&&r.occurred_at).map(r=>({day:String(r.occurred_at).slice(0,10),title:r.title}))]
+  const milestones=[...(Array.isArray(f.meilensteine)?f.meilensteine:[]).filter(x=>x&&x.datum).map(x=>({day:String(x.datum).slice(0,10),title:x.was||x.text||'',label:'Próximo hito'})),
+    ...m.deadlines.filter(r=>r.status==='confirmed'&&r.occurred_at).map(r=>({day:String(r.occurred_at).slice(0,10),title:r.title,label:'Próximo plazo'}))]
     .filter(x=>x.day>=m.today&&x.title).sort((a,b)=>a.day.localeCompare(b.day));
   const next=milestones[0];
   const n=next?cockpitDayDiff(m.today,next.day):0;
   return '<header class="cockpit-header"><div><span class="cockpit-eyebrow">Proyecto</span><h1>'+esc(project.name)+'</h1>'+(phase?'<p>'+esc(phase)+'</p>':'')+'</div>'+
-    (next?'<div class="cockpit-milestone"><div class="cockpit-countdown"><b>'+esc(String(n))+'</b><span>'+(n===1?'día':'días')+'</span></div><div><span class="cockpit-eyebrow">Próximo hito</span><strong>'+esc(next.title)+'</strong><small>'+esc(cockpitWeekday(next.day)+' '+akteDate(next.day))+'</small></div></div>':'')+'</header>';
+    (next?'<div class="cockpit-milestone"><div class="cockpit-countdown"><b>'+esc(String(n))+'</b><span>'+(n===1?'día':'días')+'</span></div><div><span class="cockpit-eyebrow">'+esc(next.label)+'</span><strong>'+esc(next.title)+'</strong><small>'+esc(cockpitWeekday(next.day)+' '+akteDate(next.day))+'</small></div></div>':'')+'</header>';
 }
 function cockpitMarkup(m){
   return '<div class="work-overview work-cockpit" aria-label="Panorama de '+esc(project.name)+'">'+cockpitHeader(m)+cockpitPflegeLine(m.pflege)+cockpitParaTi(m)+
@@ -1351,6 +1351,6 @@ async function sendThreadMessage(thread,overrideMessage=null){
   }
 }
 
-window.MINDS_WORK={render,refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
+window.MINDS_WORK={render,open:(key,nextView='overview')=>{if(key){projectKey=key;localStorage.setItem('minds-work-project',key)}view=nextView;localStorage.setItem('minds-work-view',view);folderId=null;activeThreadId=null;if(document.body.dataset.section==='work')void render()},refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
 if(document.body.dataset.section==='work'&&typeof setTimeout==='function')setTimeout(()=>{if(!bound)void render()},0);
 })();

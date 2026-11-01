@@ -35,10 +35,10 @@ test('failed registration cannot be mistaken for a created proposal in any langu
 });
 
 test('confirmed task update: one real RPC receipt plus matching canonical reread is required',async()=>{
- const start=app.indexOf('async function applyVerifiedTaskUpdate(p){');
+ const start=app.indexOf('async function applyVerifiedTaskUpdate(p,opts={}){');
  const end=app.indexOf('\nasync function applyVerifiedTaskCreate(',start);
  assert.ok(start>0&&end>start);
- const code=app.slice(start,end);
+ const code=app.slice(app.indexOf('function naturalDay('),app.indexOf('function renderMessages('))+app.slice(start,end);
  const requestId='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
  const owner='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
  const expected={id:'canonical-1',client_key:'client-1',title:'Tarea verificable',
@@ -69,7 +69,7 @@ test('confirmed task update: one real RPC receipt plus matching canonical reread
  const done=await good.update({request_id:requestId});
  assert.equal(done.receipt_id,'receipt-1');
  assert.equal(good.state.tasks[0].date,'2026-10-27');
- assert.match(good.spoken[0][1],/Confirmé en Supabase/);
+ assert.match(good.spoken[0][1],/^Listo, «Tarea verificable» queda para /);
  assert.deepEqual(good.counts(),{writes:1,reads:1,saved:1,rendered:1,closed:1});
  for(const overrides of [
   {receiptOverride:{receipt_id:null}},

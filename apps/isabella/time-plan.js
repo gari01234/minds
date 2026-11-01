@@ -136,12 +136,12 @@ async function commit(ctx){
     const {data,error}=await sb.from('isabella_events').insert(inserted).select('client_key');
     if(error||!data||data.length!==inserted.length)
       throw error||new Error('El servidor no confirmó todas las reservas. Comprueba Tiempo.');
-    msg('Sesiones guardadas en Supabase; verificando la sincronización…');
+    msg('Sesiones guardadas; sincronizando…');
     const synced=await window.ISABELLA_SYNC_PULL_NOW?.();
     const keys=new Set(inserted.map(x=>x.client_key));
     const seen=(window.ISABELLA_APP?.getState?.().events||[]).filter(e=>keys.has(e.id)).length;
     if(synced!==true||seen!==keys.size){
-      msg('Sesiones guardadas en Supabase. Recarga Tiempo para verlas; no las vuelvas a crear.',true);
+      msg('Sesiones guardadas. Recarga Tiempo para verlas; no hace falta crearlas otra vez.',true);
       return;
     }
     msg(inserted.length+' sesiones guardadas y verificadas.');

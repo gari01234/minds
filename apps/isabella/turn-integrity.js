@@ -66,20 +66,30 @@
       outcome:outcome?.outcome||(proposals.length?'proposal_created':'answered'),
       applied_count:outcome?.applied_count||0};
   }
+  // Natural dates for the person, never storage formats.
+  function naturalDay(day,now){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(day||'')))return '';
+    now=now||new Date();
+    const parts=String(day).split('-').map(Number),target=new Date(parts[0],parts[1]-1,parts[2]),base=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const diff=Math.round((target-base)/864e5);
+    if(diff===0)return 'hoy';if(diff===1)return 'mañana';if(diff===-1)return 'ayer';
+    const weekday=target.toLocaleDateString('es-ES',{weekday:'long'});
+    return diff>1&&diff<7?'el '+weekday:'el '+weekday+' '+parts[2]+' de '+target.toLocaleDateString('es-ES',{month:'long'});
+  }
   function summary(check){
-    if(!check?.ok)return 'No pude verificar el resultado de esta operación. No he confirmado ningún cambio.';
+    if(!check?.ok)return 'No pude comprobar que esto se guardara, así que no lo doy por hecho.';
     if(check.outcome==='action_applied')
-      return 'El servidor devolvió '+check.applied_count+
-        (check.applied_count===1?' recibo de ejecución.':' recibos de ejecución.')+
-        ' La operación se ha registrado, no se ha inferido de una respuesta de texto.';
+      return check.applied_count===1?'Listo, ya está hecho.':'Listo, ya están hechos los '+check.applied_count+' cambios.';
     if(!check.proposals?.length)return null;
     const p=check.proposals[0],n=check.proposals.length;
-    if(n!==1)return 'He preparado '+n+' propuestas para tu revisión. Ninguna se ha aplicado todavía.';
+    if(n!==1)return 'Te preparé '+n+' cambios. Confírmalos y los guardo.';
     const title=String(p.target_title||p.title||'').trim().slice(0,180);
-    const date=/^\d{4}-\d{2}-\d{2}$/.test(String(p.date||''))?String(p.date):'';
+    const when=naturalDay(p.date);
+    const action=String(p.action||'create');
+    if(p.kind==='task'&&action==='create')return '¿Añado «'+(title||'la tarea')+'»'+(when?' para '+when:'')+'? Confírmalo y la guardo.';
+    if(p.kind==='event'&&action==='create')return '¿Pongo «'+(title||'el evento')+'» en tu calendario'+(when?' '+when:'')+'? Confírmalo y lo guardo.';
     const item=p.kind==='task'?'la tarea':p.kind==='event'?'el evento':'el cambio';
-    return 'He preparado la revisión de '+item+(title?' «'+title+'»':'')+
-      (date?' para '+date:'')+'. Aún falta tu confirmación.';
+    return 'Tengo listo el cambio en '+item+(title?' «'+title+'»':'')+(when?' para '+when:'')+'. Confírmalo y lo guardo.';
   }
   root.MINDS_TURN_INTEGRITY={validate,summary};
 })(typeof window!=='undefined'?window:globalThis);

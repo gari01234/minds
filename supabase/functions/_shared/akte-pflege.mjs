@@ -122,8 +122,18 @@ export async function currentAkte(sb,userId,project){
 const day=v=>isDay(String(v||'').trim())?String(v).trim():undefined;
 const nonEmpty=v=>String(v||'').trim();
 
+// Near-duplicates: the model sometimes restates an existing Frist or task in other words.
+const STOP=new Set(['und','oder','der','die','das','den','dem','des','mit','für','von','vom','zur','zum','auf','bei','nach','einschließlich','sowie','eine','einer','einem','einen','über','unter','aus','dass','wird','werden','sind','ist']);
+const words=t=>new Set(norm(t).replace(/[^a-z0-9äöüß ]+/g,' ').split(/\s+/).filter(w=>w.length>3&&!STOP.has(w)));
+export function nearDuplicate(a,b){
+  const x=words(a),y=words(b);if(!x.size||!y.size)return false;
+  const inter=[...x].filter(w=>y.has(w)).length,small=Math.min(x.size,y.size);
+  return inter/small>=0.75||inter/new Set([...x,...y]).size>=0.5;
+}
 // Apply the model's result through the same Akte tools the connector uses (actor Isabella).
-export async function applyResult(akte,project,result){
+export async function applyResult(akte,project,result,existingTitles=[]){
+  const known=[...existingTitles];
+  const isKnown=t=>known.some(k=>nearDuplicate(k,t));
   const out={steckbrief:false,fristen:0,entscheidungen:0,aufgaben:0,widersprueche:0};
   const r=result||{};
   const s=r.steckbrief||{};
@@ -138,16 +148,17 @@ export async function applyResult(akte,project,result){
   }
   const reg=async(list,art,max,key)=>{
     for(const e of (list||[]).slice(0,max)){
-      if(!nonEmpty(e.titel))continue;
+      if(!nonEmpty(e.titel)||isKnown(e.titel))continue;
       const x=await akte.recordDecision({project:project.id,titel:nonEmpty(e.titel),art,datum:day(e.datum),quelle:nonEmpty(e.quelle)||undefined,thema:nonEmpty(e.thema)||undefined,bestaetigt:false});
-      if(x&&x.eingetragen)out[key]++;
+      if(x&&x.eingetragen){out[key]++;known.push(e.titel)}
     }
   };
   await reg((r.fristen||[]).filter(f=>day(f.datum)),'frist',LIMITS.fristen,'fristen');
   await reg(r.entscheidungen,'entscheidung',LIMITS.entscheidungen,'entscheidungen');
   for(const a of (r.aufgaben||[]).slice(0,LIMITS.aufgaben)){
+    if(!nonEmpty(a.titel)||isKnown(a.titel))continue;
     const x=await akte.proposeEntry(project.id,{art:'aufgabe',titel:a.titel,datum:day(a.faellig),quelle:nonEmpty(a.quelle)||undefined,thema:nonEmpty(a.thema)||undefined});
-    if(x&&!x.skipped)out.aufgaben++;
+    if(x&&!x.skipped){out.aufgaben++;known.push(a.titel)}
   }
   for(const w of (r.widersprueche||[]).slice(0,LIMITS.widersprueche)){
     const x=await akte.proposeEntry(project.id,{art:'widerspruch',titel:w.titel,details:[nonEmpty(w.details),nonEmpty(w.quellen)?'Quellen: '+nonEmpty(w.quellen):''].filter(Boolean).join('\n')});
@@ -209,7 +220,7 @@ export async function runAktePflege({sb,callModel,now=new Date(),model=PFLEGE_MO
         modelRuns++;
         const {value,payload}=await callModel(input);
         await recordUsage(sb,userId,project.id,payload,model);
-        const applied=await applyResult(akte,project,value);
+        const applied=await applyResult(akte,project,value,[...akteNow.register.map(e=>e.titel),...akteNow.offene_aufgaben.map(t=>t.titel)]);
         const summary=short(value&&value.zusammenfassung,400);
         state.projects[project.id]={...prev,last_run:at,letzter_lauf:{status:'ok',am:at,dokumente:neu.files.length,nachrichten:neu.messages.length,...applied,zusammenfassung:summary||undefined}};
         changed=true;report.push({project:project.name,status:'ok',...applied});
