@@ -80,3 +80,9 @@ entrypoint = "./functions/isabella-self-review/index.ts"
 [functions.isabella-code-preparation]
 verify_jwt = false
 entrypoint = "./functions/isabella-code-preparation/index.ts"
+
+[functions.window-mcp]
+verify_jwt = false
+entrypoint = "./functions/window-mcp/index.ts"
+# OAuth 2.1 resource server for the Window connector: the function validates the bearer token itself
+# so it can answer 401 with WWW-Authenticate (the gateway check would hide that header).
