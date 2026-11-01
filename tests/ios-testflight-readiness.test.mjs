@@ -239,3 +239,37 @@ assert m.previous_ci_certificates(profiles, 'old')[0] == []
 `], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
+
+test('crash-reports mode reads shared TestFlight crashes without the macOS build and prints no personal data', () => {
+  const workflow = readFileSync(new URL('../.github/workflows/ios-testflight.yml', import.meta.url), 'utf8');
+  assert.ok(workflow.includes('- crash-reports'));
+  assert.ok(workflow.includes("inputs.mode != 'crash-reports'"));
+  const job = workflow.slice(workflow.indexOf('  crash_reports:'));
+  assert.ok(job.includes("inputs.mode == 'crash-reports'"));
+  assert.ok(job.includes('runs-on: ubuntu-latest'));
+  assert.ok(job.includes('environment: apple-testflight'));
+  assert.ok(job.includes('asc-crash-reports.py "$APP_BUNDLE_ID"'));
+  assert.ok(job.includes('if: always()'));
+  const script = readFileSync(new URL('../apps/isabella-ios/Config/asc-crash-reports.py', import.meta.url), 'utf8');
+  assert.doesNotMatch(script, /print\([^)]*(email|comment|logText\b)/);
+  const result = spawnSync('python3', ['-B', '-c', `
+import importlib.util, json
+spec = importlib.util.spec_from_file_location('crash', 'apps/isabella-ios/Config/asc-crash-reports.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+header = {"app_version": "0.1.0", "build_version": "9"}
+body = {"exception": {"type": "EXC_CRASH", "signal": "SIGABRT"},
+        "termination": {"namespace": "TCC", "code": 0, "reasons": ["missing usage description"]},
+        "asi": {"CoreFoundation": ["reason: boom"]}, "faultingThread": 0, "crashReporterKey": "PRIVATE-KEY",
+        "usedImages": [{"name": "Window"}, {"name": "WebKit"}],
+        "threads": [{"triggered": True, "queue": "com.apple.main-thread",
+                     "frames": [{"imageIndex": 1, "symbol": "WebKit::foo", "symbolLocation": 8}, {"imageIndex": 0, "imageOffset": 4096}]}]}
+out = "\\n".join(m.summarize(json.dumps(header) + "\\n" + json.dumps(body)))
+for expected in ["App 0.1.0 (9)", "EXC_CRASH SIGABRT", "TCC 0 missing usage description", "reason: boom", "WebKit::foo + 8", "Window  + 0x1000"]:
+    assert expected in out, (expected, out)
+assert "PRIVATE-KEY" not in out
+text = m.summarize("Exception Type:  EXC_BREAKPOINT (SIGTRAP)\\nTermination Reason: SIGNAL 5\\n\\nThread 0 Crashed:\\n0 Window 0x1 foo\\n")
+assert text[0].startswith("Exception Type") and "Thread 0 Crashed:" in text, text
+assert m.summarize("") == ["(empty crash log)"]
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
