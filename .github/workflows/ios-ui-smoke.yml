@@ -1,0 +1,105 @@
+name: Window iPhone — simulator smoke test
+
+# Opens the real Window app in an iPhone simulator, taps the web sign-in and types
+# an e-mail, then reports whether the app is still running and any crash report.
+# The MINDS backend is blocked on the runner: nothing reaches production.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "apps/isabella-ios/UITests/**"
+      - "apps/isabella-ios/project-uitests.yml"
+      - ".github/workflows/ios-ui-smoke.yml"
+permissions:
+  contents: read
+jobs:
+  smoke:
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Block the MINDS backend for the simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          host="$(/usr/libexec/PlistBuddy -c 'Print :SUPABASE_URL' apps/isabella-ios/Config/App-Info.plist | sed -E 's#^https?://##; s#/.*##')"
+          [[ "$host" == *.supabase.co ]] || { echo "Unexpected backend host" >&2; exit 1; }
+          printf '127.0.0.1 %s\n::1 %s\n' "$host" "$host" | sudo tee -a /etc/hosts >/dev/null
+          sudo dscacheutil -flushcache; sudo killall -HUP mDNSResponder || true
+          if curl -s -m 5 -o /dev/null "https://$host/"; then echo "Backend still reachable" >&2; exit 1; fi
+          echo "Backend blocked"
+      - name: Generate project with the UI test target
+        working-directory: apps/isabella-ios
+        run: |
+          xcodebuild -version
+          brew list --versions xcodegen >/dev/null 2>&1 || brew install xcodegen
+          bash Config/prepare-app-icon.sh
+          xcodegen generate --spec project-uitests.yml
+      - name: Pick an iPhone simulator
+        shell: bash
+        run: |
+          set -euo pipefail
+          udid="$(xcrun simctl list devices available -j | python3 -c '
+          import json, sys
+          data = json.load(sys.stdin)["devices"]
+          runtimes = sorted((r for r in data if "iOS" in r), key=lambda r: [int(x) for x in r.rsplit("iOS-", 1)[-1].split("-") if x.isdigit()])
+          for runtime in reversed(runtimes):
+              phones = [d for d in data[runtime] if d["name"].startswith("iPhone") and d.get("isAvailable")]
+              if phones:
+                  print(phones[0]["udid"]); print(phones[0]["name"], runtime, file=sys.stderr); break
+          ')"
+          [[ -n "$udid" ]] || { echo "No iPhone simulator" >&2; exit 1; }
+          echo "SIM_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl boot "$udid" || true
+          xcrun simctl bootstatus "$udid" -b
+          touch "$RUNNER_TEMP/smoke-start"
+      - name: Run the sign-in smoke test
+        working-directory: apps/isabella-ios
+        shell: bash
+        run: |
+          set -uo pipefail
+          xcodebuild test \
+            -project MINDS.xcodeproj -scheme MINDS -configuration Debug \
+            -destination "id=$SIM_UDID" \
+            -resultBundlePath "$RUNNER_TEMP/smoke.xcresult" \
+            CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= \
+            > "$RUNNER_TEMP/smoke.log" 2>&1
+          status=$?
+          grep -E "WINDOW-SMOKE|Test Case .* (passed|failed)|error:|XCTAssert|crash" "$RUNNER_TEMP/smoke.log" | grep -v "^ld:" | head -60
+          echo "SMOKE_STATUS=$status" >> "$GITHUB_ENV"
+          [[ $status -eq 0 ]] || tail -40 "$RUNNER_TEMP/smoke.log"
+      - name: Crash reports written during the test
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          found=0
+          while IFS= read -r -d '' report; do
+            found=1
+            echo "=== $(basename "$report")"
+            python3 -I -c '
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("crash", sys.argv[1])
+          m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+          print("\n".join(m.summarize(open(sys.argv[2], errors="replace").read())))
+          ' apps/isabella-ios/Config/asc-crash-reports.py "$report"
+          done < <(find "$HOME/Library/Logs/DiagnosticReports" -newer "$RUNNER_TEMP/smoke-start" \( -name 'MINDS*' -o -name 'Window*' \) -print0 2>/dev/null)
+          [[ $found -eq 1 ]] || echo "No crash report from Window during the test."
+      - name: Export screenshots
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/smoke-shots"
+          xcrun xcresulttool export attachments --path "$RUNNER_TEMP/smoke.xcresult" --output-path "$RUNNER_TEMP/smoke-shots" >/dev/null 2>&1 || true
+          ls "$RUNNER_TEMP/smoke-shots" | head -20
+      - name: Keep the screenshots (sign-in page only, no data)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: window-ui-smoke
+          path: ${{ runner.temp }}/smoke-shots
+          retention-days: 7
+          if-no-files-found: ignore
+      - name: Result
+        shell: bash
+        run: '[[ "${SMOKE_STATUS:-1}" -eq 0 ]]'

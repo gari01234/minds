@@ -273,3 +273,17 @@ assert m.summarize("") == ["(empty crash log)"]
 `], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
   assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
+
+test('simulator smoke test drives the real app without touching production or the App Store project', () => {
+  const smoke = read('.github/workflows/ios-ui-smoke.yml');
+  const spec = read('apps/isabella-ios/project-uitests.yml');
+  const uiTest = read('apps/isabella-ios/UITests/WebSignInSmokeTests.swift');
+  assert.ok(smoke.includes('sudo tee -a /etc/hosts'), 'the MINDS backend must be blocked for the simulator');
+  assert.ok(smoke.indexOf('Backend blocked') < smoke.indexOf('xcodebuild test'));
+  assert.ok(smoke.includes('xcodegen generate --spec project-uitests.yml'));
+  assert.ok(!smoke.includes('secrets.'), 'the smoke test needs no Apple or MINDS secrets');
+  assert.ok(spec.includes('- project.yml') && spec.includes('type: bundle.ui-testing'));
+  assert.ok(!project.includes('MINDSUITests'), 'the App Store project keeps exactly three targets');
+  assert.doesNotMatch(uiTest, /Enviar código|isabellaSendCode/);
+  assert.match(uiTest, /XCTAssertEqual\(app\.state, \.runningForeground/);
+});
