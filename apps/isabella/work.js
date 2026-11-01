@@ -149,24 +149,65 @@ let knowledgeRows=[],knowledgeFilter='active',knowledgeQuery='',projectModelSnap
    Read-only projection: no bucket creation, canonical mutation or secondary model. */
 // Proposed register entries wait for Gari: one tap confirms or discards them.
 async function decideAkteEntry(id,decision){
-  if(!id||!['confirmed','rejected'].includes(decision))return;
+  if(!id||!['confirmed','rejected','resolved'].includes(decision))return;
   const patch={status:decision,updated_at:new Date().toISOString(),...(decision==='confirmed'?{confirmed_at:new Date().toISOString()}:{})};
   const {error}=await sb.from('minds_work_memory').update(patch).eq('id',id).eq('status','proposed');
   if(error){setStatus('No pude guardar la decisión. Inténtalo de nuevo.');return}
   await renderOverview();
 }
-function projektakteMarkup(rows){
+// A task proposed by the nightly Akte-Pflege becomes a real task in the planner.
+async function akteEntryToTask(id){
+  const {data:entry,error}=await sb.from('minds_work_memory').select('id,title,occurred_at,metadata,status').eq('id',id).maybeSingle();
+  if(error||!entry||entry.status!=='proposed'){setStatus('Esta propuesta ya no está pendiente.');await renderOverview();return}
+  const due=entry.metadata?.faellig||String(entry.occurred_at||'').slice(0,10)||null;
+  const res=await sb.from('isabella_tasks').insert({title:entry.title,project_id:project.id,due_date:due,work_status:'not_started',
+    notes:entry.metadata?.quelle?'Quelle: '+entry.metadata.quelle:'',metadata:{source:'akte_pflege',memory_id:entry.id}}).select('id').single();
+  if(res.error){setStatus('No pude crear la Aufgabe.');return}
+  await sb.from('minds_work_memory').update({status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(entry.metadata||{}),task_id:res.data.id}}).eq('id',entry.id);
+  setStatus('Aufgabe angelegt: '+entry.title);
+  await renderOverview();
+}
+// Descriptive updates are applied directly but versioned; this restores the previous Steckbrief.
+async function undoSteckbrief(id){
+  const {data:row,error}=await sb.from('minds_work_memory').select('id,body,metadata').eq('id',id).maybeSingle();
+  const prev=row?.metadata?.versionen?.[0];
+  if(error||!prev){setStatus('No hay una versión anterior del Steckbrief.');return}
+  const {error:saveError}=await sb.from('minds_work_memory').update({body:prev.body,updated_at:new Date().toISOString(),
+    metadata:{...row.metadata,felder:prev.felder||{},versionen:row.metadata.versionen.slice(1),aktualisiert_von:'Gari (rückgängig)'}}).eq('id',row.id);
+  if(saveError){setStatus('No pude deshacer el cambio.');return}
+  setStatus('Projektsteckbrief: vorherige Version wiederhergestellt.');
+  await renderOverview();
+}
+function aktePflegeLine(state){
+  const run=state?.projects?.[project?.id]?.letzter_lauf;if(!run)return '';
+  const when=akteDate(run.am);
+  if(run.status==='fehler')return '<p class="work-akte-pflege">Isabella no pudo revisar la Akte la última noche ('+esc(when)+'). Lo vuelve a intentar esta noche.</p>';
+  if(run.status==='nichts_neu')return '<p class="work-akte-pflege">Akte-Pflege · '+esc(when)+' · nada nuevo desde la última revisión.</p>';
+  const parts=[run.steckbrief?'Steckbrief aktualisiert':'',run.fristen?run.fristen+' Frist(en)':'',run.entscheidungen?run.entscheidungen+' Entscheidung(en)':'',run.aufgaben?run.aufgaben+' Aufgabe(n)':'',run.widersprueche?run.widersprueche+' Widerspruch/-sprüche':''].filter(Boolean);
+  return '<p class="work-akte-pflege">Akte-Pflege · '+esc(when)+' · '+esc(run.zusammenfassung||(parts.length?parts.join(', '):'nada relevante en lo nuevo'))+(parts.length&&run.zusammenfassung?' <small>('+esc(parts.join(', '))+')</small>':'')+'</p>';
+}
+function projektakteMarkup(rows,pflege){
   if(!Array.isArray(rows))return '';
   const brief=rows.find(r=>r.memory_type==='document_state'&&r.metadata?.kind==='projektsteckbrief');
   const register=rows.filter(r=>r.memory_type==='decision'||r.memory_type==='deadline');
-  if(!brief&&!register.length)return '';
+  const tasksProposed=rows.filter(r=>r.memory_type==='commitment'&&r.status==='proposed'&&r.metadata?.kind==='aufgabe');
+  const conflicts=rows.filter(r=>r.memory_type==='open_question'&&r.status==='proposed'&&r.metadata?.kind==='widerspruch');
+  const line=aktePflegeLine(pflege);
+  if(!brief&&!register.length&&!tasksProposed.length&&!conflicts.length&&!line)return '';
   const pending=register.filter(r=>r.status==='proposed'),done=register.filter(r=>r.status==='confirmed').slice(0,8);
-  const row=r=>'<article class="work-akte-entry'+(r.status==='proposed'?' is-proposed':'')+'"><span class="work-akte-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(akteDate(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+
-    ((r.metadata?.quelle||r.metadata?.thema)?'<small>'+esc([r.metadata?.thema,r.metadata?.quelle].filter(Boolean).join(' · '))+'</small>':'')+
+  const source=r=>(r.metadata?.quelle||r.metadata?.thema)?'<small>'+esc([r.metadata?.thema,r.metadata?.quelle].filter(Boolean).join(' · '))+(r.metadata?.source==='isabella_akte_pflege'?' · Isabella':'')+'</small>':'';
+  const row=r=>'<article class="work-akte-entry'+(r.status==='proposed'?' is-proposed':'')+'"><span class="work-akte-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(akteDate(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+source(r)+
     (r.status==='proposed'?'<div class="work-akte-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div>':'')+'</article>';
-  return '<section class="work-akte"><div class="work-akte-grid">'+
-    (brief?'<div class="work-akte-brief"><div class="work-overview-section-head"><h3>Projektsteckbrief</h3><small>'+esc('aktualisiert '+akteDate(brief.updated_at))+'</small></div><div class="work-akte-brief-text">'+esc(brief.body)+'</div></div>':'')+
-    (register.length?'<div class="work-akte-register"><div class="work-overview-section-head"><h3>Entscheidungen & Fristen</h3>'+(pending.length?'<small>'+pending.length+' zu bestätigen</small>':'')+'</div>'+pending.map(row).join('')+done.map(row).join('')+'</div>':'')+
+  const taskRow=r=>'<article class="work-akte-entry is-proposed"><span class="work-akte-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(akteDate(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+source(r)+
+    '<div class="work-akte-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>';
+  const conflictRow=r=>'<article class="work-akte-entry is-proposed is-conflict"><span class="work-akte-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="work-akte-detail">'+esc(r.body)+'</small>':'')+
+    '<div class="work-akte-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>';
+  const canUndo=brief&&Array.isArray(brief.metadata?.versionen)&&brief.metadata.versionen.length;
+  const by=brief?.metadata?.aktualisiert_von;
+  return '<section class="work-akte">'+line+'<div class="work-akte-grid">'+
+    (brief?'<div class="work-akte-brief"><div class="work-overview-section-head"><h3>Projektsteckbrief</h3><small>'+esc(['aktualisiert '+akteDate(brief.updated_at),by].filter(Boolean).join(' · '))+'</small>'+(canUndo?'<button type="button" class="work-akte-undo" data-akte-undo="'+esc(brief.id)+'">Rückgängig</button>':'')+'</div><div class="work-akte-brief-text">'+esc(brief.body)+'</div></div>':'')+
+    ((register.length||tasksProposed.length||conflicts.length)?'<div class="work-akte-register"><div class="work-overview-section-head"><h3>Entscheidungen & Fristen</h3>'+((pending.length+tasksProposed.length+conflicts.length)?'<small>'+(pending.length+tasksProposed.length+conflicts.length)+' zu bestätigen</small>':'')+'</div>'+
+      conflicts.map(conflictRow).join('')+pending.map(row).join('')+tasksProposed.map(taskRow).join('')+done.map(row).join('')+'</div>':'')+
     '</div></section>';
 }
 async function renderOverview(){
@@ -175,16 +216,17 @@ async function renderOverview(){
   const body=$('#workBody'),projectId=project.id;
   body.classList.add('work-overview-host');
   body.innerHTML='<div class="work-empty">Leyendo el estado del proyecto…</div>';
-  const [t,c,f,m,a]=await Promise.allSettled([
+  const [t,c,f,m,a,pf]=await Promise.allSettled([
     sb.from('isabella_tasks').select('id,title,due_date,assignee,work_status').eq('project_id',projectId).is('completed_at',null).is('archived_at',null).order('due_date',{ascending:true,nullsFirst:false}).limit(80),
     sb.from('minds_work_claims').select('id,statement,status,provenance_class,claim_type').eq('project_id',projectId).in('status',['proposed','disputed']).order('updated_at',{ascending:false}).limit(40),
     sb.from('minds_work_files').select('id',{count:'exact',head:true}).eq('project_id',projectId),
     sb.rpc('minds_project_model_snapshot',{p_project_id:projectId}),
-    sb.from('minds_work_memory').select('id,memory_type,title,body,status,occurred_at,metadata,updated_at,created_at').eq('project_id',projectId).in('memory_type',['document_state','decision','deadline']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(60)
+    sb.from('minds_work_memory').select('id,memory_type,title,body,status,occurred_at,metadata,updated_at,created_at').eq('project_id',projectId).in('memory_type',['document_state','decision','deadline','commitment','open_question']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(80),
+    sb.from('isabella_preferences').select('value').eq('preference_key','akte_pflege').limit(1)
   ]);
   if(view!=='overview'||project?.id!==projectId)return;
   const norm=r=>r.status==='fulfilled'&&!r.value?.error?r.value:null;
-  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m),akteResult=norm(a);
+  const taskResult=norm(t),claimResult=norm(c),fileResult=norm(f),modelResult=norm(m),akteResult=norm(a),pflegeResult=norm(pf);
   const taskRows=taskResult?.data||[],claimRows=claimResult?.data||[];
   projectModelSnapshot=modelResult?.data||null;
   const known=[taskResult,claimResult,fileResult,modelResult].filter(Boolean).length;
@@ -196,7 +238,7 @@ async function renderOverview(){
   body.innerHTML='<div class="work-overview">'+
     '<div class="work-overview-intro"><div class="eyebrow">MINDS · PROJECT</div><h2>Panorama de '+esc(project.name)+'</h2><p>Lectura operativa del proyecto. Los hechos, inferencias y decisiones conservan su procedencia y autoridad propias.</p></div>'+
     '<div class="work-overview-coverage">'+esc('Fuentes consultadas: '+known+'/4 · '+filesLabel+' · '+revLabel)+(known<4?'<p>La lectura es parcial: alguna fuente no respondió.</p>':'')+'</div>'+
-    projektakteMarkup(akteResult?.data||null)+
+    projektakteMarkup(akteResult?.data||null,pflegeResult?.data?.[0]?.value||null)+
     '<div class="work-overview-columns">'+
     '<section class="work-overview-section"><div class="work-overview-section-head"><h3>Movimientos abiertos</h3><button data-work-go="planner">Abrir Planner ↗</button></div>'+
     (taskResult?taskText:'<p class="small">No pude consultar las tareas de este proyecto.</p>')+
@@ -210,6 +252,8 @@ async function renderOverview(){
   $$('[data-work-go]').forEach(button=>button.onclick=()=>document.querySelector('[data-work-view="'+button.dataset.workGo+'"]')?.click());
   $$('[data-work-edit-task]').forEach(button=>button.onclick=()=>void window.ISABELLA_APP?.openCanonicalTaskById?.(button.dataset.workEditTask));
   $$('[data-akte-decide]').forEach(button=>button.onclick=()=>void decideAkteEntry(button.dataset.akteId,button.dataset.akteDecide));
+  $$('[data-akte-task]').forEach(button=>button.onclick=()=>{button.disabled=true;void akteEntryToTask(button.dataset.akteTask)});
+  $$('[data-akte-undo]').forEach(button=>button.onclick=()=>{button.disabled=true;void undoSteckbrief(button.dataset.akteUndo)});
 }
 const knowledgeStates={proposed:'Propuesto',confirmed:'Confirmado',disputed:'En disputa',superseded:'Sustituido',resolved:'Resuelto',rejected:'Descartado'};
 const provenanceNames={user:'Afirmación del usuario',project_source:'Fuente del proyecto',external:'Fuente externa',inferred:'Inferencia',system:'Sistema'};
@@ -316,13 +360,55 @@ function workTileIcon(kind,f=null){
 function workPlainPreview(text){
   return String(text||'').replace(/\[([^\]]+)\]\([^)]+\)/g,'$1').replace(/(\*\*|__|`+)/g,'').replace(/^\s{0,3}(#{1,6}|>|[-*+]|\d+\.)\s+/gm,'').replace(/\s+/g,' ').trim();
 }
+// Duplicates: same content hash (filed by Claude), or the same name (ignoring " (1)", "Kopie", "copy") and exactly the same size.
+function duplicateKey(f){
+  if(f?.metadata?.content_sha256)return 'sha:'+f.metadata.content_sha256;
+  const name=String(f?.name||'').toLowerCase().normalize('NFC').replace(/\s*\(\d+\)(?=\.[^.]+$|$)/,'').replace(/\s*[-_]?\s*(kopie|copy|copia)(\s*\d+)?(?=\.[^.]+$|$)/,'').replace(/\s+/g,' ').trim();
+  return 'name:'+name+'|'+Number(f?.size_bytes||0);
+}
+function duplicateGroups(rows){
+  const map=new Map();
+  for(const f of rows||[]){const k=duplicateKey(f);if(!map.has(k))map.set(k,[]);map.get(k).push(f)}
+  return [...map.values()].filter(g=>g.length>1).map(g=>[...g].sort((a,b)=>String(a.created_at||'').localeCompare(String(b.created_at||''))));
+}
+async function loadDuplicateGroups(){
+  const {data,error}=await sb.from('minds_work_files').select('id,folder_id,name,size_bytes,metadata,storage_path,created_at').eq('project_id',project.id).order('created_at',{ascending:true}).limit(3000);
+  if(error)throw error;return duplicateGroups(data);
+}
+async function duplicatesPanel(){
+  let groups=[];try{groups=await loadDuplicateGroups()}catch{setStatus('No pude buscar duplicados.');return}
+  const folderName=id=>folders.find(f=>f.id===id)?.name||project.name;
+  const copies=groups.flatMap(g=>g.slice(1));
+  if(!copies.length){setStatus('No hay duplicados en este proyecto.');return}
+  const html=`<div class="work-dupes"><p class="small">Se queda el archivo más antiguo de cada grupo; las copias marcadas se borran de forma permanente (archivo y texto extraído). Puedes desmarcar las que quieras conservar.</p>
+    ${groups.map(g=>`<div class="work-dupe-group"><div class="work-dupe-keep"><span>Se queda</span><strong>${esc(g[0].name)}</strong><small>${esc(folderName(g[0].folder_id))} · ${esc(akteDate(g[0].created_at))} · ${Math.max(1,Math.round(Number(g[0].size_bytes||0)/1024))} KB</small></div>
+      ${g.slice(1).map(f=>`<label class="work-dupe-copy"><input type="checkbox" data-dupe="${esc(f.id)}" checked><span><strong>${esc(f.name)}</strong><small>${esc(folderName(f.folder_id))} · ${esc(akteDate(f.created_at))}</small></span></label>`).join('')}</div>`).join('')}
+    <div class="work-dupe-actions"><button type="button" class="danger" data-dupes-delete>Borrar ${copies.length} copia${copies.length===1?'':'s'}</button></div></div>`;
+  window.ISABELLA_APP?.openModal?.('Duplicados en '+project.name,html);
+  const modalRoot=document.getElementById('modalBody')||document;
+  const button=modalRoot.querySelector('[data-dupes-delete]');if(!button)return;
+  const update=()=>{const n=[...modalRoot.querySelectorAll('[data-dupe]:checked')].length;button.textContent=n?'Borrar '+n+' copia'+(n===1?'':'s'):'Nada seleccionado';button.disabled=!n;delete button.dataset.confirm};
+  modalRoot.querySelectorAll('[data-dupe]').forEach(x=>x.onchange=update);
+  button.onclick=async()=>{
+    const ids=[...modalRoot.querySelectorAll('[data-dupe]:checked')].map(x=>x.dataset.dupe);if(!ids.length)return;
+    // Two taps: the first only asks for confirmation.
+    if(!button.dataset.confirm){button.dataset.confirm='1';button.textContent='¿Seguro? Borrar '+ids.length+' definitivamente';return}
+    button.disabled=true;button.textContent='Borrando…';
+    const rows=copies.filter(f=>ids.includes(f.id));
+    const {error}=await sb.from('minds_work_files').delete().in('id',rows.map(f=>f.id));
+    if(error){button.disabled=false;button.textContent='Reintentar';setStatus('No pude borrar los duplicados.');return}
+    try{await sb.storage.from('minds-work').remove(rows.map(f=>f.storage_path).filter(Boolean))}catch{}
+    window.ISABELLA_APP?.closeModal?.();setStatus(rows.length+' copia'+(rows.length===1?'':'s')+' borrada'+(rows.length===1?'':'s')+'.');
+    await renderDesktop();
+  };
+}
 async function renderDesktop(){
   await loadFolders();
   let fq=sb.from('minds_work_files').select('id,folder_id,name,mime_type,size_bytes,source_kind,index_status,metadata,storage_path,created_at').eq('project_id',project.id).order('created_at',{ascending:false});
   fq=folderId?fq.eq('folder_id',folderId):fq.is('folder_id',null);
   const {data:fileRows,error:fe}=await fq;if(fe)throw fe;files=fileRows||[];
   const childFolders=folders.filter(x=>(x.parent_id||null)===(folderId||null)),trail=folderTrail(),body=$('#workBody');
-  body.innerHTML=`<div class="work-desktop-toolbar"><div class="work-breadcrumb"><button data-work-project-root>${esc(project.name)}</button>${trail.map(f=>`<span>›</span><button data-work-crumb="${f.id}">${esc(f.name)}</button>`).join('')}</div><div class="work-toolbar-actions"><button data-work-new-folder>＋ Ordner</button><button data-work-upload>↑ Dateien</button></div></div>
+  body.innerHTML=`<div class="work-desktop-toolbar"><div class="work-breadcrumb"><button data-work-project-root>${esc(project.name)}</button>${trail.map(f=>`<span>›</span><button data-work-crumb="${f.id}">${esc(f.name)}</button>`).join('')}</div><div class="work-toolbar-actions"><button data-work-dupes hidden>Duplicados</button><button data-work-new-folder>＋ Ordner</button><button data-work-upload>↑ Dateien</button></div></div>
     <div class="work-drop-hint">Dateien, PDFs, Word, Excel, Bilder oder E-Mails hierher ziehen</div>
     <div class="work-files">
       ${folderId?`<button class="work-file work-folder work-up" data-work-up><span class="work-file-icon">${workTileIcon('back')}</span><strong>Zurück</strong><small>Ordner</small></button>`:''}
@@ -337,6 +423,9 @@ async function renderDesktop(){
   $$('[data-work-folder]').forEach(b=>b.onclick=()=>{folderId=b.dataset.workFolder;void renderDesktop()});
   $('[data-work-up]')?.addEventListener('click',()=>{folderId=folders.find(x=>x.id===folderId)?.parent_id||null;void renderDesktop()});
   $$('[data-work-file]').forEach(b=>b.onclick=()=>void openFile(b.dataset.workFile));
+  const dupesButton=$('[data-work-dupes]');
+  if(dupesButton){dupesButton.onclick=()=>void duplicatesPanel();
+    loadDuplicateGroups().then(groups=>{const n=groups.reduce((a,g)=>a+g.length-1,0);if(n&&document.body.contains(dupesButton)){dupesButton.hidden=false;dupesButton.textContent='Duplicados · '+n}}).catch(()=>{})}
 }
 async function newFolder(){const name=window.prompt('Nombre del Ordner');if(!name?.trim())return;setStatus('Creando Ordner…');const {error}=await sb.from('minds_work_folders').insert({project_id:project.id,parent_id:folderId,name:name.trim()});setStatus(error?'No pude crear el Ordner.':'');if(!error)await renderDesktop()}
 async function uploadFiles(list){

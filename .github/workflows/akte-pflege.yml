@@ -1,0 +1,29 @@
+name: Window Akte-Pflege
+# Once a night Isabella tidies each project's Akte: only what is new, small model, nothing when nothing changed.
+# The Edge Function accepts only this workflow on main (GitHub OIDC token, audience minds-akte-pflege).
+on:
+  schedule:
+    - cron: '23 1 * * *'   # 02:23 (winter) / 03:23 (summer) in Berlin
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: akte-pflege
+  cancel-in-progress: false
+jobs:
+  pflege:
+    if: github.repository == 'gari01234/minds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Ask Isabella to tidy the Projektakte
+        run: |
+          set -euo pipefail
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=minds-akte-pflege" | jq -r .value)
+          code=$(curl -sS -o result.json -w '%{http_code}' --max-time 400 -X POST \
+            "https://lodexwyyynlarkqgkyhy.supabase.co/functions/v1/window-akte-pflege" \
+            -H "Authorization: Bearer $token" -H 'content-type: application/json' -d '{}')
+          echo "status=$code"; cat result.json; echo
+          if [ "$code" = "404" ]; then echo "::warning::window-akte-pflege is not deployed yet"; exit 0; fi
+          [ "$code" = "200" ] || [ "$code" = "207" ]

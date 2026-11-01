@@ -63,8 +63,13 @@ export function matchTopic(threads,ref){
   return {match:null,candidates:(contains.length?contains:scored.map(x=>x.t)).slice(0,5)};
 }
 
-export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>crypto.randomUUID(),tz=TZ}){
+// Dimensions of Isabella's operating model ("Lo que Isabella sabe de mí").
+export const ARBEITSWEISE_BEREICHE=['scheduling','task_management','work_rhythm','interruptions','planning','decision_style','communication','tooling','review'];
+
+// actor 'claude' = the connector (Gari's own session); 'isabella' = the nightly Akte-Pflege.
+export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>crypto.randomUUID(),tz=TZ,actor='claude'}){
   if(!sb||!userId||!base)throw new Error('akte_tools_need_owner');
+  const ACTOR=actor==='isabella'?{source:'isabella_akte_pflege',name:'Isabella',prov:'akte_pflege'}:{source:'claude_connector',name:'Claude',prov:'claude_session'};
   const today=()=>localDay(now(),tz);
   const stamp=()=>now().toISOString();
 
@@ -97,7 +102,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     const p=await base.resolveProject(project),day=today();
     const [sb1,topics,memos,tasks,desk]=await Promise.all([
       steckbriefRow(p.id),threadsOf(p.id),
-      sb.from('minds_work_memory').select('id,memory_type,title,status,occurred_at,created_at').eq('user_id',userId).eq('project_id',p.id).in('memory_type',['decision','deadline']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(40),
+      sb.from('minds_work_memory').select('id,memory_type,title,status,occurred_at,created_at,metadata').eq('user_id',userId).eq('project_id',p.id).in('memory_type',['decision','deadline','commitment','open_question']).in('status',['proposed','confirmed']).order('created_at',{ascending:false}).limit(60),
       sb.from('isabella_tasks').select('id,title,due_date,start_date,assignee,completed_at,archived_at').eq('user_id',userId).eq('project_id',p.id).is('completed_at',null).is('archived_at',null).lte('due_date',addDays(day,14)).order('due_date',{ascending:true}).limit(15),
       desktopSummary(p.id)
     ]);
@@ -106,9 +111,11 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
       projektsteckbrief:sb1?{text:sb1.body,aktualisiert:String(sb1.updated_at||'').slice(0,10)}:null,
       hinweis:sb1?undefined:'Noch kein Projektsteckbrief. Mit update_project_brief anlegen, wenn Gari Phase, Meilensteine oder Beteiligte nennt.',
       themen:topics.map(topicLine),
-      register:{offen_zu_bestaetigen:memoRows.filter(m=>m.status==='proposed').length,
+      register:{offen_zu_bestaetigen:memoRows.filter(m=>m.status==='proposed'&&(m.memory_type==='decision'||m.memory_type==='deadline')).length,
         fristen:memoRows.filter(m=>m.memory_type==='deadline'&&(!m.occurred_at||String(m.occurred_at).slice(0,10)>=day)).slice(0,8).map(m=>({id:'memo:'+m.id,frist:String(m.occurred_at||'').slice(0,10)||null,titel:m.title,status:m.status})),
-        letzte_entscheidungen:memoRows.filter(m=>m.memory_type==='decision').slice(0,6).map(m=>({id:'memo:'+m.id,titel:m.title,status:m.status,datum:String(m.occurred_at||m.created_at||'').slice(0,10)}))},
+        letzte_entscheidungen:memoRows.filter(m=>m.memory_type==='decision').slice(0,6).map(m=>({id:'memo:'+m.id,titel:m.title,status:m.status,datum:String(m.occurred_at||m.created_at||'').slice(0,10)})),
+        vorgeschlagene_aufgaben:memoRows.filter(m=>m.memory_type==='commitment'&&m.status==='proposed'&&m.metadata&&m.metadata.kind==='aufgabe').slice(0,6).map(m=>({id:'memo:'+m.id,titel:m.title,faellig:String(m.occurred_at||'').slice(0,10)||undefined})),
+        widersprueche:memoRows.filter(m=>m.memory_type==='open_question'&&m.status==='proposed'&&m.metadata&&m.metadata.kind==='widerspruch').slice(0,4).map(m=>({id:'memo:'+m.id,titel:m.title}))},
       aufgaben_naechste_14_tage:(must(tasks,'tasks')||[]).map(t=>({id:t.id,titel:t.title,faellig:t.due_date,start:t.start_date||undefined,verantwortlich:t.assignee||undefined})),
       schreibtisch:desk};
   }
@@ -182,8 +189,8 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     const at=isDay(datum)?datum+'T12:00:00Z':null;
     const row={user_id:userId,project_id:p.id,memory_type:type,title,body:String(details||'').slice(0,4000),status:bestaetigt?'confirmed':'proposed',
       occurred_at:at,confirmed_at:bestaetigt?stamp():null,
-      metadata:{source:'claude_connector',quelle:quelle?String(quelle).slice(0,300):undefined,thema_id:thema?thema.id:undefined,thema:thema?thema.title:undefined},
-      provenance:[{kind:'claude_session',thread_id:thema?thema.id:null,at:stamp()}]};
+      metadata:{source:ACTOR.source,quelle:quelle?String(quelle).slice(0,300):undefined,thema_id:thema?thema.id:undefined,thema:thema?thema.title:undefined},
+      provenance:[{kind:ACTOR.prov,thread_id:thema?thema.id:null,at:stamp()}]};
     const saved=must(await sb.from('minds_work_memory').insert(row).select('id,status').single(),'register_insert');
     return {id:'memo:'+saved.id,titel:title,art:type==='deadline'?'Frist':'Entscheidung',status:saved.status};
   }
@@ -221,7 +228,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
       offene_fragen:args.offene_fragen!==undefined?list(args.offene_fragen).slice(0,20):list(prev.offene_fragen),
       naechste_schritte:args.naechste_schritte!==undefined?list(args.naechste_schritte).slice(0,20):list(prev.naechste_schritte),
       dokumente:args.dokumente!==undefined?list(args.dokumente).slice(0,20):list(prev.dokumente),
-      aktualisiert_am:stamp(),aktualisiert_von:'Claude'};
+      aktualisiert_am:stamp(),aktualisiert_von:ACTOR.name};
     if(!themenblatt.stand)throw new ToolError('Falta "stand": resume en una o dos frases dónde está el tema.');
     // History first: the handoff and any condensed exchange become thread messages.
     let conversationId=thread.conversation_id;
@@ -240,8 +247,21 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     const register=[];
     for(const e of neue){const r=await addRegister(p,{titel:e.text,datum:e.datum,quelle:e.quelle,bestaetigt:e.bestaetigt,thema:thread},existing);if(r&&!r.skipped){register.push(r);existing.push({memory_type:'decision',title:e.text})}}
     for(const f of list(args.fristen)){const fr=typeof f==='string'?{titel:f}:f;const r=await addRegister(p,{titel:fr.titel||fr.text,datum:fr.datum,quelle:fr.quelle,art:'frist',bestaetigt:!!fr.bestaetigt,thema:thread},existing);if(r&&!r.skipped)register.push(r)}
+    // What Gari said explicitly about how he wants to work becomes a proposal in his operating model;
+    // nothing changes how Isabella works until he confirms it in "Lo que Isabella sabe de mí".
+    const arbeitsweise=[];
+    for(const w of list(args.arbeitsweise).slice(0,5)){
+      const aussage=String((typeof w==='string'?w:w&&w.aussage)||'').trim().slice(0,600);if(!aussage)continue;
+      const bereich=ARBEITSWEISE_BEREICHE.includes(w&&w.bereich)?w.bereich:'communication';
+      const r=await sb.rpc('minds_propose_operating_model_hypothesis',{p_dimension:bereich,p_claim_type:'preference',p_statement:aussage,
+        p_rationale:'Gari lo dijo explícitamente en una sesión de Claude ('+p.name+' · '+thread.title+').',p_source_kind:'conversation',
+        p_source_ref:'claude:topic:'+thread.id,p_evidence_note:w&&w.zitat?String(w.zitat).slice(0,600):null});
+      arbeitsweise.push(r.error?{aussage,gespeichert:false}:{aussage,vorgeschlagen:true});
+    }
     return {gespeichert:true,projekt:p.name,thema:{id:'topic:'+thread.id,titel:thread.title},themenblatt:renderThemenblatt(themenblatt),nachrichten:rows.length,register,
-      hinweis:register.some(r=>r.status==='proposed')?'Vorgeschlagene Einträge bestätigt Gari in Window (Projekt → Panorama).':undefined};
+      arbeitsweise:arbeitsweise.length?arbeitsweise:undefined,
+      hinweis:[register.some(r=>r.status==='proposed')?'Vorgeschlagene Einträge bestätigt Gari in Window (Projekt → Panorama).':'',
+        arbeitsweise.some(a=>a.vorgeschlagen)?'Arbeitsweise: Gari bestätigt sie in Window (Lo que Isabella sabe de mí).':''].filter(Boolean).join(' ')||undefined};
   }
 
   async function updateProjectBrief(args={}){
@@ -252,7 +272,11 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     for(const k of ['meilensteine','beteiligte','prioritaeten'])if(args[k]!==undefined)felder[k]=list(args[k]).slice(0,30);
     const body=renderSteckbrief(felder);
     if(!body)throw new ToolError('El Projektsteckbrief necesita al menos un campo (phase, meilensteine, beteiligte, prioritaeten o notizen).');
-    const meta={kind:'projektsteckbrief',felder,aktualisiert_von:'Claude'};
+    if(row&&row.body===body)return {projekt:p.name,projektsteckbrief:body,unveraendert:true};
+    // Descriptive updates apply directly but stay versioned, so Gari can undo them in Window.
+    const versionen=row?[{body:row.body,felder:prev,aktualisiert_am:row.updated_at,aktualisiert_von:(row.metadata&&row.metadata.aktualisiert_von)||null},
+      ...list(row.metadata&&row.metadata.versionen)].slice(0,10):[];
+    const meta={kind:'projektsteckbrief',felder,aktualisiert_von:ACTOR.name,versionen};
     if(row)must(await sb.from('minds_work_memory').update({body,metadata:{...(row.metadata||{}),...meta},updated_at:stamp()}).eq('user_id',userId).eq('id',row.id),'steckbrief_update');
     else must(await sb.from('minds_work_memory').insert({user_id:userId,project_id:p.id,memory_type:'document_state',title:'Projektsteckbrief',body,status:'confirmed',confirmed_at:stamp(),metadata:meta}),'steckbrief_insert');
     return {projekt:p.name,projektsteckbrief:body};
@@ -298,6 +322,30 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
       hinweis:'Der Text wird in den nächsten Minuten erfasst und ist danach über search auffindbar.'};
   }
 
+  // Proposed tasks and contradictions (nightly Akte-Pflege). Never re-proposes something Gari already discarded.
+  async function proposeEntry(projectRef,{art,titel,details,datum,quelle,thema}={}){
+    const p=await base.resolveProject(projectRef);
+    const type=art==='aufgabe'?'commitment':art==='widerspruch'?'open_question':null;
+    if(!type)throw new ToolError('art debe ser aufgabe o widerspruch.');
+    const title=String(titel||'').trim().slice(0,240);if(!title)return null;
+    const existing=must(await sb.from('minds_work_memory').select('title').eq('user_id',userId).eq('project_id',p.id).eq('memory_type',type).limit(500),'entries')||[];
+    if(existing.some(r=>norm(r.title)===norm(title)))return {skipped:true,titel:title};
+    let topic=null;if(thema){const {match}=matchTopic(await threadsOf(p.id),thema);topic=match}
+    const row={user_id:userId,project_id:p.id,memory_type:type,title,body:String(details||'').slice(0,4000),status:'proposed',
+      occurred_at:isDay(datum)?datum+'T12:00:00Z':null,
+      metadata:{source:ACTOR.source,kind:art,quelle:quelle?String(quelle).slice(0,300):undefined,faellig:isDay(datum)?datum:undefined,thema_id:topic?topic.id:undefined,thema:topic?topic.title:undefined},
+      provenance:[{kind:ACTOR.prov,thread_id:topic?topic.id:null,at:stamp()}]};
+    const saved=must(await sb.from('minds_work_memory').insert(row).select('id,status').single(),'entry_insert');
+    return {id:'memo:'+saved.id,titel:title,art,status:saved.status};
+  }
+
+  // Gari's own edited copy of a Projektakte skill, if he installed the pack and changed it in Window.
+  async function personalSkill(slug){
+    const r=await sb.from('minds_user_skills').select('instructions,version,enabled').eq('user_id',userId).eq('agent','isabella').eq('slug',String(slug||'')).maybeSingle();
+    if(r.error||!r.data||r.data.enabled===false)return null;
+    return r.data;
+  }
+
   async function renameTopic({topic_id,titel}={}){
     const id=String(topic_id||'').replace(/^topic:/,''),t=String(titel||'').trim().slice(0,160);
     if(!id||!t)throw new ToolError('Indica topic_id y el nuevo título.');
@@ -306,5 +354,5 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     return {umbenannt:{id:'topic:'+thread.id,von:thread.title,nach:t}};
   }
 
-  return {openProject,openTopic,search,fetchItem,recordDecision,closeSession,updateProjectBrief,fileDocument,renameTopic,matchTopic};
+  return {openProject,openTopic,search,fetchItem,recordDecision,closeSession,updateProjectBrief,fileDocument,renameTopic,matchTopic,proposeEntry,personalSkill};
 }

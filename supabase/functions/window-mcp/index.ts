@@ -6,7 +6,8 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 import {createMcpHandler,McpServer} from "npm:@modelcontextprotocol/server@2.2.0";
 import * as z from "npm:zod@4.6.5";
 import {createWindowTools,ToolError} from "../_shared/window-tools.mjs";
-import {createAkteTools} from "../_shared/window-akte.mjs";
+import {createAkteTools,ARBEITSWEISE_BEREICHE} from "../_shared/window-akte.mjs";
+import {AKTE_SKILLS,AKTE_SKILL_PREFIX,akteSkillMessage} from "../_shared/akte-skills.mjs";
 
 const SUPABASE_URL=(Deno.env.get("SUPABASE_URL")||"").replace(/\/$/,"");
 // The public URL Gari pastes into Claude; the protected-resource metadata must repeat it exactly.
@@ -43,6 +44,8 @@ How to work:
 - Before stating anything about documents: search, then fetch. Cite file names. Never invent files, dates or decisions.
 - Topics are stable themes (Lichtplanung, Behinderungsanzeige, HLS & TWP…), not chat titles. Many Claude chats can feed one topic.
 - When a piece of work is done, or Gari says "guárdalo"/"cierra": close_session with stand, entscheidungen (bestaetigt=true only for what Gari explicitly decided), offene_fragen, naechste_schritte, fristen. Show Gari in 3–5 lines what you are saving.
+- If Gari explicitly said how he wants to work (e.g. "mándame siempre primero un borrador corto"), pass it as arbeitsweise in close_session, in Spanish and in his words. Never infer personality or anything sensitive.
+- open_project lists entries waiting for Gari (offen_zu_bestaetigen, vorgeschlagene_aufgaben, widersprueche, found by Isabella's nightly Akte-Pflege). Mention them briefly at the start; Gari confirms them in Window.
 - E-mails or texts Gari pastes to keep: file_document (art "email", with von/an/datum/betreff), then point out deadlines and decisions you noticed and offer to record them.
 - create_task / update_task change Gari's real task list: do it when he asks; otherwise propose.
 - Keep tool calls lean: prefer open_topic over reading whole threads, and fetch only what you need.`;
@@ -86,7 +89,9 @@ function buildServer(tools:ReturnType<typeof createWindowTools>,akte:ReturnType<
       stand:z.string().describe("1–3 sentences in German: where the topic stands now"),entscheidungen:z.array(decision).max(20).optional(),
       offene_fragen:z.array(z.string()).max(20).optional(),naechste_schritte:z.array(z.string()).max(20).optional(),fristen:z.array(frist).max(10).optional(),
       dokumente:z.array(z.string()).max(20).optional().describe("Key document names"),
-      verlauf:z.array(z.object({role:z.enum(["user","assistant"]),content:z.string()})).max(30).optional()}),annotations:WRITE},run(a=>akte.closeSession(a)));
+      verlauf:z.array(z.object({role:z.enum(["user","assistant"]),content:z.string()})).max(30).optional(),
+      arbeitsweise:z.array(z.object({aussage:z.string().describe("In Spanish, Gari's own words: how he wants Claude/Isabella to work with him"),bereich:z.enum(ARBEITSWEISE_BEREICHE as [string,...string[]]).optional(),zitat:z.string().optional().describe("What Gari literally said")})).max(5).optional()
+        .describe("Only what Gari explicitly said about how he wants to work. Becomes a proposal he confirms in Window.")}),annotations:WRITE},run(a=>akte.closeSession(a)));
   server.registerTool("record_decision",{title:"Entscheidung/Frist eintragen",description:"Add one decision (art 'entscheidung') or deadline (art 'frist') to the project register, in German, with date and source. Proposed unless bestaetigt.",
     inputSchema:z.object({project:z.string(),titel:z.string(),art:z.enum(["entscheidung","frist"]).optional(),details:z.string().optional(),datum:z.string().optional(),quelle:z.string().optional(),thema:z.string().optional(),bestaetigt:z.boolean().optional()}),annotations:WRITE},run(a=>akte.recordDecision(a)));
   server.registerTool("file_document",{title:"Dokument ablegen",description:"File a text into the project desktop as a document (e-mail, note, letter, protocol). Duplicates are detected by content. E-mails go to 'Emails' unless ordner is given. Text extraction follows automatically.",
@@ -98,17 +103,17 @@ function buildServer(tools:ReturnType<typeof createWindowTools>,akte:ReturnType<
   server.registerTool("rename_topic",{title:"Thema umbenennen",description:"Rename a topic (thread) in Window.",
     inputSchema:z.object({topic_id:z.string(),titel:z.string()}),annotations:WRITE},run(a=>akte.renameTopic(a)));
 
-  // One-click starters in Claude's "+" menu → Window.
-  server.registerPrompt("thema_fortsetzen",{title:"Thema fortsetzen",description:"Retomar un tema de un proyecto en Window",argsSchema:z.object({projekt:z.string(),thema:z.string()})},
-    ({projekt,thema}:any)=>prompt(`Retoma en Window el proyecto ${projekt}, tema «${thema}»: abre el tema (open_topic), resúmeme en 5 líneas dónde estamos y propón el siguiente paso.`));
-  server.registerPrompt("sitzung_abschliessen",{title:"Sitzung abschließen",description:"Guardar el resultado de esta conversación en el Themenblatt",argsSchema:z.object({projekt:z.string(),thema:z.string().optional()})},
-    ({projekt,thema}:any)=>prompt(`Cierra esta sesión en Window (proyecto ${projekt}${thema?`, tema «${thema}»`:''}): enséñame en 3–5 líneas lo que vas a guardar (Stand, Entscheidungen, offene Fragen, nächste Schritte, Fristen — en alemán) y, cuando te diga que sí, usa close_session. Marca como bestätigt solo lo que yo haya decidido explícitamente.`));
-  server.registerPrompt("emails_ablegen",{title:"E-Mails ablegen",description:"Archivar correos en el escritorio del proyecto",argsSchema:z.object({projekt:z.string()})},
-    ({projekt}:any)=>prompt(`Voy a pegarte uno o varios correos. Archívalos en el escritorio de ${projekt} en Window con file_document (art email, von, an, datum, betreff; un documento por correo). Después dime qué plazos, decisiones o tareas detectas y pregúntame cuáles registro.`));
-  server.registerPrompt("jour_fixe_vorbereiten",{title:"Jour fixe vorbereiten",description:"Preparar la agenda de una reunión del proyecto",argsSchema:z.object({projekt:z.string(),termin:z.string().optional()})},
-    ({projekt,termin}:any)=>prompt(`Prepara la agenda del Jour fixe de ${projekt}${termin?` (${termin})`:''}: usa open_project, los temas abiertos, las preguntas abiertas de los Themenblätter, los plazos del registro y los correos recientes del escritorio. Agenda en alemán, ordenada por prioridad, con quién debe aportar qué.`));
-  server.registerPrompt("protokoll_erstellen",{title:"Protokoll erstellen",description:"Convertir notas de una reunión en protocolo, decisiones y tareas",argsSchema:z.object({projekt:z.string(),thema:z.string().optional()})},
-    ({projekt,thema}:any)=>prompt(`Te paso mis notas de una reunión de ${projekt}${thema?` (tema «${thema}»)`:''}. Redacta el Protokoll en alemán (Teilnehmer, Punkte, Entscheidungen, Aufgaben mit Verantwortlichen und Terminen), archívalo con file_document (art protokoll) y propón qué decisiones, plazos y tareas registro.`));
+  // One-click starters in Claude's "+" menu → Window. They come from the shared Projektakte skill library;
+  // if Gari installed the pack in Window and edited a skill there, his version is used.
+  for(const skill of AKTE_SKILLS){
+    const shape:Record<string,any>={};
+    for(const arg of skill.args)shape[arg.name]=arg.optional?z.string().optional():z.string();
+    server.registerPrompt(skill.prompt,{title:skill.name,description:skill.description,argsSchema:z.object(shape)},
+      async(args:any)=>{
+        let override=null;try{override=await akte.personalSkill(AKTE_SKILL_PREFIX+skill.slug)}catch{}
+        return prompt(akteSkillMessage(skill,args,override));
+      });
+  }
   return server;
 }
 
