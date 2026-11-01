@@ -3,6 +3,7 @@
 **Estado actualizado: 28 de octubre de 2026.** Cliente privado para un propietario. La app iOS debe conservar **toda la funcionalidad de la webapp de MINDS** y añadir integración Apple; no es un producto reducido ni un segundo agente. Decisión y aceptación: [IOS-FUNCTIONAL-PARITY-v0.1](../../docs/IOS-FUNCTIONAL-PARITY-v0.1.md).
 
 ## Lo implementado actualmente (código en main/PR, no aceptación física)
+- **Pantalla única (desde build 9):** la app muestra solo la PWA a pantalla completa, como en Safari; la sesión se inicia una vez dentro de la web (código por correo). Las vistas nativas siguen en el código, ocultas.
 - **MINDS completo:** puente `WKWebView` hacia la PWA existente para navegar la superficie más avanzada (Chat, Work, Agenda/planificación, Lecturas, etc.) sin reescribir su lógica. Los enlaces principales permanecen en `/minds/`; enlaces externos abren Safari. El inicio de sesión web es **separado** del inicio de sesión nativo: usar la misma cuenta. No se inyecta el token Keychain en JavaScript. Logout nativo limpia también el estado web embebido.
 - **Continuidad SwiftUI:** proyección owner-scoped de revisiones, Attention, Missions y Commitments, con estados/huecos honestos. No concede permisos ni ejecuta decisiones.
 - **Isabella Chat nativo:** OTP, Keychain ThisDeviceOnly y llamadas autenticadas a `isabella-chat` con `surface=chat_browser`, `client_message_id` y contrato de recibos. Soporta un subconjunto limitado de aprobaciones; las demás requieren la interfaz web. No reintenta turnos o mutaciones con resultado ambiguo.

@@ -28,10 +28,10 @@ test("Continuity does not infer approval or actionable status from model text", 
   assert.match(view, /model\.section = \.chat/);
   assert.doesNotMatch(view, /aprobar automáticamente|urgencyScore|TextField\(/);
 });
-test("Native main tab surface no longer claims missing Feed, Ideas or Readings", () => {
-  assert.match(shell, /ContinuityView\(\)/);
-  assert.match(shell, /ChatView\(\)/);
-  assert.match(shell, /CalendarHomeView\(\)/);
+test("Native views stay available but the shell shows only the web app (no Feed, Ideas or Readings either)", () => {
+  assert.match(shell, /FullMINDSView\(\)/);
+  assert.doesNotMatch(shell, /ContinuityView\(\)|ChatView\(\)|CalendarHomeView\(\)/);
+  assert.match(view, /struct ContinuityView/);
   assert.doesNotMatch(shell, /FeedView\(\)|IdeasView\(\)|ReadingsView\(\)/);
   assert.match(model, /var section: Section = \.web/);
   assert.match(model, /func reloadContinuity\(\)/);

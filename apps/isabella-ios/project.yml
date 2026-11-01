@@ -37,6 +37,12 @@ targets:
         INFOPLIST_KEY_UILaunchScreen_Generation: YES
         INFOPLIST_KEY_NSMicrophoneUsageDescription: Isabella usa el micrófono cuando hablas con ella.
         INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Isabella puede transcribir tu voz para convertirla en mensajes.
+        # The web app can attach photos, save images and use your location for the weather.
+        # Without these texts iOS ends the app the moment the page asks.
+        INFOPLIST_KEY_NSCameraUsageDescription: Window usa la cámara cuando haces una foto para adjuntarla.
+        INFOPLIST_KEY_NSPhotoLibraryUsageDescription: Window abre tus fotos cuando eliges una para adjuntarla.
+        INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: Window guarda en Fotos las imágenes que decides guardar.
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Window usa tu ubicación para el tiempo de Ahora, solo si lo permites.
         # Custom keys (backend URL, public key, App Group) live in Config/App-Info.plist:
         # Xcode only maps INFOPLIST_KEY_* for keys it knows.
         INFOPLIST_FILE: Config/App-Info.plist

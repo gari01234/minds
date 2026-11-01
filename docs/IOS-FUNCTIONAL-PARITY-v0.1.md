@@ -10,6 +10,7 @@ La app del iPhone debe ofrecer **todo lo que ya existe en la webapp MINDS**, ade
 - Único backend: Supabase `lodexwyyynlarkqgkyhy`; un solo MINDS Control Plane, `native_minds`, memoria, políticas de autoridad, Knowledge Coverage, Attention Economy y Artifact Intake. No crear otra Isabella.
 - El iPhone puede contener vistas nativas, Share Extension, notificaciones APNs, widgets y (solo si hay reloj compatible) watchOS.
 - **Fase puente:** pestaña «MINDS» que integra mediante WKWebView la aplicación existente publicada en `https://gari01234.github.io/minds/isabella/`. Theory/Lecturas conserva su ruta `/minds/theory/`. Esta integración evita ocultar funciones PWA aún no reconstruidas.
+- **Desde build 9 (noviembre 2026):** Window abre solo la aplicación web a pantalla completa, sin barra de pestañas nativa ni barra «MINDS completo» y con un único inicio de sesión (el de la web, por código de correo). Continuidad, Chat y Agenda nativos siguen en el proyecto pero no se muestran hasta que igualen a la web.
 - El inicio de sesión del navegador embebido **es independiente** del OTP/Keychain nativo. Se debe entrar con la misma cuenta; no se inyecta el JWT o refresh token de Keychain en JavaScript, ni se presupone SSO. Logout nativo debe limpiar también cookies y caché WebKit.
 - El portal permite navegación principal solo por HTTPS en `gari01234.github.io/minds/`; abre enlaces externos fuera del navegador embebido. No introduce puentes JS de escritura ni privilegios locales.
 

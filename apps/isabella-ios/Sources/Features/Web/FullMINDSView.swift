@@ -13,10 +13,33 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     override init() {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        // Lets the web app know it runs inside Window (e.g. to offer sign-in right away).
+        configuration.applicationNameForUserAgent = "WindowApp/1.0"
+        configuration.allowsInlineMediaPlayback = true
+        let view = WKWebView(frame: .zero, configuration: configuration)
+        // The page draws under the status bar and home indicator itself
+        // (viewport-fit=cover + env(safe-area-inset-*)), exactly as in Safari.
+        view.scrollView.contentInsetAdjustmentBehavior = .never
+        view.isOpaque = false
+        view.backgroundColor = .systemBackground
+        view.scrollView.backgroundColor = .systemBackground
+        webView = view
         super.init()
         webView.navigationDelegate = self
         webView.uiDelegate = self
+    }
+
+    // Microphone for talking to Isabella: only MINDS pages may ask, and iOS still
+    // shows its own permission prompt the first time.
+    func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
+                 initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
+                 decisionHandler: @escaping (WKPermissionDecision) -> Void) {
+        decisionHandler(origin.protocol == "https" && origin.host.lowercased() == "gari01234.github.io" ? .grant : .deny)
+    }
+
+    // If the page's process is ended by iOS (memory), reload instead of staying blank.
+    func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        webView.reload()
     }
 
     func openIfNeeded() {
@@ -100,31 +123,10 @@ private struct MINDSWebContainer: UIViewRepresentable {
 
 struct FullMINDSView: View {
     @Environment(AppModel.self) private var model
-    @State private var showSessionInformation = false
 
     var body: some View {
-        NavigationStack {
-            MINDSWebContainer(session: model.webPortal)
-                .background(Color(uiColor: .systemBackground))
-                .navigationTitle("MINDS completo")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarLeading) {
-                        Button("Información de la sesión", systemImage: "info.circle") {
-                            showSessionInformation = true
-                        }
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Button("Recargar MINDS", systemImage: "arrow.clockwise") {
-                            model.webPortal.refresh()
-                        }
-                    }
-                }
-                .alert("Acceso a MINDS web", isPresented: $showSessionInformation) {
-                    Button("Entendido", role: .cancel) {}
-                } message: {
-                    Text("La sesión web es independiente de la sesión nativa. Inicia sesión con la misma cuenta MINDS. No se transfieren contraseñas ni tokens del llavero a la página.")
-                }
-        }
+        MINDSWebContainer(session: model.webPortal)
+            .background(Color(uiColor: .systemBackground))
+            .ignoresSafeArea()
     }
 }
