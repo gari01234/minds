@@ -102,6 +102,16 @@ def validate_metadata(info, target):
             require(type(value) is int and value == 1, f"MINDSShare: unexpected {kind} activation limit")
 
 
+def validate_runtime_config(info, target, bundle_id):
+    # Build 7 shipped without these keys and could not reach MINDS.
+    require(info.get("MINDSAppGroupID") == f"group.{bundle_id}", f"{target}: missing MINDSAppGroupID")
+    if target == "MINDS":
+        url, key = info.get("SUPABASE_URL", ""), info.get("SUPABASE_ANON_KEY", "")
+        require(isinstance(url, str) and url.startswith("https://") and "$(" not in url, "MINDS: missing SUPABASE_URL")
+        require(isinstance(key, str) and len(key) > 20 and "$(" not in key, "MINDS: missing SUPABASE_ANON_KEY")
+        require(info.get("ITSAppUsesNonExemptEncryption") is False, "MINDS: missing export compliance declaration")
+
+
 def validate_bundles(mode, root, bundle_id, team):
     apps = list(root.glob("*.app"))
     require(len(apps) == 1, "Expected one app")
@@ -113,6 +123,7 @@ def validate_bundles(mode, root, bundle_id, team):
         path = app if not suffix else app / "PlugIns" / f"{target}.appex"
         info = plistlib.loads((path / "Info.plist").read_bytes())
         validate_metadata(info, target)
+        validate_runtime_config(info, target, bundle_id)
         require(info.get("CFBundleIdentifier") == bundle_id + suffix, f"{target}: bundle ID mismatch")
         current = (info.get("CFBundleShortVersionString"), info.get("CFBundleVersion"))
         require(all(current), f"{target}: missing version/build")
