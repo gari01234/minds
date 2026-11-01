@@ -7,10 +7,16 @@ import UIKit
 @MainActor
 final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let homeURL = URL(string: "https://gari01234.github.io/minds/isabella/")!
-    let webView: WKWebView
+    private var made: WKWebView?
     private var started = false
 
-    override init() {
+    // The web view is made the first time the page is shown, never at launch.
+    // AppModel (and this session) are created before UIApplicationMain; a web
+    // view made then keeps gesture recognizers UIKit never registered, and the
+    // first touch aborts the app in -[UIGestureRecognizer _delayTouch:forEvent:]
+    // (TestFlight build 9, iOS 27).
+    var webView: WKWebView {
+        if let made { return made }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         // Lets the web app know it runs inside Window (e.g. to offer sign-in right away).
@@ -23,10 +29,10 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
         view.isOpaque = false
         view.backgroundColor = .systemBackground
         view.scrollView.backgroundColor = .systemBackground
-        webView = view
-        super.init()
-        webView.navigationDelegate = self
-        webView.uiDelegate = self
+        view.navigationDelegate = self
+        view.uiDelegate = self
+        made = view
+        return view
     }
 
     // Microphone for talking to Isabella: only MINDS pages may ask, and iOS still
@@ -96,8 +102,8 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     }
 
     func clearForLogout() async {
-        webView.stopLoading()
-        webView.loadHTMLString("", baseURL: nil)
+        made?.stopLoading()
+        made?.loadHTMLString("", baseURL: nil)
         // This data store belongs to the embedded MINDS browser, not Safari.
         // Purge cookies, local storage and cached credentials upon native logout.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in

@@ -22,6 +22,11 @@ test("Window on iPhone is the hosted MINDS web app, full screen, with one sign-i
   assert.match(portal, /contentInsetAdjustmentBehavior = \.never/);
   assert.match(portal, /applicationNameForUserAgent = "WindowApp\/1\.0"/);
   assert.match(portal, /func webViewWebContentProcessDidTerminate/);
+  // Made when the page is first shown, never at launch: AppModel exists before
+  // UIApplicationMain, and a web view made then crashes UIKit on the first touch.
+  assert.match(portal, /private var made: WKWebView\?/);
+  assert.match(portal, /var webView: WKWebView \{\s*if let made \{ return made \}/);
+  assert.doesNotMatch(portal, /let webView: WKWebView|override init\(\)/);
   assert.match(app, /enum Section: Hashable \{ case web, continuity, chat, calendar \}/);
   assert.match(app, /var section: Section = \.web/);
   assert.match(portal, /https:\/\/gari01234\.github\.io\/minds\/isabella\//);

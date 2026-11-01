@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - "apps/isabella-ios/Sources/**"
       - "apps/isabella-ios/UITests/**"
       - "apps/isabella-ios/project-uitests.yml"
       - ".github/workflows/ios-ui-smoke.yml"
@@ -57,7 +58,7 @@ jobs:
         working-directory: apps/isabella-ios
         shell: bash
         run: |
-          set -uo pipefail
+          set +e
           xcodebuild test \
             -project MINDS.xcodeproj -scheme MINDS -configuration Debug \
             -destination "id=$SIM_UDID" \
@@ -84,7 +85,11 @@ jobs:
           print("\n".join(m.summarize(open(sys.argv[2], errors="replace").read())))
           ' apps/isabella-ios/Config/asc-crash-reports.py "$report"
           done < <(find "$HOME/Library/Logs/DiagnosticReports" -newer "$RUNNER_TEMP/smoke-start" \( -name 'MINDS*' -o -name 'Window*' \) -print0 2>/dev/null)
-          [[ $found -eq 1 ]] || echo "No crash report from Window during the test."
+          [[ $found -eq 1 ]] || echo "No crash report file from Window during the test."
+          echo "--- Uncaught exceptions in the simulator log:"
+          xcrun simctl spawn "$SIM_UDID" log show --last 30m --style compact \
+            --predicate 'eventMessage CONTAINS "Terminating app due to uncaught exception" OR eventMessage CONTAINS "_delayTouch"' 2>/dev/null \
+            | grep -v "^Timestamp" | cut -c1-400 | head -20 || true
       - name: Export screenshots
         if: always()
         shell: bash
