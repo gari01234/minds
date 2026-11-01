@@ -82,6 +82,18 @@ Se contrastó la alternativa de firma local: Apple permite [usar un certificado 
 
 La CI de #235 y de `main` pasó en Xcode 26.6: once pruebas sin omisiones, simulador y archivo local de los tres targets. Las versiones de archivo se verificaron como `0.1.0 (42)` y `0.1.0 (43)` en CI; los runs reales fallidos usaron builds `5` y `6`. Los metadatos ausentes del run #4 ya están corregidos. El éxito local no valida una firma cloud generada después.
 
+### C.2. Firma local en el runner (modo `upload-local-signing`, 1/11/2026)
+
+Alternativa que no espera a Apple. El mismo workflow tiene un tercer modo, **`upload-local-signing`**:
+1. Archiva igual que antes (firma ad hoc local que conserva los entitlements).
+2. Retira primero los certificados y perfiles que dejaron runs anteriores de este mismo modo (perfiles «Window CI …»), para no acumular certificados.
+3. Con la API key existente crea en el runner una clave RSA y su CSR, pide a Apple un certificado **Apple Distribution** y crea tres perfiles **App Store** (app, `.share`, `.widget`) con ese certificado. La clave privada solo vive en un llavero temporal del runner.
+4. Firma con `/usr/bin/codesign` directamente: extensiones primero y la app después. La identidad se pasa por su huella SHA-1, sin el nombre con acentos, y codesign deriva el requisito designado del propio certificado. Si aun así no se cumple, vuelve a firmar con un requisito ASCII basado en el Team ID.
+5. Pasa el mismo verificador `distribution` (autoridad, equipo, perfiles App Store, App Group, requisito designado). Solo entonces sube con `altool`.
+6. Al final borra el llavero, la clave y los ficheros temporales. El certificado y los perfiles quedan en la cuenta hasta el siguiente run de este modo, que los retira (así el procesamiento de Apple nunca encuentra un certificado revocado).
+
+No toca el certificado cloud ni los perfiles gestionados por Xcode, ni cambia la API key, los Bundle IDs o la ficha. Si Apple rechaza crear el certificado (límite de certificados de distribución), el error queda en el log.
+
 ## D. Criterios de aceptación del primer iPhone
 
 La app actual integra una superficie nativa (Continuidad, Chat, Agenda), Share Extension/WidgetKit y un puente WKWebView a la **PWA completa**. Su intención es no perder nada de lo ya construido. Aun así, un wrapper WebKit **no prueba paridad**: comprobar acceso a Isabella real, planificación, Work/archivos, Threads, Lecturas/Sofía, memoria/recibos, notificaciones, teclado, navegación, descargas y el logout conjunto. La sesión web es independiente de la nativa; iniciar sesión en ambas con la **misma cuenta MINDS**. La captura de Share Extension queda local hasta que se complete #221; no se debe prometer que ya alimenta conocimiento en Supabase. APNs y funciones Watch siguen siendo trabajos posteriores.
