@@ -8,7 +8,7 @@ const LABELS={isabella_chat:'Chat Isabella',isabella_background:'Procesos de Isa
   decision_router:'Router adaptativo',memory_flush:'Checkpoint de memoria',work_file_read:'Lectura Work',work_source_extraction:'Lectura de fuentes Work',
   situational_feed:'Feed',feed_detail:'Detalle del Feed',ideas_generation:'Ideas',idea_worker:'Trabajos de Ideas',artifact_image:'Imágenes',
   sofia_chat:'Chat Sofía',sofia_background:'Procesos de Sofía',sofia_memory_flush:'Memoria de Sofía',research:'Investigación',research_discovery:'Investigación',
-  routine:'Rutinas',window_review:'Revisión diaria de Window',window_code:'Preparación de código de Window',
+  routine:'Rutinas',window_review:'Revisión de Window',window_code:'Preparación de código de Window',
   capability_general_execution:'Capacidades',model_independence_probe:'Pruebas de modelo'};
 let cache=null,cacheAt=0,inflight=null;
 const model=()=>window.MINDS_CREDIT_MODEL;

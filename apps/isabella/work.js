@@ -50,6 +50,8 @@ async function render(){
   bindStatic();setStatus('');
   paintChrome();
   $('#workBody')?.classList.toggle('work-overview-host',view==='overview');
+  // Only the planner board manages its own scrolling; every other Work view scrolls the body.
+  $('#workBody')?.classList.toggle('work-scroll-host',view!=='planner');
   const latest=()=>current===workRenderVersion;
   try{
     const session=await waitForWork(getSession(),'session');
@@ -114,9 +116,9 @@ async function renderSelfReview(){
   const prose=t=>`<p style="white-space:pre-wrap">${esc(t||'')}</p>`;
   const field=(label,text)=>text?`<strong>${label}</strong>${prose(text)}`:'';
   body.innerHTML=`<div class="work-threads">
-    <div class="work-desktop-toolbar"><div><strong>Revisión de Isabella</strong><p class="small">${reviewSettings.enabled?'Revisión diaria':'Revisión pausada'} · ${String(reviewSettings.local_hour).padStart(2,'0')}:15 · ${esc(reviewSettings.timezone)}. Los informes se guardan aquí, sin avisos diarios.</p><p class="small">Aceptar una propuesta permite planificarla; no cambia el código, los permisos ni el comportamiento de Isabella.</p></div></div>
+    <div class="work-desktop-toolbar"><div><strong>Revisión de Isabella</strong><p class="small">Esta es la revisión de Window como aplicación: cómo te está funcionando y qué mejorar. La Akte de cada proyecto (Projektsteckbrief, Entscheidungen & Fristen) está en el Panorama de ese proyecto.</p><p class="small">${reviewSettings.enabled?'Revisión cada 3 días':'Revisión pausada'} · ${String(reviewSettings.local_hour).padStart(2,'0')}:15 · ${esc(reviewSettings.timezone)}. Cubre todo lo ocurrido desde la anterior. Los informes se guardan aquí, sin avisos.</p><p class="small">Aceptar una propuesta permite planificarla; no cambia el código, los permisos ni el comportamiento de Isabella.</p></div></div>
     ${codeQ?.error?'<p>No pude consultar el estado de preparación de código.</p>':''}
-    <p class="small">Preparación autónoma de código: ${reviewSettings.code_preparation_enabled?'activada, máximo una propuesta al día':'pausada'}. Los resultados y los bloqueos quedan registrados aquí.</p><button data-code-toggle>${reviewSettings.code_preparation_enabled?'Pausar preparación de código':'Activar preparación de código'}</button>
+    <p class="small">Preparación de código: ${reviewSettings.code_preparation_enabled?'activada, solo a mano. Una propuesta aceptada espera hasta que se lanza en GitHub → Actions → «Window code preparation»':'pausada'}. Los resultados y los bloqueos quedan registrados aquí.</p><button data-code-toggle>${reviewSettings.code_preparation_enabled?'Pausar preparación de código':'Activar preparación de código'}</button>
     <h3>Propuestas · ${proposals.filter(p=>p.status==='proposed').length} pendientes</h3>
     ${proposals.length?proposals.map(p=>`<details class="work-thread-row" style="display:block;padding:14px"><summary><strong>${esc(p.title)}</strong> · ${esc(labels[p.status]||p.status)}</summary>
       ${codeView(p)}${field('Observación',p.details.observation)}${field('Causa probable, pendiente de comprobar',p.details.suspected_cause)}${field('Cambio propuesto',p.details.change)}${field('Prueba de aceptación',p.details.acceptance_test)}${field('Qué hace falta',p.details.owner_action)}
@@ -991,13 +993,16 @@ function themenblattMarkup(thread){
   const t=thread?.metadata?.themenblatt;if(!t||!t.stand)return '';
   const items=(arr,fn)=>Array.isArray(arr)&&arr.length?'<ul>'+arr.map(x=>'<li>'+fn(x)+'</li>').join('')+'</ul>':'';
   const decisions=items(t.entscheidungen,e=>esc((e.datum?akteDate(e.datum)+' · ':'')+e.text)+(e.quelle?' <small>'+esc(e.quelle)+'</small>':'')+(e.bestaetigt?'':' <em>vorgeschlagen</em>'));
-  return `<details class="work-themenblatt" open><summary><span>Themenblatt</span><small>${esc(['aktualisiert '+akteDate(t.aktualisiert_am),t.aktualisiert_von].filter(Boolean).join(' · '))}</small></summary>
+  let open=true;try{open=localStorage.getItem('minds-themenblatt-open')!=='0'}catch{}
+  return `<details class="work-themenblatt"${open?' open':''}><summary><span>Themenblatt</span><small>${esc(['aktualisiert '+akteDate(t.aktualisiert_am),t.aktualisiert_von].filter(Boolean).join(' · '))}</small></summary>
     <div class="work-themenblatt-body"><p class="work-themenblatt-stand">${esc(t.stand)}</p>
     ${decisions?'<h4>Entscheidungen</h4>'+decisions:''}
     ${items(t.offene_fragen,x=>esc(x))?'<h4>Offene Fragen</h4>'+items(t.offene_fragen,x=>esc(x)):''}
     ${items(t.naechste_schritte,x=>esc(x))?'<h4>Nächste Schritte</h4>'+items(t.naechste_schritte,x=>esc(x)):''}
     ${Array.isArray(t.dokumente)&&t.dokumente.length?'<p class="work-themenblatt-docs"><small>Dokumente: '+esc(t.dokumente.map(d=>d?.name||d).join(', '))+'</small></p>':''}</div></details>`;
 }
+// Remember whether Gari keeps the Themenblatt open or folded (toggle does not bubble, so capture it).
+document.addEventListener?.('toggle',event=>{const el=event.target;if(el?.classList?.contains('work-themenblatt'))try{localStorage.setItem('minds-themenblatt-open',el.open?'1':'0')}catch{}},true);
 function claudeContinueUrl(thread){
   return 'https://claude.ai/new?q='+encodeURIComponent('Retoma en Window el proyecto '+project.name+', tema «'+thread.title+'»: abre el tema y dime dónde estamos.');
 }
