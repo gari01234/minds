@@ -1,0 +1,22 @@
+# Simulator-only spec: the App Store project (project.yml) keeps exactly three
+# targets. This adds a UI test that drives the real app in an iPhone simulator.
+include:
+  - project.yml
+targets:
+  MINDSUITests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources:
+      - UITests
+    dependencies:
+      - target: MINDS
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).uitests"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: MINDS
+        SWIFT_VERSION: 5.10
+  MINDS:
+    scheme:
+      testTargets:
+        - MINDSUITests
