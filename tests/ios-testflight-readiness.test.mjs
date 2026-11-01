@@ -185,6 +185,50 @@ test('Window is installed under the approved visible name with a 1024px opaque A
   const script = read('apps/isabella-ios/Config/prepare-app-icon.sh');
   assert.ok(script.includes('icon-512.png'));
   assert.ok(script.includes('sips -s format jpeg -z 1024 1024'));
-  assert.equal(workflow.split('bash Config/prepare-app-icon.sh').length - 1, 2);
+  assert.equal(workflow.split('bash Config/prepare-app-icon.sh').length - 1, 3);
   assert.ok(ci.includes('bash Config/prepare-app-icon.sh'));
+});
+
+test('Local-signing upload: explicit mode, same environment, verified before upload, material destroyed', () => {
+  const job = workflow.slice(workflow.indexOf('  distribute_local:'));
+  assert.ok(workflow.includes('- upload-local-signing'));
+  for (const expected of ["inputs.mode == 'upload-local-signing'", 'needs: preflight', 'environment: apple-testflight',
+    'asc-local-signing.py retire-previous', 'asc-local-signing.py prepare', 'resign-for-testflight.sh',
+    'verify-testflight-signing.py distribution "$WINDOW_PAYLOAD"', 'altool --upload-app', 'Destroy temporary signing material', 'if: always()'])
+    assert.ok(job.includes(expected), 'Missing local-signing gate: ' + expected);
+  assert.ok(job.indexOf('retire-previous') < job.indexOf('asc-local-signing.py prepare'));
+  assert.ok(job.indexOf('verify-testflight-signing.py distribution') < job.indexOf('altool --upload-app'));
+  const resign = read('apps/isabella-ios/Config/resign-for-testflight.sh');
+  assert.match(resign, /codesign --force --sign "\$IDENTITY" --keychain "\$KEYCHAIN" --entitlements "\$ent" --generate-entitlement-der "\$bundle"/);
+  assert.ok(resign.indexOf('PlugIns/*.appex; do sign_bundle') < resign.indexOf('sign_bundle "$APP"'), 'extensions are signed before the app');
+  assert.match(resign, /codesign --verify --deep --strict --verbose=2 "\$bundle"/);
+  assert.match(resign, /certificate leaf\[subject\.OU\] = "%s"/, 'ASCII Team ID requirement as fallback');
+});
+
+test('Local-signing helpers: distribution entitlements and safe retirement of earlier CI identities', () => {
+  const result = spawnSync('python3', ['-B', '-c', `
+import importlib.util
+spec = importlib.util.spec_from_file_location('local', 'apps/isabella-ios/Config/asc-local-signing.py')
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+team, bundle, group = 'A123456789', 'com.minds.preview.share', 'group.com.minds.preview'
+profile = {'application-identifier': team + '.' + bundle, 'com.apple.developer.team-identifier': team, 'beta-reports-active': True,
+           'get-task-allow': False, 'com.apple.security.application-groups': [group], 'keychain-access-groups': [team + '.*']}
+ent = m.distribution_entitlements({'com.apple.security.application-groups': [group], 'get-task-allow': True,
+                                   'com.apple.developer.siri': True}, profile, team, bundle)
+assert ent['application-identifier'] == team + '.' + bundle and ent['com.apple.developer.team-identifier'] == team
+assert ent['get-task-allow'] is False and ent['beta-reports-active'] is True
+assert 'com.apple.developer.siri' not in ent, 'never claim a capability the profile lacks'
+try: m.distribution_entitlements({'com.apple.security.application-groups': ['group.other']}, profile, team, bundle)
+except SystemExit: pass
+else: raise AssertionError('App Group outside the profile accepted')
+profiles = [
+  {'id': 'p1', 'attributes': {'name': 'Window CI 7 app 20261101'}, 'relationships': {'certificates': {'data': [{'id': 'old'}]}}},
+  {'id': 'p2', 'attributes': {'name': 'Window CI 7 share 20261101'}, 'relationships': {'certificates': {'data': [{'id': 'old'}, {'id': 'shared'}]}}},
+  {'id': 'p3', 'attributes': {'name': 'iOS Team Store Provisioning Profile'}, 'relationships': {'certificates': {'data': [{'id': 'shared'}, {'id': 'cloud'}]}}}]
+certs, ids = m.previous_ci_certificates(profiles)
+assert certs == ['old'], certs
+assert ids == ['p1', 'p2']
+assert m.previous_ci_certificates(profiles, 'old')[0] == []
+`], {cwd: new URL('../', import.meta.url), encoding:'utf8'});
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
 });
