@@ -519,3 +519,7 @@ body[data-section="assistant"].desk-enabled .desk-stage .desk-panel--chat .compo
 
 /* 8. Work threads: replies Claude saved through the Window connector are signed. */
 .work-thread-message .work-thread-author{margin:0 0 4px;font-size:11px;font-weight:650;letter-spacing:.04em;color:#c96442}
+
+/* 9. No orb in the top bar on any screen size: the composer's mic starts voice, the ••• menu stays. */
+.orb-dock{visibility:hidden!important;pointer-events:none!important}
+.orb-dock *{visibility:hidden!important}

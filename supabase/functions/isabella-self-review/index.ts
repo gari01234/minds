@@ -1,6 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
 import {SELF_REVIEW_INSTRUCTIONS,selfReviewSchema,validateSelfReview,evidencePacket} from "../_shared/self-review.mjs";
+// Window reviews every few days on a mid-priced model: a due daily slot closes cheaply until the
+// interval has passed, and the next real review covers everything since the previous one (max 7 days).
+const REVIEW_INTERVAL_DAYS=3;
+const REVIEW_MODEL=()=>Deno.env.get("OPENAI_REVIEW_MODEL")||"gpt-5.6-terra";
 const json=(data:unknown,status=200)=>new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
  if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -13,9 +17,23 @@ Deno.serve(async(req:Request)=>{
  const claim=await sb.rpc("minds_claim_self_review_v1");if(claim.error)return json({error:"claim_failed"},500);
  const job=claim.data;if(!job)return json({status:"idle"});
  try{
-  const since=job.window_start,until=job.window_end,u=job.user_id;
+  const until=job.window_end,u=job.user_id;let since=job.window_start;
+  if(job.review_key!=="baseline"){
+   const prior=await sb.from("minds_self_review_reports").select("window_end,coverage").eq("user_id",u).eq("status","completed").neq("id",job.id).order("window_end",{ascending:false}).limit(30);
+   const lastReal=(prior.data||[]).find((r:any)=>!r?.coverage?.skipped);
+   if(lastReal){
+    if((Date.parse(until)-Date.parse(lastReal.window_end))/864e5<REVIEW_INTERVAL_DAYS){
+     const skipped=await sb.rpc("minds_finish_self_review_v1",{p_id:job.id,p_token:job.lease_token,
+      p_report:{summary:"Sin revisión en este periodo: Window revisa cada "+REVIEW_INTERVAL_DAYS+" días y la siguiente revisión cubrirá estos días.",what_worked:"",limitations:"",findings:[]},
+      p_evidence:[],p_coverage:{skipped:true,interval_days:REVIEW_INTERVAL_DAYS,last_review_end:lastReal.window_end}});
+     if(skipped.error)throw skipped.error;
+     return json({status:"skipped",report_id:job.id});
+    }
+    since=new Date(Math.max(Date.parse(lastReal.window_end),Date.parse(until)-7*864e5)).toISOString();
+   }
+  }
   const queries=[
-   {kind:"message",query:sb.from("conversation_messages").select("id,role,content,created_at,conversation_id,exposure_scope_key",{count:"exact"}).eq("user_id",u).gte("created_at",since).lt("created_at",until).order("created_at",{ascending:false}).limit(240)},
+   {kind:"message",query:sb.from("conversation_messages").select("id,role,content,created_at,conversation_id,exposure_scope_key",{count:"exact"}).eq("user_id",u).gte("created_at",since).lt("created_at",until).order("created_at",{ascending:false}).limit(160)},
    {kind:"run",query:sb.from("minds_agent_runs").select("id,feature,status,route,metadata,error,started_at",{count:"exact"}).eq("user_id",u).eq("feature","isabella_chat").gte("started_at",since).lt("started_at",until).order("started_at").limit(120)},
    {kind:"decision",query:sb.from("minds_shadow_decisions").select("id,request_id,action,status,candidate,reviewed_candidate,created_at",{count:"exact"}).eq("user_id",u).gte("created_at",since).lt("created_at",until).order("created_at").limit(80)},
    {kind:"calendar_receipt",query:sb.from("minds_calendar_action_receipts").select("id,request_id,action,entity_id,after_state,created_at",{count:"exact"}).eq("user_id",u).gte("created_at",since).lt("created_at",until).limit(80)},
@@ -24,7 +42,7 @@ Deno.serve(async(req:Request)=>{
   ];
   const raw=await Promise.all(queries.map(async q=>{const r=await q.query;return {kind:q.kind,rows:r.data||[],count:r.count,error:r.error?.message}}));
   // Protect the context budget without pretending it contains complete sources.
-  for(const g of raw)g.rows=g.rows.map((r:any)=>g.kind==="message"?{...r,content:String(r.content||"").slice(0,5000),content_truncated:String(r.content||"").length>5000}:r);
+  for(const g of raw)g.rows=g.rows.map((r:any)=>g.kind==="message"?{...r,content:String(r.content||"").slice(0,1500),content_truncated:String(r.content||"").length>1500}:r);
   const packet:{evidence:any[];coverage:Record<string,any>}=evidencePacket(raw);
   const existingResult=await sb.from("minds_self_review_proposals").select("id,problem_key,title,status,details,owner_note",{count:"exact"}).eq("user_id",u).eq("project_id",job.project_id).order("created_at",{ascending:false}).limit(100);
   if(existingResult.error)throw Error("existing_proposals_unavailable");
@@ -36,14 +54,14 @@ Deno.serve(async(req:Request)=>{
   if(primary.every(g=>!g.error&&g.count===0))report={summary:"No se registraron conversaciones ni ejecuciones de Isabella en este periodo. No hay interacción nueva que evaluar.",what_worked:"No evaluado por falta de actividad.",limitations:"La ausencia de actividad no demuestra una mejora ni un fallo.",findings:[]};
   else{
    const response=await fetch("https://api.openai.com/v1/responses",{method:"POST",signal:AbortSignal.timeout(85000),headers:{Authorization:`Bearer ${apiKey}`,"Content-Type":"application/json"},body:JSON.stringify({
-    model:Deno.env.get("OPENAI_REVIEW_MODEL")||Deno.env.get("OPENAI_MODEL")||"gpt-5.6",reasoning:{effort:"medium"},max_output_tokens:6500,
+    model:REVIEW_MODEL(),reasoning:{effort:"medium"},max_output_tokens:6500,
     instructions:SELF_REVIEW_INSTRUCTIONS,text:{format:{type:"json_schema",name:"isabella_daily_review",strict:true,schema:selfReviewSchema}},
     input:[{role:"user",content:JSON.stringify({window:{start:since,end:until,key:job.review_key},...packet,existing_proposals:existing})}]
    })});
    const payload=await response.json();
    // Every model call is counted in the owner's usage log, so the credit estimate sees Window too.
    if(payload?.usage){const u=payload.usage,input=Number(u.input_tokens||0),output=Number(u.output_tokens||0);
-    try{await sb.from("minds_ai_usage").insert({user_id:job.user_id,feature:"window_review",model:String(payload.model||Deno.env.get("OPENAI_REVIEW_MODEL")||Deno.env.get("OPENAI_MODEL")||"gpt-5.6"),
+    try{await sb.from("minds_ai_usage").insert({user_id:job.user_id,feature:"window_review",model:String(payload.model||REVIEW_MODEL()),
      input_tokens:input,cached_input_tokens:Number(u.input_tokens_details?.cached_tokens||0),output_tokens:output,total_tokens:Number(u.total_tokens||input+output),metadata:{report_id:job.id,review_key:job.review_key}})}catch{}}
    if(!response.ok)throw Error("review_model_http_"+response.status);
    const output=(payload.output||[]).filter((o:any)=>o.type==="message").flatMap((o:any)=>o.content||[]).filter((c:any)=>c.type==="output_text").map((c:any)=>c.text).join("");

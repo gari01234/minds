@@ -93,3 +93,19 @@ test('Uso IA shows the estimate and Ahora flags a low balance',async()=>{
   await make('ok').MINDS_SITUATION.render();
   assert.doesNotMatch(node.innerHTML,/Saldo de IA/);
 });
+
+test('Window background work stays cheap: reviews every 3 days on Terra, code preparation only on demand',()=>{
+  const review=read('supabase/functions/isabella-self-review/index.ts'),wf=read('.github/workflows/window-code.yml');
+  assert.match(review,/const REVIEW_INTERVAL_DAYS=3;/);
+  assert.match(review,/Deno\.env\.get\("OPENAI_REVIEW_MODEL"\)\|\|"gpt-5\.6-terra"/);
+  assert.match(review,/p_coverage:\{skipped:true,interval_days:REVIEW_INTERVAL_DAYS/);
+  assert.match(review,/since=new Date\(Math\.max\(Date\.parse\(lastReal\.window_end\),Date\.parse\(until\)-7\*864e5\)\)/);
+  assert.match(review,/slice\(0,1500\)/);
+  assert.doesNotMatch(wf,/schedule:|cron:|\n  push:/);
+  assert.match(wf,/on:\n  workflow_dispatch:/);
+});
+
+test('The top-bar orb is gone on phones too, without moving the ••• menu',()=>{
+  const css=read('apps/isabella/minds-calendar-shell.css');
+  assert.match(css,/\.orb-dock\{visibility:hidden!important;pointer-events:none!important\}/);
+});
