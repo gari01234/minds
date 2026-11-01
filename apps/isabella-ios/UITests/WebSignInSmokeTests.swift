@@ -16,6 +16,8 @@ final class WebSignInSmokeTests: XCTestCase {
         let field = app.webViews.textFields.firstMatch
         let appeared = field.waitForExistence(timeout: 45)
         print("WINDOW-SMOKE sign-in field appeared: \(appeared), state \(app.state.rawValue)")
+        // The field is in the accessibility tree before the page has painted.
+        sleep(5)
         attach(app, "1-after-launch")
         XCTAssertEqual(app.state, .runningForeground, "Window ended before the sign-in appeared")
         XCTAssertTrue(appeared, "The web sign-in field did not appear")
