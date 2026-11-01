@@ -6,7 +6,7 @@ const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const app=read("apps/isabella/app.js");
 const migration=read("supabase/migrations/20261013222500_minds_calendar_reviewed_task_create_v01.sql");
 const a=app.indexOf("async function applyVerifiedTaskCreate("),b=app.indexOf("\nfunction applyProposal(",a);
-assert.ok(a>0&&b>a);const snippet=app.slice(a,b);
+assert.ok(a>0&&b>a);const snippet=app.slice(app.indexOf('function naturalDay('),app.indexOf('function renderMessages('))+app.slice(a,b);
 const request="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const owner="11111111-2222-4333-8444-555555555555";
 const canonical={id:"77777777-2222-4333-8444-888888888888",
@@ -37,7 +37,9 @@ test("reviewed task creation uses canonical RPC then read-back before any succes
  assert.equal(h.tasks[0].id,canonical.client_key);
  assert.equal(h.results().saves,1);
  assert.equal(r.receipt_id,receipt.receipt_id);
- assert.match(h.spoken[0],/Confirmé en Supabase/);
+ assert.match(h.spoken[0],/^Listo, «Enviar Angebot ELT» está en tus tareas para /);
+ assert.doesNotMatch(h.spoken[0],/Supabase|\d{4}-\d{2}-\d{2}/);
+ const quiet=harness();await quiet.fn(proposal,{quiet:true});assert.equal(quiet.spoken.length,0,"batch and inline reviews confirm once, elsewhere");
 });
 test("RPC denial, missing receipt and canonical mismatch never claim success",async()=>{
  for(const opts of [{rpcError:{message:"unauthorized"}},{reply:{...receipt,receipt_id:null}},
@@ -64,5 +66,5 @@ test("single and batch task-create reviews defer feedback until verified commit"
  assert.match(single,/const verified=.*p\.kind==='task'&&\['update','create'\]/);
  assert.match(single,/if\(verified\)\{state\.pendingIntent=null;save\(\);proposalFeedback\('accepted',p\)/);
  assert.match(batch,/if\(verified\)proposalFeedback\('accepted',p\)/);
- assert.match(app,/return applyVerifiedTaskCreate\(p\)/);
+ assert.match(app,/return applyVerifiedTaskCreate\(p,opts\)/);
 });

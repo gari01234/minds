@@ -44,7 +44,7 @@ function errView(message){
 async function open(opts={}){
   const ticket=++generation;
   app()?.openModal?.('Tarea','<div class="minds-task-loading">Cargando tarea…</div>');
-  if(!sb){errView('No hay conexión con Supabase.');return}
+  if(!sb){errView('No hay conexión. Comprueba internet y vuelve a abrir la tarea.');return}
   let task=null;
   try{
     const auth=await sb.auth.getSession();
@@ -377,7 +377,7 @@ async function createQuick({title,date=null,categoryKey=null,projectKey=null,cli
     throw new Error('La fecha de la tarea no es válida.');
   if(typeof clientKey!=='string'||!/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(clientKey))
     throw new Error('El intento de guardado no tiene un identificador válido.');
-  if(!sb)throw new Error('Supabase no está conectado.');
+  if(!sb)throw new Error('No hay conexión. Comprueba internet e inténtalo otra vez.');
   const {data:auth,error:authError}=await sb.auth.getSession();
   const owner=auth?.session?.user?.id;
   if(authError||!owner)throw new Error('Inicia sesión para guardar esta tarea.');
@@ -403,7 +403,7 @@ async function createQuick({title,date=null,categoryKey=null,projectKey=null,cli
       if(!task)throw result.error;
     }else task=await read();
   }
-  if(!task)throw new Error('No pude verificar la creación en Supabase. Reintenta Guardar.');
+  if(!task)throw new Error('No pude comprobar que se guardó. Vuelve a pulsar Guardar.');
   if(task.client_key!==clientKey||task.user_id!==owner||task.title!==row.title||
      task.due_date!==row.due_date||task.category_id!==row.category_id||
      task.project_id!==row.project_id)

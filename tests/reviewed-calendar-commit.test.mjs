@@ -6,7 +6,7 @@ const app=readFileSync(new URL("../apps/isabella/app.js",import.meta.url),"utf8"
 const migration=readFileSync(new URL("../supabase/migrations/20261013112500_minds_calendar_reviewed_task_commit_v01.sql",import.meta.url),"utf8");
 const begin=app.indexOf("async function applyVerifiedTaskUpdate("),end=app.indexOf("\nfunction applyProposal(",begin);
 assert.ok(begin>0&&end>begin,"verified task executor must be isolated");
-const fragment=app.slice(begin,end);
+const fragment=app.slice(app.indexOf('function naturalDay('),app.indexOf('function renderMessages('))+app.slice(begin,end);
 const uuid="aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const owner="11111111-2222-4333-8444-555555555555";
 const clientKey="besprechungsnotiz-abc";
@@ -43,7 +43,8 @@ test("calendar approval writes before any local success and reads back canonical
  assert.equal(h.results().saves,1);
  assert.equal(h.results().closed,1);
  assert.equal(result.receipt_id,receipt.receipt_id);
- assert.match(h.spoken[0].text,/Confirmé en Supabase/);
+ assert.match(h.spoken[0].text,/^Listo, «Besprechungsnotiz» queda para /);
+ assert.doesNotMatch(h.spoken[0].text,/Supabase|\d{4}-\d{2}-\d{2}/);
 });
 test("RPC failure never mutates local tasks or declares success",async()=>{
  const h=harness({rpcError:{message:"stale_target_date"}});
@@ -77,7 +78,7 @@ test("authorization and idempotency are determined by owner-locked canonical rec
 test("reviewed task feedback is emitted only after canonical commit",()=>{
  const part=app.slice(app.indexOf("function confirmProposal("),app.indexOf("function confirmProposals("));
  assert.match(part,/if\(!verified\)\{state\.pendingIntent=null;save\(\);proposalFeedback\('accepted',p\);\}/);
- assert.match(part,/Promise\.resolve\(\)\.then\(\(\)=>applyProposal\(p\)\)\.then\(\(\)=>\{/);
+ assert.match(part,/Promise\.resolve\(\)\.then\(\(\)=>applyProposal\(p,\{quiet:true\}\)\)\.then\(\(\)=>\{/);
  assert.match(part,/if\(verified\)\{state\.pendingIntent=null;save\(\);proposalFeedback\('accepted',p\);\}/);
- assert.match(app,/if\(p\.kind==='task'&&\(p\.action\|\|'create'\)==='update'\)\s+return applyVerifiedTaskUpdate\(p\)/);
+ assert.match(app,/if\(p\.kind==='task'&&\(p\.action\|\|'create'\)==='update'\)\s+return applyVerifiedTaskUpdate\(p,opts\)/);
 });

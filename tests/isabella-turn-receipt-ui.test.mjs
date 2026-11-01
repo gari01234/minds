@@ -15,8 +15,8 @@ test("one canonical review receipt becomes a visible reviewable proposal",()=>{
  assert.equal(x.ok,true);
  assert.equal(x.proposals.length,1);
  assert.match(summary(x),/Besprechungsnotiz/);
- assert.match(summary(x),/2026-10-13/);
- assert.match(summary(x),/Aún falta tu confirmación/);
+ assert.doesNotMatch(summary(x),/2026-10-13/,'natural dates only');
+ assert.match(summary(x),/Confírmalo y lo guardo/);
  assert.doesNotMatch(summary(x),/Ya quedó agregado|Already done/i);
 });
 test("typeless legacy fast proposal has an explicit review candidate, never inferred execution",()=>{
@@ -38,7 +38,7 @@ test("receipt mismatch fails closed and never gives the UI a proposal to apply",
   const y=validate(x);
   assert.equal(y.ok,false,JSON.stringify(x));
   assert.equal(y.proposals.length,0);
-  assert.match(summary(y),/No pude verificar/);
+  assert.match(summary(y),/no lo doy por hecho/);
  }
 });
 test("read-only conversation has no invented proposals",()=>{
@@ -115,7 +115,7 @@ test("Build 100A: typed execution has exact canonical receipt cardinality",()=>{
  assert.equal(ok.ok,true);
  assert.equal(ok.outcome,"action_applied");
  assert.equal(ok.applied_count,1);
- assert.match(summary(ok),/servidor devolvió 1 recibo/);
+ assert.match(summary(ok),/^Listo, ya está hecho\.$/);
  assert.doesNotMatch(summary(ok),/falsely claims/);
  for(const data of [
    {outcome:{outcome:"action_applied",proposal_count:0,applied_count:1},autonomy_execution:{id:"run-only"}},
@@ -131,6 +131,6 @@ test("Build 100A: typed execution has exact canonical receipt cardinality",()=>{
    const result=validate(data);
    assert.equal(result.ok,false,JSON.stringify(data));
    assert.equal(result.proposals.length,0);
-   assert.match(summary(result),/No pude verificar/);
+   assert.match(summary(result),/no lo doy por hecho/);
  }
 });

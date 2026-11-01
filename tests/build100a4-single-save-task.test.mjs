@@ -102,7 +102,7 @@ test('Calendar and Tareas share one-button creation and prevent in-flight double
  assert.equal(f.nodes['#newSave'].disabled,true);
  f.resolve({id:'task-1',title:'Una tarea'});
  await Promise.all([first,second]);
- assert.match(f.nodes['#quickTaskStatus'].textContent,/verificada en Supabase/);
+ assert.match(f.nodes['#quickTaskStatus'].textContent,/Tarea creada\./);
  assert.equal(f.stats.closed,0);
  f.stats.timeouts[0]();assert.equal(f.stats.closed,1);
 });
