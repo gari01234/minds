@@ -733,7 +733,8 @@ async function hydratePlannerImages(root=document){
 }
 async function renderPlanner(){
   await loadPlanner();team=await window.MINDS_WORK_TEAM.members(project.id);const body=$('#workBody'),unbucketed=tasks.some(t=>!t.work_bucket_id),columns=[...(unbucketed?[{id:'__none',name:'Ohne Bucket',virtual:true}]:[]),...buckets];
-  const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)!=='columns';
+  // Buckets side by side by default (scroll sideways on the phone); the list is opt-in.
+  const mobileList=localStorage.getItem(WORK_MOBILE_LAYOUT_KEY)==='list';
   body.innerHTML=`<div class="work-planner-toolbar"><div><strong>Board</strong><span>${tasks.filter(t=>!t.completed_at).length} offen · ${buckets.length} Buckets</span></div><span class="work-planner-actions"><button type="button" class="work-mobile-layout" data-work-layout-toggle aria-pressed="${mobileList}" aria-label="Vista lista en iPhone">Vista lista</button><button type="button" data-work-team>Team · ${team.length}</button><button data-work-add-bucket>＋ Bucket</button><button type="button" data-work-show-bucket-archive title="Archivierte Buckets und erledigte Aufgaben ansehen">Archiv</button></span></div>
     <div class="work-board ${mobileList?'mobile-stack':''}">${columns.map(b=>{const all=tasks.filter(t=>b.virtual?!t.work_bucket_id:t.work_bucket_id===b.id),open=all.filter(t=>!t.completed_at),done=all.filter(t=>t.completed_at);return `<section class="work-bucket" data-work-bucket-drop="${b.virtual?'':b.id}">
       <header class="work-bucket-header">${b.virtual
@@ -1135,7 +1136,7 @@ async function renderThreads(){
   $('[data-work-new-thread]')?.addEventListener('click',createThread);
   $('[data-work-archived]')?.addEventListener('click',openArchivedThreads);
   $$('[data-work-thread]').forEach(b=>b.onclick=()=>{activeThreadId=b.dataset.workThread;void renderThreads()});
-  $$('[data-work-thread-actions]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openThreadActions(threads.find(x=>x.id===b.dataset.workThread))});
+  $$('[data-work-thread-actions]').forEach(b=>b.onclick=e=>{e.preventDefault();e.stopPropagation();openThreadActions(threads.find(x=>x.id===b.dataset.workThreadActions))});
 }
 function openThreadEditor(thread=null){
   const isRename=!!thread;
@@ -1168,7 +1169,7 @@ function openThreadActions(thread){
   if(!thread)return;
   window.ISABELLA_APP?.openModal?.(thread.title,`<div class="work-thread-action-sheet">
     <button id="workThreadRename" class="secondary">Renombrar</button>
-    <button id="workThreadArchive" class="secondary danger-text">Archivar Thread</button>
+    <button id="workThreadArchive" class="secondary danger-text">Quitar de la lista (archivar)</button>
     <p class="small">Archivar lo quita de la lista activa, pero conserva toda la conversación para poder recuperarla después.</p>
   </div>`);
   $('#workThreadRename').onclick=()=>openThreadEditor(thread);
