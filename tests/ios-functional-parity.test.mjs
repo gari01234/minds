@@ -32,6 +32,9 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   assert.equal((tabs.match(/WebTabView\(session: model\.webPortal, active: model\.tab == \.(chat|tiempo|work)\)/g) || []).length, 3);
   assert.match(tabs, /\.badge\(model\.openProposals\)/);
   assert.match(tabs, /\.onChange\(of: model\.tab\) \{ _, _ in model\.showWebSection\(\) \}/);
+  // Above the tab bar: build 14 drew the page under it and hid the chat composer.
+  assert.equal((tabs.match(/\.ignoresSafeArea\(edges: \.top\)/g) || []).length, 3);
+  assert.doesNotMatch(tabs, /\.ignoresSafeArea\(\)/);
   // One shared web view: the active tab takes it over (a UIView has one parent).
   assert.match(portal, /struct WebTabView: UIViewRepresentable/);
   assert.match(portal, /if web\.superview !== container \{\s*web\.removeFromSuperview\(\)/);

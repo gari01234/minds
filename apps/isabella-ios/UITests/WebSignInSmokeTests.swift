@@ -64,11 +64,16 @@ final class WebSignInSmokeTests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = ["-WindowUITestWebOnly"]
         app.launch()
-        XCTAssertNotNil(firstWebInput(app, timeout: 60), "The chat did not load")
+        let composer = firstWebInput(app, timeout: 60)
+        XCTAssertNotNil(composer, "The chat did not load")
         sleep(3)
         attach(app, "t1-chat")
         let bar = app.tabBars.firstMatch
         XCTAssertTrue(bar.waitForExistence(timeout: 10), "No tab bar")
+        // Build 14 drew the page under the tab bar and hid the composer.
+        if let composer {
+            XCTAssertLessThanOrEqual(composer.frame.maxY, bar.frame.minY + 1, "The chat composer is hidden by the tab bar")
+        }
         for name in ["Chat", "Ahora", "Tiempo", "Work", "Bandeja"] {
             XCTAssertTrue(bar.buttons[name].exists, "Missing tab " + name)
         }
@@ -102,10 +107,11 @@ final class WebSignInSmokeTests: XCTestCase {
     private func firstWebInput(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {
-            let field = app.webViews.textFields.firstMatch
-            if field.exists { return field }
+            // The chat composer first; only a field the finger can actually reach.
             let area = app.webViews.textViews.firstMatch
-            if area.exists { return area }
+            if area.exists && area.isHittable { return area }
+            let field = app.webViews.textFields.firstMatch
+            if field.exists && field.isHittable { return field }
             sleep(1)
         } while Date() < deadline
         return nil

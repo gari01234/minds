@@ -10,18 +10,21 @@ struct MainTabView: View {
         @Bindable var model = model
         TabView(selection: $model.tab) {
             WebTabView(session: model.webPortal, active: model.tab == .chat)
-                .ignoresSafeArea()
+                // Under the status bar (the page handles it), but above the tab bar.
+                .ignoresSafeArea(edges: .top)
                 .tabItem { Label("Chat", systemImage: "bubble.left") }
                 .tag(AppModel.Tab.chat)
             AhoraView()
                 .tabItem { Label("Ahora", systemImage: "smallcircle.filled.circle") }
                 .tag(AppModel.Tab.ahora)
             WebTabView(session: model.webPortal, active: model.tab == .tiempo)
-                .ignoresSafeArea()
+                // Under the status bar (the page handles it), but above the tab bar.
+                .ignoresSafeArea(edges: .top)
                 .tabItem { Label("Tiempo", systemImage: "calendar") }
                 .tag(AppModel.Tab.tiempo)
             WebTabView(session: model.webPortal, active: model.tab == .work)
-                .ignoresSafeArea()
+                // Under the status bar (the page handles it), but above the tab bar.
+                .ignoresSafeArea(edges: .top)
                 .tabItem { Label("Work", systemImage: "folder") }
                 .tag(AppModel.Tab.work)
             BandejaView()

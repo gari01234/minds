@@ -779,4 +779,6 @@ body .app .agenda-item.frist-item .meta{color:#b3261e}
 
 /* 16 · Window iPhone app: the app draws its own tab bar; the page drops its own. */
 body.window-app-shell .app .main-nav{display:none!important}
+/* Ahora | Ideas is the app's own switch above the page. */
+body.window-app-shell .situation-tabs [data-situation-view]{display:none!important}
 
