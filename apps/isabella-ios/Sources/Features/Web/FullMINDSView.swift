@@ -54,12 +54,34 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     // If the page's process is ended by iOS (memory), reload instead of staying blank.
     func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+        Self.trace("web process ended, reloading")
         webView.reload()
+    }
+
+    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        Self.trace("loaded " + (webView.url?.absoluteString ?? "?"))
+    }
+
+    func webView(_ webView: WKWebView, didFail navigation: WKNavigation!, withError error: Error) {
+        Self.trace("failed: " + error.localizedDescription)
+    }
+
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!,
+                 withError error: Error) {
+        Self.trace("could not load: " + error.localizedDescription)
+    }
+
+    // Debug builds only (the simulator smoke test reads these lines from the system log).
+    private static func trace(_ message: String) {
+        #if DEBUG
+        NSLog("WINDOW-WEB %@", message)
+        #endif
     }
 
     func openIfNeeded() {
         guard !started else { return }
         started = true
+        Self.trace("opening " + Self.homeURL.absoluteString)
         webView.load(URLRequest(url: Self.homeURL))
     }
 
