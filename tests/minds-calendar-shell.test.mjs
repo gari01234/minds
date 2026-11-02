@@ -16,8 +16,8 @@ const dashboard=read('apps/isabella/dashboard.js');
 const model=require('../apps/isabella/dashboard-model.js');
 
 test('Calendar/shell layer comes right before the Ahora/Bandeja layer (the last stylesheet) and both are precached',()=>{
-  assert.match(index,/minds-sections-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-calendar-shell\.css\?v=1">\s*<link rel="stylesheet" href="\.\/ahora-bandeja\.css\?v=1">\s*<\/head>/);
-  assert.match(sw,/minds-sections-parity\.css\?v=1',\s*'\.\/minds-calendar-shell\.css\?v=1',\s*'\.\/ahora-bandeja\.css\?v=1'/);
+  assert.match(index,/minds-sections-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-calendar-shell\.css\?v=1">\s*<link rel="stylesheet" href="\.\/ahora-bandeja\.css\?v=2">\s*<\/head>/);
+  assert.match(sw,/minds-sections-parity\.css\?v=1',\s*'\.\/minds-calendar-shell\.css\?v=1',\s*'\.\/ahora-bandeja\.css\?v=2'/);
   assert.doesNotMatch(css,/@import|@font-face|url\(/);
 });
 
