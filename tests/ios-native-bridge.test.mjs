@@ -14,7 +14,18 @@ test("native owner auth is OTP and Keychain protected, with no silent signup", (
   assert.match(backend, /"create_user": false/);
   assert.match(backend, /"auth\/v1\/verify"/);
   assert.match(backend, /"auth\/v1\/token"/);
-  assert.match(backend, /kSecAttrAccessibleWhenUnlockedThisDeviceOnly/);
+  // Readable after the first unlock (widgets and notification actions run while locked),
+  // never synced off the device, shared with the extensions through the App Group.
+  assert.match(backend, /kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly/);
+  assert.doesNotMatch(backend, /kSecAttrAccessibleAlways\b|kSecAttrSynchronizable/);
+  assert.match(backend, /query\[kSecAttrAccessGroup as String\] = group/);
+  // One owner, one refresh at a time; another process may have refreshed already.
+  assert.match(backend, /private var refreshing: Task<StoredSession, Error>\?/);
+  assert.match(backend, /if let refreshing \{ return try await refreshing\.value \}/);
+  assert.match(backend, /if let stored = NativeKeychain\.load\(\), stored\.expiresAt > \(session\?\.expiresAt \?\? 0\)/);
+  // The bridge type has no refresh token.
+  const bridgeType = backend.slice(backend.indexOf("struct BridgeSession"), backend.indexOf("private enum NativeKeychain"));
+  assert.doesNotMatch(bridgeType, /refresh/i);
   assert.match(backend, /status != errSecSuccess/);
   assert.doesNotMatch(backend, /UserDefaults|service_role|SUPABASE_SERVICE_ROLE_KEY/);
   assert.match(project, /INFOPLIST_FILE: Config\/App-Info.plist/);

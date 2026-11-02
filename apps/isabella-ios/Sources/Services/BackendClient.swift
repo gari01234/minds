@@ -21,17 +21,38 @@ private struct StoredSession: Codable {
     var refreshToken: String
     var userID: String
     var expiresAt: TimeInterval
+    var email: String?
 }
 
+// What the web app and the extensions may see of the session: never the refresh token.
+struct BridgeSession {
+    let accessToken: String
+    let expiresAt: TimeInterval
+    let userID: String
+    let email: String?
+}
+
+// The app is the only owner of the session. It lives in the Keychain under the
+// App Group, so the Share Extension, the widget and App Intents use the same one.
+// Readable after the first unlock: widgets and notification actions run while locked.
 private enum NativeKeychain {
     static let key = "minds.isabella.native.owner.session"
-    static var selector: [String: Any] { [
-        kSecClass as String: kSecClassGenericPassword,
-        kSecAttrService as String: key,
-        kSecAttrAccount as String: key
-    ] }
-    static func load() -> StoredSession? {
-        var query = selector
+    static var group: String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "MINDSAppGroupID") as? String,
+              value.hasPrefix("group.") else { return nil }
+        return value
+    }
+    static func selector(shared: Bool) -> [String: Any] {
+        var query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: key,
+            kSecAttrAccount as String: key
+        ]
+        if shared, let group { query[kSecAttrAccessGroup as String] = group }
+        return query
+    }
+    private static func read(shared: Bool) -> StoredSession? {
+        var query = selector(shared: shared)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var value: CFTypeRef?
@@ -39,13 +60,35 @@ private enum NativeKeychain {
               let data = value as? Data else { return nil }
         return try? JSONDecoder().decode(StoredSession.self, from: data)
     }
+    static func load() -> StoredSession? {
+        if let current = read(shared: true) { return current }
+        guard let group else { return nil }
+        // A session saved by a build before the shared group: move it once.
+        // Delete only that old item (by its own access group), never the new one.
+        var query = selector(shared: false)
+        query[kSecReturnAttributes as String] = true
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
+              let item = value as? [String: Any],
+              let data = item[kSecValueData as String] as? Data,
+              let legacy = try? JSONDecoder().decode(StoredSession.self, from: data) else { return nil }
+        if let oldGroup = item[kSecAttrAccessGroup as String] as? String, oldGroup != group,
+           (try? save(legacy)) != nil {
+            var old = selector(shared: false)
+            old[kSecAttrAccessGroup as String] = oldGroup
+            SecItemDelete(old as CFDictionary)
+        }
+        return legacy
+    }
     static func save(_ session: StoredSession) throws {
         let data = try JSONEncoder().encode(session)
         let attributes: [String: Any] = [kSecValueData as String: data,
-            kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]
-        let status = SecItemUpdate(selector as CFDictionary, attributes as CFDictionary)
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
+        let status = SecItemUpdate(selector(shared: true) as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
-            var new = selector
+            var new = selector(shared: true)
             attributes.forEach { new[$0.key] = $0.value }
             guard SecItemAdd(new as CFDictionary, nil) == errSecSuccess else {
                 throw BackendError.verificationFailed
@@ -54,7 +97,10 @@ private enum NativeKeychain {
             throw BackendError.verificationFailed
         }
     }
-    static func clear() { SecItemDelete(selector as CFDictionary) }
+    static func clear() {
+        SecItemDelete(selector(shared: true) as CFDictionary)
+        SecItemDelete(selector(shared: false) as CFDictionary)
+    }
 }
 
 struct AgendaTask: Identifiable, Decodable {
@@ -189,8 +235,12 @@ actor BackendClient {
     private let publicKey: String =
         Bundle.main.object(forInfoDictionaryKey: "SUPABASE_ANON_KEY") as? String ?? ""
     private var session: StoredSession? = NativeKeychain.load()
+    private var refreshing: Task<StoredSession, Error>?
 
-    var isSignedIn: Bool { session != nil }
+    var isSignedIn: Bool {
+        if session == nil { session = NativeKeychain.load() }
+        return session != nil
+    }
 
     private func url(_ path: String, query: [URLQueryItem]) throws -> URL {
         guard let root, root.scheme == "https", !publicKey.isEmpty,
@@ -244,7 +294,8 @@ actor BackendClient {
             throw BackendError.invalidResponse
         }
         return StoredSession(accessToken: access, refreshToken: refresh, userID: id,
-                             expiresAt: Date().timeIntervalSince1970 + Double(expiry))
+                             expiresAt: Date().timeIntervalSince1970 + Double(expiry),
+                             email: user["email"] as? String)
     }
 
     func sendEmailCode(_ email: String) async throws {
@@ -266,17 +317,50 @@ actor BackendClient {
         session = verified
     }
 
-    private func access() async throws -> String {
-        guard var stored = session else { throw BackendError.notSignedIn }
-        if stored.expiresAt < Date().timeIntervalSince1970 + 90 {
-            let data = try await network("auth/v1/token", method: "POST",
-                query: [.init(name: "grant_type", value: "refresh_token")],
-                json: ["refresh_token": stored.refreshToken])
-            stored = try parseSession(data)
-            try NativeKeychain.save(stored)
+    // One refresh at a time: Supabase rotates refresh tokens, so two refreshes
+    // with the same token would sign the other one out. Another process (widget,
+    // Share Extension) may already have refreshed: read the Keychain first.
+    private func validSession() async throws -> StoredSession {
+        if let refreshing { return try await refreshing.value }
+        if let stored = NativeKeychain.load(), stored.expiresAt > (session?.expiresAt ?? 0) {
             session = stored
         }
-        return stored.accessToken
+        guard let stored = session else { throw BackendError.notSignedIn }
+        if stored.expiresAt >= Date().timeIntervalSince1970 + 90 { return stored }
+        let task = Task { () throws -> StoredSession in
+            let data: Data
+            do {
+                data = try await network("auth/v1/token", method: "POST",
+                    query: [.init(name: "grant_type", value: "refresh_token")],
+                    json: ["refresh_token": stored.refreshToken])
+            } catch BackendError.rejected(let detail) where detail.lowercased().contains("refresh token") {
+                // Revoked or already used elsewhere: sign in again instead of failing forever.
+                NativeKeychain.clear()
+                session = nil
+                throw BackendError.notSignedIn
+            }
+            var fresh = try parseSession(data)
+            if fresh.email == nil { fresh.email = stored.email }
+            try NativeKeychain.save(fresh)
+            return fresh
+        }
+        refreshing = task
+        defer { refreshing = nil }
+        let fresh = try await task.value
+        session = fresh
+        return fresh
+    }
+
+    private func access() async throws -> String {
+        try await validSession().accessToken
+    }
+
+    // For the web app (through the bridge) and the extensions.
+    func bridgeSession() async throws -> BridgeSession? {
+        guard isSignedIn else { return nil }
+        let stored = try await validSession()
+        return BridgeSession(accessToken: stored.accessToken, expiresAt: stored.expiresAt,
+                             userID: stored.userID, email: stored.email)
     }
 
     func logout() async {

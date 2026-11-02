@@ -1,15 +1,33 @@
 import XCTest
 
-// Reproduces what Gari does on the iPhone: open Window, tap the e-mail field of
-// the web sign-in and start typing. The app must still be running afterwards.
-// Never asks for the sign-in code: no request is sent to MINDS.
+// Reproduces what Gari does on the iPhone: open Window, tap a field and type.
+// The app must still be running afterwards. Never asks for a sign-in code:
+// no request is sent to MINDS (the backend is also blocked on the runner).
 final class WebSignInSmokeTests: XCTestCase {
     override func setUp() {
         continueAfterFailure = false
     }
 
+    func testNativeSignInAcceptsTypingWithoutSendingAnything() throws {
+        let app = XCUIApplication()
+        app.launch()
+        let email = app.textFields["native-login-email"]
+        let appeared = email.waitForExistence(timeout: 30)
+        print("WINDOW-SMOKE native sign-in appeared: \(appeared), state \(app.state.rawValue)")
+        attach(app, "0-native-sign-in")
+        XCTAssertTrue(appeared, "The native sign-in did not appear")
+        email.tap()
+        email.typeText("prueba@example.com")
+        sleep(2)
+        attach(app, "0b-native-sign-in-typed")
+        XCTAssertEqual(app.state, .runningForeground, "Window ended while typing in the native sign-in")
+        XCTAssertTrue(app.buttons["Enviar código"].exists)
+    }
+
     func testOpeningWindowAndTypingTheEmailKeepsTheAppRunning() throws {
         let app = XCUIApplication()
+        // Debug-only: show the web app without signing in.
+        app.launchArguments = ["-WindowUITestWebOnly"]
         app.launch()
         print("WINDOW-SMOKE launched, state \(app.state.rawValue)")
 

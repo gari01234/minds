@@ -10,6 +10,11 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     private var made: WKWebView?
     private var started = false
 
+    // Set by AppModel: the app owns the session; the bridge only asks for it.
+    var sessionProvider: (() async throws -> BridgeSession?)?
+    var onSignOut: (() async -> Void)?
+    var onSessionLost: (() -> Void)?
+
     // The web view is made the first time the page is shown, never at launch.
     // AppModel (and this session) are created before UIApplicationMain; a web
     // view made then keeps gesture recognizers UIKit never registered, and the
@@ -19,9 +24,13 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
         if let made { return made }
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
-        // Lets the web app know it runs inside Window (e.g. to offer sign-in right away).
+        // Marks requests from the app; the web app detects app mode by the bridge.
         configuration.applicationNameForUserAgent = "WindowApp/1.0"
         configuration.allowsInlineMediaPlayback = true
+        let bridge = WindowNativeBridge()
+        bridge.portal = self
+        configuration.userContentController.addScriptMessageHandler(
+            bridge, contentWorld: .page, name: WindowNativeBridge.name)
         let view = WKWebView(frame: .zero, configuration: configuration)
         // The page draws under the status bar and home indicator itself
         // (viewport-fit=cover + env(safe-area-inset-*)), exactly as in Safari.
@@ -57,6 +66,12 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     func refresh() {
         openIfNeeded()
         webView.reload()
+    }
+
+    // After signing in again, the page must ask the bridge for the new session.
+    func reloadIfStarted() {
+        guard started else { return }
+        made?.reload()
     }
 
     // Same-origin MINDS and Theory are trusted pages. A link elsewhere opens

@@ -11,12 +11,18 @@ const project = read("project.yml");
 const rootDoc = readFileSync(new URL("../README.md", import.meta.url), "utf8");
 const contract = readFileSync(new URL("../docs/IOS-FUNCTIONAL-PARITY-v0.1.md", import.meta.url), "utf8");
 
-test("Window on iPhone is the hosted MINDS web app, full screen, with one sign-in", () => {
+const bridge = read("Sources/Features/Web/WindowNativeBridge.swift");
+
+test("Window on iPhone: the app owns the session and shows the MINDS web app full screen", () => {
   assert.match(shell, /FullMINDSView\(\)/);
-  // No second navigation (native tab bar or "MINDS completo" bar) and no separate native sign-in.
-  assert.doesNotMatch(shell, /TabView|NativeSignInView|NavigationStack|bootstrap\(\)/);
+  assert.match(shell, /NativeSignInView\(\)/);
+  assert.match(shell, /model\.bootstrap\(\)/);
+  // No native tab bar until its design is approved, and no "MINDS completo" bar.
+  assert.doesNotMatch(shell, /TabView|NavigationStack/);
   for (const view of ["ContinuityView","ChatView","CalendarHomeView"])
     assert.doesNotMatch(shell, new RegExp(view + "\\(\\)"));
+  // The UI-test shortcut exists only in Debug builds.
+  assert.match(shell, /#if DEBUG\s+\/\/[^\n]*\n\s+static let webOnlyForUITests = ProcessInfo\.processInfo\.arguments\.contains\("-WindowUITestWebOnly"\)\s+#else\s+static let webOnlyForUITests = false/);
   assert.doesNotMatch(portal, /NavigationStack|MINDS completo|navigationTitle/);
   assert.match(portal, /\.ignoresSafeArea\(\)/);
   assert.match(portal, /contentInsetAdjustmentBehavior = \.never/);
@@ -27,11 +33,25 @@ test("Window on iPhone is the hosted MINDS web app, full screen, with one sign-i
   assert.match(portal, /private var made: WKWebView\?/);
   assert.match(portal, /var webView: WKWebView \{\s*if let made \{ return made \}/);
   assert.doesNotMatch(portal, /let webView: WKWebView|override init\(\)/);
-  assert.match(app, /enum Section: Hashable \{ case web, continuity, chat, calendar \}/);
-  assert.match(app, /var section: Section = \.web/);
-  assert.match(portal, /https:\/\/gari01234\.github\.io\/minds\/isabella\//);
-  assert.match(portal, /UIViewRepresentable/);
-  assert.match(project, /- Sources/);
+  assert.match(app, /webPortal\.sessionProvider = \{ \[backend\] in try await backend\.bridgeSession\(\) \}/);
+  assert.match(app, /webPortal\.reloadIfStarted\(\)/);
+});
+
+test("the typed bridge answers only the top-level MINDS page and never carries the refresh token", () => {
+  assert.match(portal, /addScriptMessageHandler\(\s*bridge, contentWorld: \.page, name: WindowNativeBridge\.name\)/);
+  assert.match(bridge, /static let name = "windowNative"/);
+  assert.match(bridge, /static let version = 1/);
+  assert.match(bridge, /frame\.isMainFrame/);
+  assert.match(bridge, /origin\.protocol == "https"/);
+  assert.match(bridge, /origin\.host\.lowercased\(\) == "gari01234\.github\.io"/);
+  assert.match(bridge, /origin\.port == 0/);
+  assert.match(bridge, /\(body\["v"\] as\? Int\) == Self\.version/);
+  assert.match(bridge, /"error": "rejected"/);
+  for (const type of ["session.get", "session.signIn", "session.signOut", "app.info"])
+    assert.ok(bridge.includes('case "' + type + '"'), type);
+  assert.doesNotMatch(bridge, /refresh|evaluateJavaScript|WKUserScript|service_role/i);
+  const doc = read("BRIDGE.md");
+  assert.match(doc, /refresh token nunca sale del Llavero/);
 });
 
 test("the WebKit portal cannot bridge native authority or load arbitrary top-level sites", () => {
@@ -42,6 +62,7 @@ test("the WebKit portal cannot bridge native authority or load arbitrary top-lev
   assert.match(portal, /UIApplication\.shared\.open\(url\)/);
   assert.match(portal, /decisionHandler\(\.cancel\)/);
   assert.match(portal, /websiteDataStore = \.default\(\)/);
+  // The page asks, the app answers: no script injection and no tokens in this file.
   assert.doesNotMatch(portal, /evaluateJavaScript|WKUserScript|service_role|refreshToken|accessToken|Bearer /);
   // Microphone only for MINDS pages; iOS still asks the first time.
   assert.match(portal, /origin\.protocol == "https" && origin\.host\.lowercased\(\) == "gari01234\.github\.io" \? \.grant : \.deny/);
@@ -53,10 +74,6 @@ test("every permission the web app can ask for has its iOS usage text (otherwise
     assert.match(project, new RegExp("INFOPLIST_KEY_" + key + ": \\S"));
 });
 
-test("inside the Window app the web app offers sign-in right away", () => {
-  const sync = readFileSync(new URL("../apps/isabella/sync.js", import.meta.url), "utf8");
-  assert.match(sync, /else if\(\/WindowApp\\\/\/\.test\(navigator\.userAgent\|\|''\)\)openLogin\(\);/);
-});
 
 test("native logout purges the embedded owner session, not only Keychain", () => {
   assert.match(app, /await backend\.logout\(\)/);

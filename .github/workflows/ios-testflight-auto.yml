@@ -1,0 +1,30 @@
+name: Window iPhone — automatic TestFlight builds
+
+# Keeps the app on Gari's iPhone current without anyone pressing a button:
+# a new TestFlight build whenever the iOS app changes on main, and one every
+# two months so a build never reaches TestFlight's 90-day expiry.
+# Web-only changes need no new build: the app loads the live web app.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/isabella-ios/**"
+      - "!apps/isabella-ios/**/*.md"
+      - "!apps/isabella-ios/UITests/**"
+      - "!apps/isabella-ios/project-uitests.yml"
+  schedule:
+    - cron: "17 4 1 */2 *"
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+jobs:
+  dispatch:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Start a signed TestFlight upload
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ios-testflight.yml --repo "$GITHUB_REPOSITORY" --ref main -f mode=upload-local-signing

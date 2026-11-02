@@ -284,6 +284,17 @@ test('simulator smoke test drives the real app without touching production or th
   assert.ok(!smoke.includes('secrets.'), 'the smoke test needs no Apple or MINDS secrets');
   assert.ok(spec.includes('- project.yml') && spec.includes('type: bundle.ui-testing'));
   assert.ok(!project.includes('MINDSUITests'), 'the App Store project keeps exactly three targets');
-  assert.doesNotMatch(uiTest, /Enviar código|isabellaSendCode/);
+  // It may look for the buttons but never presses them: no code is ever requested.
+  assert.doesNotMatch(uiTest, /\["(Enviar código|Entrar)"\]\.tap|isabellaSendCode|isabellaVerifyCode/);
   assert.match(uiTest, /XCTAssertEqual\(app\.state, \.runningForeground/);
+});
+
+test('TestFlight builds start on their own: on iOS changes to main and every two months', () => {
+  const auto = read('.github/workflows/ios-testflight-auto.yml');
+  assert.ok(auto.includes('branches: [main]'));
+  assert.ok(auto.includes('"apps/isabella-ios/**"'));
+  assert.ok(auto.includes('cron: "17 4 1 */2 *"'), 'at most ~62 days between builds, below the 90-day expiry');
+  assert.ok(auto.includes('gh workflow run ios-testflight.yml') && auto.includes('-f mode=upload-local-signing'));
+  assert.ok(auto.includes('actions: write'));
+  assert.ok(!auto.includes('secrets.'), 'the dispatcher holds no Apple secrets');
 });
