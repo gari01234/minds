@@ -466,44 +466,49 @@ function placeGlobalMenu(name){
 // Window iPhone app: the app shows its own tab bar (Chat · Ahora · Tiempo · Work · Bandeja)
 // and one shared page. The app chooses the section through the URL fragment
 // (#section=…); a section that belongs to another tab is opened by the app.
-const WINDOW_TAB_FOR={assistant:'chat',feed:'ahora',ideas:'ahora',calendar:'tiempo',work:'work'};
-let windowShell=false,windowShellTab='chat';
-function show(name){
+const WINDOW_TAB_FOR={assistant:'chat',feed:'ahora',calendar:'tiempo',work:'work',bandeja:'bandeja',ideas:'bandeja'};
+const WINDOW_SECTIONS=['assistant','feed','bandeja','ideas','work','calendar','readings','thoughts'];
+let windowShell=false,windowShellTab='chat',windowShellCaps=[];
+function show(name,options={}){
   if(windowShell){
     const tab=WINDOW_TAB_FOR[name];
-    if(tab&&tab!==windowShellTab){void window.WINDOW_NATIVE.call('nav.open',{section:name});return}
+    if(tab&&tab!==windowShellTab){
+      const payload={section:name==='ideas'?'bandeja':name};
+      const view=name==='ideas'?'ideas':options.view;if(view)payload.view=view;
+      void window.WINDOW_NATIVE.call('nav.open',payload);return;
+    }
   }
-  showSection(name);
+  showSection(name,options);
 }
+// The Bandeja count also feeds the app's tab badge (only when the app can show it).
+window.addEventListener('minds:bandeja-count',e=>{
+  if(windowShell&&windowShellCaps.includes('shell.badge'))void window.WINDOW_NATIVE.call('shell.badge',{count:Math.max(0,Math.min(999,Number(e.detail?.count)||0))});
+});
 async function initWindowShell(){
   const native=window.WINDOW_NATIVE;if(!native?.available)return;
   const info=await native.call('app.info');
   if(!(info?.app?.capabilities||[]).includes('shell.tabs'))return;
-  windowShell=true;document.body.classList.add('window-app-shell');
-  const head=$('#drawer .drawer-head');
-  if(head&&!$('#drawer [data-shell-nav]'))head.insertAdjacentHTML('afterend','<button data-shell-nav="readings">Lecturas</button><button data-shell-nav="thoughts">Thoughts</button>');
-  $$('#drawer [data-shell-nav]').forEach(b=>b.onclick=()=>{closeDrawer();showSection(b.dataset.shellNav)});
+  windowShell=true;windowShellCaps=(info?.app?.capabilities||[]).map(String);document.body.classList.add('window-app-shell');
   window.addEventListener('hashchange',applyWindowShellHash);
   applyWindowShellHash();
-  // Ahora is native in the app; the page keeps the feed fresh because it has the context.
-  const refreshFeed=()=>{void window.ISABELLA_AI?.startFeedRefresh?.(state,{force:false,currentItems:[]})?.catch?.(()=>{})};
-  refreshFeed();
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshFeed()});
+  window.MINDS_BANDEJA?.refreshCount?.();
 }
 function applyWindowShellHash(){
   const params=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
   const section=params.get('section');
-  if(!section||!['assistant','feed','ideas','work','calendar','readings','thoughts'].includes(section))return;
+  if(!section||!WINDOW_SECTIONS.includes(section))return;
   if(WINDOW_TAB_FOR[section])windowShellTab=WINDOW_TAB_FOR[section];
-  showSection(section);
+  const view=params.get('view');
+  showSection(section,{view:['confirm','suggest','ideas'].includes(view)?view:undefined});
   const project=params.get('project');
   if(section==='work'&&project)setTimeout(()=>window.MINDS_WORK?.open?.(project),0);
   const draft=params.get('draft');
   if(section==='assistant'&&draft){const input=$('#chatInput');if(input){input.value=draft.slice(0,2000);input.dispatchEvent(new Event('input',{bubbles:true}))}}
 }
-function showSection(name){
-  const allowed=['assistant','feed','ideas','work','calendar','readings','thoughts'];
-  if(!allowed.includes(name))name='assistant';
+function showSection(name,options={}){
+  if(!WINDOW_SECTIONS.includes(name))name='assistant';
+  // Ideas now live in the Bandeja, next to Isabella's other proposals.
+  if(name==='ideas'){name='bandeja';options={...options,view:'ideas'}}
   // The native Time controls may be temporarily docked inside Chat.
   // Return them to their original screen BEFORE that screen becomes active.
   window.dispatchEvent(new CustomEvent('isabella:before-screen-change',{detail:{next:name}}));
@@ -518,15 +523,10 @@ function showSection(name){
   state.screen=name;
   $$('.screen').forEach(x=>x.classList.toggle('active',x.dataset.screen===name));
   document.querySelectorAll('.main-nav-item, .lens-nav-item').forEach(x=>{
-    const active=x.dataset.nav===name||(name==='ideas'&&x.dataset.nav==='feed');
+    const active=x.dataset.nav===name;
     x.classList.toggle('active',active);
     if(active)x.setAttribute('aria-current','page');
     else x.removeAttribute('aria-current');
-  });
-  document.querySelectorAll('[data-situation-view]').forEach(tab=>{
-    const active=tab.dataset.situationView===name;
-    tab.classList.toggle('active',active);
-    tab.setAttribute('aria-selected',String(active));
   });
   document.body.dataset.section=name;
   placeGlobalMenu(name);
@@ -538,8 +538,10 @@ function showSection(name){
     if(previous!=='calendar')setTimeout(()=>window.ISABELLA_SYNC_PULL_NOW?.(),0);
   }
   if(name==='assistant'&&previous!=='assistant')void recoverReviewedTaskReceipts();
-  if(name==='feed')renderFeed();
-  if(name==='ideas')renderIdeas();
+  // Ahora and the Bandeja read through modules that load after app.js (ai.js, ahora.js, bandeja.js).
+  const whenLoaded=fn=>document.readyState==='complete'?fn():window.addEventListener('load',fn,{once:true});
+  if(name==='feed')whenLoaded(()=>{if(state.screen!=='feed')return;window.MINDS_AHORA?.render?.();renderFeed()});
+  if(name==='bandeja')whenLoaded(()=>{if(state.screen==='bandeja')window.MINDS_BANDEJA?.show?.(options.view)});
   if(name==='work')setTimeout(()=>window.MINDS_WORK?.render?.(),0);
   if(name==='readings')ensureReadings();
   if(name==='thoughts')mountThoughts();
@@ -953,7 +955,7 @@ function fixedTodayFeedItems(){
   return [...events,...tasks].slice(0,10);
 }
 function renderFeedItems(items){
-  const box=$('#feedList'),weatherBox=$('#situationWeather');if(!box||!weatherBox)return;
+  const box=$('#feedList');if(!box)return;
   const all=dedupeFeedItems(items),generation=String(all.find(x=>x?.metadata?.generation_id)?.metadata?.generation_id||'');
   const current=all.filter(x=>!generation||String(x?.metadata?.generation_id||'')===generation);
   const kindOf=x=>String(x?.kind||x?.metadata?.kind||'').toLowerCase(),sectionOf=x=>String(x?.section||x?.metadata?.section||'').toLowerCase();
@@ -965,16 +967,41 @@ function renderFeedItems(items){
   const overlaps=(a,b)=>{const aa=anchors(a),bb=anchors(b);return [...aa].some(x=>bb.has(x))};
   const ongoing=all.filter(x=>allowed(x)&&(!generation||String(x?.metadata?.generation_id||'')!==generation)&&(String(x.lifecycle_state||'')==='seen'||String(x.user_feedback||'')==='liked')&&!now.some(n=>overlaps(x,n))).slice(0,2);
   feedItems=dedupeFeedItems([...(weather?[weather]:[]),...now,...ongoing]);
-  const weatherHtml=weather?surfaceCard(weather,'feed'):`<div class="feed-weather-placeholder"><div><span>CLIMA</span><strong>Sin localidad configurada</strong></div><button data-weather-settings>Ajustar</button></div>`;
   const nowHtml=now.length?now.map(x=>surfaceCard(x,'feed')).join(''):'<div class="surface-empty feed-now-empty">No hay sugerencias nuevas. Esto no significa que no tengas pendientes.</div>';
   const ongoingHtml=ongoing.length?`<section class="feed-section feed-ongoing"><h2 class="feed-section-title">Retomar</h2>${ongoing.map(x=>surfaceCard(x,'feed')).join('')}</section>`:'';
-  weatherBox.innerHTML=`<section class="feed-weather-section">${weatherHtml}</section>`;
-  box.innerHTML=`<section class="feed-section"><h2 class="feed-section-title">Sugerencias de Isabella</h2>${nowHtml}</section>${ongoingHtml}`;
+  renderAhoraWeather(weather);
+  box.innerHTML=`<section class="feed-section feed-suggestions" aria-label="Sugerencias de Isabella">${nowHtml}</section>${ongoingHtml}`;
   bindSurfaceActions();
-  document.querySelector('[data-weather-settings]')?.addEventListener('click',feedPreferencesPanel);
+}
+// Ahora: the weather is a small pill next to the title; a tap opens the week.
+function weatherNumbers(body){
+  const text=String(body||'');
+  const now=text.match(/(-?\d+)\s*°C ahora/),range=text.match(/máx\.\s*(-?\d+)°\s*\/\s*mín\.\s*(-?\d+)°/);
+  return {now:now?now[1]:null,max:range?range[1]:null,min:range?range[2]:null,label:text.split('·')[0].trim()};
+}
+function renderAhoraWeather(weather){
+  const pill=$('#situationWeather'),week=$('#ahoraWeatherWeek');if(!pill||!week)return;
+  if(!weather){
+    pill.innerHTML='<button type="button" class="ahora-weather-pill is-empty" data-weather-settings aria-label="Clima: sin localidad. Ajustar">'+weatherSymbolSvg('🌡️')+'<span><strong>Clima</strong><small>Ajustar</small></span></button>';
+    week.innerHTML='';week.classList.add('hidden');
+    pill.querySelector('[data-weather-settings]').onclick=feedPreferencesPanel;
+    return;
+  }
+  const n=weatherNumbers(weather.body),details=Array.isArray(weather.details)?weather.details:(Array.isArray(weather.metadata?.details)?weather.metadata.details:[]);
+  const place=String(weather.title||'').replace(/^Clima\s*·\s*/,'');
+  const range=n.max!=null&&n.min!=null?n.max+'° / '+n.min+'°':'';
+  pill.innerHTML='<button type="button" class="ahora-weather-pill" aria-expanded="'+String(!week.classList.contains('hidden'))+'" aria-controls="ahoraWeatherWeek" aria-label="'+esc('Clima en '+place+': '+(n.now!=null?n.now+' grados, ':'')+n.label+'. Ver la semana')+'">'+weatherSymbolSvg(weatherConditionEmoji(weather.body))+
+    '<span><strong>'+esc(n.now!=null?n.now+'°':n.label)+'</strong>'+(range?'<small>'+esc(range)+'</small>':'')+'</span></button>';
+  week.innerHTML='<div class="ahora-weather-place"><strong>'+esc(place)+'</strong><span>'+esc(weather.body||'')+'</span></div>'+
+    details.slice(0,7).map(d=>{const v=String(d.value||d.summary||''),sym=weatherConditionEmoji(v);return '<div class="weather-row"><span>'+esc(d.label||d.day||'')+'</span><b>'+(sym==='🌡️'?'':'<span class="weather-row-symbol" aria-hidden="true">'+weatherSymbolSvg(sym)+'</span>')+esc(v)+'</b></div>'}).join('')+
+    '<button type="button" class="ahora-text-button" data-weather-settings>Cambiar localidad</button>';
+  const button=pill.querySelector('.ahora-weather-pill');
+  button.onclick=()=>{const opening=week.classList.contains('hidden');week.classList.toggle('hidden',!opening);button.setAttribute('aria-expanded',String(opening))};
+  week.querySelector('[data-weather-settings]').onclick=feedPreferencesPanel;
 }
 async function renderFeed(force=false){
   void window.MINDS_SITUATION?.render?.();
+  if(!String(state.feedPreferences?.weatherLocation||'').trim()&&!$('#situationWeather')?.children.length)renderAhoraWeather(null);
   const box=$('#feedList'),status=$('#feedRefreshStatus');if(!box||feedBusy)return;feedBusy=true;
   let visible=[...feedItems];
   try{
@@ -2546,8 +2573,7 @@ function bind(){
  $('#sendButton').onclick=send;i.addEventListener('input',autosize);i.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();send()}});autosize();
  document.querySelectorAll('.main-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
  document.querySelectorAll('.lens-nav-item').forEach(b=>b.onclick=()=>show(b.dataset.nav));
- document.querySelectorAll('[data-situation-view]').forEach(tab=>tab.onclick=()=>show(tab.dataset.situationView));
- $('#feedSettings').onclick=()=>feedPreferencesPanel();
+
  $('#generateIdeas').onclick=()=>renderIdeas(true);
  $('#closeFeedDetail').onclick=closeFeedStory;
  const feedThreadInput=$('#feedThreadInput'),feedThreadForm=$('#feedThreadForm');
@@ -2562,11 +2588,11 @@ function bind(){
  ideaWorkspaceInput.addEventListener('input',autosizeIdeaWorkspace);autosizeIdeaWorkspace();
  ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
  ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
- $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;window.matchMedia?.('(min-width: 950px)')?.addEventListener?.('change',()=>placeGlobalMenu(state.screen));$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice();void initWindowShell(); }
+ $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;window.matchMedia?.('(min-width: 950px)')?.addEventListener?.('change',()=>placeGlobalMenu(state.screen));$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});$$('#drawer [data-shell-nav]').forEach(b=>b.onclick=()=>{closeDrawer();showSection(b.dataset.shellNav)});initVoice();void initWindowShell(); }
 /* Pull-to-refresh checks existing sources; generating entirely new Ideas remains an explicit choice. */
 function initSituationPullRefresh(){
-  for(const view of ['feed','ideas']){
-    const screen=$('#'+(view==='feed'?'feedScreen':'ideasScreen'));
+  for(const view of ['feed','bandeja']){
+    const screen=$('#'+(view==='feed'?'feedScreen':'bandejaScreen'));
     const scroller=screen?.querySelector('.surface-scroll');
     const indicator=screen?.querySelector('[data-pull-indicator="'+view+'"]');
     const label=indicator?.querySelector('span');
@@ -2578,7 +2604,7 @@ function initSituationPullRefresh(){
       if(!refreshing){indicator.style.opacity='';label.style.transform='';label.textContent='Desliza para actualizar'}
     };
     scroller.addEventListener('touchstart',event=>{
-      if(refreshing||event.touches.length!==1||!screen.classList.contains('active')||scroller.scrollTop>1||feedBusy&&view==='feed'||ideasBusy&&view==='ideas'||document.body.classList.contains('drawer-open'))return;
+      if(refreshing||event.touches.length!==1||!screen.classList.contains('active')||scroller.scrollTop>1||feedBusy&&view==='feed'||document.body.classList.contains('drawer-open'))return;
       if(event.target.closest?.('button,a,input,textarea,select,[contenteditable="true"]'))return;
       start={x:event.touches[0].clientX,y:event.touches[0].clientY};
       travel=0;pulling=false;
@@ -2603,7 +2629,7 @@ function initSituationPullRefresh(){
       indicator.style.opacity='1';
       label.style.transform='translateY(4px)';
       label.textContent='Actualizando…';
-      Promise.resolve().then(()=>view==='feed'?renderFeed(false):renderIdeas(false)).catch(()=>{
+      Promise.resolve().then(()=>view==='feed'?Promise.all([window.MINDS_AHORA?.render?.({fresh:true}),window.ISABELLA_SYNC_PULL_NOW?.(),renderFeed(false)]):window.MINDS_BANDEJA?.refresh?.()).catch(()=>{
         label.textContent='No pude actualizar';
       }).finally(()=>{
         refreshing=false;indicator.classList.remove('is-refreshing');
@@ -3443,8 +3469,8 @@ function openDrawer(){
       ?'Versión cargada · commit '+tag+' · app v'+assetVersion
       :'Versión local · app v'+assetVersion;
   }
-  const refresh=$('#refreshViewAction');if(refresh){refresh.classList.toggle('hidden',!['feed','ideas'].includes(state.screen));refresh.textContent=state.screen==='feed'?'Actualizar situación':'Actualizar ideas guardadas'}const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
-function action(a){if(a==='refreshview'){if(state.screen==='feed')void renderFeed(false);if(state.screen==='ideas')void renderIdeas(false)}if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
+  const refresh=$('#refreshViewAction');if(refresh){refresh.classList.toggle('hidden',!['feed','bandeja'].includes(state.screen));refresh.textContent=state.screen==='feed'?'Actualizar Ahora':'Actualizar la Bandeja'}const d=$('#drawer');d.classList.remove('hidden');d.scrollTop=0;$('#drawerBackdrop').classList.remove('hidden');document.body.classList.add('drawer-open')}function closeDrawer(){$('#drawer').classList.add('hidden');$('#drawerBackdrop').classList.add('hidden');document.body.classList.remove('drawer-open')}function modal(title,body){$('#modalTitle').textContent=title;$('#modalBody').innerHTML=body;$('#modal').classList.remove('artifact-image-modal');$('#modal').classList.remove('hidden');$('#modalBackdrop').classList.remove('hidden')}function closeModal(){$('#modal').classList.add('hidden');$('#modal').classList.remove('artifact-image-modal');$('#modalBackdrop').classList.add('hidden')}
+function action(a){if(a==='refreshview'){if(state.screen==='feed'){window.MINDS_AHORA?.render?.({fresh:true});void renderFeed(false)}if(state.screen==='bandeja')void window.MINDS_BANDEJA?.refresh?.()}if(a==='tasks')tasksPanel();if(a==='new')newPanel();if(a==='memory')memoryPanel();if(a==='assistantprefs')assistantPreferencesPanel();if(a==='push')void pushNotificationsPanel();if(a==='permissions')void contextualAutonomyPanel();if(a==='reviews')void reviewEconomyPanel();if(a==='routines')routinesPanel();if(a==='intents')void standingIntentsPanel();if(a==='continuity')void continuityPanel();if(a==='skills')skillsPanel();if(a==='doctor')void doctorPanel();if(a==='feedprefs')feedPreferencesPanel();if(a==='artifacts')void artifactsPanel();if(a==='aiusage')void aiUsagePanel();if(a==='categories')categoriesPanel()}
 function reviewAgeCopy(hours){
   const n=Math.max(0,Number(hours||0));
   if(n<1)return 'ahora';
@@ -4628,7 +4654,8 @@ window.addEventListener('isabella:synced',()=>{
   // Sync can restore a remote pre-acceptance message. Recheck accepted receipts
   // against the canonical task after every successful state replacement.
   void recoverReviewedTaskReceipts();
-  if(document.body.dataset.section==='feed')void window.MINDS_SITUATION?.render?.();
+  if(document.body.dataset.section==='feed'){void window.MINDS_SITUATION?.render?.();window.MINDS_AHORA?.render?.()}
+  window.MINDS_BANDEJA?.refreshCount?.();
   void afterSync();
 });
 window.ISABELLA_APP={
@@ -4660,6 +4687,8 @@ window.ISABELLA_APP={
   openCanonicalTaskById,
   formatMessageText,
   openNewItem:(date)=>newPanel(date),
+  renderSuggestions:(force=false)=>renderFeed(force),
+  renderIdeas:(force=false)=>renderIdeas(force),
   openModal:modal,
   closeModal,
   show,

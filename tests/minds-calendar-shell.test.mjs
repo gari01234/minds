@@ -15,9 +15,9 @@ const work=read('apps/isabella/work.js');
 const dashboard=read('apps/isabella/dashboard.js');
 const model=require('../apps/isabella/dashboard-model.js');
 
-test('Calendar/shell layer is the last stylesheet and is precached',()=>{
-  assert.match(index,/minds-sections-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-calendar-shell\.css\?v=1">\s*<\/head>/);
-  assert.match(sw,/minds-sections-parity\.css\?v=1',\s*'\.\/minds-calendar-shell\.css\?v=1'/);
+test('Calendar/shell layer comes right before the Ahora/Bandeja layer (the last stylesheet) and both are precached',()=>{
+  assert.match(index,/minds-sections-parity\.css\?v=1">\s*<link rel="stylesheet" href="\.\/minds-calendar-shell\.css\?v=1">\s*<link rel="stylesheet" href="\.\/ahora-bandeja\.css\?v=1">\s*<\/head>/);
+  assert.match(sw,/minds-sections-parity\.css\?v=1',\s*'\.\/minds-calendar-shell\.css\?v=1',\s*'\.\/ahora-bandeja\.css\?v=1'/);
   assert.doesNotMatch(css,/@import|@font-face|url\(/);
 });
 
@@ -51,20 +51,32 @@ test('Multi-day tasks belong to every day of their window, never to a done day',
   assert.match(ai,/in_progress:true,start_date:x\.startDate,due_date:x\.date/);
 });
 
-test('Ahora lists tasks already running today',async()=>{
-  const source=read('apps/isabella/situation.js');
-  const node={innerHTML:'',querySelector(){return {addEventListener(){}}}};
+test('Ahora lists the calendar tasks of the day: running spans, overdue ones and reserved sessions',async()=>{
+  const source=read('apps/isabella/ahora.js');
+  const model=read('apps/isabella/dashboard-model.js');
   const today=new Date(),pad=n=>String(n).padStart(2,'0');
-  const key=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
-  const before=new Date(today.getTime()-2*864e5),after=new Date(today.getTime()+3*864e5);
-  // Like PostgREST: the due-date query only returns tasks due by today; the start-date query returns the span.
-  const q=name=>{const o={},filters=[];for(const m of ['select','eq','is','not','in','order','limit'])o[m]=()=>o;
-    o.lte=(column)=>{filters.push(column);return o};
-    o.then=(res,rej)=>Promise.resolve(name==='isabella_tasks'&&filters.includes('start_date')?{data:[{id:'span',title:'Treppen',start_date:key(before),due_date:key(after)}],count:1,error:null}:{data:[],count:0,error:null}).then(res,rej);return o};
-  const window={MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from:q},ISABELLA_STATE:{projects:[]}};
-  vm.runInNewContext(source,{window,document:{querySelector:s=>s==='#situationLedger'?node:null},Promise,Date,console});
-  await window.MINDS_SITUATION.render();
-  assert.match(node.innerHTML,/Treppen[\s\S]*?En curso · hasta/);
+  const key=n=>{const d=new Date(today);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())};
+  const nodes={};const node=id=>nodes[id]||(nodes[id]={innerHTML:'',textContent:'',classList:{add(){},remove(){}}});
+  const state={categories:[{id:'w',name:'Trabajo'}],projects:[{id:'p',name:'Bernried'}],
+    tasks:[{id:'span',title:'Treppen',startDate:key(-2),date:key(3),categoryId:'w',projectId:'p'},
+      {id:'late',title:'Angebot prüfen',date:key(-1)},
+      {id:'done',title:'Erledigt',date:key(0),done:true},
+      {id:'later',title:'Nächste Woche',date:key(7)}],
+    events:[{id:'s1',date:key(0),start:'10:00',duration:120,metadata:{kind:'task_work_session_v1',task_client_key:'span'}},
+      {id:'jf',title:'Jour fixe',date:key(1),start:'09:30',duration:60,projectId:'p'}]};
+  const window={ISABELLA_APP:{getState:()=>JSON.parse(JSON.stringify(state))},addEventListener(){}};
+  const context=vm.createContext({window,document:{body:{dataset:{}},querySelector:s=>node(s)},setTimeout,clearTimeout,console});
+  vm.runInContext(model,context);vm.runInContext(source,context);
+  window.MINDS_AHORA.paint();
+  const day=nodes['#ahoraDay'].innerHTML,next=nodes['#ahoraNext'].innerHTML;
+  assert.match(day,/Treppen[\s\S]*?Trabajo · Bernried · en curso hasta[\s\S]*?10:00 · 2 h reservados[\s\S]*?En curso/);
+  assert.match(day,/Angebot prüfen[\s\S]*?Vencida/);
+  assert.match(day,/is-checked[\s\S]*?Erledigt[\s\S]*?Hecha/);
+  assert.doesNotMatch(day,/Nächste Woche/);
+  assert.match(day,/data-ahora-toggle="span"/);
+  assert.match(day,/data-ahora-task="span"/);
+  assert.match(next,/Termin[\s\S]*?Jour fixe[\s\S]*?Bernried · 1 h/);
+  assert.doesNotMatch(next,/Sesión|s1/,'A reserved session is not a Termin');
 });
 
 test('Idea replies that arrived as JSON text are shown as prose plus a formatted draft',()=>{

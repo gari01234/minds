@@ -12,15 +12,15 @@ test('Isabella collection selectors use querySelectorAll before forEach',()=>{
   assert.deepEqual([...source.matchAll(singular)].map(m=>m[0]),[]);
 });
 
-test('six canonical destinations and two contextual Situation routes remain wired',()=>{
+test('canonical destinations stay wired; Ideas live inside the Bandeja',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  for(const name of ['feed','assistant','calendar','work','readings','thoughts']){
-    assert.ok(shell.includes(`data-nav="${name}"`),`missing destination: ${name}`);
+  for(const name of ['feed','assistant','calendar','work','bandeja','readings','thoughts']){
+    assert.ok(shell.includes(`data-nav="${name}"`)||shell.includes(`data-shell-nav="${name}"`),`missing destination: ${name}`);
     assert.ok(app.includes(`'${name}'`),`missing route: ${name}`);
   }
   assert.ok(!shell.includes('data-nav="ideas"'));
-  assert.ok(shell.includes('data-situation-view="ideas"'));
+  assert.ok(shell.includes('data-bandeja-view="ideas"'));
   assert.ok(app.includes("document.querySelectorAll('.main-nav-item').forEach"));
 });
 
@@ -36,8 +36,8 @@ test('ORB compact mode is driven by conversation state',()=>{
 test('Feed is a situational surface with weather and Now, not an editorial news feed',()=>{
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(app.includes('feed-weather-section'));
-  assert.ok(app.includes('feed-section-title">Sugerencias de Isabella'));
+  assert.ok(app.includes('function renderAhoraWeather(weather)'));
+  assert.ok(app.includes('aria-label="Sugerencias de Isabella"'));
   assert.ok(!app.includes('feed-section-title">Noticias'));
   assert.ok(!app.includes('feed-section-title">Para mí'));
   assert.ok(ai.includes("surface_version:surface==='feed'?11"));
@@ -64,9 +64,10 @@ test('Feed exposes preferences and expandable weather',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
   const ai=read('apps/isabella/ai.js');
-  assert.ok(shell.includes('id="feedSettings"'));
+  assert.ok(shell.includes('id="ahoraWeatherWeek"'));
   assert.ok(shell.includes('data-action="feedprefs"'));
   assert.ok(app.includes('function feedPreferencesPanel'));
+  assert.ok(app.includes("pill.querySelector('[data-weather-settings]').onclick=feedPreferencesPanel"));
   assert.ok(app.includes('weather-toggle'));
   assert.ok(app.includes('weather-week'));
   assert.ok(ai.includes('weather_location'));
@@ -452,7 +453,7 @@ test('Build 41 Feed re-evaluation is asynchronous and keeps engaged signals reac
 
 test('Build 41 separates Calendar from Feed and keeps only situational signals',()=>{
   const app=read('apps/isabella/app.js');
-  assert.ok(app.includes('feed-weather-section'));
+  assert.ok(app.includes('renderAhoraWeather(weather)'));
   assert.ok(app.includes('feed-now-empty'));
   assert.ok(app.includes("!['weather','clear','news','commitment','pending','research'].includes"));
   assert.ok(!app.includes('feed-section-title">Hoy'));
@@ -618,11 +619,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('id="currentBuildInfo"'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=105'));
-  assert.ok(index.includes('app.js?v=131'));
+  assert.ok(index.includes('shell.js?v=106'));
+  assert.ok(index.includes('app.js?v=132'));
   assert.ok(index.includes('sync.js?v=pwa39'));
   assert.ok(index.includes('ai.js?v=57'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v171'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v172'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
@@ -730,9 +731,9 @@ test('Build 46 adds Work as a private Desktop plus Planner surface',()=>{
   assert.ok(shell.includes('data-nav="work"'));
   assert.ok(shell.includes('data-work-view="desktop"'));
   assert.ok(shell.includes('data-work-view="planner"'));
-  assert.ok(app.includes("'assistant','feed','ideas','work','calendar','readings'"));
+  assert.ok(app.includes("const WINDOW_SECTIONS=['assistant','feed','bandeja','ideas','work','calendar','readings','thoughts']"));
   assert.ok(app.includes("window.MINDS_WORK?.render?.()"));
-  assert.ok(index.includes('work.js?v=33'));
+  assert.ok(index.includes('work.js?v=34'));
   assert.ok(work.includes("storage.from('minds-work').upload"));
   assert.ok(work.includes("from('minds_work_folders')"));
   assert.ok(work.includes("from('minds_work_buckets')"));
@@ -761,11 +762,13 @@ test('Build 47 keeps chat images stable across background rerenders',()=>{
   assert.ok(app.includes("artifactSignedUrl(path,expires=3600){return signedAssetUrl('minds-artifacts',path,expires)}"));
 });
 
-test('Build 47 uses the requested navigation order',()=>{
+test('Navigation order is Chat · Ahora · Tiempo · Work · Bandeja; Lecturas and Thoughts sit in •••',()=>{
   const shell=read('apps/isabella/shell.js');
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"'))+6);
-  const order=['data-nav="assistant"','data-nav="feed"','data-nav="calendar"','data-nav="work"','data-nav="readings"','data-nav="thoughts"'].map(x=>nav.indexOf(x));
+  const order=['data-nav="assistant"','data-nav="feed"','data-nav="calendar"','data-nav="work"','data-nav="bandeja"'].map(x=>nav.indexOf(x));
   assert.ok(order.every((x,i)=>x>=0&&(i===0||x>order[i-1])));
+  assert.ok(!nav.includes('data-nav="readings"')&&!nav.includes('data-nav="thoughts"'));
+  assert.ok(shell.includes('<button data-shell-nav="readings">Lecturas</button><button data-shell-nav="thoughts">Thoughts</button>'));
 });
 
 test('Build 47 makes Work and MINDS responsive on desktop',()=>{

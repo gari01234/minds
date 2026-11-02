@@ -15,8 +15,8 @@ test('Desktop distinguishes stored originals, queued reading and proposed partia
   assert.doesNotThrow(()=>new Script(work,{filename:'work.js'}));
 });
 test('PWA publishes visible knowledge statuses with coherent cache pins',()=>{
-  assert.match(read('apps/isabella/index.html'),/work\.js\?v=33/);
+  assert.match(read('apps/isabella/index.html'),/work\.js\?v=34/);
   const sw=read('apps/isabella/sw.js');
-  assert.match(sw,/work\.js\?v=33/);
-  assert.match(sw,/isabella-shell-v171/);
+  assert.match(sw,/work\.js\?v=34/);
+  assert.match(sw,/isabella-shell-v172/);
 });

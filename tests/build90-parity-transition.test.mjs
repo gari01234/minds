@@ -52,7 +52,9 @@ test('90.4 Ahora resolves database UUID to client_key and edits the existing tas
   assert.deepEqual(seen.find(x=>x[0]==='id'),['id','db-uuid']);
   assert.deepEqual(seen.find(x=>x[0]==='user_id'),['user_id','owner-1']);
   assert.ok(!seen.some(x=>x[0]==='modal'),'A known canonical task must not silently fail');
-  assert.ok(situation.includes('openCanonicalTaskById?.(button.dataset.situationTask)'));
+  // Ahora now lists the calendar's own tasks (client keys) and opens them with the same editor.
+  const ahora=readFileSync(new URL('../apps/isabella/ahora.js',import.meta.url),'utf8');
+  assert.ok(ahora.includes('APP()?.editTaskById?.(t.dataset.ahoraTask)'));
 });
 
 test('90.4 unavailable canonical task yields a visible error rather than creating a shadow task',async()=>{

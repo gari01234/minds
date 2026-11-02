@@ -59,7 +59,7 @@ test('UX A.4 loads design tokens and each surface layer after legacy CSS with PW
   for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=8']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v171'));
+  assert.ok(sw.includes('isabella-shell-v172'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 
@@ -84,9 +84,9 @@ test('UX A.4 does not resize Isabella ORB or remove validated routes and drag in
   assert.doesNotMatch(web,/\.orb-(?:button|core|haze)\s*\{/);
   const oldCss=read('apps/isabella/app.css');
   assert.ok(oldCss.includes('.assistant-scroll.orb-compact .orb-button'));
-  for(const route of ['feed','assistant','calendar','work','readings','thoughts'])
+  for(const route of ['feed','assistant','calendar','work','bandeja','readings','thoughts'])
     assert.ok(shell.includes('data-nav="'+route+'"'),'Destination removed: '+route);
-  assert.ok(shell.includes('data-situation-view="ideas"'),'Ideas tab must remain available');
+  assert.ok(shell.includes('data-bandeja-view="ideas"'),'Ideas must remain available (inside the Bandeja)');
   assert.ok(read('apps/isabella/work.js').includes('card.ondragstart'));
   assert.ok(!web.includes('data-work-move'));
 });
@@ -113,7 +113,7 @@ test('UX A.4 CSS layers have balanced rules',()=>{
 test('UX A.4.1 retains one global More button and places it inside every contextual lens',()=>{
   const app=read('apps/isabella/app.js');
   assert.equal((shell.match(/id="menuButton"/g)||[]).length,1);
-  for(const lens of ['feed','ideas','work','calendar','readings'])
+  for(const lens of ['feed','bandeja','work','calendar','readings'])
     assert.ok(shell.includes('data-menu-slot="'+lens+'"'),'Menu destination missing: '+lens);
   assert.ok(app.includes('placeGlobalMenu(name)'));
   assert.ok(app.includes('host.appendChild(button)'));
@@ -128,41 +128,41 @@ test('UX A.4.1 uses underline tabs for embedded reading filters',()=>{
   assert.ok(read('apps/theory/v09.js').includes("['all','Todo']"));
 });
 
-test('UX A.4.1 hides empty attention sections but keeps unknown sources and scope visible',()=>{
+test('Avisos hide when empty but keep unknown sources and the scope caveat visible',()=>{
   const src=read('apps/isabella/situation.js');
-  assert.ok(src.includes('rowsExpect.length||!expectations.ok'));
-  assert.ok(src.includes('rowsAttention.length||!attention.ok'));
+  assert.ok(src.includes('rows.length||partial?'));
+  assert.ok(src.includes('checked<sources.length?'));
   assert.ok(src.includes('pendingReviews?'));
-  assert.ok(src.includes('details class="situation-scope"'));
-  assert.ok(src.includes('No incluye todas las conversaciones'));
+  assert.ok(src.includes('Una omisión de MINDS no equivale a ausencia de obligaciones'));
   assert.ok(!src.includes('situation-limit'));
 });
 
 
-test('UX A.4.2 uses the same six vector navigation icons and names in mobile and desktop',()=>{
+test('Phone and desktop share the vector icons and names; the phone shows five, the desktop seven',()=>{
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
-  for(const [route,label] of [['feed','Situación'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas'],['thoughts','Thoughts']]){
-    assert.ok(nav.includes('data-nav="'+route+'"'));
-    assert.ok(desktop.includes('data-nav="'+route+'"'));
+  for(const [route,label] of [['feed','Ahora'],['assistant','Chat'],['calendar','Tiempo'],['work','Work'],['bandeja','Bandeja']]){
     assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
+    assert.ok(desktop.includes('data-nav="'+route+'"'));
     assert.ok(desktop.includes('<strong>'+label+'</strong>'));
     assert.ok(shell.includes('NAV_ICONS.'+route));
   }
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
-  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,6);
+  for(const [route,label] of [['readings','Lecturas'],['thoughts','Thoughts']]){
+    assert.ok(desktop.includes('<strong>'+label+'</strong>')&&shell.includes('NAV_ICONS.'+route));
+    assert.ok(shell.includes('<button data-shell-nav="'+route+'">'+label+'</button>'),'On the phone '+label+' is in •••');
+  }
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
+  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,7);
   assert.ok(!nav.includes('data-nav="ideas"'));
   assert.ok(!desktop.includes('data-nav="ideas"'));
-  assert.ok(web.includes('grid-template-columns:repeat(6,minmax(0,1fr))'));
+  assert.ok(read('apps/isabella/ahora-bandeja.css').includes('.app .main-nav{grid-template-columns:repeat(5,minmax(0,1fr))}'));
 });
 
-test('UX A.4.2 keeps both Situation tabs while preserving existing source-bound routes',()=>{
-  const app=read('apps/isabella/app.js');
-  for(const route of ['feed','ideas']){
-    assert.equal((shell.match(new RegExp('data-situation-view="'+route+'"','g'))||[]).length,2);
-  }
-  assert.match(app,/name==='ideas'&&x\.dataset\.nav==='feed'/);
-  assert.ok(app.includes('aria-selected'));
+test('The Bandeja has three views and keeps the existing source-bound routes',()=>{
+  const app=read('apps/isabella/app.js'),bandeja=read('apps/isabella/bandeja.js');
+  for(const view of ['confirm','suggest','ideas'])assert.ok(shell.includes('data-bandeja-view="'+view+'"'));
+  assert.match(app,/if\(name==='ideas'\)\{name='bandeja'/);
+  assert.ok(bandeja.includes("setAttribute('aria-selected'"));
   assert.ok(shell.includes('id="situationLedger"'));
   assert.ok(shell.includes('id="ideasList"'));
   assert.ok(shell.includes('id="generateIdeas"'));
@@ -173,7 +173,7 @@ test('UX A.4.2 keeps source re-check separate from forced idea generation',()=>{
   assert.ok(app.includes('function initSituationPullRefresh()'));
   assert.ok(app.includes("scroller.addEventListener('touchmove'"));
   assert.ok(app.includes('scroller.scrollTop>1'));
-  assert.ok(app.includes("renderFeed(false):renderIdeas(false)"));
+  assert.ok(app.includes("renderFeed(false)]):window.MINDS_BANDEJA?.refresh?.()"));
   assert.ok(app.includes("$('#generateIdeas').onclick=()=>renderIdeas(true)"));
   assert.ok(app.includes("id=\"refreshViewAction\"")||shell.includes('id="refreshViewAction"'));
   assert.ok(!shell.includes('id="refreshFeed"'));
@@ -181,33 +181,30 @@ test('UX A.4.2 keeps source re-check separate from forced idea generation',()=>{
 });
 
 
-test('UX A.4.3 keeps six accessible icon-only mobile destinations in Chat-first order',()=>{
+test('Five accessible icon-only phone destinations in Chat-first order, same order on the desktop',()=>{
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
-  const order=['assistant','feed','calendar','work','readings','thoughts'];
+  const order=['assistant','feed','calendar','work','bandeja'];
   for(const part of [nav,desktop]){
     const positions=order.map(route=>part.indexOf('data-nav="'+route+'"'));
     assert.ok(positions.every((n,i)=>n>=0&&(i===0||n>positions[i-1])));
   }
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
   assert.doesNotMatch(nav,/class="nav-label"/);
-  for(const [route,label] of [['assistant','Chat'],['feed','Situación'],['calendar','Tiempo'],['work','Work'],['readings','Lecturas'],['thoughts','Thoughts']])
+  for(const [route,label] of [['assistant','Chat'],['feed','Ahora'],['calendar','Tiempo'],['work','Work'],['bandeja','Bandeja']])
     assert.ok(nav.includes('data-nav="'+route+'" aria-label="'+label+'"'));
 });
 
-test('UX A.4.3 displays one source-backed weather section ahead of operational Situation',()=>{
+test('Ahora shows the weather as one pill next to the title, ahead of the day',()=>{
   const app=read('apps/isabella/app.js');
   const weather=shell.indexOf('id="situationWeather"');
   const ledger=shell.indexOf('id="situationLedger"');
-  const tabs=shell.indexOf('class="situation-tabs"');
-  assert.ok(tabs>=0&&weather>tabs&&ledger>weather);
-  assert.ok(app.includes("weatherBox=$('#situationWeather')"));
-  assert.ok(app.includes("weatherBox.innerHTML=`<section class=\"feed-weather-section\""));
+  const title=shell.indexOf('<h1>Ahora</h1>');
+  assert.ok(title>=0&&weather>title&&ledger>weather);
+  assert.ok(app.includes("const pill=$('#situationWeather'),week=$('#ahoraWeatherWeek')"));
+  assert.ok(app.includes('class="ahora-weather-pill"'));
   assert.ok(!app.includes("box.innerHTML=`<section class=\"feed-weather-section\""));
-  assert.ok(app.includes("surfaceCard(weather,'feed')"));
   assert.ok(app.includes("document.querySelectorAll('.weather-toggle')"));
-  assert.ok(web.includes('.app .situation-weather .weather-card'));
-  assert.ok(web.includes('border-radius:0'));
 });
 
 
@@ -232,7 +229,7 @@ test('UX A.4.4 reduces navigation icon artwork without shrinking touch targets',
   assert.ok(web.includes('.app .main-nav .nav-icon svg{width:20px;height:20px;stroke-width:1.9}'));
   assert.ok(web.includes('.app .main-nav .main-nav-item{min-height:44px}'));
   const nav=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
-  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,6);
+  assert.equal((nav.match(/class="main-nav-item/g)||[]).length,5);
 });
 
 

@@ -27,36 +27,45 @@ function fixture({connected=true,fail=[]}={}){
   vm.runInNewContext(source,{window,document,Promise,Date,console});
   return {node,render:window.MINDS_SITUATION.render};
 }
-test('Build 90.2 places a canonical source-backed radar before the generative Feed',()=>{
+test('Ahora keeps the source-backed signals (Avisos) next to the day, suggestions move to the Bandeja',()=>{
  const shell=read('apps/isabella/shell.js');
  const app=read('apps/isabella/app.js');
  const index=read('apps/isabella/index.html');
  assert.ok(shell.includes('id="situationLedger"'));
- assert.ok(shell.indexOf('id="situationLedger"')<shell.indexOf('id="feedList"'));
- assert.ok(index.includes('situation.js?v=5'));
+ assert.ok(shell.indexOf('id="situationLedger"')<shell.indexOf('id="ahoraDay"'));
+ assert.ok(shell.indexOf('id="bandejaScreen"')<shell.indexOf('id="feedList"'),'Suggestions live in the Bandeja');
+ assert.ok(index.includes('situation.js?v=6'));
  assert.ok(app.includes('void window.MINDS_SITUATION?.render?.()'));
- assert.ok(app.includes('feed-section-title">Sugerencias de Isabella'));
+ assert.ok(app.includes('aria-label="Sugerencias de Isabella"'));
  assert.ok(!app.includes('Ahora mismo no hay nada que merezca interrumpirte.'));
 });
-test('Build 90.2 does not infer empty world from no account',async()=>{
+test('Avisos do not infer an empty world from no account',async()=>{
  const {render,node}=fixture({connected:false});
  await render();
  assert.match(node.innerHTML,/Memoria no conectada/);
  assert.doesNotMatch(node.innerHTML,/No hay tareas fechadas/);
 });
-test('Build 90.2 keeps due_unconfirmed distinct from non-occurrence',async()=>{
+test('Avisos keep due_unconfirmed distinct from non-occurrence; tasks are in «Hoy», not here',async()=>{
  const {render,node}=fixture();
  await render();
- assert.match(node.innerHTML,/Coordinar TWP/);
- assert.match(node.innerHTML,/Coordinar TWP[\s\S]*?Bernried/);
  assert.match(node.innerHTML,/Esperar respuesta/);
  assert.match(node.innerHTML,/Vencida, ocurrencia no confirmada/);
- assert.match(node.innerHTML,/No incluye todas las conversaciones/);
+ assert.match(node.innerHTML,/2 propuestas de acción esperan tu confirmación/);
+ assert.doesNotMatch(node.innerHTML,/Coordinar TWP/);
 });
-test('Build 90.2 reports partial coverage instead of silently treating query failures as no items',async()=>{
+test('Avisos report partial coverage instead of silently treating query failures as no items',async()=>{
  const {render,node}=fixture({fail:['minds_expectations','minds_attention_events']});
  await render();
- assert.match(node.innerHTML,/Cobertura parcial: 2 de cuatro fuentes/);
- assert.match(node.innerHTML,/Esta fuente no pudo comprobarse/);
- assert.doesNotMatch(node.innerHTML,/No hay sugerencias nuevas/);
+ assert.match(node.innerHTML,/Cobertura parcial: 1 de tres fuentes/);
+ assert.match(node.innerHTML,/No pude comprobar: respuestas esperadas, avisos/);
+ assert.match(node.innerHTML,/Una omisión de MINDS no equivale a ausencia de obligaciones/);
+});
+test('Avisos stay empty when every source answers and nothing needs Gari',async()=>{
+ const source=read('apps/isabella/situation.js');
+ const node={innerHTML:'x',querySelector(){return null}};
+ const q=()=>{const o={};for(const m of ['select','eq','is','not','in','order','limit','lte'])o[m]=()=>o;o.then=(r,j)=>Promise.resolve({data:[],count:0,error:null}).then(r,j);return o};
+ const window={MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{user:{id:'u'}}}})},from:q}};
+ vm.runInNewContext(source,{window,document:{querySelector:s=>s==='#situationLedger'?node:null},Promise,Date,console});
+ await window.MINDS_SITUATION.render();
+ assert.equal(node.innerHTML,'');
 });

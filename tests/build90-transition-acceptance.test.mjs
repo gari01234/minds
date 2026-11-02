@@ -95,7 +95,7 @@ test('90.4 queued pull must resolve after its actual sync, not immediately',()=>
   assert.match(sync,/return new Promise\(resolve=>queuedSyncWaiters\.push\(resolve\)\)/);
   assert.match(sync,/syncNow\(next\)\.then\(ok=>waiters\.forEach\(resolve=>resolve\(ok\)\)/);
   assert.match(app,/refreshed!==true/);
-  assert.match(app,/dataset\.section==='feed'\)void window\.MINDS_SITUATION\?\.render/);
+  assert.match(app,/dataset\.section==='feed'\)\{void window\.MINDS_SITUATION\?\.render\?\.\(\);window\.MINDS_AHORA\?\.render\?\.\(\)\}/);
   assert.match(work,/work_sort_order:\(i\+1\)\*10/);
   assert.ok(!work.includes("update({sort_order:"),'Work ordering is separate from calendar ordering');
 });
@@ -127,7 +127,7 @@ test('90.5 Sofía iframe queues opening until loaded and preserves iframe on sub
 
 test('90.6 retained destinations, document transfer, reduced motion and source scopes remain explicit',()=>{
   const shell=read('apps/isabella/shell.js'),css=read('apps/isabella/app.css');
-  const screens=['assistant','calendar','feed','work','readings','ideas'];
+  const screens=['assistant','calendar','feed','bandeja','work','readings'];
   for(const screen of screens)assert.match(shell,new RegExp('data-screen="'+screen+'"'));
   assert.match(shell,/id="workFileInput"/);
   assert.match(work,/uploadFiles\(fs\)/);

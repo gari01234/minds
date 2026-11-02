@@ -57,10 +57,10 @@ test('Ahora: weather, Ideas as the web view, Fristen, today, Isabella\'s suggest
 test('the web page joins the app shell only when the app says it has tabs', () => {
   assert.match(appJs, /if\(!\(info\?\.app\?\.capabilities\|\|\[\]\)\.includes\('shell\.tabs'\)\)return;/);
   assert.match(css, /body\.window-app-shell \.app \.main-nav\{display:none!important\}/);
-  assert.match(appJs, /<button data-shell-nav="readings">Lecturas<\/button><button data-shell-nav="thoughts">Thoughts<\/button>/);
+  assert.match(read('apps/isabella/shell.js'), /<button data-shell-nav="readings">Lecturas<\/button><button data-shell-nav="thoughts">Thoughts<\/button>/);
   // Run show() and the hash handler in a sandbox.
   const start = appJs.indexOf('const WINDOW_TAB_FOR=');
-  const end = appJs.indexOf('function showSection(name){');
+  const end = appJs.indexOf('function showSection(name,options={}){');
   const calls = [], shown = [];
   const ctx = {window: {WINDOW_NATIVE: {available: true, call: async (type, payload) => { calls.push([type, payload]); return {app: {capabilities: ['shell.tabs']}}; }}, addEventListener() {}, MINDS_WORK: {open: k => shown.push('project:' + k)}},
     document: {body: {classList: {add() {}}}, addEventListener() {}}, location: {hash: ''}, URLSearchParams, setTimeout: f => f(), Event: class { constructor(t) { this.type = t; } },
@@ -78,6 +78,13 @@ test('the web page joins the app shell only when the app says it has tabs', () =
   ctx.location.hash = '#section=work&project=bernried';
   ctx.applyWindowShellHash();
   assert.equal(JSON.stringify(shown.slice(-2)), JSON.stringify(['work', 'project:bernried']));
+  ctx.location.hash = '#section=bandeja&view=ideas';
+  ctx.applyWindowShellHash();
+  assert.equal(shown.at(-1), 'bandeja', 'the Bandeja is a web section of its own tab');
+  ctx.location.hash = '#section=assistant';
+  ctx.applyWindowShellHash();
+  ctx.show('ideas');
+  assert.equal(JSON.stringify(calls.at(-1)), JSON.stringify(['nav.open', {section: 'bandeja', view: 'ideas'}]), 'Ideas open in the Bandeja tab');
   const before = shown.length;
   ctx.location.hash = '#section=evil';
   ctx.applyWindowShellHash();

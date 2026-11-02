@@ -5,8 +5,11 @@ const NAV_ICONS = Object.freeze({
   calendar:navIcon('<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/>'),
   work:navIcon('<path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/>'),
   readings:navIcon('<path d="M12 21V5a4 4 0 0 0-4-2H3v16h5a4 4 0 0 1 4 2zm0 0V5a4 4 0 0 1 4-2h5v16h-5a4 4 0 0 0-4 2z"/>'),
-  thoughts:navIcon('<path d="m12 2 9 5-9 5-9-5 9-5zM3 7v10l9 5 9-5V7M12 12v10"/>')
+  thoughts:navIcon('<path d="m12 2 9 5-9 5-9-5 9-5zM3 7v10l9 5 9-5V7M12 12v10"/>'),
+  bandeja:navIcon('<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>')
 });
+// Only «Por confirmar» carries a number; the web and the iPhone show the same count.
+const bandejaBadge='<span class="nav-badge hidden" data-bandeja-badge aria-hidden="true"></span>';
 
 document.body.innerHTML = `
 <div class="app" id="app">
@@ -18,9 +21,10 @@ document.body.innerHTML = `
   <nav id="desktopLenses" class="desktop-lenses" aria-label="Vistas de MINDS">
     <div class="lenses-heading">VISTAS</div>
     <button class="lens-nav-item active" data-nav="assistant" aria-label="Chat"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.assistant}</span><span class="lens-copy"><strong>Chat</strong><small>Hablar con Isabella</small></span></button>
-    <button class="lens-nav-item" data-nav="feed" aria-label="Situación"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.feed}</span><span class="lens-copy"><strong>Situación</strong><small>Ahora e Ideas</small></span></button>
+    <button class="lens-nav-item" data-nav="feed" aria-label="Ahora"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.feed}</span><span class="lens-copy"><strong>Ahora</strong><small>Tu día</small></span></button>
     <button class="lens-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.calendar}</span><span class="lens-copy"><strong>Tiempo</strong><small>Calendario y tareas</small></span></button>
     <button class="lens-nav-item" data-nav="work" aria-label="Work"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.work}</span><span class="lens-copy"><strong>Work</strong><small>Proyectos</small></span></button>
+    <button class="lens-nav-item" data-nav="bandeja" aria-label="Bandeja"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.bandeja}${bandejaBadge}</span><span class="lens-copy"><strong>Bandeja</strong><small>Lo que Isabella propone</small></span></button>
     <button class="lens-nav-item" data-nav="readings" aria-label="Lecturas"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.readings}</span><span class="lens-copy"><strong>Lecturas</strong><small>Investigación</small></span></button>
     <button class="lens-nav-item" data-nav="thoughts" aria-label="Thoughts"><span class="lens-glyph" aria-hidden="true">${NAV_ICONS.thoughts}</span><span class="lens-copy"><strong>Thoughts</strong><small>Dear: Thoughts</small></span></button>
     <div class="minds-menu-slot lens-menu-slot" data-menu-slot="sidebar"></div>
@@ -46,27 +50,42 @@ document.body.innerHTML = `
       </div>
     </section>
 
-    <section id="feedScreen" class="screen surface-screen" data-screen="feed">
-      <div class="surface-scroll">
-        <div class="situation-toolbar">
-          <div class="situation-tabs" role="tablist" aria-label="Situación"><button type="button" role="tab" aria-controls="feedScreen" aria-selected="true" class="active" data-situation-view="feed">Ahora</button><button type="button" role="tab" aria-controls="ideasScreen" aria-selected="false" data-situation-view="ideas">Ideas</button></div>
-          <div class="situation-tools"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span><button id="feedSettings" class="surface-text-action">Ajustar</button><span class="minds-menu-slot" data-menu-slot="feed"></span></div>
-        </div>
+    <section id="feedScreen" class="screen surface-screen ahora-screen" data-screen="feed" aria-label="Ahora">
+      <div class="surface-scroll ahora-scroll">
         <div class="pull-refresh-indicator" data-pull-indicator="feed" aria-hidden="true"><span>Desliza para actualizar</span></div>
-        <div id="situationWeather" class="situation-weather" aria-label="Clima"></div>
-        <div id="situationLedger" class="situation-ledger" aria-live="polite"><p class="situation-loading">Comprobando tu situación…</p></div>
-        <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
+        <header class="ahora-head">
+          <div class="ahora-title"><span id="ahoraDate" class="ahora-date"></span><h1>Ahora</h1></div>
+          <div class="ahora-head-tools"><div id="situationWeather" class="ahora-weather"></div><span class="minds-menu-slot" data-menu-slot="feed"></span></div>
+        </header>
+        <div id="ahoraWeatherWeek" class="ahora-weather-week hidden"></div>
+        <button type="button" id="ahoraBandejaLink" class="ahora-bandeja-link hidden"></button>
+        <div id="situationLedger" class="situation-ledger" aria-live="polite"></div>
+        <section id="ahoraNext" class="ahora-section hidden" aria-labelledby="ahoraNextTitle"></section>
+        <section id="ahoraDay" class="ahora-section" aria-labelledby="ahoraDayTitle"></section>
       </div>
     </section>
 
-    <section id="ideasScreen" class="screen surface-screen" data-screen="ideas">
-      <div class="surface-scroll">
-        <div class="situation-toolbar">
-          <div class="situation-tabs" role="tablist" aria-label="Situación"><button type="button" role="tab" aria-controls="feedScreen" aria-selected="false" data-situation-view="feed">Ahora</button><button type="button" role="tab" aria-controls="ideasScreen" aria-selected="true" class="active" data-situation-view="ideas">Ideas</button></div>
-          <div class="situation-tools"><button type="button" id="generateIdeas" class="surface-text-action">Explorar nuevas ideas</button><span class="minds-menu-slot" data-menu-slot="ideas"></span></div>
+    <section id="bandejaScreen" class="screen surface-screen bandeja-screen" data-screen="bandeja" aria-label="Bandeja">
+      <div class="surface-scroll bandeja-scroll">
+        <div class="pull-refresh-indicator" data-pull-indicator="bandeja" aria-hidden="true"><span>Desliza para actualizar</span></div>
+        <header class="bandeja-head">
+          <div><h1>Bandeja</h1><p>Lo que Isabella propone, para cuando tengas tiempo.</p></div>
+          <span class="minds-menu-slot" data-menu-slot="bandeja"></span>
+        </header>
+        <div class="bandeja-tabs" role="tablist" aria-label="Vista de la Bandeja">
+          <button type="button" role="tab" class="active" aria-selected="true" aria-controls="bandejaConfirm" data-bandeja-view="confirm">Por confirmar</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="bandejaSuggest" data-bandeja-view="suggest">Sugerencias</button>
+          <button type="button" role="tab" aria-selected="false" aria-controls="ideasScreen" data-bandeja-view="ideas">Ideas</button>
         </div>
-        <div class="pull-refresh-indicator" data-pull-indicator="ideas" aria-hidden="true"><span>Desliza para actualizar</span></div>
-        <div id="ideasList" class="surface-list"><div class="surface-loading">Buscando algo que valga la pena producir…</div></div>
+        <div id="bandejaConfirm" class="bandeja-panel" role="tabpanel" data-bandeja-panel="confirm"><div class="surface-loading">Leyendo lo que espera tu confirmación…</div></div>
+        <div id="bandejaSuggest" class="bandeja-panel hidden" role="tabpanel" data-bandeja-panel="suggest">
+          <div class="bandeja-tools"><span id="feedRefreshStatus" class="surface-refresh-status" aria-live="polite"></span></div>
+          <div id="feedList" class="surface-list"><div class="surface-loading">Leyendo tu situación…</div></div>
+        </div>
+        <div id="ideasScreen" class="bandeja-panel hidden" role="tabpanel" data-bandeja-panel="ideas" data-screen-alias="ideas">
+          <div class="bandeja-tools"><button type="button" id="generateIdeas" class="surface-text-action">Explorar nuevas ideas</button></div>
+          <div id="ideasList" class="surface-list"><div class="surface-loading">Buscando algo que valga la pena producir…</div></div>
+        </div>
       </div>
     </section>
 
@@ -148,15 +167,14 @@ document.body.innerHTML = `
 
   <nav id="mainNav" class="main-nav" aria-label="MINDS">
     <button class="main-nav-item active" data-nav="assistant" aria-label="Chat"><span class="nav-icon">${NAV_ICONS.assistant}</span></button>
-    <button class="main-nav-item" data-nav="feed" aria-label="Situación"><span class="nav-icon">${NAV_ICONS.feed}</span></button>
+    <button class="main-nav-item" data-nav="feed" aria-label="Ahora"><span class="nav-icon">${NAV_ICONS.feed}</span></button>
     <button class="main-nav-item" data-nav="calendar" aria-label="Tiempo"><span class="nav-icon">${NAV_ICONS.calendar}</span></button>
     <button class="main-nav-item" data-nav="work" aria-label="Work"><span class="nav-icon">${NAV_ICONS.work}</span></button>
-    <button class="main-nav-item" data-nav="readings" aria-label="Lecturas"><span class="nav-icon">${NAV_ICONS.readings}</span></button>
-    <button class="main-nav-item" data-nav="thoughts" aria-label="Thoughts"><span class="nav-icon">${NAV_ICONS.thoughts}</span></button>
+    <button class="main-nav-item" data-nav="bandeja" aria-label="Bandeja"><span class="nav-icon">${NAV_ICONS.bandeja}${bandejaBadge}</span></button>
   </nav>
 
   <div id="drawerBackdrop" class="backdrop hidden"></div>
-  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button id="authButton">Conectar memoria</button><button id="refreshViewAction" data-action="refreshview" class="hidden">Actualizar vista</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="push">Avisos de Isabella</button><button data-action="permissions">Permisos de Isabella</button><button data-action="reviews">Revisiones</button><button data-action="routines">Rutinas</button><button data-action="intents">Memoria futura</button><button data-action="continuity">Continuidad</button><button data-action="skills">Habilidades</button><button data-action="doctor">Estado de MINDS</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div id="currentBuildInfo" class="drawer-note">Versión local de MINDS</div></aside>
+  <aside id="drawer" class="drawer hidden"><div class="drawer-head"><div><div class="eyebrow">ISABELLA</div><div class="drawer-title">Más</div></div><button id="closeDrawer" class="round">×</button></div><button data-shell-nav="readings">Lecturas</button><button data-shell-nav="thoughts">Thoughts</button><button id="authButton">Conectar memoria</button><button id="refreshViewAction" data-action="refreshview" class="hidden">Actualizar vista</button><button data-action="tasks">Tareas</button><button data-action="new">Agregar manualmente</button><button data-action="memory">Lo que Isabella sabe de mí</button><button data-action="assistantprefs">Proactividad de Isabella</button><button data-action="push">Avisos de Isabella</button><button data-action="permissions">Permisos de Isabella</button><button data-action="reviews">Revisiones</button><button data-action="routines">Rutinas</button><button data-action="intents">Memoria futura</button><button data-action="continuity">Continuidad</button><button data-action="skills">Habilidades</button><button data-action="doctor">Estado de MINDS</button><button data-action="feedprefs">Feed y clima</button><button data-action="artifacts">Artefactos</button><button data-action="aiusage">Uso IA</button><button data-action="categories">Categorías y proyectos</button><div id="syncStatus" class="drawer-note">Preparando memoria…</div><div id="currentBuildInfo" class="drawer-note">Versión local de MINDS</div></aside>
   <div id="focusMode" class="focus hidden" role="dialog" aria-modal="true"><div class="focus-head"><div class="focus-name">Isabella</div><button id="focusClose" class="round">×</button></div><div class="focus-center"><div class="wave"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div><div id="focusStatus" class="focus-status">Escuchando…</div><textarea id="focusTranscript" class="focus-transcript" rows="5" readonly placeholder="Tu transcripción aparecerá aquí."></textarea></div><div class="focus-actions"><button id="focusKeyboard">Cancelar</button><button id="focusStop" class="dark">Detener</button></div></div>
   <div id="modalBackdrop" class="backdrop hidden"></div><div id="modal" class="modal hidden"><div class="modal-head"><div id="modalTitle" class="modal-title"></div><button id="closeModal" class="round">×</button></div><div id="modalBody"></div></div>
 </div>`;
