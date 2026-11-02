@@ -8,19 +8,19 @@ const app=read('apps/isabella/app.js');
 const css=read('apps/isabella/design-system.css');
 const sw=read('apps/isabella/sw.js');
 
-test('Thoughts is the sixth accessible route in both navigation surfaces',()=>{
+test('Thoughts stays reachable: a desktop lens and, on the phone and in the app, the ••• menu',()=>{
   const mobile=shell.slice(shell.indexOf('<nav id="mainNav"'),shell.indexOf('</nav>',shell.indexOf('<nav id="mainNav"')));
   const desktop=shell.slice(shell.indexOf('<nav id="desktopLenses"'),shell.indexOf('</nav>',shell.indexOf('<nav id="desktopLenses"')));
-  for(const nav of [mobile,desktop]){
-    const routes=['assistant','feed','calendar','work','readings','thoughts'];
-    const positions=routes.map(x=>nav.indexOf('data-nav="'+x+'"'));
-    assert.ok(positions.every((n,i)=>n>=0&&(i===0||n>positions[i-1])));
-    assert.match(nav,/data-nav="thoughts" aria-label="Thoughts"/);
-  }
-  assert.equal((mobile.match(/class="main-nav-item/g)||[]).length,6);
-  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,6);
+  const routes=['assistant','feed','calendar','work','bandeja','readings','thoughts'];
+  const positions=routes.map(x=>desktop.indexOf('data-nav="'+x+'"'));
+  assert.ok(positions.every((n,i)=>n>=0&&(i===0||n>positions[i-1])));
+  assert.match(desktop,/data-nav="thoughts" aria-label="Thoughts"/);
+  assert.ok(!mobile.includes('data-nav="thoughts"'));
+  assert.ok(shell.includes('<button data-shell-nav="thoughts">Thoughts</button>'));
+  assert.match(app,/\$\$\('#drawer \[data-shell-nav\]'\)\.forEach\(b=>b\.onclick=\(\)=>\{closeDrawer\(\);showSection\(b\.dataset\.shellNav\)\}\)/);
+  assert.equal((mobile.match(/class="main-nav-item/g)||[]).length,5);
+  assert.equal((desktop.match(/class="lens-nav-item/g)||[]).length,7);
   assert.ok(shell.includes('NAV_ICONS.thoughts'));
-  assert.ok(css.includes('grid-template-columns:repeat(6,minmax(0,1fr))'));
   assert.ok(!mobile.includes('nav-label'));
   assert.ok(css.includes('min-height:44px'));
 });
@@ -54,7 +54,7 @@ test('no shared frame bridge or authenticated state is sent to Thoughts',()=>{
   assert.ok(!/postMessage|localStorage|sessionStorage|MINDS_SUPABASE|auth\.|document\.cookie|allow-same-origin/.test(logic));
   assert.ok(shell.includes('id="thoughtsFrameError"'));
   assert.ok(shell.includes('rel="noopener noreferrer"'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v171'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v172'"));
   assert.doesNotThrow(()=>new Script(app,{filename:'app.js'}));
   assert.doesNotThrow(()=>new Script(shell,{filename:'shell.js'}));
 });

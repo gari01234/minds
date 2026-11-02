@@ -1,0 +1,137 @@
+/* Ahora (your day) and Bandeja (Isabella's proposals): the same on the desktop, the phone and the iPhone app.
+   Cards, labels and buttons follow Work Panorama: white cards, quiet labels, blue pill buttons. */
+.app .ahora-screen,.app .bandeja-screen{background:var(--m-surface,#f7f7f6)}
+.app .ahora-scroll,.app .bandeja-scroll{
+  display:flex;flex-direction:column;gap:20px;
+  padding:calc(env(safe-area-inset-top,0px) + 18px) var(--m-content-gutter,20px) 44px;
+  color:#1d1d1f;font-family:var(--m-type-system)
+}
+.app .ahora-scroll>*,.app .bandeja-scroll>*{width:100%;max-width:720px;margin-left:auto;margin-right:auto}
+.app .bandeja-scroll{gap:14px}
+body.window-app-shell .app .ahora-scroll,body.window-app-shell .app .bandeja-scroll{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:28px}
+.app .ahora-scroll .pull-refresh-indicator,.app .bandeja-scroll .pull-refresh-indicator{margin-bottom:-20px}
+
+/* Header */
+.ahora-head,.bandeja-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+.ahora-title{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ahora-date{font-size:13px;font-weight:600;color:#5a5e66}
+.ahora-head h1,.bandeja-head h1{margin:0;font-family:var(--m-type-system);font-size:34px;line-height:1.1;font-weight:700;letter-spacing:-.02em;color:#1d1d1f}
+.bandeja-head p{margin:6px 0 0;font-size:14px;line-height:1.45;color:#5a5e66}
+.ahora-head-tools{display:flex;align-items:center;gap:8px;flex:none}
+.ahora-weather-pill{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 12px;border-radius:22px;border:1px solid #e6e8ec;background:#fff;font:inherit;color:#1d1d1f;cursor:pointer}
+.ahora-weather-pill .minds-weather-icon{width:22px;height:22px;flex:none}
+.ahora-weather-pill>span{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
+.ahora-weather-pill strong{font-size:16px;font-weight:600}
+.ahora-weather-pill small{font-size:11px;color:#5a5e66}
+.ahora-weather-week{display:flex;flex-direction:column;padding:12px 16px;border-radius:16px;border:1px solid #e6e8ec;background:#fff;margin-top:-8px}
+.ahora-weather-place{display:flex;flex-direction:column;gap:2px;padding-bottom:8px;border-bottom:1px solid #eef0f3}
+.ahora-weather-place strong{font-size:15px;font-weight:600}
+.ahora-weather-place span{font-size:12.5px;color:#5a5e66}
+.ahora-weather-week .weather-row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #eef0f3;font-size:13px}
+.ahora-weather-week .weather-row b{display:flex;align-items:center;gap:6px;font-weight:500;text-align:right}
+.ahora-weather-week .weather-row-symbol .minds-weather-icon{width:18px;height:18px}
+.ahora-weather-week .ahora-text-button{align-self:flex-start;margin-top:4px;padding:0}
+
+/* Labels, cards, rows */
+.app .ahora-label{margin:0;font-family:var(--m-type-system);font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5a5e66}
+.ahora-section{display:flex;flex-direction:column;gap:10px}
+.ahora-card{display:flex;flex-direction:column;border-radius:16px;border:1px solid #e6e8ec;background:#fff;overflow:hidden}
+.ahora-row{display:flex;align-items:center;gap:12px;width:100%;padding:12px 14px;border:0;border-bottom:1px solid #eef0f3;background:#fff;font:inherit;text-align:left;color:#1d1d1f}
+button.ahora-row{cursor:pointer}
+button.ahora-row:hover,.ahora-task .ahora-row-main:hover strong{color:#000}
+.ahora-row-main{display:flex;flex-direction:column;align-items:flex-start;gap:3px;flex:1;min-width:0;padding:0;border:0;background:transparent;font:inherit;text-align:left;color:inherit;cursor:pointer}
+.ahora-row-main strong{font-size:15px;font-weight:600;line-height:1.3;overflow-wrap:anywhere}
+.ahora-row-main small{font-size:12.5px;line-height:1.4;color:#5a5e66}
+.ahora-kind{font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.ahora-kind.is-frist{color:#8a4b00}.ahora-kind.is-termin{color:#235c84}
+.ahora-badge{display:flex;flex-direction:column;align-items:center;justify-content:center;width:46px;height:46px;border-radius:12px;flex:none;line-height:1}
+.ahora-badge strong{font-size:18px;font-weight:700}
+.ahora-badge span{font-size:10px;font-weight:600;margin-top:2px}
+.ahora-badge.is-frist{background:#fbf3ec;color:#8a4b00}
+.ahora-badge.is-termin{background:#eef3f8;color:#235c84}
+.ahora-badge.is-termin strong{font-size:14px}
+.ahora-event .ahora-badge{width:52px;height:38px}
+.ahora-task{align-items:flex-start}
+.ahora-check{width:24px;height:24px;margin-top:1px;border-radius:50%;border:1.6px solid #c4c5c3;background:#fff;color:#fff;padding:0;flex:none;display:flex;align-items:center;justify-content:center;cursor:pointer}
+.ahora-check.is-checked{border-color:#0062cc;background:#0062cc}
+.ahora-task.is-done .ahora-row-main strong{text-decoration:line-through;color:#70737a}
+.ahora-task.is-overdue .ahora-state{color:#b3261e}
+.ahora-state{font-size:12.5px;color:#70737a;flex:none;margin-top:2px}
+.ahora-session{margin-top:3px;padding:3px 10px;border-radius:8px;border:1px solid #e6e8ec;font-size:12.5px;color:#3d4046}
+.ahora-add{display:flex;align-items:center;gap:8px;min-height:48px;padding:0 14px;border:0;background:#fff;color:#0062cc;font:inherit;font-size:15px;font-weight:600;text-align:left;cursor:pointer}
+.ahora-empty{margin:0;font-size:14px;line-height:1.45;color:#5a5e66}
+.ahora-empty-inline{padding:14px;border-bottom:1px solid #eef0f3}
+.ahora-day-head{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.ahora-day-nav{display:flex;align-items:center;gap:4px}
+.ahora-round{width:36px;height:36px;border-radius:18px;border:1px solid #e6e8ec;background:#fff;color:#1d1d1f;display:flex;align-items:center;justify-content:center;padding:0;cursor:pointer}
+.ahora-text-button{min-height:34px;padding:0 10px;border:0;background:transparent;color:#0062cc;font:inherit;font-size:14px;font-weight:600;cursor:pointer}
+.ahora-bandeja-link{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:0 16px;border-radius:16px;border:1px solid #e6e8ec;background:#fff;color:#1d1d1f;font:inherit;font-size:15px;text-align:left;cursor:pointer}
+.ahora-bandeja-link span{color:#5a5e66}
+.ahora-bandeja-link strong{font-weight:600;color:#1d1d1f}
+.ahora-bandeja-link svg{color:#9a9c9f;flex:none}
+.app .situation-ledger{margin:0 auto;padding:0;border:0}
+.app .situation-ledger:empty{display:none}
+.app .ahora-avisos{display:flex;flex-direction:column;gap:10px;padding:0;border:0}
+.app .ahora-avisos-list .situation-item{margin:0;border:0;border-bottom:1px solid #eef0f3;border-radius:0;padding:12px 14px;text-align:left;font:inherit;background:#fff;color:#1d1d1f;width:100%}
+.app .ahora-avisos-list button.situation-item{cursor:pointer}
+.app .ahora-avisos-list .situation-item strong{font-size:15px;font-weight:600}
+.app .ahora-avisos-list .situation-item small{font-size:12.5px;color:#5a5e66}
+.app .ahora-avisos .situation-coverage{margin:0;font-size:12.5px;color:#5a5e66}
+.app .situation-ledger .situation-unavailable{margin:0;padding:12px 14px;border-radius:16px;border:1px solid #e6e8ec;background:#fff;font-size:13.5px;color:#5a5e66}
+.ahora-card>:last-child{border-bottom:0}
+
+/* Bandeja */
+.bandeja-tabs{display:flex;padding:3px;border-radius:11px;background:#eceef2}
+.bandeja-tabs button{flex:1;min-height:34px;border-radius:9px;border:0;background:transparent;font:inherit;font-size:14px;font-weight:400;color:#1d1d1f;cursor:pointer;white-space:nowrap}
+.bandeja-tabs button.active{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);font-weight:600}
+.bandeja-panel{display:flex;flex-direction:column;gap:14px}
+.bandeja-group{display:flex;flex-direction:column;gap:10px}
+.bandeja-group+.bandeja-group{margin-top:8px}
+.bandeja-group-head{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:34px}
+.bandeja-group-head .ahora-text-button{padding:0}
+.bandeja-screen .cockpit-cards{grid-template-columns:1fr}
+@media(min-width:900px){.bandeja-screen .cockpit-cards{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.bandeja-empty,.bandeja-note{margin:0;font-size:14px;line-height:1.45;color:#5a5e66}
+.bandeja-note:empty{display:none}
+.bandeja-tools{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.bandeja-tools:empty{display:none}
+.bandeja-tools .surface-refresh-status:empty{display:none}
+.app .bandeja-screen .surface-text-action{min-height:40px;padding:0 15px;border:0;border-radius:999px;background:#0062cc;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer}
+
+/* Suggestions and ideas as Panorama cards: same border, label and blue buttons */
+.app .bandeja-screen .surface-list{display:flex;flex-direction:column;gap:12px;max-width:none;width:100%;padding:0}
+.app .bandeja-screen .feed-section{display:flex;flex-direction:column;gap:12px;margin:0}
+.app .bandeja-screen .feed-section-title{margin:8px 0 0;font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#5a5e66;font-family:var(--m-type-system)}
+.app .bandeja-screen .surface-card{display:flex;flex-direction:column;gap:8px;margin:0;padding:16px;border-radius:16px;border:1px solid #e6e8ec;background:#fff;box-shadow:none}
+.app .bandeja-screen .surface-card-top{display:flex;align-items:center;gap:6px;margin:0}
+.app .bandeja-screen .surface-card-top .surface-icon-dot{display:none}
+.app .bandeja-screen .surface-card-agent,.app .bandeja-screen .surface-state{font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#5a5e66}
+.app .bandeja-screen .surface-state{color:#235c84}
+.app .bandeja-screen .surface-card h2{margin:0;font-family:var(--m-type-system);font-size:15px;font-weight:600;line-height:1.35;letter-spacing:0}
+.app .bandeja-screen .surface-card p{margin:0;font-size:13.5px;line-height:1.45;color:#3d4046}
+.app .bandeja-screen .surface-why-copy{font-size:13.5px;line-height:1.45;color:#3d4046}
+.app .bandeja-screen .surface-card-actions,.app .bandeja-screen .surface-feedback{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:0;padding-top:4px;border:0}
+.app .bandeja-screen .surface-card-actions button,.app .bandeja-screen .surface-card-actions a,.app .bandeja-screen .surface-feedback button{
+  display:inline-flex;align-items:center;min-height:40px;padding:0 15px;border:0;border-radius:999px;
+  background:#eceef2;color:#1d1d1f;font:inherit;font-size:13.5px;font-weight:600;text-decoration:none;cursor:pointer
+}
+.app .bandeja-screen .surface-card-actions :is(.surface-discuss,.surface-readmore){background:#0062cc;color:#fff}
+.app .bandeja-screen .surface-feedback button.active{background:#e3eefa;color:#0062cc}
+.app .bandeja-screen .surface-feedback .danger-text{color:#b3261e}
+.app .bandeja-screen .idea-deliverable{display:flex;flex-direction:column;gap:2px;padding:10px 12px;border-radius:12px;background:#f5f6f8}
+.app .bandeja-screen .idea-deliverable span{font-size:11px;font-weight:700;letter-spacing:.07em;color:#5a5e66}
+.app .bandeja-screen .idea-deliverable strong{font-size:13.5px;font-weight:600}
+.app .bandeja-screen .surface-empty,.app .bandeja-screen .surface-loading{padding:4px 0;font-size:14px;color:#5a5e66}
+
+/* Navigation: the Bandeja number on the web, like the badge on the iPhone tab */
+.nav-icon,.lens-glyph{position:relative}
+.nav-badge{position:absolute;top:-6px;right:-10px;min-width:17px;height:17px;box-sizing:border-box;padding:0 5px;border-radius:9px;background:#b54736;color:#fff;font-size:10.5px;font-weight:700;line-height:17px;text-align:center;font-family:var(--m-type-system)}
+#drawer>button[data-shell-nav]{display:block;width:100%;text-align:left;border:0;border-top:1px solid var(--line,#eee);background:#fff;padding:16px 2px;cursor:pointer;font:inherit}
+@media(min-width:1100px){#drawer>button[data-shell-nav]{display:none}}
+body.window-app-shell #drawer>button[data-shell-nav]{display:block}
+
+@media(min-width:1100px){
+  .app .ahora-scroll,.app .bandeja-scroll{padding:28px 38px 52px}
+}
+/* Five destinations on the phone: Chat · Ahora · Tiempo · Work · Bandeja (Lecturas and Thoughts are in •••) */
+.app .main-nav{grid-template-columns:repeat(5,minmax(0,1fr))}

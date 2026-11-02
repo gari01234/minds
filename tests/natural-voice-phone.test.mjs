@@ -45,7 +45,7 @@ test('Confirmed Fristen from the Akte appear read-only in Tiempo and open the pr
   assert.match(app,/for\(const f of fristen\)h\+=fristAgendaRow\(f\);/);
   assert.match(app,/akteFristenOn\(x\.di\)\.map\(fristChip\)/);
   assert.match(app,/window\.MINDS_WORK\?\.open\?\.\(b\.dataset\.fristProject,'overview'\)/);
-  assert.match(read('apps/isabella/work.js'),/window\.MINDS_WORK=\{render,open:/);
+  assert.match(read('apps/isabella/work.js'),/window\.MINDS_WORK=\{akte:\{card:akteCard,toConfirm:akteToConfirm,decide:saveAkteDecision,toTask:saveAkteTask\},render,open:/);
   assert.match(read('apps/isabella/work.js'),/label:'Próximo plazo'/);
 });
 

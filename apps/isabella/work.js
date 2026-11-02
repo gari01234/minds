@@ -148,23 +148,38 @@ let knowledgeRows=[],knowledgeFilter='review',knowledgeQuery='',projectModelSnap
 /* Build 90.3 — Project as a usable, source-bound understanding lens.
    Read-only projection: no bucket creation, canonical mutation or secondary model. */
 // Proposed register entries wait for Gari: one tap confirms or discards them.
-async function decideAkteEntry(id,decision){
-  if(!id||!['confirmed','rejected','resolved'].includes(decision))return;
+// Shared with the Bandeja (every project at once), so the entry's own project counts, not the open one.
+async function saveAkteDecision(id,decision){
+  if(!id||!['confirmed','rejected','resolved'].includes(decision))return {ok:false,message:'Decisión no válida.'};
   const patch={status:decision,updated_at:new Date().toISOString(),...(decision==='confirmed'?{confirmed_at:new Date().toISOString()}:{})};
-  const {error}=await sb.from('minds_work_memory').update(patch).eq('id',id).eq('status','proposed');
-  if(error){setStatus('No pude guardar la decisión. Inténtalo de nuevo.');return}
+  const {data,error}=await sb.from('minds_work_memory').update(patch).eq('id',id).eq('status','proposed').select('id,status');
+  if(error)return {ok:false,message:'No pude guardar la decisión. Inténtalo de nuevo.'};
+  if(!Array.isArray(data)||data.length!==1||data[0].status!==decision)return {ok:false,message:'Esta propuesta ya no está pendiente.'};
+  window.MINDS_BANDEJA?.changed?.();
+  return {ok:true};
+}
+// A task proposed by the nightly Akte-Pflege becomes a real task in the planner of its project.
+async function saveAkteTask(id){
+  const {data:entry,error}=await sb.from('minds_work_memory').select('id,project_id,title,occurred_at,metadata,status').eq('id',id).maybeSingle();
+  if(error||!entry||entry.status!=='proposed')return {ok:false,message:'Esta propuesta ya no está pendiente.'};
+  if(!entry.project_id)return {ok:false,message:'Esta propuesta no tiene proyecto.'};
+  const due=entry.metadata?.faellig||String(entry.occurred_at||'').slice(0,10)||null;
+  const res=await sb.from('isabella_tasks').insert({title:entry.title,project_id:entry.project_id,due_date:due,work_status:'not_started',
+    notes:entry.metadata?.quelle?'Quelle: '+entry.metadata.quelle:'',metadata:{source:'akte_pflege',memory_id:entry.id}}).select('id').single();
+  if(res.error)return {ok:false,message:'No pude crear la Aufgabe.'};
+  await sb.from('minds_work_memory').update({status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(entry.metadata||{}),task_id:res.data.id}}).eq('id',entry.id);
+  window.MINDS_BANDEJA?.changed?.();
+  void window.ISABELLA_SYNC_PULL_NOW?.();
+  return {ok:true,message:'Aufgabe angelegt: '+entry.title};
+}
+async function decideAkteEntry(id,decision){
+  const result=await saveAkteDecision(id,decision);
+  if(!result.ok)setStatus(result.message);
   await renderOverview();
 }
-// A task proposed by the nightly Akte-Pflege becomes a real task in the planner.
 async function akteEntryToTask(id){
-  const {data:entry,error}=await sb.from('minds_work_memory').select('id,title,occurred_at,metadata,status').eq('id',id).maybeSingle();
-  if(error||!entry||entry.status!=='proposed'){setStatus('Esta propuesta ya no está pendiente.');await renderOverview();return}
-  const due=entry.metadata?.faellig||String(entry.occurred_at||'').slice(0,10)||null;
-  const res=await sb.from('isabella_tasks').insert({title:entry.title,project_id:project.id,due_date:due,work_status:'not_started',
-    notes:entry.metadata?.quelle?'Quelle: '+entry.metadata.quelle:'',metadata:{source:'akte_pflege',memory_id:entry.id}}).select('id').single();
-  if(res.error){setStatus('No pude crear la Aufgabe.');return}
-  await sb.from('minds_work_memory').update({status:'confirmed',confirmed_at:new Date().toISOString(),updated_at:new Date().toISOString(),metadata:{...(entry.metadata||{}),task_id:res.data.id}}).eq('id',entry.id);
-  setStatus('Aufgabe angelegt: '+entry.title);
+  const result=await saveAkteTask(id);
+  setStatus(result.message||'');
   await renderOverview();
 }
 // Descriptive updates are applied directly but versioned; this restores the previous Steckbrief.
@@ -216,14 +231,24 @@ function cockpitWhy(r){
   if(!why&&!quote)return '';
   return '<details class="cockpit-why"><summary>Por qué</summary>'+(why?'<p>'+esc(why)+'</p>':'')+(quote?'<blockquote>'+esc(quote)+'</blockquote>':'')+'</details>';
 }
+// One proposed Akte entry as a card: the same markup in Panorama «Para ti» and in the Bandeja.
+function akteCard(r){
+  if(r.memory_type==='open_question')return '<article class="cockpit-card is-conflict"><span class="cockpit-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="cockpit-detail">'+esc(r.body)+'</small>':'')+
+    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>';
+  if(r.memory_type==='commitment')return '<article class="cockpit-card"><span class="cockpit-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(cockpitShort(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
+    '<div class="cockpit-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>';
+  return '<article class="cockpit-card"><span class="cockpit-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(cockpitShort(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
+    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>';
+}
+// What waits for Gari, sorted like «Para ti»: contradictions, then Fristen and decisions, then proposed tasks.
+function akteToConfirm(rows){
+  const list=Array.isArray(rows)?rows:[];
+  return [...list.filter(r=>r.memory_type==='open_question'&&r.status==='proposed'&&r.metadata?.kind==='widerspruch'),
+    ...list.filter(r=>(r.memory_type==='decision'||r.memory_type==='deadline')&&r.status==='proposed'),
+    ...list.filter(r=>r.memory_type==='commitment'&&r.status==='proposed'&&r.metadata?.kind==='aufgabe')];
+}
 function cockpitParaTi(m){
-  const cards=[];
-  for(const r of m.conflicts)cards.push('<article class="cockpit-card is-conflict"><span class="cockpit-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="cockpit-detail">'+esc(r.body)+'</small>':'')+
-    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>');
-  for(const r of m.pending)cards.push('<article class="cockpit-card"><span class="cockpit-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(cockpitShort(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
-    '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
-  for(const r of m.proposedTasks)cards.push('<article class="cockpit-card"><span class="cockpit-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(cockpitShort(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
-    '<div class="cockpit-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
+  const cards=[...m.conflicts,...m.pending,...m.proposedTasks].map(akteCard);
   for(const t of m.overdue)cards.push('<article class="cockpit-card is-overdue"><span class="cockpit-kind">Vencida · '+esc(cockpitIn(cockpitDayDiff(m.today,t.due_date)))+'</span><p>'+esc(t.title||'Sin título')+'</p>'+(t.assignee?'<small>'+esc(t.assignee)+'</small>':'')+
     '<div class="cockpit-actions"><button type="button" class="secondary" data-work-edit-task="'+esc(t.id)+'">Abrir tarea</button><button type="button" class="secondary" data-cockpit-done="'+esc(t.id)+'">Hecho</button></div></article>');
   const toConfirm=m.conflicts.length+m.pending.length+m.proposedTasks.length;
@@ -1358,6 +1383,6 @@ async function sendThreadMessage(thread,overrideMessage=null){
   }
 }
 
-window.MINDS_WORK={render,open:(key,nextView='overview')=>{if(key){projectKey=key;localStorage.setItem('minds-work-project',key)}view=nextView;localStorage.setItem('minds-work-view',view);folderId=null;activeThreadId=null;if(document.body.dataset.section==='work')void render()},refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
+window.MINDS_WORK={akte:{card:akteCard,toConfirm:akteToConfirm,decide:saveAkteDecision,toTask:saveAkteTask},render,open:(key,nextView='overview')=>{if(key){projectKey=key;localStorage.setItem('minds-work-project',key)}view=nextView;localStorage.setItem('minds-work-view',view);folderId=null;activeThreadId=null;if(document.body.dataset.section==='work')void render()},refresh:()=>document.body.dataset.section==='work'?render():null,context:()=>project?{name:project.name,key:project.client_key,active:document.body.dataset.section==='work',view,thread_id:activeThreadId||null}:null};
 if(document.body.dataset.section==='work'&&typeof setTimeout==='function')setTimeout(()=>{if(!bound)void render()},0);
 })();

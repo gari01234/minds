@@ -7,12 +7,14 @@ const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 test('Build 90.1 provides primary desktop lenses without deleting existing routes',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  for(const screen of ['feed','assistant','calendar','work','readings','thoughts']){
+  for(const screen of ['feed','assistant','calendar','work','bandeja','readings','thoughts']){
     assert.ok(shell.includes('class="lens-nav-item')&&shell.includes('data-nav="'+screen+'"'),'Missing desktop destination '+screen);
     assert.ok(shell.includes('data-screen="'+screen+'"'),'Missing screen '+screen);
   }
-  assert.ok(shell.includes('data-screen="ideas"'),'Ideas remains a distinct contextual surface');
-  assert.ok(shell.includes('data-situation-view="ideas"'));
+  // Ideas now live in the Bandeja with Isabella's other proposals; the old route still opens them.
+  assert.ok(shell.includes('data-bandeja-view="ideas"'),'Ideas stay reachable inside the Bandeja');
+  assert.ok(shell.includes('id="ideasList"'));
+  assert.match(app,/if\(name==='ideas'\)\{name='bandeja';options=\{\.\.\.options,view:'ideas'\}\}/);
   assert.ok(!shell.includes('OTRAS VISTAS'));
   assert.ok(app.includes("document.querySelectorAll('.lens-nav-item').forEach"));
   assert.ok(app.includes("document.querySelectorAll('.main-nav-item, .lens-nav-item')"));
