@@ -62,11 +62,17 @@ test("native reload restores owner-scoped pending review only from stored eviden
   assert.match(model, /backend\.pendingReview\(\)/);
 });
 
-test("Siri reads only owner calendar rows for the exact day, not a capped snapshot", () => {
-  assert.match(backend, /func todayTasks\(\)/);
-  assert.match(backend, /"due_date", value: "eq\." \+ today/);
-  assert.match(backend, /"completed_at", value: "is\.null"/);
-  assert.match(intents, /BackendClient\(\)\.todayTasks\(\)/);
+test("Siri reads the same tasks as Ahora «Hoy»: due today plus open tasks running today", () => {
+  const day = backend.slice(backend.indexOf("func dayTasks"), backend.indexOf("func history"));
+  assert.match(day, /"\(due_date\.eq\.\\\(today\),and\(start_date\.lte\.\\\(today\),due_date\.gt\.\\\(today\),completed_at\.is\.null\)\)"/);
+  assert.match(day, /"archived_at", value: "is\.null"/);
+  assert.match(intents, /BackendClient\(\)\.dayTasks\(\)\.filter \{ !\$0\.done \}/);
+  assert.doesNotMatch(backend, /func todayTasks\(\)/);
+  // Spanish phrases, and Siri may also call the app "Isabella".
+  assert.match(intents, /"Qué tengo hoy en \\\(\.applicationName\)"/);
+  const project = read("project.yml"), info = read("Config/App-Info.plist");
+  assert.match(project, /developmentLanguage: es/);
+  assert.match(info, /<key>INAlternativeAppNames<\/key>\s*<array>\s*<dict>\s*<key>INAlternativeAppName<\/key>\s*<string>Isabella<\/string>/);
 });
 
 test("native protocol handles single proposal field and enforces typed outcome", () => {

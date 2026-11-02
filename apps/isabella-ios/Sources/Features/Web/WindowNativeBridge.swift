@@ -64,10 +64,21 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "nav.open":
             // The page asks for a section that belongs to another tab.
             guard let section = body["section"] as? String,
-                  ["assistant", "feed", "ideas", "work", "calendar"].contains(section) else {
+                  ["assistant", "feed", "bandeja", "ideas", "work", "calendar"].contains(section) else {
                 return ["v": v, "ok": false, "error": "unsupported"]
             }
-            portal?.onNavigate?(section)
+            var extra: [String: String] = [:]
+            if section == "bandeja", let view = body["view"] as? String, ["confirm", "suggest", "ideas"].contains(view) {
+                extra["view"] = view
+            }
+            portal?.onNavigate?(section, extra)
+            return ["v": v, "ok": true]
+        case "shell.badge":
+            // «Por confirmar» in the Bandeja, as the page counted it: only a small whole number.
+            guard let count = body["count"] as? Int, (0...999).contains(count) else {
+                return ["v": v, "ok": false, "error": "unsupported"]
+            }
+            portal?.onBadge?(count)
             return ["v": v, "ok": true]
         case "app.info":
             let info = Bundle.main.infoDictionary ?? [:]
@@ -75,7 +86,7 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 "name": "Window",
                 "version": info["CFBundleShortVersionString"] as? String ?? "",
                 "build": info["CFBundleVersion"] as? String ?? "",
-                "capabilities": ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs"]
+                "capabilities": ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs", "shell.badge"]
             ] as [String: Any]]
         default:
             return ["v": v, "ok": false, "error": "unsupported"]

@@ -13,5 +13,13 @@
 	<string>group.$(MINDS_BUNDLE_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Siri also understands the app as "Isabella": "Mis tareas de hoy en Isabella". -->
+	<key>INAlternativeAppNames</key>
+	<array>
+		<dict>
+			<key>INAlternativeAppName</key>
+			<string>Isabella</string>
+		</dict>
+	</array>
 </dict>
 </plist>

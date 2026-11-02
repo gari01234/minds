@@ -14,7 +14,8 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     var sessionProvider: (() async throws -> BridgeSession?)?
     var onSignOut: (() async -> Void)?
     var onSessionLost: (() -> Void)?
-    var onNavigate: ((String) -> Void)?
+    var onNavigate: ((String, [String: String]) -> Void)?
+    var onBadge: ((Int) -> Void)?
 
     // The web view is made the first time the page is shown, never at launch.
     // AppModel (and this session) are created before UIApplicationMain; a web
@@ -99,7 +100,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     }
 
     static func sectionURL(_ section: String, extra: [String: String] = [:]) -> URL? {
-        guard ["assistant", "feed", "ideas", "work", "calendar", "readings", "thoughts"].contains(section),
+        guard ["assistant", "feed", "bandeja", "ideas", "work", "calendar", "readings", "thoughts"].contains(section),
               var components = URLComponents(url: homeURL, resolvingAgainstBaseURL: false) else { return nil }
         var fragment = URLComponents()
         fragment.queryItems = [URLQueryItem(name: "section", value: section)]

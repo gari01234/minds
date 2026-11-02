@@ -6,22 +6,14 @@ import WidgetKit
 @Observable
 final class AppModel {
     enum Section: Hashable { case web, continuity, chat, calendar }
-    // The app's own tab bar; Chat, Tiempo and Work show the shared web page.
+    // The app's own tab bar; every tab shows the one shared web page (web and desktop are the same).
     enum Tab: Hashable { case chat, ahora, tiempo, work, bandeja }
-    enum AhoraMode: Hashable { case ahora, ideas }
 
     var section: Section = .web
     var tab: Tab = .chat
-    var ahoraMode: AhoraMode = .ahora
-    var akteEntries: [AkteEntry] = []
-    var fristen: [AkteEntry] = []
-    var feed: [FeedItem] = []
-    var dayTasks: [DayTask] = []
-    var sessions: [String: [AgendaEvent]] = [:]
-    var ahoraError: String?
-    var bandejaError: String?
-    var deciding: Set<String> = []
-    var decided: [String: String] = [:]
+    // «Por confirmar» in the Bandeja: the tab badge. The page sends it when it counts
+    // (shell.badge); the app also counts on launch and when it comes back.
+    var openProposals = 0
     private var pendingWebExtra: [String: String] = [:]
     var messages: [ChatMessage] = []
     var tasks: [AgendaTask] = []
@@ -50,36 +42,42 @@ final class AppModel {
         webPortal.sessionProvider = { [backend] in try await backend.bridgeSession() }
         webPortal.onSignOut = { [weak self] in await self?.logout() }
         webPortal.onSessionLost = { [weak self] in self?.isAuthenticated = false }
-        webPortal.onNavigate = { [weak self] section in self?.open(section: section) }
+        webPortal.onNavigate = { [weak self] section, extra in self?.open(section: section, extra: extra) }
+        webPortal.onBadge = { [weak self] count in self?.openProposals = count }
     }
 
     // MARK: Tabs and the shared web page
 
-    var openProposals: Int { akteEntries.filter { decided[$0.id] == nil }.count }
-
     // A section the page asked for (nav.open), or one the app opens itself.
     func open(section: String, extra: [String: String] = [:]) {
         pendingWebExtra = extra
+        let previous = tab
         switch section {
         case "assistant": tab = .chat
+        case "feed": tab = .ahora
         case "calendar": tab = .tiempo
         case "work": tab = .work
-        case "feed": ahoraMode = .ahora; tab = .ahora
-        case "ideas": ahoraMode = .ideas; tab = .ahora
+        case "bandeja": tab = .bandeja
+        case "ideas": tab = .bandeja; pendingWebExtra["view"] = "ideas"
         default: return
         }
-        showWebSection()
+        // A new tab shows its section through MainTabView's onChange (with the extra).
+        if tab == previous { showWebSection() }
     }
 
     func showWebSection() {
         let extra = pendingWebExtra
         pendingWebExtra = [:]
+        webPortal.show(section: Self.webSection(for: tab), extra: extra)
+    }
+
+    static func webSection(for tab: Tab) -> String {
         switch tab {
-        case .chat: webPortal.show(section: "assistant", extra: extra)
-        case .tiempo: webPortal.show(section: "calendar", extra: extra)
-        case .work: webPortal.show(section: "work", extra: extra)
-        case .ahora where ahoraMode == .ideas: webPortal.show(section: "ideas")
-        default: break
+        case .chat: return "assistant"
+        case .ahora: return "feed"
+        case .tiempo: return "calendar"
+        case .work: return "work"
+        case .bandeja: return "bandeja"
         }
     }
 
@@ -87,76 +85,19 @@ final class AppModel {
         open(section: "work", extra: key.map { ["project": $0] } ?? [:])
     }
 
-    func discuss(_ item: FeedItem) {
-        open(section: "assistant", extra: ["draft": item.prompt ?? item.title])
-    }
-
-    // MARK: Ahora and Bandeja
-
-    func reloadAhora() async {
-        do {
-            async let entries = backend.pendingAkteEntries()
-            async let deadlines = backend.upcomingFristen()
-            async let items = backend.feedItems()
-            async let todays = backend.dayTasks()
-            async let upcoming = backend.events()
-            let (e, d, f, t, v) = try await (entries, deadlines, items, todays, upcoming)
-            akteEntries = e
-            fristen = d
-            feed = f
-            dayTasks = t
-            let today = v.filter { $0.startDate.map(Calendar.current.isDateInToday) ?? false }
-            // Work sessions belong to their task (web: "10:00 · 120 min reservados").
-            events = today.filter { $0.sessionTaskKey == nil }
-            sessions = Dictionary(grouping: today.filter { $0.sessionTaskKey != nil }, by: { $0.sessionTaskKey ?? "" })
-            decided = decided.filter { id, _ in e.contains { $0.id == id } }
-            ahoraError = nil
-            bandejaError = nil
-        } catch {
-            ahoraError = error.localizedDescription
-            bandejaError = error.localizedDescription
-        }
-    }
-
-    func reloadBandeja() async {
-        do {
-            akteEntries = try await backend.pendingAkteEntries()
-            decided = [:]
-            bandejaError = nil
-        } catch { bandejaError = error.localizedDescription }
-    }
-
-    // Saved only when the backend confirms it; otherwise the card stays as it was.
-    func decide(_ entry: AkteEntry, _ decision: AkteDecision) async {
-        guard !deciding.contains(entry.id), decided[entry.id] == nil else { return }
-        deciding.insert(entry.id)
-        defer { deciding.remove(entry.id) }
-        do {
-            switch decision {
-            case .confirm: try await backend.decideAkteEntry(id: entry.id, status: "confirmed")
-            case .reject: try await backend.decideAkteEntry(id: entry.id, status: "rejected")
-            case .resolve: try await backend.decideAkteEntry(id: entry.id, status: "resolved")
-            case .makeTask: try await backend.akteEntryToTask(id: entry.id)
-            }
-            decided[entry.id] = {
-                switch decision {
-                case .confirm: return "Bestätigt · guardado en la Akte"
-                case .resolve: return "Geklärt · guardado en la Akte"
-                case .makeTask: return "Aufgabe angelegt"
-                case .reject: return entry.kind == .widerspruch ? "Kein Widerspruch" : "Verworfen"
-                }
-            }()
-            bandejaError = nil
-        } catch {
-            bandejaError = "No pude guardar la decisión: " + error.localizedDescription
-        }
+    func refreshBadge() async {
+        guard isAuthenticated else { openProposals = 0; return }
+        if let count = try? await backend.openProposalCount() { openProposals = count }
     }
 
     func bootstrap() async {
         isLoading = true
         isAuthenticated = await backend.isSignedIn
         isLoading = false
-        if isAuthenticated { await reloadContinuity() }
+        if isAuthenticated {
+            await reloadContinuity()
+            await refreshBadge()
+        }
     }
 
     func sendCode() async {
@@ -182,6 +123,7 @@ final class AppModel {
             errorMessage = nil
             webPortal.reloadIfStarted()
             await reloadContinuity()
+            await refreshBadge()
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -194,6 +136,7 @@ final class AppModel {
         localRemindersEnabled = false
         UserDefaults.standard.set(false, forKey: "minds.native.reminders.enabled")
         isAuthenticated = false
+        openProposals = 0
         codeSent = false
         pendingReview = nil
         GlanceStore.clear()

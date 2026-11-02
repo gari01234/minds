@@ -26,8 +26,9 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   // The UI-test shortcut exists only in Debug builds.
   assert.match(shell, /#if DEBUG\s+\/\/[^\n]*\n\s+static let webOnlyForUITests = ProcessInfo\.processInfo\.arguments\.contains\("-WindowUITestWebOnly"\)\s+#else\s+static let webOnlyForUITests = false/);
   // Gari's order: Chat (opens first) · Ahora · Tiempo · Work · Bandeja.
-  const labels = [...tabs.matchAll(/\.tabItem \{ Image\("([^"]+)"\) \}/g)].map(m => m[1]);
+  const labels = [...tabs.matchAll(/page\(\.(\w+), "([^"]+)"\)/g)].map(m => m[2]);
   assert.deepEqual(labels, ["Chat", "Ahora", "Tiempo", "Work", "Bandeja"]);
+  assert.match(tabs, /\.tabItem \{ Image\(icon\) \}/);
   // Icons only, drawn like the web app's navigation (no SF Symbols, no titles).
   assert.doesNotMatch(tabs, /systemImage:|Label\(/);
   for (const name of labels) {
@@ -39,11 +40,13 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   const web = readFileSync(new URL("../apps/isabella/shell.js", import.meta.url), "utf8");
   assert.ok(web.includes('M21 11.5a8.38 8.38 0 0 1-.9 3.8') && read("Assets.xcassets/Chat.imageset/tab-chat.svg").includes('M21 11.5a8.38 8.38 0 0 1-.9 3.8'), "same chat icon as the web app");
   assert.match(app, /var tab: Tab = \.chat/);
-  assert.equal((tabs.match(/WebTabView\(session: model\.webPortal, active: model\.tab == \.(chat|tiempo|work)\)/g) || []).length, 3);
-  assert.match(tabs, /\.badge\(model\.openProposals\)/);
+  // Every tab is the shared web page: Ahora and the Bandeja are the same sections as on the desktop.
+  assert.match(tabs, /WebTabView\(session: model\.webPortal, active: model\.tab == tab\)/);
+  assert.doesNotMatch(tabs, /AhoraView|BandejaView/);
+  assert.match(tabs, /page\(\.bandeja, "Bandeja"\)\s*\.badge\(model\.openProposals\)/);
   assert.match(tabs, /\.onChange\(of: model\.tab\) \{ _, _ in model\.showWebSection\(\) \}/);
   // Above the tab bar: build 14 drew the page under it and hid the chat composer.
-  assert.equal((tabs.match(/\.ignoresSafeArea\(edges: \.top\)/g) || []).length, 3);
+  assert.equal((tabs.match(/\.ignoresSafeArea\(edges: \.top\)/g) || []).length, 1);
   assert.doesNotMatch(tabs, /\.ignoresSafeArea\(\)/);
   // One shared web view: the active tab takes it over (a UIView has one parent).
   assert.match(portal, /struct WebTabView: UIViewRepresentable/);
@@ -54,7 +57,7 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   assert.match(portal, /func webViewWebContentProcessDidTerminate/);
   // The app picks the section by URL fragment: whitelisted, "+" encoded, no reload.
   assert.match(portal, /static func sectionURL\(_ section: String, extra: \[String: String\] = \[:\]\) -> URL\?/);
-  assert.match(portal, /\["assistant", "feed", "ideas", "work", "calendar", "readings", "thoughts"\]\.contains\(section\)/);
+  assert.match(portal, /\["assistant", "feed", "bandeja", "ideas", "work", "calendar", "readings", "thoughts"\]\.contains\(section\)/);
   assert.match(portal, /replacingOccurrences\(of: "\+", with: "%2B"\)/);
   // Made when the page is first shown, never at launch: AppModel exists before
   // UIApplicationMain, and a web view made then crashes UIKit on the first touch.
@@ -62,7 +65,11 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   assert.match(portal, /var webView: WKWebView \{\s*if let made \{ return made \}/);
   assert.doesNotMatch(portal, /let webView: WKWebView|override init\(\)/);
   assert.match(app, /webPortal\.sessionProvider = \{ \[backend\] in try await backend\.bridgeSession\(\) \}/);
-  assert.match(app, /webPortal\.onNavigate = \{ \[weak self\] section in self\?\.open\(section: section\) \}/);
+  assert.match(app, /webPortal\.onNavigate = \{ \[weak self\] section, extra in self\?\.open\(section: section, extra: extra\) \}/);
+  assert.match(app, /webPortal\.onBadge = \{ \[weak self\] count in self\?\.openProposals = count \}/);
+  // Tab → web section, one table.
+  for (const [tab, section] of [["chat", "assistant"], ["ahora", "feed"], ["tiempo", "calendar"], ["work", "work"], ["bandeja", "bandeja"]])
+    assert.match(app, new RegExp('case \\.' + tab + ': return "' + section + '"'));
   assert.match(app, /webPortal\.reloadIfStarted\(\)/);
 });
 
@@ -76,11 +83,14 @@ test("the typed bridge answers only the top-level MINDS page and never carries t
   assert.match(bridge, /origin\.port == 0/);
   assert.match(bridge, /\(body\["v"\] as\? Int\) == Self\.version/);
   assert.match(bridge, /"error": "rejected"/);
-  for (const type of ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open"])
+  for (const type of ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.badge"])
     assert.ok(bridge.includes('case "' + type + '"'), type);
   // The page may only ask for the tab sections; the web hides its own nav only for "shell.tabs".
-  assert.match(bridge, /\["assistant", "feed", "ideas", "work", "calendar"\]\.contains\(section\)/);
-  assert.match(bridge, /"nav\.open", "shell\.tabs"\]/);
+  assert.match(bridge, /\["assistant", "feed", "bandeja", "ideas", "work", "calendar"\]\.contains\(section\)/);
+  assert.match(bridge, /section == "bandeja", let view = body\["view"\] as\? String, \["confirm", "suggest", "ideas"\]\.contains\(view\)/);
+  // The badge is only a small whole number.
+  assert.match(bridge, /let count = body\["count"\] as\? Int, \(0\.\.\.999\)\.contains\(count\)/);
+  assert.match(bridge, /"nav\.open", "shell\.tabs", "shell\.badge"\]/);
   assert.doesNotMatch(bridge, /refresh|evaluateJavaScript|WKUserScript|service_role/i);
   const doc = read("BRIDGE.md");
   assert.match(doc, /refresh token nunca sale del Llavero/);

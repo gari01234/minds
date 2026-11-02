@@ -60,7 +60,7 @@ final class WebSignInSmokeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "Window ended while idle")
     }
 
-    func testTabsMoveTheSharedWebPageAndShowTheNativeScreens() throws {
+    func testTabsMoveTheSharedWebPageToEveryTab() throws {
         let app = XCUIApplication()
         app.launchArguments = ["-WindowUITestWebOnly"]
         app.launch()
@@ -85,18 +85,21 @@ final class WebSignInSmokeTests: XCTestCase {
         bar.buttons["Work"].tap()
         sleep(4)
         attach(app, "t3-work")
+        // Ahora and the Bandeja are the web sections too, the same as on the desktop.
         bar.buttons["Bandeja"].tap()
-        XCTAssertTrue(app.staticTexts["Bandeja"].waitForExistence(timeout: 10), "Native Bandeja")
+        XCTAssertTrue(app.webViews.staticTexts["Bandeja"].waitForExistence(timeout: 15), "The web Bandeja")
+        sleep(2)
         attach(app, "t4-bandeja")
-        bar.buttons["Ahora"].tap()
-        XCTAssertTrue(app.staticTexts["Ahora"].waitForExistence(timeout: 10), "Native Ahora")
-        attach(app, "t5-ahora")
-        let ideas = app.buttons["Ideas"]
+        let ideas = app.webViews.buttons["Ideas"]
         if ideas.waitForExistence(timeout: 5) {
             ideas.tap()
-            sleep(4)
-            attach(app, "t6-ideas")
+            sleep(3)
+            attach(app, "t5-bandeja-ideas")
         }
+        bar.buttons["Ahora"].tap()
+        XCTAssertTrue(app.webViews.staticTexts["Ahora"].waitForExistence(timeout: 15), "The web Ahora")
+        sleep(2)
+        attach(app, "t6-ahora")
         bar.buttons["Chat"].tap()
         XCTAssertNotNil(firstWebInput(app, timeout: 20), "Back in Chat, the page is there again")
         attach(app, "t7-chat-again")
