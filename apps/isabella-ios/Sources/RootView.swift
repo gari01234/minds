@@ -1,15 +1,16 @@
 import SwiftUI
 
-// Window on iPhone: the app owns the session (one sign-in, here) and shows the
-// MINDS web app full screen; the web app gets the session through the bridge.
-// The native Continuity, Chat and Agenda views stay in the project, not shown.
+// Window on iPhone: the app owns the session (one sign-in, here), its own tab bar
+// (Chat · Ahora · Tiempo · Work · Bandeja) and the iOS integrations; the web app
+// paints the rich surfaces and gets the session through the bridge.
+// The older native Continuity, Chat and Agenda views stay in the project, not shown.
 struct RootView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
         Group {
             if Self.webOnlyForUITests || model.isAuthenticated {
-                FullMINDSView()
+                MainTabView()
             } else if model.isLoading {
                 Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
             } else {
@@ -17,6 +18,8 @@ struct RootView: View {
             }
         }
         .task { await model.bootstrap() }
+        // The web app is light; native screens match it.
+        .preferredColorScheme(.light)
     }
 
     #if DEBUG

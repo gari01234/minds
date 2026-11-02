@@ -28,8 +28,8 @@
   // one owner of the refresh token (the Keychain). The page only borrows the current
   // access token through the bridge (contract v1, apps/isabella-ios/BRIDGE.md) and
   // never refreshes or stores a session of its own.
-  const call = async (type) => {
-    try { return await bridge.postMessage({ v: 1, type }); }
+  const call = async (type, payload) => {
+    try { return await bridge.postMessage(Object.assign({}, payload || {}, { v: 1, type })); }
     catch (error) { return { v: 1, ok: false, error: String(error?.message || error) }; }
   };
   window.WINDOW_NATIVE = Object.freeze({ available: true, version: 1, call });

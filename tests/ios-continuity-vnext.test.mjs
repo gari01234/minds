@@ -29,7 +29,7 @@ test("Continuity does not infer approval or actionable status from model text", 
   assert.doesNotMatch(view, /aprobar automáticamente|urgencyScore|TextField\(/);
 });
 test("Native views stay available but the shell shows only the web app (no Feed, Ideas or Readings either)", () => {
-  assert.match(shell, /FullMINDSView\(\)/);
+  assert.match(shell, /MainTabView\(\)/);
   assert.doesNotMatch(shell, /ContinuityView\(\)|ChatView\(\)|CalendarHomeView\(\)/);
   assert.match(view, /struct ContinuityView/);
   assert.doesNotMatch(shell, /FeedView\(\)|IdeasView\(\)|ReadingsView\(\)/);

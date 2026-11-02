@@ -14,6 +14,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     var sessionProvider: (() async throws -> BridgeSession?)?
     var onSignOut: (() async -> Void)?
     var onSessionLost: (() -> Void)?
+    var onNavigate: ((String) -> Void)?
 
     // The web view is made the first time the page is shown, never at launch.
     // AppModel (and this session) are created before UIApplicationMain; a web
@@ -80,9 +81,32 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     func openIfNeeded() {
         guard !started else { return }
-        started = true
-        Self.trace("opening " + Self.homeURL.absoluteString)
-        webView.load(URLRequest(url: Self.homeURL))
+        show(section: "assistant")
+    }
+
+    // The app chooses the page's section through the URL fragment (#section=…).
+    // A fragment-only change is a same-document navigation: the page is not reloaded.
+    func show(section: String, extra: [String: String] = [:]) {
+        guard let url = Self.sectionURL(section, extra: extra) else { return }
+        if !started {
+            started = true
+            Self.trace("opening " + url.absoluteString)
+            webView.load(URLRequest(url: url))
+            return
+        }
+        guard webView.url?.absoluteString != url.absoluteString else { return }
+        webView.load(URLRequest(url: url))
+    }
+
+    static func sectionURL(_ section: String, extra: [String: String] = [:]) -> URL? {
+        guard ["assistant", "feed", "ideas", "work", "calendar", "readings", "thoughts"].contains(section),
+              var components = URLComponents(url: homeURL, resolvingAgainstBaseURL: false) else { return nil }
+        var fragment = URLComponents()
+        fragment.queryItems = [URLQueryItem(name: "section", value: section)]
+            + extra.keys.sorted().map { URLQueryItem(name: $0, value: extra[$0]) }
+        // URLSearchParams reads "+" as a space: encode it.
+        components.percentEncodedFragment = fragment.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url
     }
 
     func refresh() {
@@ -153,23 +177,27 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     }
 }
 
-private struct MINDSWebContainer: UIViewRepresentable {
+// Hosts the one shared web view in whichever tab is showing it. A UIView has a
+// single parent, so the active tab takes it over; the page keeps its state.
+struct WebTabView: UIViewRepresentable {
     let session: MINDSWebPortalSession
+    let active: Bool
 
-    func makeUIView(context: Context) -> WKWebView {
-        session.openIfNeeded()
-        return session.webView
+    func makeUIView(context: Context) -> UIView {
+        let container = UIView()
+        container.backgroundColor = .systemBackground
+        return container
     }
 
-    func updateUIView(_ uiView: WKWebView, context: Context) {}
-}
-
-struct FullMINDSView: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        MINDSWebContainer(session: model.webPortal)
-            .background(Color(uiColor: .systemBackground))
-            .ignoresSafeArea()
+    func updateUIView(_ container: UIView, context: Context) {
+        guard active else { return }
+        let web = session.webView
+        if web.superview !== container {
+            web.removeFromSuperview()
+            web.frame = container.bounds
+            web.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            container.addSubview(web)
+        }
+        session.openIfNeeded()
     }
 }
