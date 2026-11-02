@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 // Chat · Ahora · Tiempo · Work · Bandeja. Chat, Tiempo and Work show the one shared
 // web page (it moves to the active tab and keeps its state); Ahora and Bandeja are native.
@@ -7,6 +8,11 @@ import SwiftUI
 // the image name doubles as the accessibility label.
 struct MainTabView: View {
     @Environment(AppModel.self) private var model
+
+    // Like the web app's navigation: the active icon in ink, the others in soft gray.
+    init() {
+        UITabBar.appearance().unselectedItemTintColor = UIColor(red: 0.376, green: 0.388, blue: 0.416, alpha: 1)
+    }
 
     var body: some View {
         @Bindable var model = model
