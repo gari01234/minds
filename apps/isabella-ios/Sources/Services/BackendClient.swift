@@ -119,17 +119,37 @@ struct AgendaTask: Identifiable, Decodable {
 }
 
 struct AgendaEvent: Identifiable, Decodable {
+    struct Meta: Decodable {
+        let kind: String?
+        let taskClientKey: String?
+        enum CodingKeys: String, CodingKey {
+            case kind
+            case taskClientKey = "task_client_key"
+        }
+    }
+
     let id: UUID
     let title: String
     let startsAt: String
     let endsAt: String?
     let allDay: Bool
+    let metadata: Meta?
 
     enum CodingKeys: String, CodingKey {
-        case id, title
+        case id, title, metadata
         case startsAt = "starts_at"
         case endsAt = "ends_at"
         case allDay = "all_day"
+    }
+
+    // A block of time reserved to work on a task (shown with the task, like the web app).
+    var sessionTaskKey: String? { metadata?.kind == "task_work_session_v1" ? metadata?.taskClientKey : nil }
+
+    var endDate: Date? {
+        guard let endsAt else { return nil }
+        let fractional = ISO8601DateFormatter()
+        fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return fractional.date(from: endsAt) ?? ISO8601DateFormatter().date(from: endsAt)
     }
 
     var startDate: Date? {
@@ -407,7 +427,7 @@ actor BackendClient {
         let start = Calendar.current.startOfDay(for: Date())
         let utc = ISO8601DateFormatter().string(from: start)
         let data = try await network("rest/v1/isabella_events", query: [
-            .init(name: "select", value: "id,title,starts_at,ends_at,all_day"),
+            .init(name: "select", value: "id,title,starts_at,ends_at,all_day,metadata"),
             .init(name: "starts_at", value: "gte." + utc),
             .init(name: "order", value: "starts_at.asc"),
             .init(name: "limit", value: "100")
@@ -611,6 +631,39 @@ actor BackendClient {
         ], json: ["status": "confirmed", "confirmed_at": now, "updated_at": now, "metadata": newMeta],
            token: token, prefer: "return=representation"))
         guard saved.count == 1 else { throw BackendError.verificationFailed }
+    }
+
+    // The day's tasks exactly as the web app lists them (tasksForDay): due that day,
+    // done or not, plus unfinished tasks whose start–due window spans the day.
+    func dayTasks() async throws -> [DayTask] {
+        let token = try await access()
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        let today = formatter.string(from: Date())
+        async let taskData = network("rest/v1/isabella_tasks", query: [
+            .init(name: "select", value: "id,client_key,title,due_date,start_date,completed_at,sort_order,project_id,category_id"),
+            .init(name: "archived_at", value: "is.null"),
+            .init(name: "or", value: "(due_date.eq.\(today),and(start_date.lte.\(today),due_date.gt.\(today),completed_at.is.null))"),
+            .init(name: "limit", value: "100")
+        ], token: token)
+        async let projectData = network("rest/v1/isabella_projects", query: [.init(name: "select", value: "id,name")], token: token)
+        async let categoryData = network("rest/v1/isabella_categories", query: [.init(name: "select", value: "id,name")], token: token)
+        let (t, p, c) = try await (taskData, projectData, categoryData)
+        let names = { (rows: [[String: Any]]) -> [String: String] in
+            Dictionary(rows.compactMap { row in
+                guard let id = row["id"] as? String, let name = row["name"] as? String else { return nil }
+                return (id, name)
+            }, uniquingKeysWith: { first, _ in first })
+        }
+        let projects = names(try rows(p)), categories = names(try rows(c))
+        return try rows(t).compactMap { DayTask(json: $0, today: today, projects: projects, categories: categories) }
+            .sorted { a, b in
+                if a.done != b.done { return !a.done }
+                if a.isSpan != b.isSpan { return !a.isSpan }
+                if a.sortOrder != b.sortOrder { return a.sortOrder < b.sortOrder }
+                return a.title.localizedCompare(b.title) == .orderedAscending
+            }
     }
 
     // Isabella's current situation cards (the web app keeps them fresh), newest generation only.

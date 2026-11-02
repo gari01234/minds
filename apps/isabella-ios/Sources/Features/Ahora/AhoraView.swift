@@ -189,7 +189,7 @@ struct AhoraView: View {
     }
 
     @ViewBuilder private var todayList: some View {
-        if model.events.isEmpty && model.tasks.isEmpty {
+        if model.events.isEmpty && model.dayTasks.isEmpty {
             Text("Nada para hoy.")
                 .font(.subheadline)
                 .foregroundStyle(WindowStyle.soft)
@@ -215,27 +215,56 @@ struct AhoraView: View {
                     }
                     .buttonStyle(.plain)
                 }
-                ForEach(Array(model.tasks.enumerated()), id: \.element.id) { index, task in
-                    if index > 0 || !model.events.isEmpty { Divider().padding(.leading, 14) }
-                    Button { model.open(section: "calendar") } label: {
-                        HStack(spacing: 12) {
-                            Circle()
-                                .stroke(Color(red: 0.769, green: 0.773, blue: 0.765), lineWidth: 1.6)
-                                .frame(width: 22, height: 22)
-                                .accessibilityHidden(true)
-                            Text(task.title).font(.subheadline).multilineTextAlignment(.leading)
-                            Spacer(minLength: 0)
-                        }
-                        .padding(.vertical, 12)
-                        .padding(.horizontal, 14)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityHint("Abre la tarea en Tiempo")
+                ForEach(Array(model.dayTasks.enumerated()), id: \.element.id) { index, task in
+                    if index > 0 || !model.events.isEmpty { Divider().padding(.leading, 48) }
+                    Button { model.open(section: "calendar") } label: { taskRow(task) }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Abre la tarea en Tiempo")
                 }
             }
             .windowCard()
         }
+    }
+
+    // Same order and wording as the web app's day list.
+    private func taskRow(_ task: DayTask) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            ZStack {
+                Circle()
+                    .stroke(Color(red: 0.769, green: 0.773, blue: 0.765), lineWidth: 1.6)
+                if task.done {
+                    Image(systemName: "checkmark").font(.caption2.weight(.bold)).foregroundStyle(WindowStyle.soft)
+                }
+            }
+            .frame(width: 22, height: 22)
+            .padding(.top, 1)
+            .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(task.title)
+                    .font(.subheadline.weight(.semibold))
+                    .strikethrough(task.done)
+                    .foregroundStyle(task.done ? WindowStyle.soft : WindowStyle.ink)
+                    .multilineTextAlignment(.leading)
+                if !task.subtitle.isEmpty {
+                    Text(task.subtitle).font(.footnote).foregroundStyle(WindowStyle.soft)
+                }
+                ForEach(model.sessions[task.clientKey ?? ""] ?? []) { session in
+                    Text(Self.sessionText(session))
+                        .font(.footnote)
+                        .foregroundStyle(Color(red: 0.239, green: 0.251, blue: 0.275))
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 4)
+                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(WindowStyle.border, lineWidth: 1))
+                }
+            }
+            Spacer(minLength: 0)
+            Text(task.isSpan ? "En curso" : (task.done ? "Hecha" : "Hoy"))
+                .font(.footnote)
+                .foregroundStyle(WindowStyle.faint)
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .contentShape(Rectangle())
     }
 
     private func suggestion(_ item: FeedItem) -> some View {
@@ -277,6 +306,13 @@ struct AhoraView: View {
         formatter.locale = Locale(identifier: "es_ES")
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
+    }
+
+    static func sessionText(_ session: AgendaEvent) -> String {
+        let start = time(session.startDate)
+        guard let from = session.startDate, let to = session.endDate else { return start }
+        let minutes = max(0, Int(to.timeIntervalSince(from) / 60))
+        return start + " · \(minutes) min reservados"
     }
 
     static func perProject(_ entries: [AkteEntry]) -> String {

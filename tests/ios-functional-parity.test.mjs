@@ -26,8 +26,18 @@ test("Window on iPhone: the app owns the session, its tab bar and the shared web
   // The UI-test shortcut exists only in Debug builds.
   assert.match(shell, /#if DEBUG\s+\/\/[^\n]*\n\s+static let webOnlyForUITests = ProcessInfo\.processInfo\.arguments\.contains\("-WindowUITestWebOnly"\)\s+#else\s+static let webOnlyForUITests = false/);
   // Gari's order: Chat (opens first) · Ahora · Tiempo · Work · Bandeja.
-  const labels = [...tabs.matchAll(/Label\("([^"]+)"/g)].map(m => m[1]);
+  const labels = [...tabs.matchAll(/\.tabItem \{ Image\("([^"]+)"\) \}/g)].map(m => m[1]);
   assert.deepEqual(labels, ["Chat", "Ahora", "Tiempo", "Work", "Bandeja"]);
+  // Icons only, drawn like the web app's navigation (no SF Symbols, no titles).
+  assert.doesNotMatch(tabs, /systemImage:|Label\(/);
+  for (const name of labels) {
+    const set = JSON.parse(read("Assets.xcassets/" + name + ".imageset/Contents.json"));
+    assert.equal(set.properties["template-rendering-intent"], "template");
+    const svg = read("Assets.xcassets/" + name + ".imageset/" + set.images[0].filename);
+    assert.match(svg, /stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/);
+  }
+  const web = readFileSync(new URL("../apps/isabella/shell.js", import.meta.url), "utf8");
+  assert.ok(web.includes('M21 11.5a8.38 8.38 0 0 1-.9 3.8') && read("Assets.xcassets/Chat.imageset/tab-chat.svg").includes('M21 11.5a8.38 8.38 0 0 1-.9 3.8'), "same chat icon as the web app");
   assert.match(app, /var tab: Tab = \.chat/);
   assert.equal((tabs.match(/WebTabView\(session: model\.webPortal, active: model\.tab == \.(chat|tiempo|work)\)/g) || []).length, 3);
   assert.match(tabs, /\.badge\(model\.openProposals\)/);
