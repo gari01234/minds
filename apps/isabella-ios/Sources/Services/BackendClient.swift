@@ -523,22 +523,7 @@ actor BackendClient {
         return items
     }
 
-    func todayTasks() async throws -> [AgendaTask] {
-        let token = try await access()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        let today = formatter.string(from: Date())
-        let data = try await network("rest/v1/isabella_tasks", query: [
-            .init(name: "select", value: "id,title,due_date,completed_at,notes,reminder_time"),
-            .init(name: "due_date", value: "eq." + today),
-            .init(name: "archived_at", value: "is.null"),
-            .init(name: "completed_at", value: "is.null"),
-            .init(name: "order", value: "title.asc")
-        ], token: token)
-        return try JSONDecoder().decode([AgendaTask].self, from: data)
-    }
-
-    // MARK: Ahora and Bandeja (the same rows and rules as the web app's Panorama)
+    // MARK: Akte proposals and the day's tasks (the same rows and rules as the web app)
 
     private func rows(_ data: Data) throws -> [[String: Any]] {
         guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
@@ -552,34 +537,31 @@ actor BackendClient {
         return formatter.string(from: Date())
     }
 
-    // Entries Isabella proposed and Gari has not decided yet, across projects.
-    func pendingAkteEntries() async throws -> [AkteEntry] {
+    // «Por confirmar» in the Bandeja, counted exactly like the web (Panorama «Para ti»):
+    // contradictions, proposed Fristen and decisions, and proposed tasks of every project.
+    func openProposalCount() async throws -> Int {
         let token = try await access()
         let data = try await network("rest/v1/minds_work_memory", query: [
-            .init(name: "select", value: "id,project_id,memory_type,title,body,status,occurred_at,metadata,created_at,isabella_projects(name,client_key)"),
+            .init(name: "select", value: "id,memory_type,metadata"),
             .init(name: "status", value: "eq.proposed"),
             .init(name: "memory_type", value: "in.(deadline,decision,commitment,open_question)"),
-            .init(name: "order", value: "created_at.desc"),
-            .init(name: "limit", value: "100")
+            .init(name: "limit", value: "200")
         ], token: token)
-        return try rows(data).compactMap(AkteEntry.init(json:))
+        return try rows(data).filter(Self.waitsForConfirmation).count
     }
 
-    // Confirmed Fristen from today on, soonest first.
-    func upcomingFristen() async throws -> [AkteEntry] {
-        let token = try await access()
-        let start = ISO8601DateFormatter().string(from: Calendar.current.startOfDay(for: Date()))
-        let data = try await network("rest/v1/minds_work_memory", query: [
-            .init(name: "select", value: "id,project_id,memory_type,title,body,status,occurred_at,metadata,created_at,isabella_projects(name,client_key)"),
-            .init(name: "status", value: "eq.confirmed"),
-            .init(name: "memory_type", value: "eq.deadline"),
-            .init(name: "occurred_at", value: "gte." + start),
-            .init(name: "order", value: "occurred_at.asc"),
-            .init(name: "limit", value: "10")
-        ], token: token)
-        return try rows(data).compactMap(AkteEntry.init(json:))
+    static func waitsForConfirmation(_ row: [String: Any]) -> Bool {
+        let kind = (row["metadata"] as? [String: Any])?["kind"] as? String
+        switch row["memory_type"] as? String {
+        case "deadline", "decision": return true
+        case "commitment": return kind == "aufgabe"
+        case "open_question": return kind == "widerspruch"
+        default: return false
+        }
     }
 
+    // Decisions from outside the page (the planned notification actions) use the same
+    // rules as Panorama and the Bandeja.
     // Confirmed / rejected / resolved, only while still proposed; done only if the row says so.
     func decideAkteEntry(id: String, status: String) async throws {
         guard ["confirmed", "rejected", "resolved"].contains(status), UUID(uuidString: id) != nil
@@ -667,23 +649,6 @@ actor BackendClient {
     }
 
     // Isabella's current situation cards (the web app keeps them fresh), newest generation only.
-    func feedItems() async throws -> [FeedItem] {
-        let token = try await access()
-        let data = try await network("rest/v1/minds_surface_items", query: [
-            .init(name: "select", value: "*"),
-            .init(name: "surface", value: "eq.feed"),
-            .init(name: "status", value: "eq.active"),
-            .init(name: "agent", value: "eq.isabella"),
-            .init(name: "order", value: "generated_at.desc"),
-            .init(name: "limit", value: "40")
-        ], token: token)
-        let list = try rows(data)
-        let generation = (list.first?["metadata"] as? [String: Any])?["generation_id"] as? String
-        return list
-            .filter { generation == nil || (($0["metadata"] as? [String: Any])?["generation_id"] as? String) == generation }
-            .compactMap(FeedItem.init(json:))
-    }
-
     func history() async throws -> [ChatMessage] {
         let token = try await access()
         let data = try await network("rest/v1/conversations", query: [

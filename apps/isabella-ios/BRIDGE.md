@@ -29,6 +29,12 @@ Petición: `window.webkit.messageHandlers.windowNative.postMessage({ v: 1, type 
 | `session.signIn` | `{ v: 1, ok: true }` — la app muestra su inicio de sesión |
 | `session.signOut` | `{ v: 1, ok: true }` — la app borra el Llavero y los datos web y vuelve a su inicio de sesión |
 | `app.info` | `{ v: 1, ok: true, app: { name, version, build, capabilities } }` |
+| `nav.open` | `{ section, view? }` → la app cambia a la pestaña de esa sección (`assistant`, `feed`, `calendar`, `work`, `bandeja`, `ideas`). `view` solo para `bandeja`: `confirm`, `suggest` o `ideas`. `{ v: 1, ok: true }` |
+| `shell.badge` | `{ count }` (entero 0–999): el número de «Por confirmar» de la Bandeja, para el badge de la pestaña. `{ v: 1, ok: true }` |
 | otro | `{ v: 1, ok: false, error: "unsupported" }` |
+
+## Pestañas (`shell.tabs`)
+
+Con `shell.tabs` en `capabilities`, la web entra en modo app: oculta su propia barra y la app muestra la suya (Chat · Ahora · Tiempo · Work · Bandeja). Todas las pestañas muestran **la misma página web** (una sola `WKWebView` que pasa a la pestaña activa). La app elige la sección con el fragmento de la URL (`#section=feed`, `#section=bandeja&view=ideas`, `#section=work&project=…`); si la web quiere abrir una sección de otra pestaña, lo pide con `nav.open`. Lecturas y Thoughts se abren dentro de la pestaña actual desde el menú «•••». La web solo envía `shell.badge` si la app anuncia esa capacidad.
 
 Cambios incompatibles suben `v`. Las capacidades nuevas (escanear, adjuntar foto, compartir, Quick Look, háptica…) se añaden como tipos nuevos y se anuncian en `app.info.capabilities`.

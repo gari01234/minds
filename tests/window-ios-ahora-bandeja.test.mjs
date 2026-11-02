@@ -1,57 +1,54 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
+import {readFileSync, existsSync} from 'node:fs';
 import vm from 'node:vm';
 
 const read = p => readFileSync(new URL('../' + p, import.meta.url), 'utf8');
 const backend = read('apps/isabella-ios/Sources/Services/BackendClient.swift');
 const model = read('apps/isabella-ios/Sources/AppModel.swift');
-const bandeja = read('apps/isabella-ios/Sources/Features/Ahora/BandejaView.swift');
-const ahora = read('apps/isabella-ios/Sources/Features/Ahora/AhoraView.swift');
-const entries = read('apps/isabella-ios/Sources/Features/Ahora/AhoraModels.swift');
+const tabs = read('apps/isabella-ios/Sources/Features/Ahora/MainTabView.swift');
+const dayTask = read('apps/isabella-ios/Sources/Services/DayTask.swift');
 const appJs = read('apps/isabella/app.js');
 const css = read('apps/isabella/minds-calendar-shell.css');
 
-test('Bandeja decides exactly like Panorama and only counts what the backend confirmed', () => {
+test('Ahora and the Bandeja in the app are the web sections, the same as on the desktop', () => {
+  for (const gone of ['AhoraView', 'BandejaView', 'AhoraModels', 'WindowStyle'])
+    assert.ok(!existsSync(new URL('../apps/isabella-ios/Sources/Features/Ahora/' + gone + '.swift', import.meta.url)), gone + ' is gone');
+  assert.match(tabs, /page\(\.ahora, "Ahora"\)/);
+  assert.match(tabs, /page\(\.bandeja, "Bandeja"\)/);
+  assert.match(model, /case \.ahora: return "feed"/);
+  assert.match(model, /case \.bandeja: return "bandeja"/);
+  assert.match(model, /case "ideas": tab = \.bandeja; pendingWebExtra\["view"\] = "ideas"/);
+  assert.doesNotMatch(model, /reloadAhora|reloadBandeja|akteEntries|FeedItem/);
+});
+
+test('The Bandeja badge counts exactly what the web counts as «Por confirmar»', () => {
+  const count = backend.slice(backend.indexOf('func openProposalCount'), backend.indexOf('// Decisions from outside the page'));
+  assert.match(count, /"eq\.proposed"/);
+  assert.match(count, /"in\.\(deadline,decision,commitment,open_question\)"/);
+  assert.match(count, /case "deadline", "decision": return true/);
+  assert.match(count, /case "commitment": return kind == "aufgabe"/);
+  assert.match(count, /case "open_question": return kind == "widerspruch"/);
+  // The same rule on the web (Panorama «Para ti» and the Bandeja).
+  const work = read('apps/isabella/work.js');
+  assert.match(work, /r\.memory_type==='open_question'&&r\.status==='proposed'&&r\.metadata\?\.kind==='widerspruch'/);
+  assert.match(work, /r\.memory_type==='commitment'&&r\.status==='proposed'&&r\.metadata\?\.kind==='aufgabe'/);
+  // The page's count wins while it is open; the app counts on launch and when it comes back.
+  assert.match(model, /webPortal\.onBadge = \{ \[weak self\] count in self\?\.openProposals = count \}/);
+  assert.match(tabs, /if phase == \.active \{ Task \{ await model\.refreshBadge\(\) \} \}/);
+  assert.match(model, /openProposals = 0/);
+});
+
+test('Decisions outside the page keep Panorama\'s rules (for the notification actions)', () => {
   const decide = backend.slice(backend.indexOf('func decideAkteEntry'), backend.indexOf('func akteEntryToTask'));
   assert.match(decide, /\["confirmed", "rejected", "resolved"\]\.contains\(status\)/);
   assert.match(decide, /\.init\(name: "status", value: "eq\.proposed"\)/, 'only while still proposed');
   assert.match(decide, /prefer: "return=representation"/);
   assert.match(decide, /saved\.count == 1, saved\[0\]\["status"\] as\? String == status/);
-  assert.match(decide, /if status == "confirmed" \{ patch\["confirmed_at"\] = now \}/);
-  const toTask = backend.slice(backend.indexOf('func akteEntryToTask'), backend.indexOf('func feedItems'));
+  const toTask = backend.slice(backend.indexOf('func akteEntryToTask'), backend.indexOf('func dayTasks'));
   assert.match(toTask, /entry\["status"\] as\? String == "proposed"/);
-  assert.match(toTask, /"rest\/v1\/isabella_tasks", method: "POST"/);
   assert.match(toTask, /"metadata": \["source": "akte_pflege", "memory_id": id\]/);
   assert.ok(toTask.indexOf('isabella_tasks') < toTask.lastIndexOf('"status": "confirmed"'), 'the entry is confirmed only after the task exists');
-  assert.match(model, /Saved only when the backend confirms it/);
-  assert.match(model, /catch \{\s*bandejaError = "No pude guardar la decisión: "/);
-  // Same German actions as Panorama.
-  for (const label of ['"Bestätigen"', '"Verwerfen"', '"Als Aufgabe anlegen"', '"Geklärt"', '"Kein Widerspruch"']) assert.ok(bandeja.includes(label), label);
-});
-
-test('Bandeja cards open to show why: the reason, the exact quote and the source', () => {
-  assert.match(entries, /reason = \(json\["body"\] as\? String \?\? ""\)/);
-  assert.match(entries, /quote = \(meta\["zitat"\] as\? String\)/);
-  assert.match(bandeja, /Text\("POR QUÉ"\)/);
-  assert.match(bandeja, /if open \{ why\(entry\) \}/);
-  assert.match(bandeja, /design: \.serif/);
-  assert.match(bandeja, /Esta propuesta es anterior a las explicaciones/);
-  const pending = backend.slice(backend.indexOf('func pendingAkteEntries'), backend.indexOf('func upcomingFristen'));
-  assert.match(pending, /"in\.\(deadline,decision,commitment,open_question\)"/);
-  assert.match(pending, /isabella_projects\(name,client_key\)/);
-});
-
-test('Ahora: weather, Ideas as the web view, Fristen, today, Isabella\'s suggestions', () => {
-  assert.match(ahora, /model\.feed\.first\(where: \\\.isWeather\)/);
-  assert.match(ahora, /Picker\("Vista", selection: \$model\.ahoraMode\)/);
-  assert.match(ahora, /WebTabView\(session: model\.webPortal, active: model\.tab == \.ahora && model\.ahoraMode == \.ideas\)/);
-  for (const title of ['"Próximas Fristen"', '"Hoy"', '"Isabella sugiere"']) assert.ok(ahora.includes(title), title);
-  assert.match(ahora, /model\.discuss\(item\)/);
-  assert.match(model, /open\(section: "assistant", extra: \["draft": item\.prompt \?\? item\.title\]\)/);
-  const feed = backend.slice(backend.indexOf('func feedItems'), backend.indexOf('func history'));
-  assert.match(feed, /"eq\.feed"/);
-  assert.match(feed, /generation == nil \|\| /, 'only the newest generation, like the web app');
 });
 
 test('the web page joins the app shell only when the app says it has tabs', () => {
@@ -91,16 +88,13 @@ test('the web page joins the app shell only when the app says it has tabs', () =
   assert.equal(shown.length, before, 'unknown sections are ignored');
 });
 
-test('Ahora lists the day\'s tasks like the web app (due today, plus open tasks whose window spans today)', () => {
-  const day = backend.slice(backend.indexOf('func dayTasks'), backend.indexOf('func feedItems'));
+test('Siri lists the day\'s tasks like the web app (due today, plus open tasks whose window spans today)', () => {
+  const day = backend.slice(backend.indexOf('func dayTasks'), backend.indexOf('func history'));
   assert.match(day, /"\(due_date\.eq\.\\\(today\),and\(start_date\.lte\.\\\(today\),due_date\.gt\.\\\(today\),completed_at\.is\.null\)\)"/);
   assert.match(day, /"archived_at", value: "is\.null"/);
   assert.match(day, /if a\.done != b\.done \{ return !a\.done \}/);
   assert.match(day, /if a\.isSpan != b\.isSpan \{ return !a\.isSpan \}/);
-  assert.match(entries, /parts\.append\("en curso hasta " \+ until\)/);
-  assert.match(ahora, /ForEach\(Array\(model\.dayTasks\.enumerated\(\)\)/);
-  assert.match(ahora, /min reservados"/);
-  assert.match(model, /events = today\.filter \{ \$0\.sessionTaskKey == nil \}/);
+  assert.match(dayTask, /parts\.append\("en curso hasta " \+ until\)/);
   // The web rule it mirrors.
   const web = read('apps/isabella/dashboard-model.js');
   assert.match(web, /task\.startDate < task\.date && task\.startDate <= key && key < task\.date/);

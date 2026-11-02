@@ -1,6 +1,8 @@
 name: MINDS
 options:
   createIntermediateGroups: true
+  # The app speaks Spanish: Siri matches the App Shortcut phrases in this language.
+  developmentLanguage: es
   xcodeVersion: "15.4"
   projectFormat: xcode15_3
   deploymentTarget:

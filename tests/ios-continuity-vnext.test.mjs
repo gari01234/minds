@@ -19,7 +19,7 @@ test("Continuity is an owner-scoped read model with canonical source IDs", () =>
   assert.match(backend, /"consumed_at", value: "is.null"/);
   assert.match(backend, /"status", value: "eq.pending"/);
   assert.match(backend, /"status", value: "eq.active"/);
-  assert.doesNotMatch(backend.slice(backend.indexOf("func continuityItems()"), backend.indexOf("func todayTasks()")), /method: "POST"|\bupdate\(|\.insert\(/);
+  assert.doesNotMatch(backend.slice(backend.indexOf("func continuityItems()"), backend.indexOf("// MARK: Akte proposals")), /method: "POST"|\bupdate\(|\.insert\(/);
 });
 test("Continuity does not infer approval or actionable status from model text", () => {
   assert.match(backend, /"paused" \? "Pausada"/);

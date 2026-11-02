@@ -33,7 +33,7 @@ test("Siri next-event and tasks remain read only", () => {
   const intents = read("Sources/Services/MINDSAppIntents.swift");
   assert.match(intents, /NextMINDSCalendarEventIntent/);
   assert.match(intents, /BackendClient\(\)\.events\(\)/);
-  assert.match(intents, /BackendClient\(\)\.todayTasks\(\)/);
+  assert.match(intents, /BackendClient\(\)\.dayTasks\(\)\.filter \{ !\$0\.done \}/);
   assert.doesNotMatch(intents, /minds_commit_reviewed_task|minds_resolve_shadow/);
 });
 

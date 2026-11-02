@@ -92,6 +92,8 @@ private struct NativeSignInView: View {
                 }
             }
             .padding(24)
+            // Buttons in Window's blue (the web app's Panorama: #0062cc).
+            .tint(Color(red: 0, green: 0.384, blue: 0.8))
             .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 28))
             .padding(20)
             .frame(maxWidth: 460)
