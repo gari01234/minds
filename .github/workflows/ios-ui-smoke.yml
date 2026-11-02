@@ -88,8 +88,8 @@ jobs:
           [[ $found -eq 1 ]] || echo "No crash report file from Window during the test."
           echo "--- Uncaught exceptions in the simulator log:"
           xcrun simctl spawn "$SIM_UDID" log show --last 30m --style compact \
-            --predicate 'eventMessage CONTAINS "Terminating app due to uncaught exception" OR eventMessage CONTAINS "_delayTouch"' 2>/dev/null \
-            | grep -v "^Timestamp" | cut -c1-400 | head -20 || true
+            --predicate 'eventMessage CONTAINS "Terminating app due to uncaught exception" OR eventMessage CONTAINS "_delayTouch" OR eventMessage CONTAINS "WINDOW-WEB"' 2>/dev/null \
+            | grep -v "^Timestamp" | cut -c1-400 | head -40 || true
       - name: Export screenshots
         if: always()
         shell: bash

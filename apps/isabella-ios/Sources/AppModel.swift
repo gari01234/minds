@@ -30,11 +30,18 @@ final class AppModel {
     let backend = BackendClient()
     let notifications = NotificationService()
 
+    // The app owns the session; the web app asks for it through the bridge.
+    init() {
+        webPortal.sessionProvider = { [backend] in try await backend.bridgeSession() }
+        webPortal.onSignOut = { [weak self] in await self?.logout() }
+        webPortal.onSessionLost = { [weak self] in self?.isAuthenticated = false }
+    }
+
     func bootstrap() async {
         isLoading = true
         isAuthenticated = await backend.isSignedIn
-        if isAuthenticated { await reload(); await reloadContinuity() }
         isLoading = false
+        if isAuthenticated { await reloadContinuity() }
     }
 
     func sendCode() async {
@@ -55,9 +62,10 @@ final class AppModel {
         do {
             try await backend.verifyEmailCode(loginEmail, code: loginCode)
             loginCode = ""
+            codeSent = false
             isAuthenticated = true
             errorMessage = nil
-            await reload()
+            webPortal.reloadIfStarted()
             await reloadContinuity()
         } catch {
             errorMessage = error.localizedDescription

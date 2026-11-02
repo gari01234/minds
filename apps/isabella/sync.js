@@ -44,8 +44,6 @@ async function init(){
   user=data.session?.user||null;
   paintAuth();
   if(user){await syncNow({initial:true});startRealtime()}
-  // Inside the Window iPhone app the web session starts empty: offer sign-in right away.
-  else if(/WindowApp\//.test(navigator.userAgent||''))openLogin();
   sb.auth.onAuthStateChange((_event,session)=>{stopRealtime();user=session?.user||null;paintAuth();if(user)setTimeout(async()=>{await syncNow({initial:true});startRealtime()},0)});
   window.addEventListener('isabella:state',()=>{if(hydrating||!user)return;clearTimeout(timer);timer=setTimeout(()=>syncNow({pushOnly:true}),900)});
   window.addEventListener('isabella:mutation',e=>{if(!user||!e.detail)return;recordActivity(e.detail)});
@@ -64,6 +62,8 @@ function paintAuth(){
   }
 }
 function openLogin(){
+  // Inside the Window app the app owns the session: sign-in happens in the app.
+  if(window.WINDOW_NATIVE?.available){void window.WINDOW_NATIVE.call('session.signIn');return}
   app.openModal('Conectar memoria',`<div class="form">
     <input id="isabellaEmail" type="email" autocomplete="email" inputmode="email" required placeholder="tu@email.com">
     <button id="isabellaSendCode" class="primary">Enviar código</button>
