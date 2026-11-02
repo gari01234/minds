@@ -345,16 +345,18 @@ test('Chat now relies on native WebKit text selection instead of a custom word p
   assert.ok(css.includes('-webkit-touch-callout:default!important'));
 });
 
-test('Build 27 docks the same Isabella ORB in the top bar instead of floating over chat',()=>{
+test('the chat has no orb (Gari, November 2026): voice stays on the microphone button',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  const css=read('apps/isabella/app.css');
-  assert.ok(shell.includes('id="orbDock"'));
-  assert.ok(shell.includes('id="orbHome"'));
-  assert.ok(app.includes("const target=docked?dock:home"));
-  assert.ok(app.includes('target.appendChild(orb)'));
-  assert.ok(css.includes('.orb-dock'));
-  assert.ok(css.includes('position:relative!important'));
+  const css=read('apps/isabella/minds-calendar-shell.css');
+  assert.ok(!shell.includes('id="orbDock"'));
+  assert.ok(!shell.includes('id="orbHome"'));
+  assert.ok(!shell.includes('id="orbButton"'));
+  assert.ok(shell.includes('id="micButton"'));
+  assert.ok(app.includes("$('#micButton').onclick=start;"));
+  assert.ok(!app.includes("$('#orbButton').onclick"));
+  // The Hoy line leads the phone chat and stays clear of the floating ••• button.
+  assert.match(css,/\.today-card\{align-self:stretch!important;width:auto!important;max-width:none!important;margin-left:0!important;margin-right:64px!important\}/);
 });
 
 
