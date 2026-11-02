@@ -3,12 +3,13 @@
 .app .ahora-screen,.app .bandeja-screen{background:var(--m-surface,#f7f7f6)}
 .app .ahora-scroll,.app .bandeja-scroll{
   display:flex;flex-direction:column;gap:20px;
-  padding:calc(env(safe-area-inset-top,0px) + 18px) var(--m-content-gutter,20px) 44px;
+  /* The active screen already reserves the status bar (design-system.css); no second safe area here. */
+  padding:18px var(--m-content-gutter,20px) 44px;
   color:#1d1d1f;font-family:var(--m-type-system)
 }
 .app .ahora-scroll>*,.app .bandeja-scroll>*{width:100%;max-width:720px;margin-left:auto;margin-right:auto}
 .app .bandeja-scroll{gap:14px}
-body.window-app-shell .app .ahora-scroll,body.window-app-shell .app .bandeja-scroll{padding-top:calc(env(safe-area-inset-top,0px) + 14px);padding-bottom:28px}
+body.window-app-shell .app .ahora-scroll,body.window-app-shell .app .bandeja-scroll{padding-top:12px;padding-bottom:28px}
 .app .ahora-scroll .pull-refresh-indicator,.app .bandeja-scroll .pull-refresh-indicator{margin-bottom:-20px}
 
 /* Header */
