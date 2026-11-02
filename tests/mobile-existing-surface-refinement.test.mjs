@@ -19,7 +19,8 @@ test('UX A.5 translates Work technical statuses only in the visible Panorama lab
 });
 test('UX A.5 mobile Planner layout toggles without changing its canonical actions',()=>{
   assert.match(work,/WORK_MOBILE_LAYOUT_KEY/);
-  assert.match(work,/localStorage\.getItem\(WORK_MOBILE_LAYOUT_KEY\)!=='columns'/);
+  // Gari (Nov 2026): buckets side by side by default on the phone; the list is opt-in.
+  assert.match(work,/localStorage\.getItem\(WORK_MOBILE_LAYOUT_KEY\)==='list'/);
   assert.match(work,/data-work-layout-toggle aria-pressed="\$\{mobileList\}"/);
   assert.match(work,/board\.classList\.toggle\('mobile-stack',listMode\)/);
   assert.match(work,/listMode\?'list':'columns'/);

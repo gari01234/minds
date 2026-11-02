@@ -98,3 +98,10 @@ test('Ahora lists the day\'s tasks like the web app (due today, plus open tasks 
   const web = read('apps/isabella/dashboard-model.js');
   assert.match(web, /task\.startDate < task\.date && task\.startDate <= key && key < task\.date/);
 });
+
+test('Threads: the ••• button opens its actions (rename, archive)', () => {
+  const work = read('apps/isabella/work.js');
+  assert.match(work, /openThreadActions\(threads\.find\(x=>x\.id===b\.dataset\.workThreadActions\)\)/);
+  assert.match(work, /data-work-thread-actions="\$\{t\.id\}"/);
+  assert.match(work, /<button id="workThreadRename" class="secondary">Renombrar<\/button>/);
+});
