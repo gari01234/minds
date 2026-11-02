@@ -47,7 +47,7 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 return ["v": v, "ok": true, "session": [
                     "access_token": session.accessToken,
                     "expires_at": Int(session.expiresAt),
-                    "user": ["id": session.userID, "email": session.email ?? NSNull()]
+                    "user": ["id": session.userID, "email": session.email.map { $0 as Any } ?? NSNull()] as [String: Any]
                 ] as [String: Any]]
             } catch BackendError.notSignedIn {
                 portal?.onSessionLost?()
