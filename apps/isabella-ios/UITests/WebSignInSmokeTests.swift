@@ -60,6 +60,45 @@ final class WebSignInSmokeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground, "Window ended while idle")
     }
 
+    func testTabsMoveTheSharedWebPageAndShowTheNativeScreens() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WindowUITestWebOnly"]
+        app.launch()
+        XCTAssertNotNil(firstWebInput(app, timeout: 60), "The chat did not load")
+        sleep(3)
+        attach(app, "t1-chat")
+        let bar = app.tabBars.firstMatch
+        XCTAssertTrue(bar.waitForExistence(timeout: 10), "No tab bar")
+        for name in ["Chat", "Ahora", "Tiempo", "Work", "Bandeja"] {
+            XCTAssertTrue(bar.buttons[name].exists, "Missing tab " + name)
+        }
+        bar.buttons["Tiempo"].tap()
+        sleep(4)
+        attach(app, "t2-tiempo")
+        XCTAssertEqual(app.state, .runningForeground)
+        XCTAssertTrue(app.webViews.firstMatch.exists, "Tiempo shows the web page")
+        bar.buttons["Work"].tap()
+        sleep(4)
+        attach(app, "t3-work")
+        bar.buttons["Bandeja"].tap()
+        XCTAssertTrue(app.staticTexts["Bandeja"].waitForExistence(timeout: 10), "Native Bandeja")
+        attach(app, "t4-bandeja")
+        bar.buttons["Ahora"].tap()
+        XCTAssertTrue(app.staticTexts["Ahora"].waitForExistence(timeout: 10), "Native Ahora")
+        attach(app, "t5-ahora")
+        let ideas = app.buttons["Ideas"]
+        if ideas.waitForExistence(timeout: 5) {
+            ideas.tap()
+            sleep(4)
+            attach(app, "t6-ideas")
+        }
+        bar.buttons["Chat"].tap()
+        XCTAssertNotNil(firstWebInput(app, timeout: 20), "Back in Chat, the page is there again")
+        attach(app, "t7-chat-again")
+        print("WINDOW-SMOKE tabs done, state \(app.state.rawValue)")
+        XCTAssertEqual(app.state, .runningForeground)
+    }
+
     private func firstWebInput(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {

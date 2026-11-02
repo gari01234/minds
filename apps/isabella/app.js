@@ -463,7 +463,45 @@ function placeGlobalMenu(name){
   const host=desk?document.querySelector('[data-menu-slot="sidebar"]'):name==='assistant'?$('.top-actions'):document.querySelector('[data-menu-slot="'+name+'"]');
   if(button&&host&&button.parentElement!==host)host.appendChild(button);
 }
+// Window iPhone app: the app shows its own tab bar (Chat · Ahora · Tiempo · Work · Bandeja)
+// and one shared page. The app chooses the section through the URL fragment
+// (#section=…); a section that belongs to another tab is opened by the app.
+const WINDOW_TAB_FOR={assistant:'chat',feed:'ahora',ideas:'ahora',calendar:'tiempo',work:'work'};
+let windowShell=false,windowShellTab='chat';
 function show(name){
+  if(windowShell){
+    const tab=WINDOW_TAB_FOR[name];
+    if(tab&&tab!==windowShellTab){void window.WINDOW_NATIVE.call('nav.open',{section:name});return}
+  }
+  showSection(name);
+}
+async function initWindowShell(){
+  const native=window.WINDOW_NATIVE;if(!native?.available)return;
+  const info=await native.call('app.info');
+  if(!(info?.app?.capabilities||[]).includes('shell.tabs'))return;
+  windowShell=true;document.body.classList.add('window-app-shell');
+  const head=$('#drawer .drawer-head');
+  if(head&&!$('#drawer [data-shell-nav]'))head.insertAdjacentHTML('afterend','<button data-shell-nav="readings">Lecturas</button><button data-shell-nav="thoughts">Thoughts</button>');
+  $$('#drawer [data-shell-nav]').forEach(b=>b.onclick=()=>{closeDrawer();showSection(b.dataset.shellNav)});
+  window.addEventListener('hashchange',applyWindowShellHash);
+  applyWindowShellHash();
+  // Ahora is native in the app; the page keeps the feed fresh because it has the context.
+  const refreshFeed=()=>{void window.ISABELLA_AI?.startFeedRefresh?.(state,{force:false,currentItems:[]})?.catch?.(()=>{})};
+  refreshFeed();
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refreshFeed()});
+}
+function applyWindowShellHash(){
+  const params=new URLSearchParams(String(location.hash||'').replace(/^#/,''));
+  const section=params.get('section');
+  if(!section||!['assistant','feed','ideas','work','calendar','readings','thoughts'].includes(section))return;
+  if(WINDOW_TAB_FOR[section])windowShellTab=WINDOW_TAB_FOR[section];
+  showSection(section);
+  const project=params.get('project');
+  if(section==='work'&&project)setTimeout(()=>window.MINDS_WORK?.open?.(project),0);
+  const draft=params.get('draft');
+  if(section==='assistant'&&draft){const input=$('#chatInput');if(input){input.value=draft.slice(0,2000);input.dispatchEvent(new Event('input',{bubbles:true}))}}
+}
+function showSection(name){
   const allowed=['assistant','feed','ideas','work','calendar','readings','thoughts'];
   if(!allowed.includes(name))name='assistant';
   // The native Time controls may be temporarily docked inside Chat.
@@ -2524,7 +2562,7 @@ function bind(){
  ideaWorkspaceInput.addEventListener('input',autosizeIdeaWorkspace);autosizeIdeaWorkspace();
  ideaWorkspaceInput.addEventListener('keydown',e=>{if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)){e.preventDefault();ideaWorkspaceForm.requestSubmit()}});
  ideaWorkspaceForm.onsubmit=e=>{e.preventDefault();const q=ideaWorkspaceInput.value.trim();if(!q)return;ideaWorkspaceInput.value='';autosizeIdeaWorkspace();void runIdeaWorkspace(q)};
- $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;window.matchMedia?.('(min-width: 950px)')?.addEventListener?.('change',()=>placeGlobalMenu(state.screen));$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice(); }
+ $('#todayCard').onclick=()=>{state.date=today();state.view='month';show('calendar')};$('#backButton').onclick=()=>show('assistant');$('#todayButton').onclick=()=>{state.date=today();save();renderCalendar()};$('#prevButton').onclick=()=>move(-1);$('#nextButton').onclick=()=>move(1);$$('[data-view]').forEach(b=>b.onclick=()=>{state.view=b.dataset.view;save();renderCalendar()});$('#menuButton').onclick=openDrawer;window.matchMedia?.('(min-width: 950px)')?.addEventListener?.('change',()=>placeGlobalMenu(state.screen));$('#closeDrawer').onclick=closeDrawer;$('#drawerBackdrop').onclick=closeDrawer;$('#closeModal').onclick=closeModal;$('#modalBackdrop').onclick=closeModal;$$('[data-action]').forEach(b=>b.onclick=()=>{closeDrawer();action(b.dataset.action)});initVoice();void initWindowShell(); }
 /* Pull-to-refresh checks existing sources; generating entirely new Ideas remains an explicit choice. */
 function initSituationPullRefresh(){
   for(const view of ['feed','ideas']){

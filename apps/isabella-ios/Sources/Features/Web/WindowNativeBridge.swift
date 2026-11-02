@@ -28,12 +28,12 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return
         }
         Task { @MainActor in
-            let reply = await self.handle(type)
+            let reply = await self.handle(type, body)
             replyHandler(reply, nil)
         }
     }
 
-    private func handle(_ type: String) async -> [String: Any] {
+    private func handle(_ type: String, _ body: [String: Any]) async -> [String: Any] {
         let v = Self.version
         switch type {
         case "session.get":
@@ -61,13 +61,21 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "session.signOut":
             await portal?.onSignOut?()
             return ["v": v, "ok": true]
+        case "nav.open":
+            // The page asks for a section that belongs to another tab.
+            guard let section = body["section"] as? String,
+                  ["assistant", "feed", "ideas", "work", "calendar"].contains(section) else {
+                return ["v": v, "ok": false, "error": "unsupported"]
+            }
+            portal?.onNavigate?(section)
+            return ["v": v, "ok": true]
         case "app.info":
             let info = Bundle.main.infoDictionary ?? [:]
             return ["v": v, "ok": true, "app": [
                 "name": "Window",
                 "version": info["CFBundleShortVersionString"] as? String ?? "",
                 "build": info["CFBundleVersion"] as? String ?? "",
-                "capabilities": ["session.get", "session.signIn", "session.signOut", "app.info"]
+                "capabilities": ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs"]
             ] as [String: Any]]
         default:
             return ["v": v, "ok": false, "error": "unsupported"]

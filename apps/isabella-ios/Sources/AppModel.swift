@@ -6,8 +6,21 @@ import WidgetKit
 @Observable
 final class AppModel {
     enum Section: Hashable { case web, continuity, chat, calendar }
+    // The app's own tab bar; Chat, Tiempo and Work show the shared web page.
+    enum Tab: Hashable { case chat, ahora, tiempo, work, bandeja }
+    enum AhoraMode: Hashable { case ahora, ideas }
 
     var section: Section = .web
+    var tab: Tab = .chat
+    var ahoraMode: AhoraMode = .ahora
+    var akteEntries: [AkteEntry] = []
+    var fristen: [AkteEntry] = []
+    var feed: [FeedItem] = []
+    var ahoraError: String?
+    var bandejaError: String?
+    var deciding: Set<String> = []
+    var decided: [String: String] = [:]
+    private var pendingWebExtra: [String: String] = [:]
     var messages: [ChatMessage] = []
     var tasks: [AgendaTask] = []
     var events: [AgendaEvent] = []
@@ -35,6 +48,103 @@ final class AppModel {
         webPortal.sessionProvider = { [backend] in try await backend.bridgeSession() }
         webPortal.onSignOut = { [weak self] in await self?.logout() }
         webPortal.onSessionLost = { [weak self] in self?.isAuthenticated = false }
+        webPortal.onNavigate = { [weak self] section in self?.open(section: section) }
+    }
+
+    // MARK: Tabs and the shared web page
+
+    var openProposals: Int { akteEntries.filter { decided[$0.id] == nil }.count }
+
+    // A section the page asked for (nav.open), or one the app opens itself.
+    func open(section: String, extra: [String: String] = [:]) {
+        pendingWebExtra = extra
+        switch section {
+        case "assistant": tab = .chat
+        case "calendar": tab = .tiempo
+        case "work": tab = .work
+        case "feed": ahoraMode = .ahora; tab = .ahora
+        case "ideas": ahoraMode = .ideas; tab = .ahora
+        default: return
+        }
+        showWebSection()
+    }
+
+    func showWebSection() {
+        let extra = pendingWebExtra
+        pendingWebExtra = [:]
+        switch tab {
+        case .chat: webPortal.show(section: "assistant", extra: extra)
+        case .tiempo: webPortal.show(section: "calendar", extra: extra)
+        case .work: webPortal.show(section: "work", extra: extra)
+        case .ahora where ahoraMode == .ideas: webPortal.show(section: "ideas")
+        default: break
+        }
+    }
+
+    func openProject(_ key: String?) {
+        open(section: "work", extra: key.map { ["project": $0] } ?? [:])
+    }
+
+    func discuss(_ item: FeedItem) {
+        open(section: "assistant", extra: ["draft": item.prompt ?? item.title])
+    }
+
+    // MARK: Ahora and Bandeja
+
+    func reloadAhora() async {
+        do {
+            async let entries = backend.pendingAkteEntries()
+            async let deadlines = backend.upcomingFristen()
+            async let items = backend.feedItems()
+            async let todays = backend.todayTasks()
+            async let upcoming = backend.events()
+            let (e, d, f, t, v) = try await (entries, deadlines, items, todays, upcoming)
+            akteEntries = e
+            fristen = d
+            feed = f
+            tasks = t
+            events = v.filter { $0.startDate.map(Calendar.current.isDateInToday) ?? false }
+            decided = decided.filter { id, _ in e.contains { $0.id == id } }
+            ahoraError = nil
+            bandejaError = nil
+        } catch {
+            ahoraError = error.localizedDescription
+            bandejaError = error.localizedDescription
+        }
+    }
+
+    func reloadBandeja() async {
+        do {
+            akteEntries = try await backend.pendingAkteEntries()
+            decided = [:]
+            bandejaError = nil
+        } catch { bandejaError = error.localizedDescription }
+    }
+
+    // Saved only when the backend confirms it; otherwise the card stays as it was.
+    func decide(_ entry: AkteEntry, _ decision: AkteDecision) async {
+        guard !deciding.contains(entry.id), decided[entry.id] == nil else { return }
+        deciding.insert(entry.id)
+        defer { deciding.remove(entry.id) }
+        do {
+            switch decision {
+            case .confirm: try await backend.decideAkteEntry(id: entry.id, status: "confirmed")
+            case .reject: try await backend.decideAkteEntry(id: entry.id, status: "rejected")
+            case .resolve: try await backend.decideAkteEntry(id: entry.id, status: "resolved")
+            case .makeTask: try await backend.akteEntryToTask(id: entry.id)
+            }
+            decided[entry.id] = {
+                switch decision {
+                case .confirm: return "Bestätigt · guardado en la Akte"
+                case .resolve: return "Geklärt · guardado en la Akte"
+                case .makeTask: return "Aufgabe angelegt"
+                case .reject: return entry.kind == .widerspruch ? "Kein Widerspruch" : "Verworfen"
+                }
+            }()
+            bandejaError = nil
+        } catch {
+            bandejaError = "No pude guardar la decisión: " + error.localizedDescription
+        }
     }
 
     func bootstrap() async {

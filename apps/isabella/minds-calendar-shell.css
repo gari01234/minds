@@ -777,3 +777,6 @@ body .app .agenda-item.frist-item .meta{color:#b3261e}
 .cockpit-why p{margin:4px 0 6px;line-height:1.45}
 .cockpit-why blockquote{margin:0;padding-left:10px;border-left:2px solid #d3d4d2;font-family:var(--m-type-reading,Georgia,serif);line-height:1.45;color:#4a4e57}
 
+/* 16 · Window iPhone app: the app draws its own tab bar; the page drops its own. */
+body.window-app-shell .app .main-nav{display:none!important}
+

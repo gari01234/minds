@@ -255,12 +255,13 @@ actor BackendClient {
 
     private func network(_ path: String, method: String = "GET",
                          query: [URLQueryItem] = [], json: [String: Any]? = nil,
-                         token: String? = nil) async throws -> Data {
+                         token: String? = nil, prefer: String? = nil) async throws -> Data {
         var req = URLRequest(url: try url(path, query: query))
         req.httpMethod = method
         req.setValue(publicKey, forHTTPHeaderField: "apikey")
         req.setValue("Bearer " + (token ?? publicKey), forHTTPHeaderField: "Authorization")
         req.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let prefer { req.setValue(prefer, forHTTPHeaderField: "Prefer") }
         if let json {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             req.httpBody = try JSONSerialization.data(withJSONObject: json)
@@ -515,6 +516,119 @@ actor BackendClient {
             .init(name: "order", value: "title.asc")
         ], token: token)
         return try JSONDecoder().decode([AgendaTask].self, from: data)
+    }
+
+    // MARK: Ahora and Bandeja (the same rows and rules as the web app's Panorama)
+
+    private func rows(_ data: Data) throws -> [[String: Any]] {
+        guard let list = try JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+        else { throw BackendError.invalidResponse }
+        return list
+    }
+
+    private static func stamp() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
+    }
+
+    // Entries Isabella proposed and Gari has not decided yet, across projects.
+    func pendingAkteEntries() async throws -> [AkteEntry] {
+        let token = try await access()
+        let data = try await network("rest/v1/minds_work_memory", query: [
+            .init(name: "select", value: "id,project_id,memory_type,title,body,status,occurred_at,metadata,created_at,isabella_projects(name,client_key)"),
+            .init(name: "status", value: "eq.proposed"),
+            .init(name: "memory_type", value: "in.(deadline,decision,commitment,open_question)"),
+            .init(name: "order", value: "created_at.desc"),
+            .init(name: "limit", value: "100")
+        ], token: token)
+        return try rows(data).compactMap(AkteEntry.init(json:))
+    }
+
+    // Confirmed Fristen from today on, soonest first.
+    func upcomingFristen() async throws -> [AkteEntry] {
+        let token = try await access()
+        let start = ISO8601DateFormatter().string(from: Calendar.current.startOfDay(for: Date()))
+        let data = try await network("rest/v1/minds_work_memory", query: [
+            .init(name: "select", value: "id,project_id,memory_type,title,body,status,occurred_at,metadata,created_at,isabella_projects(name,client_key)"),
+            .init(name: "status", value: "eq.confirmed"),
+            .init(name: "memory_type", value: "eq.deadline"),
+            .init(name: "occurred_at", value: "gte." + start),
+            .init(name: "order", value: "occurred_at.asc"),
+            .init(name: "limit", value: "10")
+        ], token: token)
+        return try rows(data).compactMap(AkteEntry.init(json:))
+    }
+
+    // Confirmed / rejected / resolved, only while still proposed; done only if the row says so.
+    func decideAkteEntry(id: String, status: String) async throws {
+        guard ["confirmed", "rejected", "resolved"].contains(status), UUID(uuidString: id) != nil
+        else { throw BackendError.invalidResponse }
+        let token = try await access()
+        let now = Self.stamp()
+        var patch: [String: Any] = ["status": status, "updated_at": now]
+        if status == "confirmed" { patch["confirmed_at"] = now }
+        let data = try await network("rest/v1/minds_work_memory", method: "PATCH", query: [
+            .init(name: "id", value: "eq." + id),
+            .init(name: "status", value: "eq.proposed")
+        ], json: patch, token: token, prefer: "return=representation")
+        let saved = try rows(data)
+        guard saved.count == 1, saved[0]["status"] as? String == status else {
+            throw BackendError.rejected("Esta propuesta ya no está pendiente.")
+        }
+    }
+
+    // A proposed Aufgabe becomes a real task in the project, then the entry is confirmed.
+    func akteEntryToTask(id: String) async throws {
+        guard UUID(uuidString: id) != nil else { throw BackendError.invalidResponse }
+        let token = try await access()
+        let found = try rows(try await network("rest/v1/minds_work_memory", query: [
+            .init(name: "select", value: "id,title,occurred_at,metadata,status,project_id"),
+            .init(name: "id", value: "eq." + id)
+        ], token: token))
+        guard let entry = found.first, entry["status"] as? String == "proposed" else {
+            throw BackendError.rejected("Esta propuesta ya no está pendiente.")
+        }
+        let meta = entry["metadata"] as? [String: Any] ?? [:]
+        let due = (meta["faellig"] as? String) ?? (entry["occurred_at"] as? String).map { String($0.prefix(10)) }
+        let task: [String: Any] = [
+            "title": entry["title"] as? String ?? "",
+            "project_id": entry["project_id"].map { $0 as Any } ?? NSNull(),
+            "due_date": due.map { $0 as Any } ?? NSNull(),
+            "work_status": "not_started",
+            "notes": (meta["quelle"] as? String).map { "Quelle: " + $0 } ?? "",
+            "metadata": ["source": "akte_pflege", "memory_id": id]
+        ]
+        let created = try rows(try await network("rest/v1/isabella_tasks", method: "POST",
+                                                 json: task, token: token, prefer: "return=representation"))
+        guard let taskID = created.first?["id"] as? String else { throw BackendError.verificationFailed }
+        var newMeta = meta
+        newMeta["task_id"] = taskID
+        let now = Self.stamp()
+        let saved = try rows(try await network("rest/v1/minds_work_memory", method: "PATCH", query: [
+            .init(name: "id", value: "eq." + id),
+            .init(name: "status", value: "eq.proposed")
+        ], json: ["status": "confirmed", "confirmed_at": now, "updated_at": now, "metadata": newMeta],
+           token: token, prefer: "return=representation"))
+        guard saved.count == 1 else { throw BackendError.verificationFailed }
+    }
+
+    // Isabella's current situation cards (the web app keeps them fresh), newest generation only.
+    func feedItems() async throws -> [FeedItem] {
+        let token = try await access()
+        let data = try await network("rest/v1/minds_surface_items", query: [
+            .init(name: "select", value: "*"),
+            .init(name: "surface", value: "eq.feed"),
+            .init(name: "status", value: "eq.active"),
+            .init(name: "agent", value: "eq.isabella"),
+            .init(name: "order", value: "generated_at.desc"),
+            .init(name: "limit", value: "40")
+        ], token: token)
+        let list = try rows(data)
+        let generation = (list.first?["metadata"] as? [String: Any])?["generation_id"] as? String
+        return list
+            .filter { generation == nil || (($0["metadata"] as? [String: Any])?["generation_id"] as? String) == generation }
+            .compactMap(FeedItem.init(json:))
     }
 
     func history() async throws -> [ChatMessage] {
