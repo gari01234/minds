@@ -755,6 +755,8 @@ button.cockpit-line:hover .cockpit-line-title{text-decoration:underline}
     box-shadow:0 0 0 1px rgba(0,0,0,.06),0 2px 10px rgba(0,0,0,.08);font-size:17px;letter-spacing:.06em;color:#1d1d1f;
   }
   body[data-section="assistant"]:not(.desk-enabled) .app .assistant-scroll{padding-top:calc(env(safe-area-inset-top,0px) + 12px)!important}
+  /* No orb: the Hoy line leads the chat; keep it clear of the floating ••• button. */
+  body[data-section="assistant"]:not(.desk-enabled) .app .today-card{align-self:stretch!important;width:auto!important;max-width:none!important;margin-left:0!important;margin-right:64px!important}
 }
 /* Task checkboxes stay round: an older rule forced 20px height while min-width kept 24px. */
 .app .task-check,.app .task-list-check{flex:0 0 auto;aspect-ratio:1/1}
@@ -765,3 +767,13 @@ body .app .agenda-item.frist-item{width:100%;border:0;border-bottom:1px solid #e
 body .app .agenda-item.frist-item .meta{color:#b3261e}
 .app .wk-chip.frist-chip,.app .day-all .frist-chip{display:flex;align-items:center;gap:6px;border:1px solid #f3c7c3;background:#fff5f4;color:#8c1d18;cursor:pointer}
 .app .frist-chip .frist-mark{width:8px;height:8px;border-radius:2px}
+
+/* 15 · Panorama: why Isabella proposes an entry (explanation + quote from the source) */
+.cockpit-why{margin-top:2px;font-size:13.5px;color:#3d4046}
+.cockpit-why summary{cursor:pointer;min-height:32px;display:inline-flex;align-items:center;font-weight:600;color:#235c84;list-style:none}
+.cockpit-why summary::-webkit-details-marker{display:none}
+.cockpit-why summary::after{content:"›";margin-left:6px;transition:transform var(--m-motion-fast,160ms)}
+.cockpit-why[open] summary::after{transform:rotate(90deg)}
+.cockpit-why p{margin:4px 0 6px;line-height:1.45}
+.cockpit-why blockquote{margin:0;padding-left:10px;border-left:2px solid #d3d4d2;font-family:var(--m-type-reading,Georgia,serif);line-height:1.45;color:#4a4e57}
+

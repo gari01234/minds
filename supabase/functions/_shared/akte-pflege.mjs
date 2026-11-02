@@ -29,9 +29,9 @@ export const PFLEGE_SCHEMA={type:'object',additionalProperties:false,
       aendern:{type:'boolean'},phase:str,notizen:str,grund:str,
       meilensteine:arr({datum:str,was:str}),beteiligte:arr({rolle:str,name:str}),prioritaeten:{type:'array',items:str}},
       required:['aendern','phase','notizen','grund','meilensteine','beteiligte','prioritaeten']},
-    fristen:arr({titel:str,datum:str,quelle:str,thema:str}),
-    entscheidungen:arr({titel:str,datum:str,quelle:str,thema:str}),
-    aufgaben:arr({titel:str,faellig:str,quelle:str,thema:str}),
+    fristen:arr({titel:str,datum:str,quelle:str,thema:str,grund:str,zitat:str}),
+    entscheidungen:arr({titel:str,datum:str,quelle:str,thema:str,grund:str,zitat:str}),
+    aufgaben:arr({titel:str,faellig:str,quelle:str,thema:str,grund:str,zitat:str}),
     widersprueche:arr({titel:str,details:str,quellen:str})},
   required:['zusammenfassung','steckbrief','fristen','entscheidungen','aufgaben','widersprueche']};
 
@@ -42,6 +42,7 @@ export const PFLEGE_INSTRUCTIONS=[
   'Regeln:',
   '- Nur was in den neuen Quellen ausdrücklich steht. Nichts erfinden, nichts schätzen. Jede Frist, Entscheidung und Aufgabe braucht eine Quelle (Dateiname oder Thema mit Datum).',
   '- Fristen: nur mit konkretem Datum (JJJJ-MM-TT). Relative Angaben nur umrechnen, wenn das Bezugsdatum in der Quelle steht.',
+  '- Zu jeder Frist, Entscheidung und Aufgabe: grund = EIN kurzer Satz, warum du es vorschlägst (woraus es folgt); zitat = die wörtliche Stelle aus der Quelle, höchstens 200 Zeichen, unverändert. Gibt es keine wörtliche Stelle, zitat leer lassen.',
   '- Entscheidungen: nur was jemand entschieden oder angewiesen hat (Bauherr, Gari, Fachplaner), nicht was nur besprochen wurde.',
   '- Aufgaben: konkrete Handlungen für Garis Büro, die sich aus den Quellen ergeben; nicht für Dritte.',
   '- Nichts vorschlagen, was schon im Register, in den Aufgaben oder als verworfen markiert ist (auch nicht umformuliert).',
@@ -149,7 +150,8 @@ export async function applyResult(akte,project,result,existingTitles=[]){
   const reg=async(list,art,max,key)=>{
     for(const e of (list||[]).slice(0,max)){
       if(!nonEmpty(e.titel)||isKnown(e.titel))continue;
-      const x=await akte.recordDecision({project:project.id,titel:nonEmpty(e.titel),art,datum:day(e.datum),quelle:nonEmpty(e.quelle)||undefined,thema:nonEmpty(e.thema)||undefined,bestaetigt:false});
+      const x=await akte.recordDecision({project:project.id,titel:nonEmpty(e.titel),art,datum:day(e.datum),quelle:nonEmpty(e.quelle)||undefined,thema:nonEmpty(e.thema)||undefined,
+        details:nonEmpty(e.grund)||undefined,zitat:nonEmpty(e.zitat)||undefined,bestaetigt:false});
       if(x&&x.eingetragen){out[key]++;known.push(e.titel)}
     }
   };
@@ -157,7 +159,8 @@ export async function applyResult(akte,project,result,existingTitles=[]){
   await reg(r.entscheidungen,'entscheidung',LIMITS.entscheidungen,'entscheidungen');
   for(const a of (r.aufgaben||[]).slice(0,LIMITS.aufgaben)){
     if(!nonEmpty(a.titel)||isKnown(a.titel))continue;
-    const x=await akte.proposeEntry(project.id,{art:'aufgabe',titel:a.titel,datum:day(a.faellig),quelle:nonEmpty(a.quelle)||undefined,thema:nonEmpty(a.thema)||undefined});
+    const x=await akte.proposeEntry(project.id,{art:'aufgabe',titel:a.titel,datum:day(a.faellig),quelle:nonEmpty(a.quelle)||undefined,thema:nonEmpty(a.thema)||undefined,
+      details:nonEmpty(a.grund)||undefined,zitat:nonEmpty(a.zitat)||undefined});
     if(x&&!x.skipped){out.aufgaben++;known.push(a.titel)}
   }
   for(const w of (r.widersprueche||[]).slice(0,LIMITS.widersprueche)){

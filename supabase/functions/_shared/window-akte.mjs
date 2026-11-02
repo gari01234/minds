@@ -181,7 +181,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     return {id:raw,title:'Ordner',text:files.map(f=>'file:'+f.id+' · '+f.name+' · '+String(f.created_at||'').slice(0,10)).join('\n')||'(leer)',metadata:{dateien:files.length}};
   }
 
-  async function addRegister(p,{titel,details,datum,quelle,art='entscheidung',bestaetigt=false,thema},existing){
+  async function addRegister(p,{titel,details,datum,quelle,zitat,art='entscheidung',bestaetigt=false,thema},existing){
     const title=String(titel||'').trim().slice(0,240);
     if(!title)return null;
     const type=art==='frist'?'deadline':'decision';
@@ -189,7 +189,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     const at=isDay(datum)?datum+'T12:00:00Z':null;
     const row={user_id:userId,project_id:p.id,memory_type:type,title,body:String(details||'').slice(0,4000),status:bestaetigt?'confirmed':'proposed',
       occurred_at:at,confirmed_at:bestaetigt?stamp():null,
-      metadata:{source:ACTOR.source,quelle:quelle?String(quelle).slice(0,300):undefined,thema_id:thema?thema.id:undefined,thema:thema?thema.title:undefined},
+      metadata:{source:ACTOR.source,quelle:quelle?String(quelle).slice(0,300):undefined,zitat:zitat?String(zitat).slice(0,300):undefined,thema_id:thema?thema.id:undefined,thema:thema?thema.title:undefined},
       provenance:[{kind:ACTOR.prov,thread_id:thema?thema.id:null,at:stamp()}]};
     const saved=must(await sb.from('minds_work_memory').insert(row).select('id,status').single(),'register_insert');
     return {id:'memo:'+saved.id,titel:title,art:type==='deadline'?'Frist':'Entscheidung',status:saved.status};
@@ -323,7 +323,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
   }
 
   // Proposed tasks and contradictions (nightly Akte-Pflege). Never re-proposes something Gari already discarded.
-  async function proposeEntry(projectRef,{art,titel,details,datum,quelle,thema}={}){
+  async function proposeEntry(projectRef,{art,titel,details,datum,quelle,zitat,thema}={}){
     const p=await base.resolveProject(projectRef);
     const type=art==='aufgabe'?'commitment':art==='widerspruch'?'open_question':null;
     if(!type)throw new ToolError('art debe ser aufgabe o widerspruch.');
@@ -333,7 +333,7 @@ export function createAkteTools({sb,userId,base,now=()=>new Date(),uuid=()=>cryp
     let topic=null;if(thema){const {match}=matchTopic(await threadsOf(p.id),thema);topic=match}
     const row={user_id:userId,project_id:p.id,memory_type:type,title,body:String(details||'').slice(0,4000),status:'proposed',
       occurred_at:isDay(datum)?datum+'T12:00:00Z':null,
-      metadata:{source:ACTOR.source,kind:art,quelle:quelle?String(quelle).slice(0,300):undefined,faellig:isDay(datum)?datum:undefined,thema_id:topic?topic.id:undefined,thema:topic?topic.title:undefined},
+      metadata:{source:ACTOR.source,kind:art,quelle:quelle?String(quelle).slice(0,300):undefined,zitat:zitat?String(zitat).slice(0,300):undefined,faellig:isDay(datum)?datum:undefined,thema_id:topic?topic.id:undefined,thema:topic?topic.title:undefined},
       provenance:[{kind:ACTOR.prov,thread_id:topic?topic.id:null,at:stamp()}]};
     const saved=must(await sb.from('minds_work_memory').insert(row).select('id,status').single(),'entry_insert');
     return {id:'memo:'+saved.id,titel:title,art,status:saved.status};

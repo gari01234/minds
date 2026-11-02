@@ -2647,7 +2647,7 @@ function initVoice(){
     if(phase==='recording'||phase==='transcribing'){cancel();return}
     cancel();
   };
-  $('#micButton').onclick=start;$('#orbButton').onclick=start;
+  $('#micButton').onclick=start;
   $('#focusClose').onclick=cancel;primary.onclick=stop;secondary.onclick=secondaryAction;
 }
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';const t=$('#focusTranscript');if(t){t.value='';t.textContent='';t.readOnly=true}}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}

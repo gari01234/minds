@@ -12,7 +12,6 @@ document.body.innerHTML = `
 <div class="app" id="app">
   <header class="topbar">
     <div class="topbar-brand"><div class="eyebrow">MINDS</div></div>
-    <div id="orbDock" class="orb-dock" aria-label="Isabella"></div>
     <div class="top-actions"><button id="menuButton" class="dots" aria-label="Menú">•••</button></div>
   </header>
 
@@ -31,7 +30,6 @@ document.body.innerHTML = `
   <main id="swipeArea" class="swipe-area">
     <section id="assistantScreen" class="screen active" data-screen="assistant">
       <div class="assistant-scroll">
-        <div id="orbHome" class="orb-home"><button id="orbButton" class="orb-button" aria-label="Hablar con Isabella"><span class="orb-haze orb-haze-a"></span><span class="orb-haze orb-haze-b"></span><span class="orb-core"></span></button></div>
         <button id="todayCard" class="today-card"><span class="today-title">Hoy</span><span id="todaySummary" class="today-summary">0 eventos · 0 tareas</span><span id="todayNext" class="today-next">Sin próxima cita</span><span class="chevron">›</span></button>
         <div id="messages" class="messages" aria-live="polite"></div>
       </div>

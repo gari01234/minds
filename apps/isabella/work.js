@@ -210,13 +210,19 @@ function cockpitSource(r){
   const bits=[r.metadata?.thema,r.metadata?.quelle,r.metadata?.source==='isabella_akte_pflege'?'propuesta de Isabella':r.metadata?.source==='claude_connector'?'Claude':''].filter(Boolean);
   return bits.length?'<small>'+esc(bits.join(' · '))+'</small>':'';
 }
+// Why Isabella proposes it: her one-line reason and the exact passage of the source.
+function cockpitWhy(r){
+  const why=String(r.body||'').trim(),quote=String(r.metadata?.zitat||'').trim();
+  if(!why&&!quote)return '';
+  return '<details class="cockpit-why"><summary>Por qué</summary>'+(why?'<p>'+esc(why)+'</p>':'')+(quote?'<blockquote>'+esc(quote)+'</blockquote>':'')+'</details>';
+}
 function cockpitParaTi(m){
   const cards=[];
   for(const r of m.conflicts)cards.push('<article class="cockpit-card is-conflict"><span class="cockpit-kind">Widerspruch</span><p>'+esc(r.title)+'</p>'+(r.body?'<small class="cockpit-detail">'+esc(r.body)+'</small>':'')+
     '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="resolved">Geklärt</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Kein Widerspruch</button></div></article>');
-  for(const r of m.pending)cards.push('<article class="cockpit-card"><span class="cockpit-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(cockpitShort(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+
+  for(const r of m.pending)cards.push('<article class="cockpit-card"><span class="cockpit-kind">'+(r.memory_type==='deadline'?'Frist':'Entscheidung')+(r.occurred_at?' · '+esc(cockpitShort(r.occurred_at)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
     '<div class="cockpit-actions"><button type="button" data-akte-id="'+esc(r.id)+'" data-akte-decide="confirmed">Bestätigen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
-  for(const r of m.proposedTasks)cards.push('<article class="cockpit-card"><span class="cockpit-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(cockpitShort(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+
+  for(const r of m.proposedTasks)cards.push('<article class="cockpit-card"><span class="cockpit-kind">Aufgabe'+(r.metadata?.faellig?' · bis '+esc(cockpitShort(r.metadata.faellig)):'')+'</span><p>'+esc(r.title)+'</p>'+cockpitSource(r)+cockpitWhy(r)+
     '<div class="cockpit-actions"><button type="button" data-akte-task="'+esc(r.id)+'">Als Aufgabe anlegen</button><button type="button" class="secondary" data-akte-id="'+esc(r.id)+'" data-akte-decide="rejected">Verwerfen</button></div></article>');
   for(const t of m.overdue)cards.push('<article class="cockpit-card is-overdue"><span class="cockpit-kind">Vencida · '+esc(cockpitIn(cockpitDayDiff(m.today,t.due_date)))+'</span><p>'+esc(t.title||'Sin título')+'</p>'+(t.assignee?'<small>'+esc(t.assignee)+'</small>':'')+
     '<div class="cockpit-actions"><button type="button" class="secondary" data-work-edit-task="'+esc(t.id)+'">Abrir tarea</button><button type="button" class="secondary" data-cockpit-done="'+esc(t.id)+'">Hecho</button></div></article>');

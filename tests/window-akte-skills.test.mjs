@@ -58,9 +58,9 @@ const fixture=()=>({
 });
 const result=over=>({zusammenfassung:'Encontré el plazo de entrega del Entwurf.',
   steckbrief:{aendern:true,phase:'LPH 3 Entwurfsplanung',notizen:'',grund:'Abgabe genannt',meilensteine:[{datum:'2026-11-13',was:'Abgabe Entwurf'}],beteiligte:[],prioritaeten:[]},
-  fristen:[{titel:'Abgabe Entwurf',datum:'2026-11-13',quelle:'AW_ Abgabe Entwurf.eml.md',thema:''},{titel:'Ohne Datum',datum:'bald',quelle:'',thema:''},{titel:'Lichtkonzept an ELT',datum:'2026-11-20',quelle:'x',thema:''}],
-  entscheidungen:[{titel:'Lichtbänder im Ausstellungsraum',datum:'2026-11-03',quelle:'Sitzungsübergabe',thema:'Lichtplanung'}],
-  aufgaben:[{titel:'Entwurfspläne plotten',faellig:'2026-11-12',quelle:'AW_ Abgabe Entwurf.eml.md',thema:''}],
+  fristen:[{titel:'Abgabe Entwurf',datum:'2026-11-13',quelle:'AW_ Abgabe Entwurf.eml.md',thema:'',grund:'Der Bauherr nennt den Abgabetermin.',zitat:'Bitte reichen Sie den Entwurf bis 13.11. ein.'},{titel:'Ohne Datum',datum:'bald',quelle:'',thema:'',grund:'',zitat:''},{titel:'Lichtkonzept an ELT',datum:'2026-11-20',quelle:'x',thema:'',grund:'',zitat:''}],
+  entscheidungen:[{titel:'Lichtbänder im Ausstellungsraum',datum:'2026-11-03',quelle:'Sitzungsübergabe',thema:'Lichtplanung',grund:'',zitat:''}],
+  aufgaben:[{titel:'Entwurfspläne plotten',faellig:'2026-11-12',quelle:'AW_ Abgabe Entwurf.eml.md',thema:'',grund:'Für die Abgabe am 13.11. werden Pläne gebraucht.',zitat:''}],
   widersprueche:[{titel:'Abgabetermin weicht vom Protokoll ab',details:'E-Mail 13.11., Protokoll 20.11.',quellen:'AW_ Abgabe; Protokoll 05.10.'}],...over});
 
 test('Skill library: one source, byte-identical browser copy, nine German skills incl. the original prompts',()=>{
@@ -132,10 +132,13 @@ test('Akte-Pflege: only new material, Window skipped, nothing-new costs nothing,
   const mem=sb.db.minds_work_memory;
   const frist=mem.find(m=>m.title==='Abgabe Entwurf');
   assert.equal(frist.status,'proposed');assert.equal(frist.memory_type,'deadline');assert.equal(frist.metadata.source,'isabella_akte_pflege');
+  // Why Isabella proposes it: her reason in the body, the exact passage in metadata.zitat.
+  assert.equal(frist.body,'Der Bauherr nennt den Abgabetermin.');assert.equal(frist.metadata.zitat,'Bitte reichen Sie den Entwurf bis 13.11. ein.');
+  assert.equal(mem.find(m=>m.title==='Lichtbänder im Ausstellungsraum').metadata.zitat,undefined,'no quote is invented');
   assert.ok(!mem.some(m=>m.title==='Ohne Datum'),'a Frist needs a concrete date');
   assert.equal(mem.filter(m=>m.title==='Lichtkonzept an ELT').length,1,'a discarded Frist is not proposed again');
   assert.equal(mem.find(m=>m.title==='Lichtbänder im Ausstellungsraum').metadata.thema,'Lichtplanung');
-  const task=mem.find(m=>m.memory_type==='commitment');assert.equal(task.metadata.kind,'aufgabe');assert.equal(task.metadata.faellig,'2026-11-12');assert.equal(task.status,'proposed');
+  const task=mem.find(m=>m.memory_type==='commitment');assert.equal(task.body,'Für die Abgabe am 13.11. werden Pläne gebraucht.');assert.equal(task.metadata.kind,'aufgabe');assert.equal(task.metadata.faellig,'2026-11-12');assert.equal(task.status,'proposed');
   assert.equal(mem.find(m=>m.memory_type==='open_question').metadata.kind,'widerspruch');
   assert.match(mem.find(m=>m.id==='brief').body,/Abgabe Entwurf/,'the Steckbrief is updated directly');
   assert.ok(!sb.db.isabella_tasks.some(t=>t.title==='Entwurfspläne plotten'),'no real task without Gari');
@@ -233,6 +236,17 @@ test('Window UI: Proactividad choices, skills pack install, Panorama actions, un
   // Panorama helpers stay outside the overview render function (it must not write).
   const ov=work.slice(work.indexOf('async function renderOverview(){'),work.indexOf('const knowledgeStates='));
   assert.ok(!ov.includes('.update(')&&!ov.includes('.insert('));
+});
+
+test('Panorama shows why Isabella proposes an entry: her reason and the exact quote, both escaped',()=>{
+  const work=read('apps/isabella/work.js');
+  const fn=work.slice(work.indexOf('function cockpitWhy'),work.indexOf('function cockpitParaTi'));
+  const cockpitWhy=new Function('esc',fn+';return cockpitWhy;')(s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])));
+  assert.equal(cockpitWhy({body:'',metadata:{}}),'');
+  const html=cockpitWhy({body:'Der Bauherr <nennt> den Termin.',metadata:{zitat:'bis 13.11.'}});
+  assert.match(html,/<details class="cockpit-why"><summary>Por qué<\/summary><p>Der Bauherr &lt;nennt&gt; den Termin\.<\/p><blockquote>bis 13\.11\.<\/blockquote><\/details>/);
+  assert.equal((work.match(/cockpitSource\(r\)\+cockpitWhy\(r\)/g)||[]).length,2,'pending register entries and proposed tasks');
+  assert.match(read('supabase/functions/_shared/akte-pflege.mjs'),/zitat = die wörtliche Stelle aus der Quelle/);
 });
 
 test('Desktop duplicates: same hash, or same name ignoring copy suffixes and same size; the oldest stays',()=>{
