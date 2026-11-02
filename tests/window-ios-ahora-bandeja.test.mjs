@@ -83,3 +83,18 @@ test('the web page joins the app shell only when the app says it has tabs', () =
   ctx.applyWindowShellHash();
   assert.equal(shown.length, before, 'unknown sections are ignored');
 });
+
+test('Ahora lists the day\'s tasks like the web app (due today, plus open tasks whose window spans today)', () => {
+  const day = backend.slice(backend.indexOf('func dayTasks'), backend.indexOf('func feedItems'));
+  assert.match(day, /"\(due_date\.eq\.\\\(today\),and\(start_date\.lte\.\\\(today\),due_date\.gt\.\\\(today\),completed_at\.is\.null\)\)"/);
+  assert.match(day, /"archived_at", value: "is\.null"/);
+  assert.match(day, /if a\.done != b\.done \{ return !a\.done \}/);
+  assert.match(day, /if a\.isSpan != b\.isSpan \{ return !a\.isSpan \}/);
+  assert.match(entries, /parts\.append\("en curso hasta " \+ until\)/);
+  assert.match(ahora, /ForEach\(Array\(model\.dayTasks\.enumerated\(\)\)/);
+  assert.match(ahora, /min reservados"/);
+  assert.match(model, /events = today\.filter \{ \$0\.sessionTaskKey == nil \}/);
+  // The web rule it mirrors.
+  const web = read('apps/isabella/dashboard-model.js');
+  assert.match(web, /task\.startDate < task\.date && task\.startDate <= key && key < task\.date/);
+});

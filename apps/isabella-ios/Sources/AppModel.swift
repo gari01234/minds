@@ -16,6 +16,8 @@ final class AppModel {
     var akteEntries: [AkteEntry] = []
     var fristen: [AkteEntry] = []
     var feed: [FeedItem] = []
+    var dayTasks: [DayTask] = []
+    var sessions: [String: [AgendaEvent]] = [:]
     var ahoraError: String?
     var bandejaError: String?
     var deciding: Set<String> = []
@@ -96,14 +98,17 @@ final class AppModel {
             async let entries = backend.pendingAkteEntries()
             async let deadlines = backend.upcomingFristen()
             async let items = backend.feedItems()
-            async let todays = backend.todayTasks()
+            async let todays = backend.dayTasks()
             async let upcoming = backend.events()
             let (e, d, f, t, v) = try await (entries, deadlines, items, todays, upcoming)
             akteEntries = e
             fristen = d
             feed = f
-            tasks = t
-            events = v.filter { $0.startDate.map(Calendar.current.isDateInToday) ?? false }
+            dayTasks = t
+            let today = v.filter { $0.startDate.map(Calendar.current.isDateInToday) ?? false }
+            // Work sessions belong to their task (web: "10:00 · 120 min reservados").
+            events = today.filter { $0.sessionTaskKey == nil }
+            sessions = Dictionary(grouping: today.filter { $0.sessionTaskKey != nil }, by: { $0.sessionTaskKey ?? "" })
             decided = decided.filter { id, _ in e.contains { $0.id == id } }
             ahoraError = nil
             bandejaError = nil
