@@ -178,6 +178,6 @@ test('Edge Functions deploy only by hand, from main, with the token scoped to on
   assert.match(wf,/github\.ref == 'refs\/heads\/main'/);
   assert.match(wf,/environment: supabase/);
   assert.match(wf,/\[\[ "\$f" =~ \^\[a-z0-9-\]\+\$ \]\]/);
-  assert.match(wf,/supabase functions deploy "\$f" --project-ref "\$PROJECT_REF" --use-api/);
+  assert.match(wf,/supabase functions deploy "\$f" --project-ref "\$PROJECT_REF" --use-api --yes/,'a workflow cannot answer the CLI confirmation');
   assert.match(wf,/Expected 401 from window-mcp/);
 });
