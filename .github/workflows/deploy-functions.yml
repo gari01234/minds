@@ -52,7 +52,8 @@ jobs:
           for f in $FUNCTIONS; do
             echo "::group::Deploying $f"
             # verify_jwt and entrypoint come from supabase/config.toml.
-            supabase functions deploy "$f" --project-ref "$PROJECT_REF" --use-api
+            # --yes: the CLI asks for confirmation and a workflow cannot answer; running it is the confirmation.
+            supabase functions deploy "$f" --project-ref "$PROJECT_REF" --use-api --yes
             echo "::endgroup::"
           done
       - name: Check the Window connector asks for sign-in
