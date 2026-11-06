@@ -8,6 +8,11 @@
   const audio=$("liveAudio"),unlock=$("liveUnlock"),status=$("liveStatus");
   const playback=$("livePlayback"),input=$("liveInput"),output=$("liveOutput");
   const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
+  const ORIGINAL_VOICE="isabella-original-v1";
+  const originalNote=$("liveOriginalNote");
+  const updateVoiceHint=()=>originalNote.classList.toggle("hidden",voicePicker.value!==ORIGINAL_VOICE);
+  voicePicker.addEventListener("change",updateVoiceHint);
+  updateVoiceHint();
   let peer=null,microphone=null,channel=null,timeoutId=null;
   let active=false,epoch=0,sessionReady=false,remoteTrack=false,playbackStarted=false;
   const shownError={
@@ -17,7 +22,12 @@
     live_capacity_unavailable:"Live no está disponible por capacidad del proveedor.",
     live_provider_unavailable:"El proveedor no ha permitido iniciar esta sesión de voz.",
     live_connection_failed:"No fue posible conectar la sesión de audio.",
-    invalid_audio_sdp:"Safari no generó una oferta WebRTC válida."
+    invalid_audio_sdp:"Safari no generó una oferta WebRTC válida.",
+    original_voice_provider_unavailable:"OpenAI no ha permitido crear esta voz original. Puedes seguir utilizando las voces existentes.",
+    original_voice_invalid_response:"OpenAI no devolvió una voz utilizable.",
+    original_voice_save_failed:"La voz se creó, pero no pude guardarla en MINDS. No la utilizaré sin un identificador verificado.",
+    original_voice_unavailable:"No pude recuperar la voz original desde tu sesión de MINDS.",
+    original_voice_not_ready:"La voz original todavía no está preparada."
   };
 
   function state(value,message){
@@ -140,6 +150,19 @@
         audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
       });
       if(token!==epoch){microphone?.getTracks().forEach(t=>t.stop());return}
+      if(voice===ORIGINAL_VOICE){
+        state("connecting","Preparando una voz original para Isabella…");
+        const created=await fetch(cfg.url+"/functions/v1/isabella-live-session",{
+          method:"POST",
+          headers:{apikey:cfg.publishableKey,Authorization:"Bearer "+session.access_token,
+            "Content-Type":"application/json"},
+          body:JSON.stringify({action:"ensure_original_voice"})
+        });
+        const payload=await created.json().catch(()=>null);
+        if(token!==epoch)return;
+        if(!created.ok||payload?.ready!==true)
+          throw new Error(shownError[payload?.error]||"No pude crear la voz original de Isabella.");
+      }
       const connection=new RTCPeerConnection();
       peer=connection;
       connection.addEventListener("track",event=>{

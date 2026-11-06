@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
 <title>Isabella Live · prueba de audio</title>
-<link rel="stylesheet" href="./live.css?v=2">
+<link rel="stylesheet" href="./live.css?v=3">
 </head>
 <body>
 <main class="live-shell">
@@ -30,6 +30,9 @@
     <div class="live-voice-picker">
       <label for="liveVoice">Voz de Isabella</label>
       <select id="liveVoice" name="voice" aria-describedby="liveVoiceHint">
+        <optgroup label="Voz original de Isabella">
+          <option value="isabella-original-v1">Isabella · Original I (crear al probar)</option>
+        </optgroup>
         <optgroup label="Voces principales">
           <option value="marin" selected>Marin · actual</option>
           <option value="cedar">Cedar</option>
@@ -71,6 +74,7 @@
         </optgroup>
       </select>
       <p id="liveVoiceHint">Elige antes de iniciar. Para cambiar de voz, finaliza la conversación y comienza otra.</p>
+      <p id="liveOriginalNote" class="hidden">«Original I» es una voz sintética nueva, no una copia de Sky ni de ninguna actriz. Se crea una sola vez desde una descripción al iniciar la primera prueba, y queda disponible para tus próximas sesiones.</p>
     </div>
     <div class="live-actions">
       <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
@@ -81,6 +85,6 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../shared/supabase-client.js"></script>
-<script src="./live.js?v=2"></script>
+<script src="./live.js?v=3"></script>
 </body>
 </html>

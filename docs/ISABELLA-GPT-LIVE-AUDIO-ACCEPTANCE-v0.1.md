@@ -28,6 +28,16 @@ The Live acceptance page offers the 31 named GPT-Live built-in voices documented
 
 The browser sends only the selected voice name along with the SDP offer. The server rejects invalid, unknown and non-string names before invoking OpenAI. No voice choice is written into MINDS or browser storage; there are no new permissions. Compare vocal quality in the user's real languages (Spanish and German) rather than assuming regional labels imply performance in another language. OpenAI also offers prompt-created custom voices, but creating one is deliberately out of scope of this comparison.
 
+## Original voice design v0.1 (6 November 2026)
+
+A genuine GPT-Live custom voice can now be generated through OpenAI's `POST /v1/audio/voices` with `type:"prompt"`. The live pilot exposes **Isabella · Original I** as a separate, explicitly selected option, retaining all 31 built-in voices.
+
+The brief consists entirely of general adult vocal attributes: moderate pitch, warmth, slight airy texture, lower-mid resonance, relaxed and varied conversational cadence, understated humor, and clear Spanish/German. It expressly forbids imitation of a specific person, actor, fictional character, synthetic voice or branded assistant. The source recording of a named performer is neither needed nor used. No reproduction of Sky or Scarlett Johansson is requested. Similarity to real voices is not guaranteed to be absent, nor is uniqueness guaranteed by the provider; assess the result by listening.
+
+The first selected session calls `ensure_original_voice` on the same owner-authenticated Supabase function. Only the fixed server-side prompt can create a voice; no user-controlled synthesis prompt or audio uploads. A successful voice ID is saved as a separate `live_voice_isabella_original_v1` row in the existing `isabella_preferences` table with owner-scoped RLS and an explicit-confirmed source. Subsequent sessions reuse it. The app never exposes the OpenAI API key. The identifier is not a new memory, agent or authority; the original voice is still governed by the same `store:false` and no-tools voice trial.
+
+A voice creation failure or unavailable `api.voices.write` permission is shown to the owner without affecting any built-in voice option. Creation itself produces no preview audio; a successful initial session is needed to judge the result. **Physical iPhone voice quality and bilingual accuracy remain unverified.** The original session still has the 90-second safety cap, and selection cannot change during playback.
+
 ## Independent release gates
 
 CI must pass, including `node --test tests/isabella-gpt-live-pilot.test.mjs`, `node --check apps/isabella/live/live.js`, `deno check supabase/functions/isabella-live-session/index.ts`, and `node scripts/build.mjs`. The app's pre-existing browser and SQL tests must remain green.
