@@ -31,7 +31,9 @@
       <label for="liveVoice">Voz de Isabella</label>
       <select id="liveVoice" name="voice" aria-describedby="liveVoiceHint">
         <optgroup label="Voz original de Isabella">
-          <option value="isabella-original-v1">Isabella · Original I (crear al probar)</option>
+          <option value="isabella-original-v1">Original I · Primera versión</option>
+          <option value="isabella-original-v2">Original II · Estadounidense cálida</option>
+          <option value="isabella-original-v3">Original III · Estadounidense ligera</option>
         </optgroup>
         <optgroup label="Voces principales">
           <option value="marin" selected>Marin · actual</option>
@@ -74,7 +76,7 @@
         </optgroup>
       </select>
       <p id="liveVoiceHint">Elige antes de iniciar. Para cambiar de voz, finaliza la conversación y comienza otra.</p>
-      <p id="liveOriginalNote" class="hidden">«Original I» es una voz sintética nueva, no una copia de Sky ni de ninguna actriz. Se crea una sola vez desde una descripción al iniciar la primera prueba, y queda disponible para tus próximas sesiones.</p>
+      <p id="liveOriginalNote" class="hidden">Las voces originales se generan desde descripciones propias, sin copiar grabaciones ni identidades vocales. La II prioriza un registro estadounidense cálido y la III uno más ligero y expresivo. Se crean al primer uso y quedan disponibles para compararlas en nuevas sesiones.</p>
     </div>
     <div class="live-actions">
       <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
@@ -85,6 +87,6 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../shared/supabase-client.js"></script>
-<script src="./live.js?v=4"></script>
+<script src="./live.js?v=5"></script>
 </body>
 </html>
