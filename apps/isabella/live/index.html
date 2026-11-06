@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#ffffff">
+<title>Isabella Live · prueba de audio</title>
+<link rel="stylesheet" href="./live.css?v=1">
+</head>
+<body>
+<main class="live-shell">
+  <header class="live-header">
+    <a href="../" aria-label="Volver al chat de Isabella">← Chat de Isabella</a>
+    <span class="live-tag">LIVE · PRUEBA</span>
+  </header>
+  <section class="live-main" aria-labelledby="live-title">
+    <h1 id="live-title">Isabella</h1>
+    <p class="live-subtitle">Conversación de voz · GPT‑Live‑1</p>
+    <div class="live-wave" aria-hidden="true"><span></span><span></span><span></span><span></span><span></span><span></span><span></span></div>
+    <p id="liveStatus" class="live-status" role="status" aria-live="polite">Lista para una prueba de audio.</p>
+    <p id="livePlayback" class="live-playback" role="status" aria-live="polite">El altavoz se activará al recibir audio. Si Safari lo bloquea, pulsa «Activar altavoz».</p>
+    <audio id="liveAudio" class="live-audio" autoplay playsinline controls aria-label="Audio de Isabella"></audio>
+    <button id="liveUnlock" class="live-unlock hidden" type="button">Activar altavoz</button>
+    <div class="live-captions" aria-label="Transcripciones temporales">
+      <div><span>Tú</span><p id="liveInput">—</p></div>
+      <div><span>Isabella</span><p id="liveOutput">—</p></div>
+    </div>
+  </section>
+  <footer class="live-footer">
+    <div class="live-actions">
+      <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
+      <button id="liveStop" type="button" class="secondary" disabled>Finalizar</button>
+    </div>
+    <p class="live-disclaimer">Prueba aislada de sonido y conversación natural. No tiene acceso a tu memoria, tareas ni proyectos. No realiza acciones ni guarda esta conversación en MINDS. Duración máxima: 90 segundos.</p>
+  </footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="../../shared/supabase-client.js"></script>
+<script src="./live.js?v=1"></script>
+</body>
+</html>
