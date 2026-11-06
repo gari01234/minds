@@ -45,14 +45,16 @@ test('no speech at load, and speech is explicitly requested',()=>{
   const b=browser();
   assert.equal(b.voice.available(),true);
   assert.equal(b.spoken.length,0);
-  assert.equal(b.button.classList.speaking,true);
+  assert.equal(b.button.classList.speaking,false);
   assert.equal(b.voice.speak('Hola, Gari.'),true);
   assert.equal(b.spoken.length,1);
   assert.equal(b.spoken[0].text,'Hola, Gari.');
   assert.equal(b.spoken[0].lang,'es-ES');
-  assert.equal(b.button.classList.speaking,false);
-  b.spoken[0].onend();
   assert.equal(b.button.classList.speaking,true);
+  assert.equal(b.button.attributes['aria-label'],'Detener respuesta hablada');
+  b.spoken[0].onend();
+  assert.equal(b.button.classList.speaking,false);
+  assert.equal(b.button.attributes['aria-label'],'Hablar');
 });
 
 test('speech does not read code blocks or external URL destinations',()=>{
@@ -73,9 +75,9 @@ test('spoken reply can always be stopped, old completion cannot clear a new one'
   b.voice.speak('Segunda');
   assert.equal(b.spoken.length,2);
   old.onend();
-  assert.equal(b.button.classList.speaking,false);
-  b.voice.stop();
   assert.equal(b.button.classList.speaking,true);
+  b.voice.stop();
+  assert.equal(b.button.classList.speaking,false);
   assert.ok(b.cancellations>=2);
 });
 
@@ -83,15 +85,15 @@ test('visibility and navigation stop speaking; no playback in a hidden tab',()=>
   const b=browser();
   b.voice.speak('Algo importante');
   b.events.window['isabella:before-screen-change']();
-  assert.equal(b.button.classList.speaking,true);
+  assert.equal(b.button.classList.speaking,false);
   b.document.hidden=true;
   assert.equal(b.voice.speak('No debe sonar'),false);
   b.events.document.visibilitychange();
-  assert.equal(b.button.classList.speaking,true);
+  assert.equal(b.button.classList.speaking,false);
   b.document.hidden=false;
   b.voice.speak('Nuevo mensaje');
   b.events.window.pagehide();
-  assert.equal(b.button.classList.speaking,true);
+  assert.equal(b.button.classList.speaking,false);
 });
 
 test('unsupported browser remains silent without throwing',()=>{
