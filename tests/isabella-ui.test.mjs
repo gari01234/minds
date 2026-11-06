@@ -354,7 +354,8 @@ test('the chat has no orb (Gari, November 2026): voice stays on the microphone b
   assert.ok(!shell.includes('id="orbHome"'));
   assert.ok(!shell.includes('id="orbButton"'));
   assert.ok(shell.includes('id="micButton"'));
-  assert.ok(app.includes("$('#micButton').onclick=start;"));
+  assert.ok(app.includes("$('#micButton').onclick=()=>{if(window.ISABELLA_VOICE_OUTPUT?.isSpeaking())"));
+  assert.ok(app.includes("window.ISABELLA_VOICE_OUTPUT.stop();return;}void start()"));
   assert.ok(!app.includes("$('#orbButton').onclick"));
   // The Hoy line leads the phone chat and stays clear of the floating ••• button.
   assert.match(css,/\.today-card\{align-self:stretch!important;width:auto!important;max-width:none!important;margin-left:0!important;margin-right:64px!important\}/);
