@@ -48,6 +48,12 @@ The fix does **not** reconstruct discontinued ChatGPT Sky or the identifiable vo
 
 The result of the corrected request is not yet known until an authenticated owner retries creation on an actual device. Never mark it as audible PASS based solely on CI.
 
+## Brise selected as the default Live voice (6 November 2026)
+
+After testing the official built-in voices, the owner explicitly chose **Brise** as Isabella's Live voice. Selection is a preference, not a claim that the voice has a native Mexican Spanish accent or resembles a particular performer. Keep her vocal identity separate from any future language/accent tuning.
+
+`apps/isabella/live/index.html` shows Brise as the single default-selected option, the user can still change to any of the 30 other built-in voices or Original I, and the owner-authenticated broker defaults to `brise` if an older client does not send a voice. This touches neither the canonical Isabella chat nor any other audio path. No DB migration and no voice synthesis creation is required.
+
 ## Independent release gates
 
 CI must pass, including `node --test tests/isabella-gpt-live-pilot.test.mjs`, `node --check apps/isabella/live/live.js`, `deno check supabase/functions/isabella-live-session/index.ts`, and `node scripts/build.mjs`. The app's pre-existing browser and SQL tests must remain green.
