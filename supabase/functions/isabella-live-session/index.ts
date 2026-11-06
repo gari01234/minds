@@ -19,7 +19,6 @@ const ORIGINAL_PROMPT=[
   "Produce clear Spanish and German pronunciation, preserving the same recognizable vocal identity across both languages.",
   "Keep emotional modulation nuanced and restrained; allow a lightly playful edge without sounding performative."
 ].join(" ");
-const ORIGINAL_SCRIPT="Buenas tardes. Cuéntame qué tienes en mente y seguimos desde ahí. A veces merece la pena dejar una pequeña pausa antes de contestar. Wir können natürlich auch auf Deutsch sprechen. Sag einfach, was dir gerade wichtig ist.";
 const isVoiceId=(id:unknown)=>typeof id==="string"&&/^voice_[A-Za-z0-9_-]{1,128}$/.test(id);
 async function existingOriginalVoice(client:any,userId:string){
   const {data,error}=await client.from("isabella_preferences")
@@ -94,14 +93,21 @@ Deno.serve(async(req:Request)=>{
         reply=await fetch("https://api.openai.com/v1/audio/voices",{
           method:"POST",
           headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
-          body:JSON.stringify({type:"prompt",name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT,
-            script_hint:ORIGINAL_SCRIPT,model:"auto"}),
+          body:JSON.stringify({type:"prompt",name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT,model:"auto"}),
           signal:ctrl.signal
         });
       }finally{clearTimeout(timer)}
       if(!reply.ok){
-        console.error("isabella_original_voice_create_failed",reply.status);
-        return json({error:"original_voice_provider_unavailable"},502,origin);
+        // A 400 can mean an invalid optional creation script/prompt, not a policy denial.
+        // Never log personal content or expose provider diagnostics to the browser.
+        const failure=await reply.json().catch(()=>null);
+        const safe=(s:unknown)=>typeof s==="string"&&/^[a-zA-Z0-9_.-]{1,80}$/.test(s)?s:"unknown";
+        console.error("isabella_original_voice_create_failed",
+          reply.status,safe(failure?.error?.code),safe(failure?.error?.type),safe(failure?.error?.param));
+        const kind=reply.status===400?"original_voice_invalid_request":
+          reply.status===401||reply.status===403?"original_voice_access_denied":
+          "original_voice_provider_unavailable";
+        return json({error:kind},502,origin);
       }
       const created=await reply.json().catch(()=>null);
       if(created?.object!=="audio.voice"||created?.type!=="prompt"||!isVoiceId(created?.id))
