@@ -24,29 +24,33 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=4/);
+  assert.match(page,/\.\/live\.js\?v=5/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
 
 test('Live voice choices are exactly the documented server allowlist',()=>{
   const allOptions=[...page.matchAll(/<option value="([^"]+)"(?: selected)?>/g)].map(x=>x[1]);
-  const options=allOptions.filter(x=>x!=='isabella-original-v1');
+  const options=allOptions.filter(x=>!x.startsWith('isabella-original-'));
   const m=broker.match(/const LIVE_VOICES=new Set\((\[[^;]+\])\);/);
   assert.ok(m,'missing server-side voice allowlist');
   const accepted=JSON.parse(m[1]);
   assert.equal(options.length,31);
-  assert.equal(allOptions.length,32);
+  assert.equal(allOptions.length,34);
   assert.equal(new Set(options).size,options.length);
   assert.deepEqual([...options].sort(),[...accepted].sort());
   assert.equal(options[0],'marin');
   assert.match(page,/value="marin" selected/);
   assert.match(page,/value="isabella-original-v1"/);
+  assert.match(page,/value="isabella-original-v2"/);
+  assert.match(page,/value="isabella-original-v3"/);
   assert.match(page,/id="liveOriginalNote"/);
   assert.match(page,/id="liveVoice"/);
   assert.match(page,/\.\/live\.css\?v=3/);
   assert.match(broker,/typeof voice!=="string"/);
-  assert.match(broker,/voice!==ORIGINAL_ALIAS/);
+  assert.match(broker,/!voiceProfile\(voice\)/);
+  assert.match(broker,/const ORIGINAL_VARIANTS/);
+  assert.match(broker,/voiceProfile\(alias:string\)/);
   assert.match(broker,/error:"invalid_voice"/);
   assert.match(broker,/audio:\{output:\{voice:voiceValue\}\}/);
   assert.match(client,/const voice=voicePicker\.value;/);
@@ -58,10 +62,10 @@ test('Live voice choices are exactly the documented server allowlist',()=>{
 test('original voice requires explicit selection and uses a non-imitative fixed prompt under owner RLS',()=>{
   assert.match(broker,/const ORIGINAL_ALIAS="isabella-original-v1"/);
   assert.match(broker,/body\?\.action==="ensure_original_voice"/);
-  assert.match(broker,/existingOriginalVoice\(id\.client,user\.id\)/);
+  assert.match(broker,/existingOriginalVoice\(id\.client,user\.id,profile\.preferenceKey\)/);
   assert.match(broker,/https:\/\/api\.openai\.com\/v1\/audio\/voices/);
   assert.match(broker,/type:"prompt"/);
-  assert.match(broker,/prompt:ORIGINAL_PROMPT,model:"auto"/);
+  assert.match(broker,/prompt:profile\.prompt,model:"auto"/);
   assert.doesNotMatch(broker,/script_hint:ORIGINAL_SCRIPT/);
   assert.match(broker,/original_voice_invalid_request/);
   assert.match(broker,/original_voice_access_denied/);
@@ -69,19 +73,46 @@ test('original voice requires explicit selection and uses a non-imitative fixed 
   assert.match(broker,/Do not emulate or imitate any real individual/);
   assert.doesNotMatch(broker,/Johansson|Scarlett|Samantha|Sky|audio_sample|voice_consents/);
   assert.match(broker,/voice_id:created\.id/);
-  assert.match(broker,/preference_key:ORIGINAL_PREF/);
+  assert.match(broker,/preference_key:profile\.preferenceKey/);
+  assert.match(broker,/\.eq\("preference_key",preferenceKey\)/);
   assert.match(broker,/\.eq\("user_id",userId\)/);
   assert.match(broker,/global:\{headers:\{Authorization:"Bearer "\+token\}\}/);
   assert.match(broker,/voiceValue=\{id:ownerVoice\}/);
   assert.match(broker,/error:"original_voice_not_ready"/);
-  assert.match(client,/const ORIGINAL_VOICE="isabella-original-v1"/);
-  assert.match(client,/voice===ORIGINAL_VOICE/);
-  assert.match(client,/action:"ensure_original_voice"/);
+  assert.match(client,/const ORIGINAL_VOICES=new Set/);
+  assert.match(client,/ORIGINAL_VOICES\.has\(voice\)/);
+  assert.match(client,/ORIGINAL_VOICES\.has\(voicePicker\.value\)/);
+  assert.match(client,/action:"ensure_original_voice",voice/);
   assert.match(client,/OpenAI rechazó los parámetros de creación/);
   assert.match(client,/playback\.textContent="Reproducción detenida\."/);
   assert.match(client,/if\(!created\.ok\|\|payload\?\.ready!==true\)/);
   assert.match(client,/voicePicker\.disabled=value==="connecting"\|\|value==="active"/);
   assert.doesNotMatch(client,/OPENAI_API_KEY|SUPABASE_SERVICE_ROLE_KEY|voice_id:created\.id/);
+});
+
+
+test('new variants have a General American acoustic anchor with less Peninsular Spanish and separate live speech steering',()=>{
+  const s=broker;
+  assert.match(s,/"isabella-original-v2":\{/);
+  assert.match(s,/"isabella-original-v3":\{/);
+  assert.match(s,/live_voice_isabella_original_v2/);
+  assert.match(s,/live_voice_isabella_original_v3/);
+  assert.match(s,/General American English/);
+  assert.match(s,/neutral Latin American pronunciation/);
+  assert.match(s,/seseo/);
+  assert.match(s,/voiceConfig\?\[voiceConfig\.liveStyle\]:\[\]/);
+  assert.match(s,/if\(alias===ORIGINAL_ALIAS\)return \{/);
+  assert.match(s,/preferenceKey:ORIGINAL_PREF,name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT/);
+  assert.match(s,/audio:\{output:\{voice:voiceValue\}\}/);
+  const m=s.match(/const ORIGINAL_PROMPT=\[([\s\S]*?)\]\.join\(" "\);/);
+  assert.ok(m,'Original I remains defined');
+  assert.match(m[1],/Produce clear Spanish and German pronunciation/);
+  assert.match(page,/Original II · Estadounidense cálida/);
+  assert.match(page,/Original III · Estadounidense ligera/);
+  assert.match(client,/body:JSON\.stringify\(\{action:"ensure_original_voice",voice\}\)/);
+  // No voice creation on page load, only through a user-initiated Live session.
+  assert.match(client,/startButton\.addEventListener\("click",\(\)=>void start\(\)\)/);
+  assert.doesNotMatch(client,/localStorage|sessionStorage|minds_commit/);
 });
 
 test('broker authenticates owner, hides credentials, rejects oversized SDP and forbids privileged tools',()=>{
