@@ -24,7 +24,7 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=3/);
+  assert.match(page,/\.\/live\.js\?v=4/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -61,6 +61,11 @@ test('original voice requires explicit selection and uses a non-imitative fixed 
   assert.match(broker,/existingOriginalVoice\(id\.client,user\.id\)/);
   assert.match(broker,/https:\/\/api\.openai\.com\/v1\/audio\/voices/);
   assert.match(broker,/type:"prompt"/);
+  assert.match(broker,/prompt:ORIGINAL_PROMPT,model:"auto"/);
+  assert.doesNotMatch(broker,/script_hint:ORIGINAL_SCRIPT/);
+  assert.match(broker,/original_voice_invalid_request/);
+  assert.match(broker,/original_voice_access_denied/);
+  assert.match(broker,/safe\(failure\?\.error\?\.code\)/);
   assert.match(broker,/Do not emulate or imitate any real individual/);
   assert.doesNotMatch(broker,/Johansson|Scarlett|Samantha|Sky|audio_sample|voice_consents/);
   assert.match(broker,/voice_id:created\.id/);
@@ -72,6 +77,8 @@ test('original voice requires explicit selection and uses a non-imitative fixed 
   assert.match(client,/const ORIGINAL_VOICE="isabella-original-v1"/);
   assert.match(client,/voice===ORIGINAL_VOICE/);
   assert.match(client,/action:"ensure_original_voice"/);
+  assert.match(client,/OpenAI rechazó los parámetros de creación/);
+  assert.match(client,/playback\.textContent="Reproducción detenida\."/);
   assert.match(client,/if\(!created\.ok\|\|payload\?\.ready!==true\)/);
   assert.match(client,/voicePicker\.disabled=value==="connecting"\|\|value==="active"/);
   assert.doesNotMatch(client,/OPENAI_API_KEY|SUPABASE_SERVICE_ROLE_KEY|voice_id:created\.id/);
