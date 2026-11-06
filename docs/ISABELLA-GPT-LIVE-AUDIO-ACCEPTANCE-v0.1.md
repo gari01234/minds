@@ -22,6 +22,12 @@ A 90-second timeout, Finish button, pagehide, and background visibility terminat
 
 The user's voice is transmitted to OpenAI to process the active session. This pilot sends no work documents or personal context to GPT-Live. No application audio recording or transcript is written to Supabase or local storage. OpenAI may process transmitted audio subject to its API data handling; `store:false` disables API session storage.
 
+## Voice comparison (6 November 2026)
+
+The Live acceptance page offers the 31 named GPT-Live built-in voices documented in OpenAI's current `/live/sessions` API reference. `marin` remains the default. The owner can select any voice **before** clicking Start; the selection is captured once and locked until the session finishes. Switching voices therefore requires starting a new (billable, 90-second maximum) session; changing a voice mid-stream is not supported by the API.
+
+The browser sends only the selected voice name along with the SDP offer. The server rejects invalid, unknown and non-string names before invoking OpenAI. No voice choice is written into MINDS or browser storage; there are no new permissions. Compare vocal quality in the user's real languages (Spanish and German) rather than assuming regional labels imply performance in another language. OpenAI also offers prompt-created custom voices, but creating one is deliberately out of scope of this comparison.
+
 ## Independent release gates
 
 CI must pass, including `node --test tests/isabella-gpt-live-pilot.test.mjs`, `node --check apps/isabella/live/live.js`, `deno check supabase/functions/isabella-live-session/index.ts`, and `node scripts/build.mjs`. The app's pre-existing browser and SQL tests must remain green.
