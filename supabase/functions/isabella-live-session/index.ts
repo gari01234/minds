@@ -19,10 +19,46 @@ const ORIGINAL_PROMPT=[
   "Produce clear Spanish and German pronunciation, preserving the same recognizable vocal identity across both languages.",
   "Keep emotional modulation nuanced and restrained; allow a lightly playful edge without sounding performative."
 ].join(" ");
+
+// Independent original voices; v1 and its persisted ID are left untouched.
+// Voice design changes the acoustic speaker, conversation guidance only the delivery.
+const ORIGINAL_VARIANTS:Record<string,{preferenceKey:string;name:string;version:number;prompt:string;liveStyle:string}>={
+  "isabella-original-v2":{
+    preferenceKey:"live_voice_isabella_original_v2",name:"Isabella · Original II",version:2,
+    prompt:[
+      "An entirely original adult feminine voice, with a native General American English accent as its clear phonetic foundation. Not an imitation of any person, performer, character, existing voice or branded assistant.",
+      "Perceived age early-to-mid 30s; relaxed medium register, quietly warm and inviting with smooth midrange resonance. No exaggerated low pitch, smoky rasp, whisperiness, breathy glamour or narrator polish.",
+      "The voice is conversational at close range: effortless, vivid and slightly smiling, with organic timing, small natural pitch movements and spontaneous changes of pace. Crisp enough to understand, never over-enunciated.",
+      "In English use authentic contemporary General American vowels and rhotic consonants, with an unforced American cadence. It should sound natural rather than like a foreign-accented English speaker.",
+      "In Spanish aim for clear broadly neutral Latin American pronunciation, not Peninsular Spanish: seseo rather than the Castilian theta consonant for c/z, with gentle conversational rhythm rather than a formal Spanish broadcast cadence. Preserve the same vocal identity across both languages.",
+      "In German speak clearly without a caricature accent. Sound grounded, gently playful and responsive, never robotic, theatrical, seductive or like a customer-service recording."
+    ].join(" "),
+    liveStyle:"For this original voice, keep delivery light, spontaneous and conversational, not a slow narration or a performance. In Spanish use neutral Latin American seseo and avoid Peninsular Spanish intonation; speak naturally and do not force English phonemes into Spanish. In English speak with a relaxed American rhythm. Keep the same vocal identity in German."
+  },
+  "isabella-original-v3":{
+    preferenceKey:"live_voice_isabella_original_v3",name:"Isabella · Original III",version:3,
+    prompt:[
+      "Create a distinct original fictional adult feminine voice, anchored in a natural General American English accent. Do not copy or resemble a specific person, actor, character, famous assistant or existing synthetic voice.",
+      "Light to medium register, an open bright-but-soft timbre, clear velvety consonants and a subtle warm texture. Neither childish nor low and sultry; no exaggerated breathiness or exaggerated vocal fry.",
+      "Speak like someone curious and quietly amused in a one-to-one conversation. Flexible tempo, very natural micro-pauses, gentle melodic rise and fall, quick bursts of authentic expressive energy and a restrained dry wit. Never sound like someone reading prepared lines.",
+      "English should have naturally American vowel placement, rhotic r sounds and a relaxed native North American cadence; avoid accented English and overly musical sing-song intonation.",
+      "When speaking Spanish, use broadly neutral Latin American pronunciation with seseo instead of Peninsular Spanish c/z theta, with straightforward colloquial rhythm and no formal Spain-Spanish announcer quality. Keep one consistent timbre across languages.",
+      "German is clear and fluid, but the acoustic character must remain recognizably the same. No imitation, cartoon accent, stage acting or customer-service cheeriness."
+    ].join(" "),
+    liveStyle:"For this original voice, sound subtly lively and curious, with a light conversational smile rather than breathy acting or theatrical emotion. In Spanish prefer neutral Latin American seseo and natural phrasing without Peninsular intonation. In English retain a gentle native American cadence. Do not over-enunciate or prolong pauses."
+  }
+};
+function voiceProfile(alias:string){
+  if(alias===ORIGINAL_ALIAS)return {
+    preferenceKey:ORIGINAL_PREF,name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT,
+    version:1,liveStyle:ORIGINAL_PROMPT
+  };
+  return ORIGINAL_VARIANTS[alias]||null;
+}
 const isVoiceId=(id:unknown)=>typeof id==="string"&&/^voice_[A-Za-z0-9_-]{1,128}$/.test(id);
-async function existingOriginalVoice(client:any,userId:string){
+async function existingOriginalVoice(client:any,userId:string,preferenceKey=ORIGINAL_PREF){
   const {data,error}=await client.from("isabella_preferences")
-    .select("value").eq("user_id",userId).eq("preference_key",ORIGINAL_PREF)
+    .select("value").eq("user_id",userId).eq("preference_key",preferenceKey)
     .eq("status","confirmed").maybeSingle();
   if(error)throw new Error("voice_preference_unavailable");
   const id=data?.value?.voice_id;
@@ -82,8 +118,10 @@ Deno.serve(async(req:Request)=>{
   // Explicit first-use creation from a single fixed text prompt; no voice cloning.
   // The resulting ID is saved under the authenticated owner's existing RLS policy.
   if(body?.action==="ensure_original_voice"){
+    const profile=voiceProfile(body?.voice===undefined?ORIGINAL_ALIAS:body.voice);
+    if(!profile)return json({error:"invalid_voice"},400,origin);
     try{
-      const stored=await existingOriginalVoice(id.client,user.id);
+      const stored=await existingOriginalVoice(id.client,user.id,profile.preferenceKey);
       if(stored)return json({ready:true,reused:true},200,origin);
       const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
       if(!apiKey)return json({error:"live_not_configured"},503,origin);
@@ -93,7 +131,7 @@ Deno.serve(async(req:Request)=>{
         reply=await fetch("https://api.openai.com/v1/audio/voices",{
           method:"POST",
           headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
-          body:JSON.stringify({type:"prompt",name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT,model:"auto"}),
+          body:JSON.stringify({type:"prompt",name:profile.name,prompt:profile.prompt,model:"auto"}),
           signal:ctrl.signal
         });
       }finally{clearTimeout(timer)}
@@ -113,8 +151,8 @@ Deno.serve(async(req:Request)=>{
       if(created?.object!=="audio.voice"||created?.type!=="prompt"||!isVoiceId(created?.id))
         return json({error:"original_voice_invalid_response"},502,origin);
       const {error:writeError}=await id.client.from("isabella_preferences").upsert({
-        user_id:user.id,preference_key:ORIGINAL_PREF,
-        value:{voice_id:created.id,description_version:1,kind:"original_prompt"},
+        user_id:user.id,preference_key:profile.preferenceKey,
+        value:{voice_id:created.id,description_version:profile.version,kind:"original_prompt"},
         status:"confirmed",confidence:1,
         evidence:[{kind:"explicit_user_request",source:"isabella_live_pilot"}]
       },{onConflict:"user_id,preference_key"});
@@ -131,12 +169,13 @@ Deno.serve(async(req:Request)=>{
   }
   if(body?.action!==undefined)return json({error:"invalid_action"},400,origin);
   const voice=body?.voice===undefined?"marin":body.voice;
-  if(typeof voice!=="string"||(!LIVE_VOICES.has(voice)&&voice!==ORIGINAL_ALIAS))
+  if(typeof voice!=="string"||(!LIVE_VOICES.has(voice)&&!voiceProfile(voice)))
     return json({error:"invalid_voice"},400,origin);
   let voiceValue:string|{id:string}=voice;
-  if(voice===ORIGINAL_ALIAS){
+  const voiceConfig=voiceProfile(voice);
+  if(voiceConfig){
     try{
-      const ownerVoice=await existingOriginalVoice(id.client,user.id);
+      const ownerVoice=await existingOriginalVoice(id.client,user.id,voiceConfig.preferenceKey);
       if(!ownerVoice)return json({error:"original_voice_not_ready"},409,origin);
       voiceValue={id:ownerVoice};
     }catch{
@@ -165,7 +204,7 @@ Deno.serve(async(req:Request)=>{
       "Si piden datos, acciones, programación o información externa, dilo brevemente y remite al chat escrito de Isabella.",
       "No te atribuyas consciencia, emociones humanas ni capacidades que no están conectadas.",
       "La app es dueña de permisos y datos; no tienes ninguna capacidad de acción ni confirmación.",
-      ...(voice===ORIGINAL_ALIAS?[ORIGINAL_PROMPT]:[])
+      ...(voiceConfig?[voiceConfig.liveStyle]:[])
     ].join(" "),
     audio:{output:{voice:voiceValue}},
     delegation:{type:"client",acknowledgement_delay_ms:800},
