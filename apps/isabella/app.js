@@ -2730,7 +2730,7 @@ function initVoice(){
     if(phase==='recording'||phase==='transcribing'){cancel();return}
     cancel();
   };
-  $('#micButton').onclick=start;
+  $('#micButton').onclick=()=>{if(window.ISABELLA_VOICE_OUTPUT?.isSpeaking()){window.ISABELLA_VOICE_OUTPUT.stop();return;}void start()};
   $('#focusClose').onclick=cancel;primary.onclick=stop;secondary.onclick=secondaryAction;
 }
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';const t=$('#focusTranscript');if(t){t.value='';t.textContent='';t.readOnly=true}}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}

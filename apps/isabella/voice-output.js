@@ -3,7 +3,7 @@
 // This module never invokes an LLM, writes a conversation, or authorizes an action.
 (()=>{
   'use strict';
-  const button=document.getElementById('voiceStopButton');
+  const button=document.getElementById('micButton');
   let current=null;
   let generation=0;
 
@@ -12,8 +12,9 @@
   }
   function buttonState(speaking){
     if(!button)return;
-    button.classList.toggle('hidden',!speaking);
-    button.disabled=!speaking;
+    button.classList.toggle('voice-speaking',speaking);
+    button.setAttribute('aria-label',speaking?'Detener respuesta hablada':'Hablar');
+    button.title=speaking?'Detener respuesta hablada':'Hablar';
   }
   function textForSpeech(markdown){
     let text=String(markdown||'')
@@ -60,9 +61,8 @@
     try{window.speechSynthesis.speak(utterance);return true}
     catch{stop();return false}
   }
-  button?.addEventListener('click',stop);
   document.addEventListener('visibilitychange',()=>{if(document.hidden)stop()});
   window.addEventListener('pagehide',stop);
   window.addEventListener('isabella:before-screen-change',stop);
-  window.ISABELLA_VOICE_OUTPUT=Object.freeze({available,speak,stop,textForSpeech});
+  window.ISABELLA_VOICE_OUTPUT=Object.freeze({available,speak,stop,isSpeaking:()=>current!==null,textForSpeech});
 })();

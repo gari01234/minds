@@ -354,7 +354,8 @@ test('the chat has no orb (Gari, November 2026): voice stays on the microphone b
   assert.ok(!shell.includes('id="orbHome"'));
   assert.ok(!shell.includes('id="orbButton"'));
   assert.ok(shell.includes('id="micButton"'));
-  assert.ok(app.includes("$('#micButton').onclick=start;"));
+  assert.ok(app.includes("$('#micButton').onclick=()=>{if(window.ISABELLA_VOICE_OUTPUT?.isSpeaking())"));
+  assert.ok(app.includes("window.ISABELLA_VOICE_OUTPUT.stop();return;}void start()"));
   assert.ok(!app.includes("$('#orbButton').onclick"));
   // The Hoy line leads the phone chat and stays clear of the floating ••• button.
   assert.match(css,/\.today-card\{align-self:stretch!important;width:auto!important;max-width:none!important;margin-left:0!important;margin-right:64px!important\}/);
@@ -619,11 +620,11 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('id="currentBuildInfo"'));
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=69'));
-  assert.ok(index.includes('shell.js?v=107'));
-  assert.ok(index.includes('app.js?v=133'));
+  assert.ok(index.includes('shell.js?v=108'));
+  assert.ok(index.includes('app.js?v=134'));
   assert.ok(index.includes('sync.js?v=pwa39'));
   assert.ok(index.includes('ai.js?v=57'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v174'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v175'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{
