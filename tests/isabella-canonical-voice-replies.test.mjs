@@ -104,7 +104,7 @@ test('voice belongs only to the existing canonical chat turn',()=>{
   assert.match(app,/voiceTurn===voiceTurnEpoch/);
   assert.match(app,/integrity\.typed&&integrity\.outcome==='answered'/);
   assert.match(app,/!result\?\.incomplete/);
-  assert.match(app,/voiceReply=!!speakChoice\?\.checked&&!speakChoice\.disabled/);
+  assert.match(app,/speakReply=!!speakChoice\?\.checked&&!speakChoice\.disabled/);
   assert.match(app,/handle\(text,\[\],null,\{speakReply\}\)/);
   assert.match(app,/window\.ISABELLA_VOICE_OUTPUT\?\.stop\(\)/);
   assert.doesNotMatch(voiceSource,/openai\.com|supabase\.co|fetch\(|localStorage|sessionStorage/);
