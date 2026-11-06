@@ -48,6 +48,21 @@ The fix does **not** reconstruct discontinued ChatGPT Sky or the identifiable vo
 
 The result of the corrected request is not yet known until an authenticated owner retries creation on an actual device. Never mark it as audible PASS based solely on CI.
 
+## Original II / III · feedback-based voice refinement
+
+Owner's authenticated physical iPhone acceptance of Original I: generated successfully but the perceived sound was too far from the desired friendly, spontaneous, American-influenced character, and the Spanish sounded too Peninsular. This is qualitative owner feedback, not a measured speaker-identity match. The earlier prompt didn't define a US-accent acoustic anchor, and its text was also reused as session-level speaking guidance.
+
+Two **new, separate and audibly unverified** versions are now explicitly selectable:
+
+- Original II: contemporary General American acoustic anchor, medium register, smooth and warm, restrained energy; neutral Latin American seseo when speaking Spanish rather than Spain's c/z distinction. 
+- Original III: same American English and non-Peninsular Spanish targets, with a lighter/brighter voice, faster spontaneous variation, restrained dry wit.
+
+This does not attempt to duplicate a specific voice performer. Both descriptions explicitly forbid imitation of real people, fictional characters, brand assistants, or existing synthetic voices. A General American/Latin American target is an accent/delivery category, not voice identity. Spanish/German bilingual stability is a hypothesis to test, not guaranteed.
+
+Voice identity and delivery prompt are now separate for II and III: `/audio/voices` receives a fixed voice-design prompt on first explicit selection, while `/live/sessions` receives a shorter style instruction on the new sessions. Original I remains untouched, including its persisted voice identifier; all 31 existing voices and permission gates are unchanged. No new database schema: individual versioned `isabella_preferences` keys for each candidate, owner RLS and the same API key.
+
+**Recommended acoustic acceptance:** In the same actual iPhone, test II and III with identical English and Spanish sentences and a short spontaneous joke or interruption. Evaluate US-vs-Peninsular Spanish vowels/consonants, naturalness, pacing and tonal warmth, not likeness to a specific actress. If neither improves the perceived experience, do not promote one as Isabella's production voice. The production default remains Marin until the owner approves a candidate.
+
 ## Independent release gates
 
 CI must pass, including `node --test tests/isabella-gpt-live-pilot.test.mjs`, `node --check apps/isabella/live/live.js`, `deno check supabase/functions/isabella-live-session/index.ts`, and `node scripts/build.mjs`. The app's pre-existing browser and SQL tests must remain green.
