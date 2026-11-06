@@ -2355,7 +2355,10 @@ async function syncDurableChatJobs(){
   finally{durableChatSyncBusy=false;void reconcileReadOnlyBrowserReceipts()}
 }
 
-async function handle(text,attachments=[],replyTo=null){
+let voiceTurnEpoch=0;
+async function handle(text,attachments=[],replyTo=null,options={}){
+  const voiceTurn=++voiceTurnEpoch;
+  window.ISABELLA_VOICE_OUTPUT?.stop();
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
   // Persist the binding atomically with the first user turn; syncing between
@@ -2435,6 +2438,13 @@ async function handle(text,attachments=[],replyTo=null){
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
             ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
           sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+      }
+      // Only this explicitly opted-in microphone turn may be spoken. A browser
+      // re-render, background delivery, proposal or ambiguous result stays silent.
+      if(options.speakReply&&voiceTurn===voiceTurnEpoch&&state.screen==='assistant'&&
+         integrity.typed&&integrity.outcome==='answered'&&!result?.incomplete&&
+         !result?.question&&!result?.artifacts?.length&&verifiedReply){
+        window.ISABELLA_VOICE_OUTPUT?.speak(verifiedReply);
       }
       if(result?.reply&&!result?.incomplete&&result?.standing_intent_delivery)void acknowledgeIntentDelivery(result.standing_intent_delivery);
       if(result?.question&&result.question!==result.reply)say('assistant',result.question,{metadata:{exposure_scope:exposure},quickReplies:result?.reply?[]:(result.quick_replies||[])});
@@ -2645,6 +2655,12 @@ function initVoice(){
   const R=window.SpeechRecognition||window.webkitSpeechRecognition;
   let recorder=null,stream=null,chunks=[],discard=false,fallbackRec=null,phase='idle';
   const transcript=$('#focusTranscript'),primary=$('#focusStop'),secondary=$('#focusKeyboard');
+  const speakChoice=$('#focusSpeakReply');
+  if(speakChoice&&!window.ISABELLA_VOICE_OUTPUT?.available()){
+    speakChoice.checked=false;speakChoice.disabled=true;
+    speakChoice.closest('label')?.classList.add('is-unavailable');
+    speakChoice.closest('label')?.setAttribute('title','La respuesta hablada no está disponible en este navegador.');
+  }
   const setText=t=>{if(transcript){transcript.value=t||'';transcript.textContent=t||''}};
   const getText=()=>String(transcript?.value||transcript?.textContent||'').trim();
   const stopTracks=()=>{try{stream?.getTracks().forEach(t=>t.stop())}catch{}stream=null};
@@ -2676,6 +2692,7 @@ function initVoice(){
     }catch{phase='error';$('#focusStatus').textContent='No pude iniciar el micrófono'}
   };
   const start=async()=>{
+    window.ISABELLA_VOICE_OUTPUT?.stop();
     discard=false;openFocus();orb('listening','Escuchando…');phase='recording';
     transcript.readOnly=true;setText('');$('#focusStatus').textContent='Escuchando…';primary.textContent='Detener';secondary.textContent='Cancelar';
     if(!navigator.mediaDevices?.getUserMedia||!window.MediaRecorder||!window.ISABELLA_AI?.transcribe){browserFallback();return}
@@ -2702,7 +2719,9 @@ function initVoice(){
     }
     if(phase==='review'){
       const text=getText();if(!text)return;
-      closeFocus();phase='idle';handle(text);return;
+      // Explicit per-session choice. Never speak replies to typed or background turns.
+      const speakReply=!!speakChoice?.checked&&!speakChoice.disabled;
+      closeFocus();phase='idle';void handle(text,[],null,{speakReply});return;
     }
     closeFocus();phase='idle';
   };
