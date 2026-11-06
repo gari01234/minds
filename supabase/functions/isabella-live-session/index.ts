@@ -7,6 +7,28 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 const ORIGIN="https://gari01234.github.io";
 const MAX_BODY=64*1024;
 const MAX_SDP=56*1024;
+const ORIGINAL_ALIAS="isabella-original-v1";
+const ORIGINAL_PREF="live_voice_isabella_original_v1";
+const ORIGINAL_NAME="Isabella · Original I";
+const ORIGINAL_PROMPT=[
+  "Create a distinct, original adult feminine voice. Do not emulate or imitate any real individual, celebrity, actor, character, existing synthetic voice or branded assistant.",
+  "The voice is intimate in the acoustic sense: warm, clear, natural, and present, with a comfortable medium pitch and a gentle lower-mid resonance.",
+  "Use a lightly airy texture and a subtle warm grain without excessive breathiness, exaggerated huskiness or artificial sultriness.",
+  "Its rhythm is gently spontaneous: relaxed conversational tempo, flexible short pauses, a hint of dry humor and a naturally smiling, curious inflection.",
+  "Speech should sound like a thoughtful conversation with a familiar person, not like narration, a call-center voice, an advertisement, or a whisper.",
+  "Produce clear Spanish and German pronunciation, preserving the same recognizable vocal identity across both languages.",
+  "Keep emotional modulation nuanced and restrained; allow a lightly playful edge without sounding performative."
+].join(" ");
+const ORIGINAL_SCRIPT="Buenas tardes. Cuéntame qué tienes en mente y seguimos desde ahí. A veces merece la pena dejar una pequeña pausa antes de contestar. Wir können natürlich auch auf Deutsch sprechen. Sag einfach, was dir gerade wichtig ist.";
+const isVoiceId=(id:unknown)=>typeof id==="string"&&/^voice_[A-Za-z0-9_-]{1,128}$/.test(id);
+async function existingOriginalVoice(client:any,userId:string){
+  const {data,error}=await client.from("isabella_preferences")
+    .select("value").eq("user_id",userId).eq("preference_key",ORIGINAL_PREF)
+    .eq("status","confirmed").maybeSingle();
+  if(error)throw new Error("voice_preference_unavailable");
+  const id=data?.value?.voice_id;
+  return isVoiceId(id)?id:null;
+}
 // Documented built-in GPT-Live voices; server verifies every client choice.
 const LIVE_VOICES=new Set(["alloy","ash","ballad","beacon","bossa","brise","cedar","cinder","coral","delta","echo","flitz","gleam","harema","juni","marin","meridian","nira","noeul","nuri","quartz","ripple","sage","shida","shimmer","sillage","stone","tempo","verse","vesper","willow"]);
 
@@ -35,7 +57,7 @@ function identity(req:Request){
   if(!token||token.length>4096)return null;
   const url=Deno.env.get("SUPABASE_URL")||"",key=publishableKey();
   if(!url||!key)return null;
-  const client=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+  const client=createClient(url,key,{global:{headers:{Authorization:"Bearer "+token}},auth:{persistSession:false,autoRefreshToken:false}});
   return {client,token};
 }
 
@@ -58,9 +80,63 @@ Deno.serve(async(req:Request)=>{
     if(text.length>MAX_BODY)return json({error:"offer_too_large"},413,origin);
     body=JSON.parse(text);
   }catch{return json({error:"invalid_json"},400,origin)}
+  // Explicit first-use creation from a single fixed text prompt; no voice cloning.
+  // The resulting ID is saved under the authenticated owner's existing RLS policy.
+  if(body?.action==="ensure_original_voice"){
+    try{
+      const stored=await existingOriginalVoice(id.client,user.id);
+      if(stored)return json({ready:true,reused:true},200,origin);
+      const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+      if(!apiKey)return json({error:"live_not_configured"},503,origin);
+      const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),30000);
+      let reply:Response;
+      try{
+        reply=await fetch("https://api.openai.com/v1/audio/voices",{
+          method:"POST",
+          headers:{Authorization:"Bearer "+apiKey,"Content-Type":"application/json"},
+          body:JSON.stringify({type:"prompt",name:ORIGINAL_NAME,prompt:ORIGINAL_PROMPT,
+            script_hint:ORIGINAL_SCRIPT,model:"auto"}),
+          signal:ctrl.signal
+        });
+      }finally{clearTimeout(timer)}
+      if(!reply.ok){
+        console.error("isabella_original_voice_create_failed",reply.status);
+        return json({error:"original_voice_provider_unavailable"},502,origin);
+      }
+      const created=await reply.json().catch(()=>null);
+      if(created?.object!=="audio.voice"||created?.type!=="prompt"||!isVoiceId(created?.id))
+        return json({error:"original_voice_invalid_response"},502,origin);
+      const {error:writeError}=await id.client.from("isabella_preferences").upsert({
+        user_id:user.id,preference_key:ORIGINAL_PREF,
+        value:{voice_id:created.id,description_version:1,kind:"original_prompt"},
+        status:"confirmed",confidence:1,
+        evidence:[{kind:"explicit_user_request",source:"isabella_live_pilot"}]
+      },{onConflict:"user_id,preference_key"});
+      if(writeError){
+        console.error("isabella_original_voice_preference_failed");
+        return json({error:"original_voice_save_failed"},503,origin);
+      }
+      return json({ready:true,reused:false},201,origin);
+    }catch(e){
+      console.error("isabella_original_voice_create_error",
+        e instanceof Error?e.message.slice(0,60):"unknown");
+      return json({error:"original_voice_unavailable"},503,origin);
+    }
+  }
+  if(body?.action!==undefined)return json({error:"invalid_action"},400,origin);
   const voice=body?.voice===undefined?"marin":body.voice;
-  if(typeof voice!=="string"||!LIVE_VOICES.has(voice))
+  if(typeof voice!=="string"||(!LIVE_VOICES.has(voice)&&voice!==ORIGINAL_ALIAS))
     return json({error:"invalid_voice"},400,origin);
+  let voiceValue:string|{id:string}=voice;
+  if(voice===ORIGINAL_ALIAS){
+    try{
+      const ownerVoice=await existingOriginalVoice(id.client,user.id);
+      if(!ownerVoice)return json({error:"original_voice_not_ready"},409,origin);
+      voiceValue={id:ownerVoice};
+    }catch{
+      return json({error:"original_voice_unavailable"},503,origin);
+    }
+  }
   const sdp=body?.sdp;
   if(typeof sdp!=="string"||!sdp.startsWith("v=0\r\n")||
      sdp.length>MAX_SDP||sdp.length<100||!/\nm=audio /m.test(sdp)){
@@ -82,9 +158,10 @@ Deno.serve(async(req:Request)=>{
       "No inventes datos personales ni afirmes que has recordado, buscado, creado, enviado o modificado nada.",
       "Si piden datos, acciones, programación o información externa, dilo brevemente y remite al chat escrito de Isabella.",
       "No te atribuyas consciencia, emociones humanas ni capacidades que no están conectadas.",
-      "La app es dueña de permisos y datos; no tienes ninguna capacidad de acción ni confirmación."
+      "La app es dueña de permisos y datos; no tienes ninguna capacidad de acción ni confirmación.",
+      ...(voice===ORIGINAL_ALIAS?[ORIGINAL_PROMPT]:[])
     ].join(" "),
-    audio:{output:{voice}},
+    audio:{output:{voice:voiceValue}},
     delegation:{type:"client",acknowledgement_delay_ms:800},
     store:false
   };
