@@ -23,7 +23,9 @@
     live_provider_unavailable:"El proveedor no ha permitido iniciar esta sesión de voz.",
     live_connection_failed:"No fue posible conectar la sesión de audio.",
     invalid_audio_sdp:"Safari no generó una oferta WebRTC válida.",
-    original_voice_provider_unavailable:"OpenAI no ha permitido crear esta voz original. Puedes seguir utilizando las voces existentes.",
+    original_voice_provider_unavailable:"La creación de la voz no se completó. Las voces existentes siguen disponibles.",
+    original_voice_invalid_request:"OpenAI rechazó los parámetros de creación. Es un error técnico HTTP 400, no una confirmación de que la voz esté prohibida.",
+    original_voice_access_denied:"La API rechazó el acceso para crear voces. Comprueba los permisos del proyecto OpenAI.",
     original_voice_invalid_response:"OpenAI no devolvió una voz utilizable.",
     original_voice_save_failed:"La voz se creó, pero no pude guardarla en MINDS. No la utilizaré sin un identificador verificado.",
     original_voice_unavailable:"No pude recuperar la voz original desde tu sesión de MINDS.",
@@ -47,6 +49,7 @@
     try{oldMic?.getTracks().forEach(t=>t.stop())}catch{}
     try{audio.pause()}catch{}
     audio.srcObject=null;
+    playback.textContent="Reproducción detenida.";
     unlock.classList.add("hidden");
     state("idle",message);
   }
