@@ -8,9 +8,9 @@
   const audio=$("liveAudio"),unlock=$("liveUnlock"),status=$("liveStatus");
   const playback=$("livePlayback"),input=$("liveInput"),output=$("liveOutput");
   const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
-  const ORIGINAL_VOICE="isabella-original-v1";
+  const ORIGINAL_VOICES=new Set(["isabella-original-v1","isabella-original-v2","isabella-original-v3"]);
   const originalNote=$("liveOriginalNote");
-  const updateVoiceHint=()=>originalNote.classList.toggle("hidden",voicePicker.value!==ORIGINAL_VOICE);
+  const updateVoiceHint=()=>originalNote.classList.toggle("hidden",!ORIGINAL_VOICES.has(voicePicker.value));
   voicePicker.addEventListener("change",updateVoiceHint);
   updateVoiceHint();
   let peer=null,microphone=null,channel=null,timeoutId=null;
@@ -153,13 +153,13 @@
         audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
       });
       if(token!==epoch){microphone?.getTracks().forEach(t=>t.stop());return}
-      if(voice===ORIGINAL_VOICE){
+      if(ORIGINAL_VOICES.has(voice)){
         state("connecting","Preparando una voz original para Isabella…");
         const created=await fetch(cfg.url+"/functions/v1/isabella-live-session",{
           method:"POST",
           headers:{apikey:cfg.publishableKey,Authorization:"Bearer "+session.access_token,
             "Content-Type":"application/json"},
-          body:JSON.stringify({action:"ensure_original_voice"})
+          body:JSON.stringify({action:"ensure_original_voice",voice})
         });
         const payload=await created.json().catch(()=>null);
         if(token!==epoch)return;
