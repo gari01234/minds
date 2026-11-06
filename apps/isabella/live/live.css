@@ -28,7 +28,8 @@ h1{font-family:"Iowan Old Style",Georgia,serif;font-size:clamp(42px,9vw,65px);fo
 .live-voice-picker label{font-size:13px;color:#565656}
 .live-voice-picker select{width:100%;font:inherit;font-size:16px;color:inherit;background:#fff;border:1px solid #d8d8d8;border-radius:13px;padding:12px 13px;min-height:48px}
 .live-voice-picker select:disabled{opacity:.58}
-.live-voice-picker p{font-size:12px;line-height:1.4;color:#777;margin:0}.live-actions{display:grid;grid-template-columns:1.6fr 1fr;gap:10px}
+.live-voice-picker p{font-size:12px;line-height:1.4;color:#777;margin:0}
+#liveOriginalNote{max-width:520px;border-left:2px solid #d7d7d7;padding-left:12px;margin-top:4px;color:#666}.live-actions{display:grid;grid-template-columns:1.6fr 1fr;gap:10px}
 .live-actions button{font-size:16px;border-radius:99px;padding:16px 13px;border:1px solid #dedede;min-height:54px}
 .live-actions .primary{background:#111;color:#fff;border-color:#111}
 .live-actions .secondary{background:#fff;color:#111}
