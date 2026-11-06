@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
 <title>Isabella Live · prueba de audio</title>
-<link rel="stylesheet" href="./live.css?v=1">
+<link rel="stylesheet" href="./live.css?v=2">
 </head>
 <body>
 <main class="live-shell">
@@ -27,6 +27,51 @@
     </div>
   </section>
   <footer class="live-footer">
+    <div class="live-voice-picker">
+      <label for="liveVoice">Voz de Isabella</label>
+      <select id="liveVoice" name="voice" aria-describedby="liveVoiceHint">
+        <optgroup label="Voces principales">
+          <option value="marin" selected>Marin · actual</option>
+          <option value="cedar">Cedar</option>
+          <option value="coral">Coral</option>
+          <option value="shimmer">Shimmer</option>
+          <option value="sage">Sage</option>
+          <option value="alloy">Alloy</option>
+          <option value="ash">Ash</option>
+          <option value="ballad">Ballad</option>
+          <option value="echo">Echo</option>
+          <option value="verse">Verse</option>
+        </optgroup>
+        <optgroup label="Voces naturales y regionales">
+          <option value="gleam">Gleam · Norteamérica</option>
+          <option value="willow">Willow · Irlanda</option>
+          <option value="quartz">Quartz · Australia</option>
+          <option value="ripple">Ripple · Australia</option>
+          <option value="vesper">Vesper · Reino Unido</option>
+          <option value="stone">Stone · Irlanda</option>
+          <option value="meridian">Meridian · Norteamérica</option>
+          <option value="delta">Delta · EE. UU.</option>
+          <option value="cinder">Cinder · EE. UU.</option>
+          <option value="beacon">Beacon · Filipinas</option>
+        </optgroup>
+        <optgroup label="Voces alemanas">
+          <option value="nuri">Nuri</option>
+          <option value="juni">Juni</option>
+          <option value="flitz">Flitz</option>
+        </optgroup>
+        <optgroup label="Otros idiomas">
+          <option value="brise">Brise · francés</option>
+          <option value="sillage">Sillage · francés</option>
+          <option value="bossa">Bossa · portugués brasileño</option>
+          <option value="tempo">Tempo · portugués brasileño</option>
+          <option value="nira">Nira · hindi</option>
+          <option value="harema">Harema · japonés</option>
+          <option value="shida">Shida · japonés</option>
+          <option value="noeul">Noeul · coreano</option>
+        </optgroup>
+      </select>
+      <p id="liveVoiceHint">Elige antes de iniciar. Para cambiar de voz, finaliza la conversación y comienza otra.</p>
+    </div>
     <div class="live-actions">
       <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
       <button id="liveStop" type="button" class="secondary" disabled>Finalizar</button>
@@ -36,6 +81,6 @@
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../shared/supabase-client.js"></script>
-<script src="./live.js?v=1"></script>
+<script src="./live.js?v=2"></script>
 </body>
 </html>
