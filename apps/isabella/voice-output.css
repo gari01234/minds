@@ -2,4 +2,5 @@
 .focus-voice-option{display:flex;align-items:center;justify-content:center;gap:10px;padding:10px 0 16px;font-size:14px;color:#444;cursor:pointer}
 .focus-voice-option input{width:18px;height:18px;accent-color:#171717}
 .focus-voice-option.is-unavailable{opacity:.52;cursor:default}
-#voiceStopButton:not(.hidden){display:inline-flex;align-items:center;justify-content:center}
+#micButton.voice-speaking .chat-ui-icon{display:none}
+#micButton.voice-speaking::after{content:"";display:block;width:12px;height:12px;border-radius:2px;background:currentColor;margin:auto}
