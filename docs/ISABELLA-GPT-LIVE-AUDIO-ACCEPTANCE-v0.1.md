@@ -38,6 +38,16 @@ The first selected session calls `ensure_original_voice` on the same owner-authe
 
 A voice creation failure or unavailable `api.voices.write` permission is shown to the owner without affecting any built-in voice option. Creation itself produces no preview audio; a successful initial session is needed to judge the result. **Physical iPhone voice quality and bilingual accuracy remain unverified.** The original session still has the 90-second safety cap, and selection cannot change during playback.
 
+## Original I provider HTTP 400 correction (6 November 2026)
+
+The owner's iPhone reported creation failure at 21:07 CET. Edge Function logs confirm `isabella_original_voice_create_failed 400` at 20:07:27 UTC. The previous client phrasing ("OpenAI no ha permitido") was **not a supported diagnosis of a policy denial**: status 400 also covers malformed or invalid optional input fields.
+
+OpenAI's official voice-create API documents `script_hint` as optional and notes that too-short scripts are rejected. The first implementation supplied a short bilingual hint; that is a **possible**, not verified, cause. The updated request omits this optional hint, allowing the provider to generate its own script while retaining the same original non-imitative voice design prompt. The server records only the status and safe error type/code/parameter tokens for future diagnosis. The browser distinguishes invalid request, permission denial and provider error; after failure it no longer falsely displays "waiting for remote audio".
+
+The fix does **not** reconstruct discontinued ChatGPT Sky or the identifiable voice of any real voice performer. German personality rights can protect distinctive voice imitation, including AI-generated recreations, depending on purpose, context and recognizability (LG Berlin II, 20 August 2025, 2 O 202/24). There is no blanket conclusion that every private study is unlawful, or that recording availability confers permission to clone. Only non-identifying vocal qualities and speaking behavior are used in this trial.
+
+The result of the corrected request is not yet known until an authenticated owner retries creation on an actual device. Never mark it as audible PASS based solely on CI.
+
 ## Independent release gates
 
 CI must pass, including `node --test tests/isabella-gpt-live-pilot.test.mjs`, `node --check apps/isabella/live/live.js`, `deno check supabase/functions/isabella-live-session/index.ts`, and `node scripts/build.mjs`. The app's pre-existing browser and SQL tests must remain green.
