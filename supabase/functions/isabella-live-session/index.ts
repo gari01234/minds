@@ -7,6 +7,8 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 const ORIGIN="https://gari01234.github.io";
 const MAX_BODY=64*1024;
 const MAX_SDP=56*1024;
+// Documented built-in GPT-Live voices; server verifies every client choice.
+const LIVE_VOICES=new Set(["alloy","ash","ballad","beacon","bossa","brise","cedar","cinder","coral","delta","echo","flitz","gleam","harema","juni","marin","meridian","nira","noeul","nuri","quartz","ripple","sage","shida","shimmer","sillage","stone","tempo","verse","vesper","willow"]);
 
 function cors(origin:string|null){
   const approved=origin===ORIGIN;
@@ -56,6 +58,9 @@ Deno.serve(async(req:Request)=>{
     if(text.length>MAX_BODY)return json({error:"offer_too_large"},413,origin);
     body=JSON.parse(text);
   }catch{return json({error:"invalid_json"},400,origin)}
+  const voice=body?.voice===undefined?"marin":body.voice;
+  if(typeof voice!=="string"||!LIVE_VOICES.has(voice))
+    return json({error:"invalid_voice"},400,origin);
   const sdp=body?.sdp;
   if(typeof sdp!=="string"||!sdp.startsWith("v=0\r\n")||
      sdp.length>MAX_SDP||sdp.length<100||!/\nm=audio /m.test(sdp)){
@@ -79,7 +84,7 @@ Deno.serve(async(req:Request)=>{
       "No te atribuyas consciencia, emociones humanas ni capacidades que no están conectadas.",
       "La app es dueña de permisos y datos; no tienes ninguna capacidad de acción ni confirmación."
     ].join(" "),
-    audio:{output:{voice:"marin"}},
+    audio:{output:{voice}},
     delegation:{type:"client",acknowledgement_delay_ms:800},
     store:false
   };
