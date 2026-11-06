@@ -4,7 +4,7 @@
   "use strict";
   const $=id=>document.getElementById(id);
   const shell=document.querySelector(".live-shell");
-  const startButton=$("liveStart"),stopButton=$("liveStop");
+  const startButton=$("liveStart"),stopButton=$("liveStop"),voicePicker=$("liveVoice");
   const audio=$("liveAudio"),unlock=$("liveUnlock"),status=$("liveStatus");
   const playback=$("livePlayback"),input=$("liveInput"),output=$("liveOutput");
   const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
@@ -24,6 +24,7 @@
     shell.dataset.state=value;status.textContent=message;
     startButton.disabled=value==="connecting"||value==="active";
     stopButton.disabled=value!=="connecting"&&value!=="active";
+    voicePicker.disabled=value==="connecting"||value==="active";
   }
   function stop(message="Conversación finalizada."){
     epoch++;active=false;sessionReady=false;remoteTrack=false;playbackStarted=false;
@@ -118,6 +119,8 @@
 
   async function start(){
     if(active||peer)return;
+    // Capture the selected voice once; GPT-Live voices are immutable per session.
+    const voice=voicePicker.value;
     const token=++epoch;
     active=true;sessionReady=false;remoteTrack=false;playbackStarted=false;
     input.textContent="—";output.textContent="—";
@@ -167,7 +170,7 @@
           Authorization:"Bearer "+session.access_token,
           "Content-Type":"application/json"
         },
-        body:JSON.stringify({sdp:connection.localDescription?.sdp||""})
+        body:JSON.stringify({sdp:connection.localDescription?.sdp||"",voice})
       });
       const result=await response.json().catch(()=>null);
       if(token!==epoch)return;
