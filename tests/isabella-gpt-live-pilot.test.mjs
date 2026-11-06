@@ -39,8 +39,12 @@ test('Live voice choices are exactly the documented server allowlist',()=>{
   assert.equal(allOptions.length,32);
   assert.equal(new Set(options).size,options.length);
   assert.deepEqual([...options].sort(),[...accepted].sort());
-  assert.equal(options[0],'marin');
-  assert.match(page,/value="marin" selected/);
+  assert.equal(options[0],'brise');
+  assert.match(page,/value="brise" selected/);
+  assert.match(page,/value="marin"/);
+  assert.doesNotMatch(page,/value="marin" selected/);
+  assert.equal((page.match(/<option value="[^"]+" selected>/g)||[]).length,1);
+  assert.match(broker,/const voice=body\?\.voice===undefined\?"brise":body\.voice/);
   assert.match(page,/value="isabella-original-v1"/);
   assert.match(page,/id="liveOriginalNote"/);
   assert.match(page,/id="liveVoice"/);
@@ -134,7 +138,7 @@ test('runtime starts idle; a backend failure is visible and never starts microph
     pause(){},play(){return Promise.resolve()}
   });
   const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput','liveVoice','liveOriginalNote'].map(k=>[k,node()]));
-  ids.liveVoice.value='marin';
+  ids.liveVoice.value='brise';
   const shell={dataset:{}};
   const document={hidden:false,
     getElementById:id=>ids[id],
