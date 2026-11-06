@@ -1,5 +1,10 @@
 project_id = "lodexwyyynlarkqgkyhy"
 
+# Isolated WebRTC voice evaluation; owner authentication and no store.
+[functions.isabella-live-session]
+verify_jwt = true
+entrypoint = "./functions/isabella-live-session/index.ts"
+
 [functions.isabella-chat]
 verify_jwt = true
 entrypoint = "./functions/isabella-chat/index.ts"
