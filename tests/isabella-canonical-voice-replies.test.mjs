@@ -11,16 +11,17 @@ const html=read('apps/isabella/index.html');
 const sw=read('apps/isabella/sw.js');
 
 function browser(withVoice=true){
-  const buttons=new Map(),events={document:{},window:{}},spoken=[];
+  const events={document:{},window:{}},spoken=[];
   let cancellations=0;
   const button={
-    disabled:true,
-    classList:{hidden:true,toggle(name,hidden){if(name==='hidden')this.hidden=hidden}},
-    addEventListener(name,callback){buttons.set(name,callback)}
+    title:'Hablar',
+    attributes:{},
+    setAttribute(name,value){this.attributes[name]=value},
+    classList:{speaking:false,toggle(name,value){if(name==='voice-speaking')this.speaking=value}}
   };
   const document={
     hidden:false,documentElement:{lang:'es'},
-    getElementById(id){return id==='voiceStopButton'?button:null},
+    getElementById(id){return id==='micButton'?button:null},
     addEventListener(name,callback){events.document[name]=callback}
   };
   const window={
@@ -36,7 +37,7 @@ function browser(withVoice=true){
     }:{})
   };
   runInNewContext(voiceSource,{window,document,navigator:{language:'de-DE'}});
-  return {voice:window.ISABELLA_VOICE_OUTPUT,document,window,spoken,events,button,buttons,
+  return {voice:window.ISABELLA_VOICE_OUTPUT,document,window,spoken,events,button,
     get cancellations(){return cancellations}};
 }
 
@@ -44,14 +45,14 @@ test('no speech at load, and speech is explicitly requested',()=>{
   const b=browser();
   assert.equal(b.voice.available(),true);
   assert.equal(b.spoken.length,0);
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,true);
   assert.equal(b.voice.speak('Hola, Gari.'),true);
   assert.equal(b.spoken.length,1);
   assert.equal(b.spoken[0].text,'Hola, Gari.');
   assert.equal(b.spoken[0].lang,'es-ES');
-  assert.equal(b.button.classList.hidden,false);
+  assert.equal(b.button.classList.speaking,false);
   b.spoken[0].onend();
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,true);
 });
 
 test('speech does not read code blocks or external URL destinations',()=>{
@@ -72,9 +73,9 @@ test('spoken reply can always be stopped, old completion cannot clear a new one'
   b.voice.speak('Segunda');
   assert.equal(b.spoken.length,2);
   old.onend();
-  assert.equal(b.button.classList.hidden,false);
-  b.buttons.get('click')();
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,false);
+  b.voice.stop();
+  assert.equal(b.button.classList.speaking,true);
   assert.ok(b.cancellations>=2);
 });
 
@@ -82,15 +83,15 @@ test('visibility and navigation stop speaking; no playback in a hidden tab',()=>
   const b=browser();
   b.voice.speak('Algo importante');
   b.events.window['isabella:before-screen-change']();
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,true);
   b.document.hidden=true;
   assert.equal(b.voice.speak('No debe sonar'),false);
   b.events.document.visibilitychange();
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,true);
   b.document.hidden=false;
   b.voice.speak('Nuevo mensaje');
   b.events.window.pagehide();
-  assert.equal(b.button.classList.hidden,true);
+  assert.equal(b.button.classList.speaking,true);
 });
 
 test('unsupported browser remains silent without throwing',()=>{
@@ -109,15 +110,18 @@ test('voice belongs only to the existing canonical chat turn',()=>{
   assert.match(app,/window\.ISABELLA_VOICE_OUTPUT\?\.stop\(\)/);
   assert.doesNotMatch(voiceSource,/openai\.com|supabase\.co|fetch\(|localStorage|sessionStorage/);
   assert.match(shell,/id="focusSpeakReply" type="checkbox"/);
-  assert.match(shell,/id="voiceStopButton"/);
+  assert.match(shell,/id="micButton"/);
+  assert.doesNotMatch(shell,/id="voiceStopButton"/);
+  assert.match(app,/ISABELLA_VOICE_OUTPUT\?\.isSpeaking\(\)/);
+  assert.match(voiceSource,/voice-speaking/);
 });
 
 test('PWA includes new scripts and keeps existing transcription and canonical runtime',()=>{
-  for(const src of ["./voice-output.js?v=1","./app.js?v=133","./shell.js?v=107"])
+  for(const src of ["./voice-output.js?v=2","./app.js?v=134","./shell.js?v=108"])
     assert.ok(html.includes(src)&&sw.includes(src),src);
-  assert.ok(html.includes('./voice-output.css?v=1')&&sw.includes('./voice-output.css?v=1'));
-  assert.ok(html.indexOf('voice-output.js?v=1')<html.indexOf('app.js?v=133'));
+  assert.ok(html.includes('./voice-output.css?v=2')&&sw.includes('./voice-output.css?v=2'));
+  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=134'));
   assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.match(app,/window\.ISABELLA_AI\.ask\(/);
-  assert.match(sw,/isabella-shell-v174/);
+  assert.match(sw,/isabella-shell-v175/);
 });
