@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v173';
+const CACHE_NAME = 'isabella-shell-v174';
 const SHELL = [
   './',
   './index.html',
@@ -14,6 +14,7 @@ const SHELL = [
   './work-polish.css?v=1',
   './minds-unified-surface.css?v=1',
   './chat-apple-finish.css?v=1',
+  './voice-output.css?v=1',
   './minds-detail-parity.css?v=1',
   './minds-sections-parity.css?v=1',
   './minds-calendar-shell.css?v=1',
@@ -28,12 +29,13 @@ const SHELL = [
   './dashboard-daily-polish.css?v=1',
   './daily-controls.css?v=1',
   './mobile-refinement.css?v=1',
-  './shell.js?v=106',
+  './shell.js?v=107',
   './situation.js?v=6',
   './turn-integrity.js?v=3',
     './calendar-plan.js?v=2',
   './day-layout.js?v=1',
-'./app.js?v=132',
+'./voice-output.js?v=1',
+  './app.js?v=133',
   './work-team.js?v=1',
   './work.js?v=34',
   './ahora.js?v=1',
