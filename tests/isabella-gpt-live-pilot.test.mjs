@@ -24,8 +24,30 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=1/);
+  assert.match(page,/\.\/live\.js\?v=2/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
+});
+
+
+test('Live voice choices are exactly the documented server allowlist',()=>{
+  const options=[...page.matchAll(/<option value="([^"]+)"(?: selected)?>/g)].map(x=>x[1]);
+  const m=broker.match(/const LIVE_VOICES=new Set\((\[[^;]+\])\);/);
+  assert.ok(m,'missing server-side voice allowlist');
+  const accepted=JSON.parse(m[1]);
+  assert.equal(options.length,31);
+  assert.equal(new Set(options).size,options.length);
+  assert.deepEqual([...options].sort(),[...accepted].sort());
+  assert.equal(options[0],'marin');
+  assert.match(page,/value="marin" selected/);
+  assert.match(page,/id="liveVoice"/);
+  assert.match(page,/\.\/live\.css\?v=2/);
+  assert.match(broker,/typeof voice!=="string"\|\|!LIVE_VOICES\.has\(voice\)/);
+  assert.match(broker,/error:"invalid_voice"/);
+  assert.match(broker,/audio:\{output:\{voice\}\}/);
+  assert.match(client,/const voice=voicePicker\.value;/);
+  assert.match(client,/body:JSON\.stringify\(\{sdp:connection\.localDescription\?\.sdp\|\|"",voice\}\)/);
+  assert.match(client,/voicePicker\.disabled=value==="connecting"\|\|value==="active"/);
+  assert.doesNotMatch(client,/localStorage|sessionStorage|\.rpc\(|\.from\(/);
 });
 
 test('broker authenticates owner, hides credentials, rejects oversized SDP and forbids privileged tools',()=>{
@@ -77,7 +99,8 @@ test('runtime starts idle; a backend failure is visible and never starts microph
     srcObject:null,muted:false,
     pause(){},play(){return Promise.resolve()}
   });
-  const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput'].map(k=>[k,node()]));
+  const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput','liveVoice'].map(k=>[k,node()]));
+  ids.liveVoice.value='marin';
   const shell={dataset:{}};
   const document={hidden:false,
     getElementById:id=>ids[id],
