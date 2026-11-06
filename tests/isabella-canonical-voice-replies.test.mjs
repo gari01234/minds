@@ -56,7 +56,7 @@ test('no speech at load, and speech is explicitly requested',()=>{
 
 test('speech does not read code blocks or external URL destinations',()=>{
   const b=browser();
-  const text=b.voice.textForSpeech('Hola **Gari**. [Archivo](https://example.com/source) \\n\\n```secret\\npassword\\n```\\n Más.');
+  const text=b.voice.textForSpeech('Hola **Gari**. [Archivo](https://example.com/source) \n\n```secret\npassword\n```\n Más.');
   assert.ok(!text.includes('https://'));
   assert.ok(!text.includes('secret'));
   assert.ok(!text.includes('password'));
@@ -100,14 +100,14 @@ test('unsupported browser remains silent without throwing',()=>{
 });
 
 test('voice belongs only to the existing canonical chat turn',()=>{
-  assert.match(app,/async function handle\\(text,attachments=\\[\\],replyTo=null,options=\\{\\}\\)/);
+  assert.match(app,/async function handle\(text,attachments=\[\],replyTo=null,options=\{\}\)/);
   assert.match(app,/voiceTurn===voiceTurnEpoch/);
-  assert.match(app,/integrity\\.typed&&integrity\\.outcome==='answered'/);
-  assert.match(app,/!result\\?\\.incomplete/);
-  assert.match(app,/voiceReply=!!speakChoice\\?\\.checked&&!speakChoice\\.disabled/);
-  assert.match(app,/handle\\(text,\\[\\],null,\\{speakReply\\}\\)/);
-  assert.match(app,/window\\.ISABELLA_VOICE_OUTPUT\\?\\.stop\\(\\)/);
-  assert.doesNotMatch(voiceSource,/openai\\.com|supabase\\.co|fetch\\(|localStorage|sessionStorage/);
+  assert.match(app,/integrity\.typed&&integrity\.outcome==='answered'/);
+  assert.match(app,/!result\?\.incomplete/);
+  assert.match(app,/voiceReply=!!speakChoice\?\.checked&&!speakChoice\.disabled/);
+  assert.match(app,/handle\(text,\[\],null,\{speakReply\}\)/);
+  assert.match(app,/window\.ISABELLA_VOICE_OUTPUT\?\.stop\(\)/);
+  assert.doesNotMatch(voiceSource,/openai\.com|supabase\.co|fetch\(|localStorage|sessionStorage/);
   assert.match(shell,/id="focusSpeakReply" type="checkbox"/);
   assert.match(shell,/id="voiceStopButton"/);
 });
@@ -117,7 +117,7 @@ test('PWA includes new scripts and keeps existing transcription and canonical ru
     assert.ok(html.includes(src)&&sw.includes(src),src);
   assert.ok(html.includes('./voice-output.css?v=1')&&sw.includes('./voice-output.css?v=1'));
   assert.ok(html.indexOf('voice-output.js?v=1')<html.indexOf('app.js?v=133'));
-  assert.match(app,/ISABELLA_AI\\.transcribe\\(blob\\)/);
-  assert.match(app,/window\\.ISABELLA_AI\\.ask\\(/);
+  assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
+  assert.match(app,/window\.ISABELLA_AI\.ask\(/);
   assert.match(sw,/isabella-shell-v174/);
 });
