@@ -18,7 +18,7 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(page,/id="liveStop"[^>]*disabled/);
   assert.match(page,/id="liveAudio"[^>]*autoplay[^>]*playsinline[^>]*controls/);
   assert.match(page,/id="liveUnlock"[^>]*hidden/);
-  assert.match(page,/no guarda esta conversación en MINDS/);
+  assert.match(page,/no guarda esta conversación en MINDS/i);
   assert.match(shell,/id="micButton"/);
   assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"/);
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
