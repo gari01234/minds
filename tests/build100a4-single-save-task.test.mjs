@@ -68,63 +68,64 @@ test('auth, unknown taxonomy and divergent canonical readback fail closed',async
  await assert.rejects(wrong.quick(data),/otros datos/);
  assert.equal(wrong.counts.writes,1);
 });
-const begin=app.indexOf('function newPanel(presetDate=null){');
+const begin=app.indexOf('function newPanel(presetDate=null,kind=\'task\',draft={}){');
 const end=app.indexOf('\nfunction autonomyContextLabel(',begin);
 assert.ok(begin>=0&&end>begin);
 const newPanelCode=app.slice(begin,end);
-function form(){
- const nodes={};
- const names=['#newType','#newTitle','#newDate','#newCat','#newProject','#newTime','#newSave','#quickTaskStatus'];
- for(const n of names)nodes[n]={value:'',textContent:'',disabled:false,classList:{toggle(){}}};
- nodes['#newType'].value='task';nodes['#newTitle'].value='Una tarea';
- nodes['#newDate'].value='2026-10-27';nodes['#newCat'].value='personal';
- const stats={modals:0,legacyCreates:0,saved:0,closed:0,calls:[],timeouts:[]};
- let resolveWork;
- const ctx={$:k=>nodes[k],state:{categories:[{id:'personal',name:'Personal'}],projects:[],tasks:[],events:[]},
-  esc:v=>String(v),modal:()=>stats.modals++,today:()=> '2026-10-24',
-  window:{MINDS_TASK_DETAIL:{createQuick:params=>{stats.calls.push(params);
-    return new Promise(resolve=>{resolveWork=resolve});}},
-    ISABELLA_SYNC_PULL_NOW:async()=>true},
-  crypto:{randomUUID:()=>key},setTimeout:fn=>{stats.timeouts.push(fn)},Promise,
-  save:()=>stats.saved++,renderCalendar:()=>{},closeModal:()=>stats.closed++,
-  uid:()=>{stats.legacyCreates++;return 'legacy-id'},mutation:()=>{stats.legacyCreates++}};
+// 07.11.2026 (Gari): "Agregar" opens the complete task editor at once instead of a short form.
+function panel(){
+ const nodes={},stats={modals:0,opened:[],saved:0,closed:0,mutations:[]};
+ for(const n of ['#newTitle','#newDate','#newTime','#newDuration','#newCat','#newProject','#newNotes','#newSave','#newToTask','#quickTaskStatus'])
+  nodes[n]={value:'',textContent:''};
+ const state={categories:[{id:'personal',name:'Personal'},{id:'casa',name:'Casa'}],projects:[{id:'p-1',name:'Bernried'}],tasks:[],events:[]};
+ const ctx={$:k=>nodes[k],state,esc:v=>String(v??''),modal:(t,h)=>{stats.modals++;stats.html=h},today:()=> '2026-10-24',
+  window:{MINDS_TASK_DETAIL:{open:opts=>{stats.opened.push(opts);return Promise.resolve()}}},
+  save:()=>stats.saved++,renderCalendar:()=>{},closeModal:()=>stats.closed++,uid:()=> 'event-1',
+  mutation:(...a)=>stats.mutations.push(a),Math,Number};
  vm.runInNewContext(newPanelCode+';this.newPanel=newPanel;',ctx);
- ctx.newPanel();return {ctx,nodes,stats,resolve:task=>resolveWork(task)};
+ return {ctx,nodes,stats,state};
 }
-test('Calendar and Tareas share one-button creation and prevent in-flight double click',async()=>{
- const f=form();
- assert.equal(f.stats.modals,1);
- const first=f.nodes['#newSave'].onclick();
- const second=f.nodes['#newSave'].onclick();
- assert.equal(f.stats.calls.length,1);
- assert.equal(f.stats.modals,1,'no second creation modal');
- assert.equal(f.stats.legacyCreates,0,'no local-only task');
- assert.equal(f.nodes['#newSave'].disabled,true);
- f.resolve({id:'task-1',title:'Una tarea'});
- await Promise.all([first,second]);
- assert.match(f.nodes['#quickTaskStatus'].textContent,/Tarea creada\./);
- assert.equal(f.stats.closed,0);
- f.stats.timeouts[0]();assert.equal(f.stats.closed,1);
+test('Calendar + opens the complete task editor with the day, no short form and no local-only task',()=>{
+ const p=panel();
+ p.ctx.newPanel('2026-10-27');
+ assert.equal(p.stats.modals,0,'no short form');
+ assert.equal(p.stats.opened.length,1);
+ const o=p.stats.opened[0];
+ assert.equal(o.date,'2026-10-27');assert.equal(o.categoryKey,'personal');assert.equal(typeof o.onSwitchKind,'function');
+ assert.equal(p.state.tasks.length,0);assert.equal(p.stats.mutations.length,0);
+ o.onSwitchKind({title:'Reunión',date:'2026-10-28',projectKey:'p-1',notes:'Sala 2',categoryKey:'casa'});
+ assert.equal(p.stats.modals,1);
+ assert.match(p.stats.html,/value="Reunión"/);assert.match(p.stats.html,/value="2026-10-28"/);
+ assert.match(p.stats.html,/<option value="p-1" selected>/);assert.match(p.stats.html,/<option value="casa" selected>/);
+ assert.match(p.stats.html,/id="newDuration"/);assert.match(p.stats.html,/id="newNotes"/);
 });
-test('failed Guardar does not close, and retry preserves same idempotency key',async()=>{
- const f=form();
- const first=f.nodes['#newSave'].onclick();
- f.resolve(null);
- await first;
- assert.equal(f.stats.closed,0);
- assert.equal(f.nodes['#newSave'].disabled,false);
- const second=f.nodes['#newSave'].onclick();
- assert.equal(f.stats.calls.length,2);
- assert.equal(f.stats.calls[0].clientKey,f.stats.calls[1].clientKey);
- f.resolve({id:'task-1',title:'Una tarea'});await second;
- assert.equal(f.stats.legacyCreates,0);
+test('The event form saves every field once; switching back keeps what was typed',()=>{
+ const p=panel();
+ p.ctx.newPanel('2026-10-27','event');
+ Object.assign(p.nodes['#newTitle'],{value:'Besprechung'});p.nodes['#newDate'].value='2026-10-29';p.nodes['#newTime'].value='16:30';
+ p.nodes['#newDuration'].value='90';p.nodes['#newCat'].value='casa';p.nodes['#newProject'].value='p-1';p.nodes['#newNotes'].value='Planos';
+ p.nodes['#newSave'].onclick();
+ assert.equal(p.state.events.length,1);
+ const e=p.state.events[0];
+ assert.deepEqual([e.title,e.date,e.start,e.duration,e.categoryId,e.projectId,e.notes],['Besprechung','2026-10-29','16:30',90,'casa','p-1','Planos']);
+ assert.equal(p.stats.mutations.length,1);assert.equal(p.stats.closed,1);
+ p.nodes['#newToTask'].onclick();
+ const o=p.stats.opened.at(-1);
+ assert.deepEqual([o.date,o.projectKey,o.categoryKey,o.draft.title,o.draft.notes],['2026-10-29','p-1','casa','Besprechung','Planos']);
+});
+test('The complete editor creates with one key and reads it back, so a retry never duplicates',()=>{
+ assert.match(detail,/clientKey:task\?null:uid\(\),/);
+ assert.match(detail,/row\.client_key=ctx\.clientKey\|\|uid\(\);ctx\.clientKey=row\.client_key;/);
+ assert.match(detail,/let data=await readBack\(\),error=null;\n\s*if\(!data\)\{\n\s*const inserted=await sb\.from\('isabella_tasks'\)\.insert\(row\)/);
+ assert.match(detail,/if\(error\|\|!data\)\{data=await readBack\(\);if\(data\)error=null\}/);
+ assert.match(detail,/const button=\$\('#taskDetailCreate'\);button\.disabled=true;/);
 });
 test('PWA pins both changed scripts and rotates one coherent cache',()=>{
  const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
- for(const pin of ['app.js?v=136','task-detail.js?v=4']){
+ for(const pin of ['app.js?v=137','task-detail.js?v=5']){
   assert.ok(html.includes(pin),'HTML '+pin);assert.ok(sw.includes(pin),'SW '+pin);
  }
- assert.match(sw,/isabella-shell-v178/);
- assert.match(app,/await window\.MINDS_TASK_DETAIL\.createQuick\(attempt\)/);
- assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.open\(\{title,date,categoryKey:categoryId,projectKey:projectId\}\)/);
+ assert.match(sw,/isabella-shell-v179/);
+ assert.match(app,/void window\.MINDS_TASK_DETAIL\.open\(\{date,projectKey:draft\.projectKey\|\|null,/);
+ assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.createQuick\(/);
 });

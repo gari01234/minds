@@ -3802,50 +3802,39 @@ function taskGroupPanel(group){
   document.querySelectorAll('[data-edit-task]').forEach(x=>x.onclick=()=>editItem('task',x.dataset.editTask));
   document.querySelectorAll('[data-list-task-toggle]').forEach(x=>x.onclick=e=>{e.stopPropagation();const id=x.dataset.listTaskToggle;const t=state.tasks.find(y=>y.id===id);if(!t)return;const before=clone(t);t.done=!t.done;t.completedAt=t.done?new Date().toISOString():null;mutation('task',t.done?'complete':'reopen',before,t,'manual');save();taskGroupPanel(group)});
 }
-function newPanel(presetDate=null){
-  modal('Agregar manualmente',`<div class="form">
-    <select id="newType"><option value="task">Tarea</option><option value="event">Evento</option></select>
-    <input id="newTitle" placeholder="Nombre">
-    <label>Fecha <span class="small">(opcional para tareas)</span><input id="newDate" type="date" value="${esc(presetDate||'')}"></label>
-    <label>Categoría<select id="newCat">${state.categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></label>
-    <label>Proyecto<select id="newProject"><option value="">Sin proyecto</option>${state.projects.map(p=>`<option value="${esc(p.id)}">${esc(p.name)}</option>`).join('')}</select></label>
-    <input id="newTime" type="time" value="09:00">
+// "Agregar" (calendar +, menu): the complete form at once, not a short one to fill in later
+// (Gari, 07.11.2026). A task opens the full task editor; one tap switches to an event and back.
+function newPanel(presetDate=null,kind='task',draft={}){
+  const date=draft.date||presetDate||null;
+  if(kind==='task'){
+    if(!window.MINDS_TASK_DETAIL?.open){modal('Agregar','<p class="small">La creación no está disponible. Recarga Window.</p>');return}
+    void window.MINDS_TASK_DETAIL.open({date,projectKey:draft.projectKey||null,
+      categoryKey:draft.categoryKey||state.categories[0]?.id||null,
+      draft:(draft.title||draft.notes)?{title:draft.title||'',notes:draft.notes||''}:null,
+      onSwitchKind:d=>newPanel(presetDate,'event',d)});
+    return;
+  }
+  const catKey=draft.categoryKey||state.categories[0]?.id;
+  const cats=state.categories.map(c=>`<option value="${c.id}" ${c.id===catKey?'selected':''}>${esc(c.name)}</option>`).join('');
+  const projects='<option value="">Sin proyecto</option>'+state.projects.map(p=>`<option value="${esc(p.id)}" ${p.id===draft.projectKey?'selected':''}>${esc(p.name)}</option>`).join('');
+  modal('Nuevo evento',`<div class="form item-editor">
+    <div class="minds-new-kind" role="group" aria-label="Tipo"><button type="button" id="newToTask" aria-pressed="false">Tarea</button><button type="button" class="is-active" aria-pressed="true">Evento</button></div>
+    <label>Título<input id="newTitle" placeholder="Nombre" value="${esc(draft.title||'')}"></label>
+    <label>Fecha<input id="newDate" type="date" value="${esc(date||today())}"></label>
+    <label>Hora<input id="newTime" type="time" value="09:00"></label>
+    <label>Duración (min)<input id="newDuration" type="number" min="5" step="5" value="60"></label>
+    <label>Categoría<select id="newCat">${cats}</select></label>
+    <label>Proyecto<select id="newProject">${projects}</select></label>
+    <label>Notas<textarea id="newNotes" rows="3">${esc(draft.notes||'')}</textarea></label>
     <button id="newSave" type="button" class="primary">Guardar</button><div id="quickTaskStatus" class="small" role="status" aria-live="polite"></div>
   </div>`);
-  const type=$('#newType'),dateInput=$('#newDate'),timeInput=$('#newTime');
-  const syncType=()=>{const event=type.value==='event';if(event&&!dateInput.value)dateInput.value=today();timeInput.classList.toggle('hidden',!event)};
-  type.onchange=syncType;syncType();
-  let saving=false,attempt=null;
-  $('#newSave').onclick=async()=>{
-    if(saving)return;
-    const title=$('#newTitle').value.trim();if(!title){$('#quickTaskStatus').textContent='Escribe un nombre para la tarea.';return}
-    const kind=type.value,date=dateInput.value||null,categoryId=$('#newCat').value,projectId=$('#newProject').value||null;
-    if(kind==='task'){
-      const button=$('#newSave'),status=$('#quickTaskStatus');
-      if(!window.MINDS_TASK_DETAIL?.createQuick){status.textContent='La creación no está disponible. Recarga MINDS.';return}
-      const values={title,date,categoryKey:categoryId,projectKey:projectId};
-      if(attempt){
-        if(!Object.entries(values).every(([k,v])=>attempt[k]===v)){
-          status.textContent='El guardado anterior aún no se verificó. Reintenta con los mismos datos o abre un formulario nuevo.';
-          return;
-        }
-      }else attempt={...values,clientKey:crypto.randomUUID()};
-      saving=true;button.disabled=true;button.textContent='Guardando…';
-      status.textContent='Guardando…';
-      try{
-        const task=await window.MINDS_TASK_DETAIL.createQuick(attempt);
-        if(!task?.id||task.title!==attempt.title)throw new Error('No se pudo verificar la tarea.');
-        status.textContent='Tarea creada.';
-        void Promise.resolve(window.ISABELLA_SYNC_PULL_NOW?.()).then(()=>renderCalendar()).catch(()=>{});
-        setTimeout(()=>{if($('#newSave')===button)closeModal()},650);
-      }catch(error){
-        status.textContent='No se pudo verificar el guardado: '+String(error?.message||error);
-        button.disabled=false;button.textContent='Guardar';
-      }finally{saving=false}
-      return;
-    }
-    if(!date){$('#quickTaskStatus').textContent='El evento necesita una fecha.';return}
-    const item={id:uid(),title,date,categoryId,projectId,start:timeInput.value||'09:00',duration:60};
+  $('#newToTask').onclick=()=>newPanel(presetDate,'task',{title:$('#newTitle').value,date:$('#newDate').value||null,
+    projectKey:$('#newProject').value||null,notes:$('#newNotes').value,categoryKey:$('#newCat').value||null});
+  $('#newSave').onclick=()=>{
+    const title=$('#newTitle').value.trim();if(!title){$('#quickTaskStatus').textContent='Escribe un nombre para el evento.';return}
+    const day=$('#newDate').value;if(!day){$('#quickTaskStatus').textContent='El evento necesita una fecha.';return}
+    const item={id:uid(),title,date:day,categoryId:$('#newCat').value||'personal',projectId:$('#newProject').value||null,
+      start:$('#newTime').value||'09:00',duration:Math.max(5,Number($('#newDuration').value)||60),notes:$('#newNotes').value||''};
     state.events.push(item);mutation('event','create',null,item,'manual');
     save();closeModal();renderCalendar();
   };

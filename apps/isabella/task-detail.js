@@ -65,6 +65,9 @@ async function open(opts={}){
     const categoryId=task?.category_id||choices.categories.find(c=>c.client_key===opts.categoryKey)?.id||null;
     const teamData=task&&window.MINDS_TASK_TEAM?.read?await window.MINDS_TASK_TEAM.read(task.id,task.assignee_person_id):{ids:[],allocations:[]};
     const ctx={ticket,task,projectId,categoryId,choices,opts,queue:Promise.resolve(),blocked:false,
+      draft:!task&&opts.draft?{...opts.draft}:null,
+      // One key per new task: a second tap or a retry after a lost answer finds the same row instead of a copy.
+      clientKey:task?null:uid(),
       teamIds:teamData.ids.length?teamData.ids:(task?.assignee_person_id?[task.assignee_person_id]:[]),
       allocations:teamData.allocations};
     render(ctx);
@@ -72,7 +75,8 @@ async function open(opts={}){
 }
 function render(ctx){
   if(ctx.ticket!==generation)return;
-  const t=ctx.task||{},choices=ctx.choices;
+  // A new task keeps what was already typed (draft) when the form is drawn again, e.g. after choosing a project.
+  const t=ctx.task||ctx.draft||{},choices=ctx.choices;
   const person=t.assignee_person_id||'',legacy=t.assignee&&!person;
   const statusValue=t.work_status||'not_started',priority=t.priority||'normal';
   const projectOptions=selectOption('','Sin proyecto',t.project_id||ctx.projectId)+
@@ -91,7 +95,11 @@ function render(ctx){
     (String(l.url||'').match(/^https?:\/\//i)?E(l.url):'#')+'">'+E(l.title||l.url||'Enlace')+'</a>'+
     '<button type="button" data-task-link-remove="'+i+'" title="Quitar enlace">×</button></div>').join('');
   const estimate=Number(t.metadata?.planning?.estimated_minutes||0);
-  const body='<div class="minds-task-detail" data-task-detail>'+
+  // New from the calendar: the complete form at once, and one tap to make it an event instead.
+  const kindSwitch=!ctx.task&&typeof ctx.opts.onSwitchKind==='function'
+    ?'<div class="minds-new-kind" role="group" aria-label="Tipo"><button type="button" class="is-active" aria-pressed="true">Tarea</button>'+
+      '<button type="button" id="taskDetailToEvent" aria-pressed="false">Evento</button></div>':'';
+  const body='<div class="minds-task-detail" data-task-detail>'+kindSwitch+
     '<header class="minds-task-detail-top"><button type="button" class="minds-task-complete'+(t.completed_at?' is-done':'')+'" id="taskDetailComplete" aria-pressed="'+!!t.completed_at+'" aria-label="'+(t.completed_at?'Reabrir tarea':'Marcar como completada')+'">'+
     (t.completed_at?'<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="m5 12 4 4 10-10"/></svg>':'')+'</button><input id="taskDetailTitle" aria-label="Título" placeholder="Nombre de la tarea" value="'+E(t.title||ctx.opts.title||'')+'">'+
     '<button class="minds-task-more" type="button" id="taskDetailMore" aria-label="Opciones de tarea">···</button></header>'+
@@ -156,6 +164,11 @@ function bind(ctx){
     if(!dates()){status('La fecha de inicio debe ser anterior o igual a la entrega.',true);return null}
     return make(value);
   };
+  $('#taskDetailToEvent')?.addEventListener('click',()=>{
+    const d=readDraft(),project=ctx.choices.projects.find(p=>p.id===($('#taskDetailProject')?.value||''));
+    ctx.opts.onSwitchKind({title:d.title,date:d.due_date||d.start_date||ctx.opts.date||null,
+      projectKey:project?.client_key||null,notes:d.notes,categoryKey:ctx.choices.categories.find(c=>c.id===d.category_id)?.client_key||null});
+  });
   blur('#taskDetailTitle',value=>({title:value.trim()}));
   blur('#taskDetailNotes',value=>({notes:value}));
   blur('#taskDetailLabels',value=>({labels:value.split(',').map(s=>s.trim()).filter(Boolean)}));
@@ -260,6 +273,7 @@ async function changeProject(ctx,id){
     return;
   }
   if(!ctx.task){
+    ctx.draft=readDraft();if(ctx.draft.category_id!==undefined)ctx.categoryId=ctx.draft.category_id;
     ctx.projectId=id;ctx.opts.projectId=id;ctx.opts.bucketId=null;ctx.choices=await readChoices(id);
     if(ctx.ticket===generation)render(ctx);return;
   }
@@ -268,6 +282,16 @@ async function changeProject(ctx,id){
   ctx.projectId=id;ctx.opts.bucketId=null;ctx.choices=await readChoices(id);
   ctx.teamIds=[];ctx.allocations=[];
   if(ctx.ticket===generation)render(ctx);
+}
+// What is typed in a task that does not exist yet.
+function readDraft(){
+  const v=s=>$(s)?.value??'';
+  return {title:v('#taskDetailTitle'),start_date:v('#taskDetailStart')||null,due_date:v('#taskDetailDue')||null,
+    work_status:v('#taskDetailWorkStatus')||'not_started',priority:v('#taskDetailPriority')||'normal',
+    category_id:$('#taskDetailCategory')?(v('#taskDetailCategory')||null):undefined,
+    reminder_time:v('#taskDetailReminder')||null,labels:v('#taskDetailLabels').split(',').map(s=>s.trim()).filter(Boolean),
+    notes:v('#taskDetailNotes'),checklist:$('#taskDetailChecks')?collectChecks():[],
+    metadata:{planning:{estimated_minutes:Number(v('#taskDetailEstimate')||0)||0}}};
 }
 async function createTask(ctx){
   const title=$('#taskDetailTitle')?.value.trim();
@@ -293,7 +317,21 @@ async function createTask(ctx){
   status('Creando…');
   const button=$('#taskDetailCreate');button.disabled=true;
   try{
-    const {data,error}=await sb.from('isabella_tasks').insert(row).select('*').single();
+    row.client_key=ctx.clientKey||uid();ctx.clientKey=row.client_key;
+    const owner=(await sb.auth.getSession())?.data?.session?.user?.id||null;
+    const readBack=async()=>{
+      let q=sb.from('isabella_tasks').select('*').eq('client_key',row.client_key);
+      if(owner)q=q.eq('user_id',owner);
+      const {data:found,error:readError}=await q.maybeSingle();
+      if(readError)throw readError;
+      return found;
+    };
+    let data=await readBack(),error=null;
+    if(!data){
+      const inserted=await sb.from('isabella_tasks').insert(row).select('*').single();
+      data=inserted.data;error=inserted.error;
+      if(error||!data){data=await readBack();if(data)error=null}
+    }
     if(error||!data)throw error||new Error('El servidor no confirmó la tarea.');
     ctx.task=data;ctx.projectId=data.project_id;ctx.categoryId=data.category_id;
     if(ctx.teamIds?.length){

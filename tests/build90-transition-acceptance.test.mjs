@@ -15,46 +15,32 @@ function part(source,start,end){
 }
 const esc=x=>String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-test('90.4 manual calendar Guardar preserves category and project in one canonical insert',async()=>{
-  const elements={
-    '#newType':{value:'task'},'#newDate':{value:'2026-10-15'},
-    '#newTime':{value:'09:00',classList:{toggle(){}}},
-    '#newTitle':{value:'Revisar Schnitt'},'#newCat':{value:'trabajo'},
-    '#newProject':{value:'bernried'},'#newSave':{},
-    '#quickTaskStatus':{textContent:''}
-  };
+// 07.11.2026: "Agregar" opens the complete editors; category, project and date still carry through.
+const newPanelSource=()=>part(app,"function newPanel(presetDate=null,kind='task',draft={}){",'function autonomyContextLabel(').trim();
+test('90.4 manual calendar task keeps day, category and project, through the complete editor',async()=>{
+  const opened=[];const calls=[];
   const state={tasks:[],events:[],categories:[{id:'trabajo',name:'Trabajo'}],projects:[{id:'bernried',name:'Bernried'}]};
-  const calls=[];let row;
-  const c={state,$:s=>elements[s],modal:(title,html)=>calls.push(['modal',title,html]),esc,
-    window:{MINDS_TASK_DETAIL:{createQuick:async x=>{row=x;return {id:'canonical-id',title:x.title}}},
-      ISABELLA_SYNC_PULL_NOW:async()=>true},
-    crypto:{randomUUID:()=> 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'},
-    setTimeout:()=>{},Promise,
-    uid:()=> 'task-one',today:()=> '2026-10-09',nextTaskOrder:()=>10,
-    mutation:(...args)=>calls.push(['mutation',...args]),save:()=>calls.push(['save']),closeModal:()=>{},renderCalendar:()=>{}};
-  const fn=vm.runInNewContext('('+part(app,'function newPanel(presetDate=null){','function autonomyContextLabel(').trim()+')',c);
-  fn('2026-10-15');
-  assert.match(calls[0][2],/id="newProject"/);
-  assert.match(calls[0][2],/value="2026-10-15"/);
-  await elements['#newSave'].onclick();
-  assert.equal(calls.filter(x=>x[0]==='modal').length,1,'no second required create modal');
-  assert.equal(state.tasks.length,0,'not a local-only task');
-  assert.deepEqual([row.title,row.date,row.categoryKey,row.projectKey],
-    ['Revisar Schnitt','2026-10-15','trabajo','bernried']);
-  assert.match(elements['#quickTaskStatus'].textContent,/Tarea creada\./);
+  const c={state,$:()=>({}),modal:(title,html)=>calls.push(['modal',title,html]),esc,
+    window:{MINDS_TASK_DETAIL:{open:async o=>{opened.push(o)}}},
+    uid:()=> 'task-one',today:()=> '2026-10-09',mutation:(...args)=>calls.push(['mutation',...args]),save:()=>calls.push(['save']),closeModal:()=>{},renderCalendar:()=>{}};
+  const fn=vm.runInNewContext('('+newPanelSource()+')',c);
+  fn('2026-10-15','task',{projectKey:'bernried',categoryKey:'trabajo',title:'Revisar Schnitt'});
+  assert.equal(calls.length,0,'no short form and no local-only task');
+  assert.deepEqual([opened[0].date,opened[0].categoryKey,opened[0].projectKey,opened[0].draft.title],
+    ['2026-10-15','trabajo','bernried','Revisar Schnitt']);
+  assert.equal(state.tasks.length,0);
 });
 test('90.4 event creation also preserves explicit project and date',()=>{
   const elements={
-    '#newType':{value:'event'},'#newDate':{value:'2026-10-21'},
-    '#newTime':{value:'16:30',classList:{toggle(){}}},
-    '#newTitle':{value:'Besprechung'},'#newCat':{value:'trabajo'},
-    '#newProject':{value:'schwarz'},'#newSave':{}
+    '#newDate':{value:'2026-10-21'},'#newTime':{value:'16:30'},'#newDuration':{value:'60'},
+    '#newTitle':{value:'Besprechung'},'#newCat':{value:'trabajo'},'#newNotes':{value:''},
+    '#newProject':{value:'schwarz'},'#newSave':{},'#newToTask':{},'#quickTaskStatus':{textContent:''}
   };
   const state={tasks:[],events:[],categories:[{id:'trabajo',name:'Trabajo'}],projects:[{id:'schwarz',name:'Schwarz'}]};
-  const c={state,$:s=>elements[s],modal:()=>{},esc,uid:()=> 'event-one',
+  const c={state,$:s=>elements[s],modal:()=>{},esc,uid:()=> 'event-one',Math,Number,
     today:()=> '2026-10-09',nextTaskOrder:()=>10,mutation:()=>{},save:()=>{},closeModal:()=>{},renderCalendar:()=>{}};
-  const fn=vm.runInNewContext('('+part(app,'function newPanel(presetDate=null){','function autonomyContextLabel(').trim()+')',c);
-  fn('2026-10-21');
+  const fn=vm.runInNewContext('('+newPanelSource()+')',c);
+  fn('2026-10-21','event');
   elements['#newSave'].onclick();
   assert.deepEqual([state.events[0].projectId,state.events[0].start,state.events[0].date],['schwarz','16:30','2026-10-21']);
 });
