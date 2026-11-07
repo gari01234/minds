@@ -140,14 +140,10 @@
         // Do not invent an approval endpoint or transfer approval authority to Live.
         const proposed=result.proposal!=null?[result.proposal]:
           Array.isArray(result.proposals)?result.proposals:[];
-        const requestId=proposed.length===1?String(proposed[0]?.request_id||""):"";
-        reviewChat.textContent=proposed.length===1
+        const specificReview=canonical?.reviewLink?.(result,window.location.href);
+        reviewChat.textContent=specificReview
           ?"Revisar propuesta en Isabella":"Revisar propuestas en Isabella";
-        if(/^[0-9a-f-]{36}$/i.test(requestId)){
-          const dest=new URL("../",window.location.href);
-          dest.searchParams.set("review",requestId);
-          reviewChat.href=dest.href;
-        }
+        if(specificReview)reviewChat.href=specificReview;
       }
       reviewStatus.textContent=outcome.hasReview
         ?"MINDS preparó una propuesta pendiente de revisión; no se ha aplicado."
