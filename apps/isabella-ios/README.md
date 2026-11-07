@@ -4,6 +4,10 @@
 
 ## Lo implementado actualmente (código en main/PR, no aceptación física)
 - **La app es dueña de la sesión (desde noviembre 2026):** se entra una vez en una pantalla nativa (código por correo); la sesión vive en el Llavero bajo la App Group y la comparten la Share Extension, el widget y los App Intents. La PWA se muestra a pantalla completa y recibe el access token por el puente tipado (`BRIDGE.md`); el refresh token nunca sale del Llavero. Las vistas nativas Continuidad/Chat/Agenda siguen en el código, ocultas.
+- **Dos cuentas (desde el 07.11.2026):** como cambiar de usuario en GitHub.
+  - **Persönlich** es Window; **Office** es TBA Office, con su propio proyecto de Supabase, su inicio con correo y contraseña, su sesión en el Llavero y su propio almacén web.
+  - Se cambia desde el menú «•••» de la web o desde la pantalla de inicio de sesión. Ver `BRIDGE.md`.
+  - El widget, la Share Extension y Siri siguen siendo solo de Persönlich.
 - **Builds automáticos:** `ios-testflight-auto.yml` sube un build a TestFlight cuando cambia la app en `main` y cada dos meses (TestFlight caduca a los 90 días).
 - **MINDS completo:** puente `WKWebView` hacia la PWA existente para navegar la superficie más avanzada (Chat, Work, Agenda/planificación, Lecturas, etc.) sin reescribir su lógica. Los enlaces principales permanecen en `/minds/`; enlaces externos abren Safari. El inicio de sesión web es **separado** del inicio de sesión nativo: usar la misma cuenta. No se inyecta el token Keychain en JavaScript. Logout nativo limpia también el estado web embebido.
 - **Continuidad SwiftUI:** proyección owner-scoped de revisiones, Attention, Missions y Commitments, con estados/huecos honestos. No concede permisos ni ejecuta decisiones.

@@ -19,13 +19,24 @@ struct MainTabView: View {
     var body: some View {
         @Bindable var model = model
         TabView(selection: $model.tab) {
-            page(.chat, "Chat")
-            page(.ahora, "Ahora")
-            page(.tiempo, "Tiempo")
-            page(.work, "Work")
-            page(.bandeja, "Bandeja")
-                .badge(model.openProposals)
+            if model.account == .office {
+                // TBA Office: Romy · Heute · Kalender · Work · Tools (same icons as the office web).
+                page(.chat, "Chat")
+                page(.ahora, "Ahora")
+                page(.tiempo, "Tiempo")
+                page(.work, "Work")
+                page(.tools, "Tools")
+            } else {
+                page(.chat, "Chat")
+                page(.ahora, "Ahora")
+                page(.tiempo, "Tiempo")
+                page(.work, "Work")
+                page(.bandeja, "Bandeja")
+                    .badge(model.openProposals)
+            }
         }
+        // Each account has its own web page: rebuild the tabs when the account changes.
+        .id(model.account)
         .tint(Color(red: 0.090, green: 0.090, blue: 0.090))
         .onChange(of: model.tab) { _, _ in model.showWebSection() }
         .onChange(of: scenePhase) { _, phase in
@@ -34,7 +45,7 @@ struct MainTabView: View {
     }
 
     private func page(_ tab: AppModel.Tab, _ icon: String) -> some View {
-        WebTabView(session: model.webPortal, active: model.tab == tab)
+        WebTabView(session: model.activePortal, active: model.tab == tab)
             // Under the status bar (the page handles it), but above the tab bar.
             .ignoresSafeArea(edges: .top)
             .tabItem { Image(icon) }

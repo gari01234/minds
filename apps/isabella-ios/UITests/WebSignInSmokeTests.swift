@@ -107,6 +107,31 @@ final class WebSignInSmokeTests: XCTestCase {
         XCTAssertEqual(app.state, .runningForeground)
     }
 
+    // The second account (TBA Office): its own sign-in with e-mail and password. Nothing is sent.
+    // "Zu Persönlich wechseln" goes back to Window's own sign-in.
+    func testOfficeAccountShowsItsOwnSignInAndSwitchesBack() throws {
+        let app = XCUIApplication()
+        app.launchArguments = ["-WindowUITestOffice"]
+        app.launch()
+        let email = app.textFields["office-login-email"]
+        let appeared = email.waitForExistence(timeout: 30)
+        print("WINDOW-SMOKE office sign-in appeared: \(appeared), state \(app.state.rawValue)")
+        attach(app, "o1-office-sign-in")
+        XCTAssertTrue(appeared, "The office sign-in did not appear")
+        XCTAssertTrue(app.secureTextFields["office-login-password"].exists, "No password field")
+        XCTAssertFalse(app.buttons["office-login-submit"].isEnabled, "Anmelden is enabled without e-mail and password")
+        email.tap()
+        email.typeText("prueba@example.com")
+        sleep(1)
+        attach(app, "o2-office-typed")
+        XCTAssertEqual(app.state, .runningForeground, "Window ended while typing in the office sign-in")
+        app.buttons["switch-to-personal"].tap()
+        let personal = app.textFields["native-login-email"]
+        XCTAssertTrue(personal.waitForExistence(timeout: 10), "Back in Persönlich, Window's sign-in")
+        XCTAssertTrue(app.buttons["switch-to-office"].exists, "Persönlich offers the office account")
+        attach(app, "o3-back-to-personal")
+    }
+
     private func firstWebInput(_ app: XCUIApplication, timeout: TimeInterval) -> XCUIElement? {
         let deadline = Date().addingTimeInterval(timeout)
         repeat {

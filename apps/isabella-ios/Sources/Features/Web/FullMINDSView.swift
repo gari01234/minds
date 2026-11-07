@@ -4,11 +4,40 @@ import UIKit
 
 // Bridge to the already deployed MINDS web application. It has no access to
 // Keychain, privileged credentials, native task mutations or Apple approvals.
+// One session per account: Persönlich shows Window (MINDS), Office shows TBA Office.
+// Each has its own web view and its own website data (cookies, local storage).
 @MainActor
 final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate {
     static let homeURL = URL(string: "https://gari01234.github.io/minds/isabella/")!
+    static let officeHomeURL = URL(string: "https://tbarchitekten.github.io/app/")!
+    // A fixed identifier: the office's website data survives app launches, apart from Window's.
+    private static let officeDataStoreID = UUID(uuidString: "6F1C2A4E-0B7D-4C3A-9E51-7A0D2B3C4F10")!
+
+    let account: WindowAccount
     private var made: WKWebView?
     private var started = false
+
+    init(account: WindowAccount = .personal) {
+        self.account = account
+        super.init()
+    }
+
+    var startURL: URL { account == .office ? Self.officeHomeURL : Self.homeURL }
+    var trustedHost: String { account == .office ? "tbarchitekten.github.io" : "gari01234.github.io" }
+    // Sections the app may open in this account (the fragment #section=…).
+    var sections: [String] {
+        account == .office
+            ? ["assistant", "feed", "calendar", "work", "tools", "projects", "plans"]
+            : ["assistant", "feed", "bandeja", "ideas", "work", "calendar", "readings", "thoughts"]
+    }
+    private var dataStore: WKWebsiteDataStore {
+        account == .office ? WKWebsiteDataStore(forIdentifier: Self.officeDataStoreID) : .default()
+    }
+
+    // The top-level page of this account's site, over https on the default port.
+    func trusts(_ origin: WKSecurityOrigin) -> Bool {
+        origin.protocol == "https" && origin.host.lowercased() == trustedHost && origin.port == 0
+    }
 
     // Set by AppModel: the app owns the session; the bridge only asks for it.
     var sessionProvider: (() async throws -> BridgeSession?)?
@@ -16,6 +45,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     var onSessionLost: (() -> Void)?
     var onNavigate: ((String, [String: String]) -> Void)?
     var onBadge: ((Int) -> Void)?
+    var onSwitchAccount: ((WindowAccount) -> Void)?
 
     // The web view is made the first time the page is shown, never at launch.
     // AppModel (and this session) are created before UIApplicationMain; a web
@@ -25,7 +55,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     var webView: WKWebView {
         if let made { return made }
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = .default()
+        configuration.websiteDataStore = dataStore
         // Marks requests from the app; the web app detects app mode by the bridge.
         configuration.applicationNameForUserAgent = "WindowApp/1.0"
         configuration.allowsInlineMediaPlayback = true
@@ -51,7 +81,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     func webView(_ webView: WKWebView, requestMediaCapturePermissionFor origin: WKSecurityOrigin,
                  initiatedByFrame frame: WKFrameInfo, type: WKMediaCaptureType,
                  decisionHandler: @escaping (WKPermissionDecision) -> Void) {
-        decisionHandler(origin.protocol == "https" && origin.host.lowercased() == "gari01234.github.io" ? .grant : .deny)
+        decisionHandler(trusts(origin) ? .grant : .deny)
     }
 
     // If the page's process is ended by iOS (memory), reload instead of staying blank.
@@ -88,7 +118,8 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     // The app chooses the page's section through the URL fragment (#section=…).
     // A fragment-only change is a same-document navigation: the page is not reloaded.
     func show(section: String, extra: [String: String] = [:]) {
-        guard let url = Self.sectionURL(section, extra: extra) else { return }
+        guard sections.contains(section),
+              let url = Self.sectionURL(section, extra: extra, home: startURL, allowed: sections) else { return }
         if !started {
             started = true
             Self.trace("opening " + url.absoluteString)
@@ -99,9 +130,10 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
         webView.load(URLRequest(url: url))
     }
 
-    static func sectionURL(_ section: String, extra: [String: String] = [:]) -> URL? {
-        guard ["assistant", "feed", "bandeja", "ideas", "work", "calendar", "readings", "thoughts"].contains(section),
-              var components = URLComponents(url: homeURL, resolvingAgainstBaseURL: false) else { return nil }
+    static func sectionURL(_ section: String, extra: [String: String] = [:], home: URL = MINDSWebPortalSession.homeURL,
+                           allowed: [String] = ["assistant", "feed", "bandeja", "ideas", "work", "calendar", "readings", "thoughts"]) -> URL? {
+        guard allowed.contains(section),
+              var components = URLComponents(url: home, resolvingAgainstBaseURL: false) else { return nil }
         var fragment = URLComponents()
         fragment.queryItems = [URLQueryItem(name: "section", value: section)]
             + extra.keys.sorted().map { URLQueryItem(name: $0, value: extra[$0]) }
@@ -123,10 +155,12 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
 
     // Same-origin MINDS and Theory are trusted pages. A link elsewhere opens
     // outside the embedded session; subframes keep their ordinary web policy.
-    private static func isMINDSPage(_ url: URL) -> Bool {
+    // In the office account the whole office site is trusted (app, start page, Terminplan).
+    private func isMINDSPage(_ url: URL) -> Bool {
         guard url.scheme?.lowercased() == "https",
-              url.host?.lowercased() == "gari01234.github.io",
+              url.host?.lowercased() == trustedHost,
               url.port == nil else { return false }
+        if account == .office { return true }
         return url.path == "/minds" || url.path.hasPrefix("/minds/")
     }
 
@@ -140,7 +174,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
             decisionHandler(.cancel)
             return
         }
-        if Self.isMINDSPage(url) {
+        if isMINDSPage(url) {
             decisionHandler(.allow)
         } else {
             if ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
@@ -155,7 +189,7 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
                  for action: WKNavigationAction,
                  windowFeatures: WKWindowFeatures) -> WKWebView? {
         guard let url = action.request.url else { return nil }
-        if Self.isMINDSPage(url) {
+        if isMINDSPage(url) {
             webView.load(URLRequest(url: url))
         } else if ["https", "http"].contains(url.scheme?.lowercased() ?? "") {
             UIApplication.shared.open(url)
@@ -166,10 +200,11 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     func clearForLogout() async {
         made?.stopLoading()
         made?.loadHTMLString("", baseURL: nil)
-        // This data store belongs to the embedded MINDS browser, not Safari.
-        // Purge cookies, local storage and cached credentials upon native logout.
+        // This data store belongs to the embedded browser of this account, not Safari
+        // and not the other account. Purge cookies, local storage and cached credentials.
+        let store = made?.configuration.websiteDataStore ?? dataStore
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            WKWebsiteDataStore.default().removeData(
+            store.removeData(
                 ofTypes: WKWebsiteDataStore.allWebsiteDataTypes(),
                 modifiedSince: .distantPast
             ) { continuation.resume() }

@@ -18,7 +18,7 @@ test('Ahora and the Bandeja in the app are the web sections, the same as on the 
   assert.match(tabs, /page\(\.bandeja, "Bandeja"\)/);
   assert.match(model, /case \.ahora: return "feed"/);
   assert.match(model, /case \.bandeja: return "bandeja"/);
-  assert.match(model, /case "ideas": tab = \.bandeja; pendingWebExtra\["view"\] = "ideas"/);
+  assert.match(model, /case "ideas" where account == \.personal: tab = \.bandeja; pendingWebExtra\["view"\] = "ideas"/);
   assert.doesNotMatch(model, /reloadAhora|reloadBandeja|akteEntries|FeedItem/);
 });
 

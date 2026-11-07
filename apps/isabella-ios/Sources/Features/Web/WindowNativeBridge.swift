@@ -1,26 +1,24 @@
 import WebKit
 
 // Typed bridge between the MINDS web app and the native app (contract v1, see BRIDGE.md).
-// Only the top-level MINDS page may call it. The web app receives the current
-// access token; the long-lived sign-in token never leaves the native Keychain.
+// Only the top-level page of the portal's own account may call it: MINDS for Persönlich,
+// TBA Office for Office. The web app receives the current access token of that account;
+// the long-lived sign-in token never leaves the native Keychain.
 @MainActor
 final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
     static let name = "windowNative"
     static let version = 1
     weak var portal: MINDSWebPortalSession?
 
-    static func isTrusted(_ frame: WKFrameInfo) -> Bool {
-        let origin = frame.securityOrigin
-        return frame.isMainFrame
-            && origin.protocol == "https"
-            && origin.host.lowercased() == "gari01234.github.io"
-            && origin.port == 0
+    func isTrusted(_ frame: WKFrameInfo) -> Bool {
+        guard let portal else { return false }
+        return frame.isMainFrame && portal.trusts(frame.securityOrigin)
     }
 
     func userContentController(_ userContentController: WKUserContentController,
                                didReceive message: WKScriptMessage,
                                replyHandler: @escaping (Any?, String?) -> Void) {
-        guard Self.isTrusted(message.frameInfo),
+        guard isTrusted(message.frameInfo),
               let body = message.body as? [String: Any],
               (body["v"] as? Int) == Self.version,
               let type = body["type"] as? String else {
@@ -63,8 +61,10 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return ["v": v, "ok": true]
         case "nav.open":
             // The page asks for a section that belongs to another tab.
-            guard let section = body["section"] as? String,
-                  ["assistant", "feed", "bandeja", "ideas", "work", "calendar"].contains(section) else {
+            let tabSections = portal?.account == .office
+                ? ["assistant", "feed", "calendar", "work", "tools", "projects", "plans"]
+                : ["assistant", "feed", "bandeja", "ideas", "work", "calendar"]
+            guard let section = body["section"] as? String, tabSections.contains(section) else {
                 return ["v": v, "ok": false, "error": "unsupported"]
             }
             var extra: [String: String] = [:]
@@ -72,6 +72,13 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
                 extra["view"] = view
             }
             portal?.onNavigate?(section, extra)
+            return ["v": v, "ok": true]
+        case "account.switch":
+            // Like changing users on GitHub: the app shows the other account (its own sign-in if needed).
+            guard let raw = body["to"] as? String, let target = WindowAccount(rawValue: raw) else {
+                return ["v": v, "ok": false, "error": "unsupported"]
+            }
+            portal?.onSwitchAccount?(target)
             return ["v": v, "ok": true]
         case "shell.badge":
             // «Por confirmar» in the Bandeja, as the page counted it: only a small whole number.
@@ -82,11 +89,15 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             return ["v": v, "ok": true]
         case "app.info":
             let info = Bundle.main.infoDictionary ?? [:]
+            let office = portal?.account == .office
+            var capabilities = ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs", "account.switch"]
+            if !office { capabilities.append("shell.badge") }
             return ["v": v, "ok": true, "app": [
                 "name": "Window",
                 "version": info["CFBundleShortVersionString"] as? String ?? "",
                 "build": info["CFBundleVersion"] as? String ?? "",
-                "capabilities": ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs", "shell.badge"]
+                "account": office ? "office" : "personal",
+                "capabilities": capabilities
             ] as [String: Any]]
         default:
             return ["v": v, "ok": false, "error": "unsupported"]

@@ -9,6 +9,11 @@
 	<string>https://lodexwyyynlarkqgkyhy.supabase.co</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<!-- TBA Office, the second account (public address and publishable key; RLS governs access). -->
+	<key>OFFICE_SUPABASE_URL</key>
+	<string>https://ynzsbemisjvfgbqcqliq.supabase.co</string>
+	<key>OFFICE_SUPABASE_KEY</key>
+	<string>sb_publishable_A59RSOlLQ71V8hEnexaLZA_GFSyMIgR</string>
 	<key>MINDSAppGroupID</key>
 	<string>group.$(MINDS_BUNDLE_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
