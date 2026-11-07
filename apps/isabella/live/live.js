@@ -78,7 +78,8 @@
     reviewEdited=false;reviewText.value=draft;
     review.classList.remove("hidden");
     reviewAnswer.textContent="";reviewAnswer.classList.add("hidden");
-    reviewChat.classList.add("hidden");
+    reviewChat.classList.add("hidden");reviewChat.href="../";
+    reviewChat.textContent="Abrir chat de Isabella para revisar el resultado";
     reviewStatus.textContent="Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.";
     reviewSend.disabled=false;reviewDismiss.disabled=false;
     consult.classList.add("hidden");
@@ -134,6 +135,20 @@
         ?outcome.spoken:outcome.reply.slice(0,5200);
       reviewAnswer.classList.remove("hidden");
       reviewChat.classList.remove("hidden");
+      if(outcome.hasReview){
+        // The primary Isabella app already owns owner-scoped proposal review.
+        // Do not invent an approval endpoint or transfer approval authority to Live.
+        const proposed=result.proposal!=null?[result.proposal]:
+          Array.isArray(result.proposals)?result.proposals:[];
+        const requestId=proposed.length===1?String(proposed[0]?.request_id||""):"";
+        reviewChat.textContent=proposed.length===1
+          ?"Revisar propuesta en Isabella":"Revisar propuestas en Isabella";
+        if(/^[0-9a-f-]{36}$/i.test(requestId)){
+          const dest=new URL("../",window.location.href);
+          dest.searchParams.set("review",requestId);
+          reviewChat.href=dest.href;
+        }
+      }
       reviewStatus.textContent=outcome.hasReview
         ?"MINDS preparó una propuesta pendiente de revisión; no se ha aplicado."
         :outcome.outcome==="action_applied"
