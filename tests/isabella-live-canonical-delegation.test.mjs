@@ -94,7 +94,7 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
     createDataChannel(){return {readyState:'open',
       addEventListener:(kind,fn)=>{events[kind]=fn},
       send:data=>sent.push(JSON.parse(data)),close(){}}}
-    async createOffer(){return {type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111'}}
+    async createOffer(){return {type:'offer',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n'}}
     async setLocalDescription(o){this.localDescription=o}
     async setRemoteDescription(){}
     close(){}
@@ -117,7 +117,7 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
     fetch:async(url,options)=>{
       calls.push({url,options});
       if(url.endsWith('/isabella-live-session'))return {ok:true,status:201,
-        json:async()=>({transport:{type:'webrtc',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111'}})};
+        json:async()=>({transport:{type:'webrtc',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n'}})};
       if(url.endsWith('/isabella-chat'))return {ok:true,status:200,
         json:async()=>answered('Según MINDS, tienes dos tareas pendientes hoy.')};
       throw Error('unexpected endpoint');
@@ -128,6 +128,7 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
   nodes.get('liveStart').emit('click');
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.equal(calls.length,1,'WebRTC not started: '+nodes.get('liveStatus').textContent);
+  assert.equal(nodes.get('liveStatus').textContent,'Conectando el altavoz…');
   events.message({data:JSON.stringify({type:'session.input_transcript.delta',delta:'¿Qué tareas tengo hoy?'})});
   assert.equal(calls.length,1,'transcript alone does not call MINDS');
   events.message({data:JSON.stringify({type:'session.delegation.created',
