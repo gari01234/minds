@@ -5,7 +5,7 @@
 (function(root){
   'use strict';
   function textForVoice(value){
-    return String(value||'').replace(/`{3}[sS]*?`{3}/g,'')
+    return String(value||'').replace(/`{3}[\s\S]*?`{3}/g,'')
       .replace(/\[[^\]]+\]\(https?:\/\/[^)]+\)/g,m=>m.slice(1,m.indexOf(']')))
       .replace(/https?:\/\/\S+/g,'')
       .replace(/\*\*|__|[>#]/g,'')
