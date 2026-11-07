@@ -54,8 +54,11 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
     return {projects:list.map(p=>({id:p.id,name:p.name}))};
   }
 
-  async function listTasks({project,range='open',query,limit=80}={}){
-    const day=today(),names=await projectNames();
+  async function listTasks({project,range='open',day:askedDay,query,limit=80}={}){
+    if(askedDay!=null&&!isDay(askedDay))throw new ToolError('day: AAAA-MM-DD.');
+    // A specific day (e.g. tomorrow) works like today: everything due by then and still open, plus multi-day tasks running.
+    const now0=today(),day=askedDay||now0,names=await projectNames();
+    if(askedDay)range='today';
     const p=project?await resolveProject(project):null;
     const cap=Math.min(Math.max(Number(limit)||80,1),200);
     let q=sb.from('isabella_tasks').select(TASK_COLS).eq('user_id',userId).is('archived_at',null);
@@ -72,7 +75,7 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
     // A multi-day task belongs to every day from its start until its due date.
     if(range==='today')rows=rows.filter(t=>(t.due_date&&t.due_date<=day)||(t.start_date&&t.start_date<=day&&(!t.due_date||t.due_date>=day)));
     if(range==='week')rows=rows.filter(t=>(t.due_date&&t.due_date<=addDays(day,7))||(t.start_date&&t.start_date<=addDays(day,7)&&(!t.due_date||t.due_date>=day)));
-    return {today:day,range,project:p?p.name:null,count:rows.length,tasks:rows.map(t=>({...taskOut(t,names),overdue:!t.completed_at&&t.due_date&&t.due_date<day||undefined}))};
+    return {today:now0,day,range:askedDay?'day':range,project:p?p.name:null,count:rows.length,tasks:rows.map(t=>({...taskOut(t,names),overdue:!t.completed_at&&t.due_date&&t.due_date<now0||undefined}))};
   }
 
   async function listEvents({from,to}={}){

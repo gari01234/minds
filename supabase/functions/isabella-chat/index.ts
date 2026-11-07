@@ -202,6 +202,10 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
         .map((x:any)=>({...x,in_progress:true,due_date:x.date}))
     ];
     const overdueTasks=tasks.filter((x:any)=>x.date&&x.date<currentDate).sort((a:any,b:any)=>String(b.date).localeCompare(String(a.date))||a.sort_order-b.sort_order);
+    // Still open from before tomorrow (overdue or due today): pending tomorrow too (07.11.2026: "Test", due 04.11, was missed).
+    const openBeforeTomorrow=tasks.filter((x:any)=>x.date&&x.date<tomorrowDate)
+      .sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order)
+      .map((x:any)=>({...x,overdue:x.date<currentDate}));
     const undatedTasks=tasks.filter((x:any)=>!x.date).sort((a:any,b:any)=>a.sort_order-b.sort_order).slice(0,30);
     const futureTasks=tasks.filter((x:any)=>x.date&&x.date>currentDate&&!runsOn(x,currentDate)).sort((a:any,b:any)=>String(a.date).localeCompare(String(b.date))||a.sort_order-b.sort_order).slice(0,30);
     const eventView=(x:any)=>{
@@ -225,6 +229,7 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     ].sort((a:any,b:any)=>String(a.date||"").localeCompare(String(b.date||""))).slice(0,30);
     return {status:"ok",today_tasks:todayTasks.slice(0,40),tomorrow_date:tomorrowDate,
       tomorrow_tasks:tomorrowTasks.slice(0,80),tomorrow_events:tomorrowEvents.slice(0,50),
+      still_open_before_tomorrow:openBeforeTomorrow.slice(0,40),
       overdue_tasks:overdueTasks.slice(0,40),undated_tasks:undatedTasks,today_events:todayEvents.slice(0,30),upcoming};
   }catch{return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]}}
 }
@@ -721,10 +726,10 @@ const calendarTools = [
   {
     type: "function",
     name: "search_calendar",
-    description: "Search the user's calendar and tasks, including dates beyond the compact agenda context.",
+    description: "Search the user's calendar and tasks, including dates beyond the compact agenda context. For 'what is pending on <day>' pass include_open_before:true: open_before then lists tasks due before date_from that are still open (overdue).",
     strict: false,
     parameters: { type:"object", properties:{
-      query:{type:"string"}, date_from:{type:"string"}, date_to:{type:"string"}
+      query:{type:"string"}, date_from:{type:"string"}, date_to:{type:"string"}, include_open_before:{type:"boolean"}
     }}
   },
   {
@@ -2527,9 +2532,15 @@ async function searchCalendar(req: Request, args: any) {
     if(from){eq=eq.gte("starts_at",from+"T00:00:00");tq=tq.gte("due_date",from)}
     // A task overlaps the range when it is due in it or started before its end.
     if(to){eq=eq.lte("starts_at",to+"T23:59:59");tq=tq.or(`due_date.lte.${to},start_date.lte.${to}`)}
-    const [{data:events},{data:tasks}]=await Promise.all([eq,tq]);
+    // Still open from before the range: pending on the asked day too.
+    const before=args?.include_open_before===true&&/^\d{4}-\d{2}-\d{2}$/.test(from)
+      ?sb.from("isabella_tasks").select("client_key,title,due_date,start_date,reminder_time,notes").is("completed_at",null).is("archived_at",null)
+        .lt("due_date",from).order("due_date",{ascending:true}).limit(40)
+      :Promise.resolve({data:null});
+    const [{data:events},{data:tasks},{data:openBefore}]=await Promise.all([eq,tq,before]);
     const has=(x:any)=>!query||normalizeText((x?.title||"")+" "+(x?.notes||"")).includes(query);
     return {
+      ...(openBefore?{open_before:(openBefore||[]).filter(has).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,overdue:true}))}:{}),
       events:(events||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:x.all_day})),
       tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time}))
     };
@@ -3187,7 +3198,7 @@ En resúmenes de noticias o del día, elige pocas cosas que de verdad importen a
 
 AGENDA CANÓNICA:
 CONTEXTO PRIVADO.today_tasks, today_events, overdue_tasks, undated_tasks y upcoming se cargan en servidor desde MINDS/Supabase para cada turno cuando están disponibles. Son el snapshot operativo canónico para preguntas sobre agenda y pendientes, independientemente de si Gari habla desde web, Presence u otra superficie. Si agenda_context_source es server_canonical, no contradigas esos datos basándote en un contexto local incompleto ni afirmes que no hay tareas/eventos sin revisar esos campos. Las tareas con in_progress:true son tareas de varios días que ya empezaron (start_date) y siguen abiertas hasta su due_date: forman parte del día; nómbralas como tareas en curso con su fecha de entrega, no como si vencieran hoy.
-Cuando pregunte por "mañana", usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events como referencia del día siguiente; jamás confundas ese día con current_date. Si la consulta pide todas las tareas de mañana, examina primero el conjunto completo de tomorrow_tasks. Si agenda_context_source no es server_canonical, no afirmes que no hay tareas sin verificar la información disponible. Para una consulta puramente informativa de mañana no es necesario modificar ninguna tarea.
+Cuando pregunte por "mañana", usa exclusivamente tomorrow_date, tomorrow_tasks y tomorrow_events como referencia del día siguiente; jamás confundas ese día con current_date. Si la consulta pide todas las tareas de mañana, examina primero el conjunto completo de tomorrow_tasks. still_open_before_tomorrow son tareas vencidas (overdue:true) o de hoy que siguen abiertas: mañana también estarán pendientes. Nómbralas aparte con su fecha («sigue abierta desde el 04.11») y nunca digas que no hay nada pendiente para mañana si esa lista no está vacía. Para otro día concreto usa search_calendar con include_open_before:true, que devuelve también lo vencido que sigue abierto. Si agenda_context_source no es server_canonical, no afirmes que no hay tareas sin verificar la información disponible. Para una consulta puramente informativa de mañana no es necesario modificar ninguna tarea.
 PREVISIÓN METEOROLÓGICA COMPARTIDA:
 Si CONTEXTO PRIVADO.situation_weather contiene una previsión reciente, ya está disponible en MINDS/Situación (Ahora), con procedencia y fecha de generación. Para una pregunta sobre el clima de esa localidad y los días cubiertos, UTILIZA esos datos. No afirmes que careces de acceso al pronóstico. Aclara su antigüedad si es relevante. Nunca extrapoles a días fuera de los siete incluidos ni a una ciudad diferente; si piden otra localidad, consulta web_search en la ruta que lo permita o reconoce el límite.
 Los eventos canónicos incluyen local_date, local_start_time, local_end_time, display_time y timezone calculados por MINDS. Para comunicar horas usa SIEMPRE esos campos locales cuando existan. starts_at/ends_at son timestamps de almacenamiento y no deben mostrarse ni reinterpretarse como hora local. No hagas conversiones UTC manuales si display_time ya está disponible.
@@ -3366,6 +3377,7 @@ El contexto variable relevante se adjunta al turno actual bajo CONTEXTO PRIVADO.
     situation_weather:situationWeather,
     tomorrow_date:new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10),
     tomorrow_tasks:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_tasks:(context.upcoming||[]).filter((x:any)=>x.kind==="task"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
+    still_open_before_tomorrow:canonicalAgenda.status==="ok"?(canonicalAgenda.still_open_before_tomorrow||[]):[],
     tomorrow_events:canonicalAgenda.status==="ok"?canonicalAgenda.tomorrow_events:(context.upcoming||[]).filter((x:any)=>x.kind==="event"&&x.date===new Date(new Date(temporal.current_date+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10)),
     current_local_datetime:temporal.current_local_datetime,
     current_local_time:temporal.current_local_time,
@@ -3455,6 +3467,7 @@ pregunta cuál.`;
     today_tasks:(canonicalAgenda.today_tasks||[]).slice(0,12),
     overdue_tasks:(canonicalAgenda.overdue_tasks||[]).slice(0,16),
     tomorrow_tasks:(canonicalAgenda.tomorrow_tasks||[]).slice(0,12),
+    still_open_before_tomorrow:(canonicalAgenda.still_open_before_tomorrow||[]).slice(0,16),
     upcoming:(canonicalAgenda.upcoming||[]).slice(0,12),
     undated_tasks:(canonicalAgenda.undated_tasks||[]).slice(0,8),
     agenda_context_source:canonicalAgenda.status==="ok"?"server_canonical":"unavailable"
