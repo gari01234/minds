@@ -23,6 +23,10 @@ import_map = "./functions/sofia-chat/deno.json"
 verify_jwt = false
 entrypoint = "./functions/isabella-heartbeat/index.ts"
 
+[functions.isabella-dream]
+verify_jwt = false
+entrypoint = "./functions/isabella-dream/index.ts"
+
 [functions.isabella-routine-runner]
 verify_jwt = false
 entrypoint = "./functions/isabella-routine-runner/index.ts"
