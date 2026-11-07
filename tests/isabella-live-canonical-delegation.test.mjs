@@ -11,7 +11,7 @@ const clientCode=read('apps/isabella/live/live.js');
 function makeGate(){
   const window={};
   runInNewContext(contractCode,{window});
-  runInNewContext(gateCode,{window});
+  runInNewContext(gateCode,{window,URL});
   const integrity=window.MINDS_TURN_INTEGRITY,gate=window.ISABELLA_LIVE_CANONICAL;
   return {integrity,gate,decide:r=>gate.admission(r,integrity.validate,integrity.summary)};
 }
@@ -47,6 +47,20 @@ test('Proposals are pending; never voiced as completed actions',()=>{
   assert.match(admission.spoken,/No he aplicado ningún cambio/);
   assert.doesNotMatch(admission.spoken,/Ya guardé/);
   assert.equal(decide({...result,proposal:{...p,request_id:''}}).ok,false);
+});
+
+test('One receipt-backed proposal deep-links to the existing owner review, never auto-approves',()=>{
+  const {gate}=makeGate();
+  const id='123e4567-e89b-42d3-a456-426614174000';
+  const base='https://gari01234.github.io/minds/isabella/live/';
+  const proposal={request_id:id,kind:'task',action:'create',title:'Enviar informe'};
+  assert.equal(gate.reviewLink({proposal,proposals:[]},base),
+    'https://gari01234.github.io/minds/isabella/?review='+id);
+  assert.equal(gate.reviewLink({proposal:{...proposal,request_id:'invalid'}},base),null);
+  assert.equal(gate.reviewLink({proposals:[proposal,{...proposal,request_id:'223e4567-e89b-42d3-a456-426614174000'}]},base),null);
+  assert.equal(gate.reviewLink({proposal,proposals:[]},'bad-url'),null);
+  assert.match(clientCode,/canonical\?\.reviewLink\?\.\(result,window\.location\.href\)/);
+  assert.doesNotMatch(clientCode,/confirmProposal\(|applyProposal\(/);
 });
 
 test('Action completion requires exact canonical receipts',()=>{
@@ -88,7 +102,7 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
     'liveMindsStatus','liveMindsAnswer','liveMindsChat','liveOriginalNote']){
     nodes.set(id,node());
   }
-  nodes.get('liveVoice').value='brise';
+  nodes.get('liveVoice').value='nuri';
   const doc={hidden:false,querySelector:()=>({dataset:{}}),
     getElementById:id=>nodes.get(id),
     addEventListener:(kind,fn)=>{listeners['doc_'+kind]=fn}};
