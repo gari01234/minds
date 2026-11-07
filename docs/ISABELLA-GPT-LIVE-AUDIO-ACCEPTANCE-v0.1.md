@@ -2,6 +2,28 @@
 
 Date: 6 November 2026. Base: `main f4b4d2b37a0bdcb74702bfaa9d7fd205341ce56a`.
 
+## Canonical MINDS delegation v0.1 · 7 November 2026
+
+**This section supersedes the isolated no-MINDS-access behavior described below, which remains as version history.** Brise/GPT-Live continues to handle natural speech; `isabella-chat` is the only engine allowed to handle MINDS facts, memory, projects, governed tools and permissions.
+
+### A single canonical turn, explicitly reviewed
+
+For anything that requires actual personal facts or backend work, GPT-Live issues `session.delegation.created`. Per the official OpenAI contract this event has only a delegation ID and an offset, **not the utterance text**. The browser collects the transcript deltas but does not classify them as complete or reliable commands. Instead, it opens a temporary transcription review field. The owner must read, correct and explicitly press **Consultar MINDS**; there is no automatic mutation or model call merely because a fragment, delegation event or keyword arrived. The same field can be opened manually after a transcript if Live did not delegate.
+
+After this explicit step the page calls the existing authenticated `/functions/v1/isabella-chat` with `surface:"chat_browser"`, a fresh `client_message_id` and `stream:false`, `durable:false`, and no fabricated local context or work-thread binding. It **does not create a second agent**; the unchanged server performs source-first retrieval, model routing, memory access, policy review and storage of the canonical owner turn. No new database, new auth policy, new action executor or second conversation store is introduced.
+
+The browser admits the returned result for Live speech **only** if `MINDS_TURN_INTEGRITY.validate` reports a complete typed outcome. `answered` and receipt-backed `needs_clarification` can be spoken; `proposal_created` is spoken deterministically as **pending**, not as completed, and the owner is directed to review in the main Isabella UI. `action_applied` requires valid server-origin action receipts, and the spoken text is generated from the receipt summary rather than raw model claims. Missing/contradictory receipts, incomplete responses, transport failures or malformed results are **not** narrated as success. A result sent to GPT-Live uses `session.commentary.append` with the original delegation ID, at most 1,200 sanitized characters; a quiet `session.thinking.append` prevents speculative automatic acknowledgments while the transcription is being reviewed.
+
+A duplicate delegation ID cannot trigger a second request. The reviewed request uses a stable ID for its single submission. Browser network errors never cause an automatic second call, because the first may already have reached the backend. Page exit and the existing 90-second session cap stop audio and discard local transcript state, not backend work that already began. The interface explicitly warns if backend work could continue.
+
+### Safety and acceptance caveats
+
+The Live voice has **no independent access** to MINDS tools. However, sending a reviewed instruction to the existing tool-capable `isabella-chat` can lead to a canonical action under the user's **existing** policy (including any pre-approved direct modes). Explicit review verifies the transcription, not a new approval for arbitrary future actions. Proposals returned from Live are not approved or executed by the pilot page. Review their canonical status in the primary Isabella interface. The current release does not claim seamless, hands-free automatic task execution or uninterrupted cross-session spoken memory: those require further work on provenance, receipt recovery and shared UI continuity.
+
+The owner has previously confirmed audible Brise on an iPhone, **not yet** the reviewed canonical delegation flow. Before marking this implementation production-accepted, verify in Safari on the actual iPhone: ask for a project or agenda fact, observe the preview, correct at least one misrecognized word, explicitly submit, verify the answer arrived from the canonical runtime and was spoken by Brise, verify that pending changes are **never** reported as completed, test interruption and ensure exiting with an in-flight request does not silently replay it.
+
+Source: https://developers.openai.com/api/docs/guides/live-delegation ; see the sections on client delegation, transcript deltas, missing task text, 500-token updates and suppressing automatic acknowledgments. Source of truth for decisions/permissions remains Supabase and the `isabella-chat` runtime.
+
 ## Why this pilot is isolated
 
 The first browser SpeechSynthesis attempt rendered text but did not produce audible speech on the owner's iPhone. It was not a full-duplex conversation. Do not claim it passed.

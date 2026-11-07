@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
 <title>Isabella Live · prueba de audio</title>
-<link rel="stylesheet" href="./live.css?v=3">
+<link rel="stylesheet" href="./live.css?v=4">
 </head>
 <body>
 <main class="live-shell">
@@ -22,9 +22,22 @@
     <audio id="liveAudio" class="live-audio" autoplay playsinline controls aria-label="Audio de Isabella"></audio>
     <button id="liveUnlock" class="live-unlock hidden" type="button">Activar altavoz</button>
     <div class="live-captions" aria-label="Transcripciones temporales">
-      <div><span>Tú</span><p id="liveInput">—</p></div>
+      <div><span>Tú</span><p id="liveInput">—</p>
+        <button id="liveConsult" class="live-consult hidden" type="button">Consultar a MINDS</button>
+      </div>
       <div><span>Isabella</span><p id="liveOutput">—</p></div>
     </div>
+    <section id="liveMindsReview" class="live-minds-review hidden" aria-label="Consulta a MINDS">
+      <label for="liveMindsText">Revisa lo que Isabella escuchó antes de enviarlo a MINDS</label>
+      <textarea id="liveMindsText" rows="2" maxlength="2000" placeholder="Corrige la frase si falta algo"></textarea>
+      <div class="live-minds-actions">
+        <button id="liveMindsSend" type="button">Consultar MINDS</button>
+        <button id="liveMindsDismiss" type="button">Cancelar</button>
+      </div>
+      <p id="liveMindsStatus" role="status" aria-live="polite">Ninguna consulta enviada.</p>
+      <p id="liveMindsAnswer" class="hidden" aria-live="polite"></p>
+      <a id="liveMindsChat" class="hidden" href="../">Abrir chat de Isabella para revisar el resultado</a>
+    </section>
   </section>
   <footer class="live-footer">
     <div class="live-voice-picker">
@@ -80,11 +93,13 @@
       <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
       <button id="liveStop" type="button" class="secondary" disabled>Finalizar</button>
     </div>
-    <p class="live-disclaimer">Prueba aislada de sonido y conversación natural. No tiene acceso a tu memoria, tareas ni proyectos. No realiza acciones ni guarda esta conversación en MINDS. Duración máxima: 90 segundos.</p>
+    <p class="live-disclaimer">Conversación oral con Brise. Cuando consultes MINDS, revisa primero la transcripción: las respuestas usan el agente y permisos existentes y pueden quedar guardadas en la conversación canónica. No se autoriza ninguna acción por una transcripción sin revisar. Duración máxima de audio: 90 segundos.</p>
   </footer>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../shared/supabase-client.js"></script>
-<script src="./live.js?v=4"></script>
+<script src="../turn-integrity.js"></script>
+<script src="./canonical.js?v=1"></script>
+<script src="./live.js?v=5"></script>
 </body>
 </html>

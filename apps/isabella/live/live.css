@@ -36,3 +36,15 @@ h1{font-family:"Iowan Old Style",Georgia,serif;font-size:clamp(42px,9vw,65px);fo
 button:disabled{opacity:.45}
 .live-disclaimer{font-size:12px;color:#777;line-height:1.55;margin:16px 0 0}
 @media(max-height:740px){.live-main{min-height:240px}.live-wave{height:72px;margin:9px 0}.live-wave span{transform:scaleY(.7)}.live-captions{margin:10px 0}}
+
+.live-consult{border:0;background:none;color:#3d3d3d;text-decoration:underline;text-underline-offset:4px;font-size:12px;padding:8px 0}
+.live-minds-review{width:100%;max-width:520px;margin:10px auto 4px;padding:14px 15px;border:1px solid #e0e0e0;border-radius:16px;text-align:left;background:#fafafa}
+.live-minds-review label{display:block;color:#505050;font-size:13px;line-height:1.4;margin-bottom:8px}
+.live-minds-review textarea{box-sizing:border-box;display:block;width:100%;font:inherit;font-size:16px;line-height:1.45;border:1px solid #d5d5d5;background:#fff;border-radius:10px;padding:10px;resize:vertical;max-height:138px}
+.live-minds-actions{display:flex;gap:9px;align-items:center;margin-top:10px}
+.live-minds-actions button{border:1px solid #dedede;border-radius:30px;padding:10px 15px;font-size:14px;background:#fff}
+.live-minds-actions button:first-child{background:#171717;color:#fff}
+.live-minds-actions button:disabled{opacity:.5}
+#liveMindsStatus{color:#707070;font-size:12px;line-height:1.5;margin:9px 0 0}
+#liveMindsAnswer{font-size:14px;line-height:1.45;margin:10px 0 0;white-space:pre-wrap;max-height:130px;overflow-y:auto}
+#liveMindsChat{display:inline-block;margin-top:8px;font-size:12px;color:#333;text-decoration:underline}

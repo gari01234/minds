@@ -18,6 +18,7 @@ jobs:
       - run: node --check apps/isabella/dashboard.js
       - run: node --check apps/isabella/app.js
       - run: node --check apps/isabella/live/live.js
+      - run: node --check apps/isabella/live/canonical.js
       - run: node scripts/build.mjs
       - uses: denoland/setup-deno@v2
         with:
