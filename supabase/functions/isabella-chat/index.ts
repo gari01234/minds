@@ -7,7 +7,7 @@ import {capabilityPromptSummary,CAPABILITY_REGISTRY_VERSION} from "../_shared/ca
 import {presentZonedRange} from "../_shared/temporal-presentation.ts";
 import {isSimpleAgendaMutation,calendarProposalReply} from "../_shared/calendar-temporal-fastpath.mjs";
 import {verifyCalendarSemanticProposal,validatedCalendarClock} from "../_shared/calendar-semantic-boundary.mjs";
-import {interactiveTurnContract,boundedScopedTurn,turnOutcomeReceipt,unregisteredReviewAttempt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
+import {interactiveTurnContract,boundedScopedTurn,historyRole,turnOutcomeReceipt,unregisteredReviewAttempt,scopedHistoryReady} from "../_shared/turn-capability-contract.mjs";
 import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_shared/browser-turn-ledger.mjs";
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
@@ -3940,7 +3940,7 @@ pregunta cuál.`;
   // Fast, stateless turn: preserve up to four scoped previous messages as
   // quoted evidence, not as a new provider-side conversation.
   const fastHistory=recent.slice(-4).map((x:any)=>({
-    role:x.role==="assistant"?"assistant":"user",
+    role:x.role==="assistant"?(historyRole(x)==="sistema"?"sistema":"assistant"):"user",
     text:String(x.content||"").slice(0,900)
   }));
   let input:any = fastAgenda

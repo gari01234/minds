@@ -14,16 +14,16 @@ test('Confirmations read like a person: one sentence, natural dates, no internal
   assert.equal(naturalDay('2026-11-01',NOW),'hoy');assert.equal(naturalDay('2026-11-02',NOW),'mañana');
   assert.equal(naturalDay('2026-11-05',NOW),'el jueves');assert.equal(naturalDay('2026-11-13',NOW),'el viernes 13 de noviembre');
   const seven=['Lavar chupones','Ventilar','Sacar basura','Anuncio Ezi','Lavar ropa','Baños','Quitar decoración de Halloween'].map(title=>({kind:'task',action:'create',title,date:'2026-11-01'}));
-  assert.equal(confirmationText(seven,NOW),'Listo, añadí 7 tareas para hoy: Lavar chupones, Ventilar, Sacar basura, Anuncio Ezi, Lavar ropa, Baños y Quitar decoración de Halloween.');
-  assert.equal(confirmationText([{kind:'task',action:'update',title:'Treppen',date:'2026-11-03'}],NOW),'Listo, «Treppen» queda para el martes.');
-  assert.equal(confirmationText([{kind:'event',action:'create',title:'Jour fixe',date:'2026-11-02'}],NOW),'Listo, «Jour fixe» está en tu calendario mañana.');
-  assert.match(confirmationText([{kind:'task',title:'A',date:'2026-11-01'},{kind:'task',title:'B',date:'2026-11-02'}],NOW),/^Listo, añadí 2 tareas: A \(hoy\) y B \(mañana\)\.$/);
+  assert.equal(confirmationText(seven,NOW),'7 tareas añadidas para hoy: Lavar chupones, Ventilar, Sacar basura, Anuncio Ezi, Lavar ropa, Baños y Quitar decoración de Halloween.');
+  assert.equal(confirmationText([{kind:'task',action:'update',title:'Treppen',date:'2026-11-03'}],NOW),'«Treppen» queda para el martes.');
+  assert.equal(confirmationText([{kind:'event',action:'create',title:'Jour fixe',date:'2026-11-02'}],NOW),'«Jour fixe» está en tu calendario mañana.');
+  assert.match(confirmationText([{kind:'task',title:'A',date:'2026-11-01'},{kind:'task',title:'B',date:'2026-11-02'}],NOW),/^2 tareas añadidas: A \(hoy\) y B \(mañana\)\.$/);
   // No user-facing "Supabase" in chat confirmations or task saving.
   for(const s of ['Confirmé en Supabase','verificado en Supabase','Guardando en Supabase','verificada en Supabase','He guardado y verificado'])assert.ok(!app.includes(s),s);
   assert.ok(!read('apps/isabella/turn-integrity.js').includes('recibo de ejecución'));
   // Inline and batch reviews confirm once (the proposal message itself), not once per task.
   assert.match(app,/applyProposal\(p,\{quiet:true\}\)\)\.then/);
-  assert.match(app,/if\(appliedTasks\.length&&!marked\)say\('assistant',confirmationText\(appliedTasks\)\)/);
+  assert.match(app,/if\(appliedTasks\.length&&!marked\)sayEvent\(confirmationText\(appliedTasks\)\)/);
 });
 
 test('Isabella\'s prompt sets a natural voice',()=>{

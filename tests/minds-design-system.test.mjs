@@ -52,14 +52,14 @@ test('UX A.4 uses a semantic color system with legible informational text',()=>{
 });
 
 test('UX A.4 loads design tokens and each surface layer after legacy CSS with PWA support',()=>{
-  assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=69'));
-  assert.ok(appHtml.indexOf('app.css?v=69')<appHtml.indexOf('design-system.css?v=8'));
+  assert.ok(appHtml.indexOf('minds-design-tokens.css?v=1')<appHtml.indexOf('app.css?v=70'));
+  assert.ok(appHtml.indexOf('app.css?v=70')<appHtml.indexOf('design-system.css?v=8'));
   assert.ok(theoryHtml.indexOf('v10.css?v=0115')<theoryHtml.indexOf('design-system.css?v=2'));
   assert.ok(theoryHtml.includes('../shared/minds-design-tokens.css?v=1'));
   for(const path of ['../shared/minds-design-tokens.css?v=1','./design-system.css?v=8']){
     assert.ok(sw.includes(path),'PWA precache missing '+path);
   }
-  assert.ok(sw.includes('isabella-shell-v180'));
+  assert.ok(sw.includes('isabella-shell-v181'));
   assert.ok(nativeHtml.includes('presence.css?v=design1'));
 });
 

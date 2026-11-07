@@ -61,7 +61,7 @@ test('confirmed task update: one real RPC receipt plus matching canonical reread
   };
   const state={tasks:[{...before}]};
   const context={window:{MINDS_SUPABASE:sb},state,save:()=>saved++,renderCalendar:()=>rendered++,
-   closeModal:()=>closed++,say:(...x)=>spoken.push(x),Date,Error};
+   closeModal:()=>closed++,say:(...x)=>spoken.push(x),sayEvent:(...x)=>spoken.push(['assistant',...x]),Date,Error};
   vm.runInNewContext(code+'\nthis.update=applyVerifiedTaskUpdate;',context);
   return {update:context.update,state,spoken,counts:()=>({writes,reads,saved,rendered,closed})};
  };
@@ -69,7 +69,7 @@ test('confirmed task update: one real RPC receipt plus matching canonical reread
  const done=await good.update({request_id:requestId});
  assert.equal(done.receipt_id,'receipt-1');
  assert.equal(good.state.tasks[0].date,'2026-10-27');
- assert.match(good.spoken[0][1],/^Listo, «Tarea verificable» queda para /);
+ assert.match(good.spoken[0][1],/^«Tarea verificable» queda para /);
  assert.deepEqual(good.counts(),{writes:1,reads:1,saved:1,rendered:1,closed:1});
  for(const overrides of [
   {receiptOverride:{receipt_id:null}},

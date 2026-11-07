@@ -68,7 +68,7 @@ test('Action completion requires exact canonical receipts',()=>{
   const result={reply:'Se modificó la agenda',proposal:null,proposals:[],
     outcome:{outcome:'action_applied',proposal_count:0,applied_count:1},
     action_receipts:[{receipt_id:'receipt-1',request_id:'request-1'}]};
-  assert.match(decide(result).spoken,/Listo/);
+  assert.match(decide(result).spoken,/^Guardado\.$/);
   assert.equal(decide({...result,action_receipts:[]}).ok,false);
   assert.equal(decide({...result,action_receipts:[{receipt_id:'',request_id:'request-1'}]}).ok,false);
 });
