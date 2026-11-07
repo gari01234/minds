@@ -9,7 +9,16 @@ struct RootView: View {
 
     var body: some View {
         Group {
-            if Self.webOnlyForUITests || model.isAuthenticated {
+            if model.account == .office {
+                // TBA Office: its own sign-in (office e-mail and password), its own session.
+                if model.officeAuthenticated {
+                    MainTabView()
+                } else if model.isLoading {
+                    Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+                } else {
+                    OfficeSignInView()
+                }
+            } else if Self.webOnlyForUITests || model.isAuthenticated {
                 MainTabView()
             } else if model.isLoading {
                 Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
@@ -90,6 +99,11 @@ private struct NativeSignInView: View {
                 if let error = model.errorMessage {
                     Text(error).font(.footnote).foregroundStyle(.red)
                 }
+                Divider().padding(.vertical, 4)
+                // The second account: TBA Office, like switching users on GitHub.
+                Button("Entrar a Office") { model.switchAccount(to: .office) }
+                    .font(.footnote)
+                    .accessibilityIdentifier("switch-to-office")
             }
             .padding(24)
             // Buttons in Window's blue (the web app's Panorama: #0062cc).
@@ -99,5 +113,67 @@ private struct NativeSignInView: View {
             .frame(maxWidth: 460)
         }
         .onChange(of: model.codeSent) { _, sent in focused = sent ? .code : .email }
+    }
+}
+
+// Sign-in to the office account: the office's own e-mail and password (like its start page).
+// The office speaks German; Window speaks Spanish.
+private struct OfficeSignInView: View {
+    @Environment(AppModel.self) private var model
+    @FocusState private var focused: Field?
+    private enum Field { case email, password }
+
+    var body: some View {
+        @Bindable var model = model
+        ZStack {
+            Color(uiColor: .systemGroupedBackground).ignoresSafeArea()
+            VStack(alignment: .leading, spacing: 18) {
+                Text("TBA Office")
+                    .font(.system(size: 34, weight: .semibold))
+                Text("Melde dich mit deiner Office-E-Mail und deinem Passwort an. Das machst du nur einmal.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                TextField("name@bernhardarchitekten.com", text: $model.officeEmail)
+                    .keyboardType(.emailAddress)
+                    .textContentType(.username)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                    .padding(14)
+                    .background(Color(uiColor: .systemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                    .focused($focused, equals: .email)
+                    .submitLabel(.next)
+                    .onSubmit { focused = .password }
+                    .accessibilityIdentifier("office-login-email")
+                SecureField("Passwort", text: $model.officePassword)
+                    .textContentType(.password)
+                    .padding(14)
+                    .background(Color(uiColor: .systemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                    .focused($focused, equals: .password)
+                    .submitLabel(.go)
+                    .onSubmit { Task { await model.signInOffice() } }
+                    .accessibilityIdentifier("office-login-password")
+                Button {
+                    Task { await model.signInOffice() }
+                } label: {
+                    Text("Anmelden").frame(maxWidth: .infinity).padding(.vertical, 6)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(model.isOfficeSigningIn || !model.officeEmail.contains("@") || model.officePassword.isEmpty)
+                .accessibilityIdentifier("office-login-submit")
+                if model.isOfficeSigningIn { ProgressView() }
+                if let error = model.officeError {
+                    Text(error).font(.footnote).foregroundStyle(.red)
+                }
+                Divider().padding(.vertical, 4)
+                Button("Zu Persönlich wechseln") { model.switchAccount(to: .personal) }
+                    .font(.footnote)
+                    .accessibilityIdentifier("switch-to-personal")
+            }
+            .padding(24)
+            .tint(Color(red: 0, green: 0.384, blue: 0.8))
+            .background(Color(uiColor: .secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 28))
+            .padding(20)
+            .frame(maxWidth: 460)
+        }
     }
 }
