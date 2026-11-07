@@ -178,6 +178,13 @@
       sessionReady=true;
       state("active","Te escucho. Habla con naturalidad.");
     }else if(event?.type==="session.input_transcript.delta"){
+      // A completed review belongs to the previous turn. Never merge its
+      // transcript into a subsequent utterance or hide manual consultation.
+      if(reviewTurn?.done){
+        reviewTurn=null;reviewEdited=false;
+        review.classList.add("hidden");
+        input.textContent="—";
+      }
       appendCaption(input,event.delta);
       if(reviewTurn&&!reviewTurn.busy&&!reviewTurn.done&&!reviewEdited){
         reviewText.value=String(input.textContent==="—"?"":input.textContent).slice(0,2000);
