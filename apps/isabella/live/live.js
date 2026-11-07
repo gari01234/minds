@@ -128,7 +128,10 @@
         reviewStatus.textContent="La respuesta no tiene un comprobante completo y verificable. No la enviaré a la voz.";
         reviewChat.classList.remove("hidden");turn.done=true;return;
       }
-      reviewAnswer.textContent=outcome.reply.slice(0,5200);
+      // The visible UI must obey the same verified receipts as speech.
+      // Do not display raw model prose claiming an unapproved change is done.
+      reviewAnswer.textContent=["proposal_created","action_applied","failed"].includes(outcome.outcome)
+        ?outcome.spoken:outcome.reply.slice(0,5200);
       reviewAnswer.classList.remove("hidden");
       reviewChat.classList.remove("hidden");
       reviewStatus.textContent=outcome.hasReview
