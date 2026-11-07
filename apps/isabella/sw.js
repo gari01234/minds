@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v178';
+const CACHE_NAME = 'isabella-shell-v179';
 const SHELL = [
   './',
   './index.html',
@@ -19,7 +19,7 @@ const SHELL = [
   './minds-sections-parity.css?v=1',
   './minds-calendar-shell.css?v=2',
   './ahora-bandeja.css?v=2',
-  './task-detail.css?v=1',
+  './task-detail.css?v=2',
   './task-team.css?v=1',
   './time-plan.css?v=1',
   './calendar-spans.css?v=1',
@@ -35,14 +35,14 @@ const SHELL = [
     './calendar-plan.js?v=2',
   './day-layout.js?v=1',
 './voice-output.js?v=2',
-  './app.js?v=136',
+  './app.js?v=137',
   './work-team.js?v=1',
   './work.js?v=34',
   './ahora.js?v=1',
   './bandeja.js?v=1',
   './sync.js?v=pwa39',
     './task-team.js?v=1',
-'./task-detail.js?v=4',
+'./task-detail.js?v=5',
   './time-plan-model.js?v=2',
   './time-plan.js?v=3',
   './chat-stream-recovery.js?v=1',
