@@ -795,7 +795,8 @@ body .app .week-timegrid .wk-event.other-account-entry:hover,
 body .app .hours .event.other-account-entry:hover{box-shadow:none;z-index:auto}
 body .app .week-timegrid .wk-event.other-account-entry b,
 body .app .hours .event.other-account-entry b{color:#4b4f56}
-.app .wk-chip.other-account-entry,.app .day-all .other-account-entry{display:flex;align-items:center;gap:6px;border:1px dashed rgba(138,143,152,.6);background:#f6f7f8;color:#4b4f56;cursor:default}
+.app .wk-chip.other-account-entry{display:flex;align-items:center;gap:6px;border:1px dashed rgba(138,143,152,.6);background:#f6f7f8;color:#4b4f56;cursor:default}
 body .app .agenda-item.other-account-entry{cursor:default}
+.app .day-all .pill.other-account-entry{border:1px dashed rgba(138,143,152,.6);background:#f6f7f8;color:#4b4f56;cursor:default}
 body .app .agenda-item.other-account-entry .meta{color:#8a8f98}
 .app .other-account-mark{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px dashed #8a8f98;justify-self:center;margin-top:6px;flex:none}
