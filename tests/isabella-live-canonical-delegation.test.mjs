@@ -152,6 +152,12 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
   nodes.get('liveMindsSend').emit('click');
   await Promise.resolve();
   assert.equal(calls.length,2,'no duplicate request');
+  events.message({data:JSON.stringify({type:'session.input_transcript.delta',delta:'¿Qué sigue?'})});
+  assert.equal(nodes.get('liveInput').textContent,'¿Qué sigue?');
+  assert.equal(nodes.get('liveConsult').classList.contains('hidden'),false);
+  nodes.get('liveConsult').emit('click');
+  assert.equal(nodes.get('liveMindsText').value,'¿Qué sigue?');
+  assert.equal(calls.length,2,'follow-up is not sent without another explicit confirmation');
   listeners.pagehide();
   assert.ok(mediaStops.length>0);
 });
