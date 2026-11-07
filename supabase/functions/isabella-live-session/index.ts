@@ -130,7 +130,7 @@ Deno.serve(async(req:Request)=>{
     }
   }
   if(body?.action!==undefined)return json({error:"invalid_action"},400,origin);
-  const voice=body?.voice===undefined?"brise":body.voice;
+  const voice=body?.voice===undefined?"nuri":body.voice;
   if(typeof voice!=="string"||(!LIVE_VOICES.has(voice)&&voice!==ORIGINAL_ALIAS))
     return json({error:"invalid_voice"},400,origin);
   let voiceValue:string|{id:string}=voice;
