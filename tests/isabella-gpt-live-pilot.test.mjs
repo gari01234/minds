@@ -18,13 +18,13 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(page,/id="liveStop"[^>]*disabled/);
   assert.match(page,/id="liveAudio"[^>]*autoplay[^>]*playsinline[^>]*controls/);
   assert.match(page,/id="liveUnlock"[^>]*hidden/);
-  assert.match(page,/ni guarda esta conversación en MINDS/i);
+  assert.match(page,/las respuestas usan el agente y permisos existentes/i);
   assert.match(shell,/id="micButton"/);
   assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"/);
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=4/);
+  assert.match(page,/\.\/live\.js\?v=5/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -48,7 +48,7 @@ test('Live voice choices are exactly the documented server allowlist',()=>{
   assert.match(page,/value="isabella-original-v1"/);
   assert.match(page,/id="liveOriginalNote"/);
   assert.match(page,/id="liveVoice"/);
-  assert.match(page,/\.\/live\.css\?v=3/);
+  assert.match(page,/\.\/live\.css\?v=4/);
   assert.match(broker,/typeof voice!=="string"/);
   assert.match(broker,/voice!==ORIGINAL_ALIAS/);
   assert.match(broker,/error:"invalid_voice"/);
@@ -124,9 +124,33 @@ test('no transcript fragment or delegated event may run MINDS writes',()=>{
   assert.match(client,/session\.input_transcript\.delta/);
   assert.match(client,/session\.delegation\.created/);
   assert.match(client,/session\.commentary\.append/);
-  assert.match(client,/No tengo acceso|Todavía no tengo acceso/);
+  assert.match(client,/La respuesta no tiene un comprobante completo y verificable/);
   assert.doesNotMatch(client,/window\.ISABELLA_AI\.ask|window\.MINDS_CHAT_STREAM_RECOVERY/);
-  assert.doesNotMatch(client,/\.from\(|\.rpc\(|\/functions\/v1\/isabella-chat/);
+  assert.match(client,/\/functions\/v1\/isabella-chat/);
+  assert.match(client,/reviewSend\.addEventListener\("click"/);
+  assert.match(client,/surface:"chat_browser",client_message_id:turn\.requestId/);
+  assert.match(client,/canonical\?\.admission\?\.\(result,integrity\?\.validate,integrity\?\.summary\)/);
+  assert.match(client,/No pude confirmar el resultado/);
+  assert.doesNotMatch(client,/\.from\(|\.rpc\(/);
+});
+
+test('delegation requires an explicit reviewed utterance and typed MINDS receipt',()=>{
+  assert.match(page,/id="liveMindsText"/);
+  assert.match(page,/id="liveMindsReview" class="live-minds-review hidden"/);
+  assert.match(page,/id="liveMindsSend"/);
+  assert.match(page,/src="\.\/canonical\.js\?v=1"/);
+  assert.match(page,/src="\.\.\/turn-integrity\.js"/);
+  assert.match(client,/session\.thinking\.append/);
+  assert.match(client,/if\(!showReview\(id\)\)/);
+  assert.match(client,/seenDelegations\.add\(id\)/);
+  assert.match(client,/if\(!active\|\|!turn\|\|turn\.busy\|\|turn\.done\|\|turn\.epoch!==epoch\)return/);
+  assert.match(client,/turn\.requestId=crypto\.randomUUID\(\)/);
+  assert.match(client,/reviewText\.value/);
+  assert.match(client,/requestId:turn\.requestId|client_message_id:turn\.requestId/);
+  assert.match(client,/No se pudo enviar al canal de audio/);
+  assert.match(broker,/solicita delegación al cliente/);
+  assert.match(broker,/español mexicano/);
+  assert.doesNotMatch(client,/MINDS_CHAT_STREAM_RECOVERY|confirmProposals|applyProposal/);
 });
 
 test('runtime starts idle; a backend failure is visible and never starts microphone without a click',async()=>{
@@ -137,7 +161,7 @@ test('runtime starts idle; a backend failure is visible and never starts microph
     srcObject:null,muted:false,
     pause(){},play(){return Promise.resolve()}
   });
-  const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput','liveVoice','liveOriginalNote'].map(k=>[k,node()]));
+  const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput','liveVoice','liveOriginalNote','liveConsult','liveMindsReview','liveMindsText','liveMindsSend','liveMindsDismiss','liveMindsStatus','liveMindsAnswer','liveMindsChat'].map(k=>[k,node()]));
   ids.liveVoice.value='brise';
   const shell={dataset:{}};
   const document={hidden:false,
