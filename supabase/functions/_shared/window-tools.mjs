@@ -247,6 +247,36 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
       note:'Historical conversation: what was said, not confirmed facts. Older messages: pass next_before as before.'};
   }
 
+  // How Isabella's chat turns ran, read-only and without content (Phase 1, 07.11.2026): route, context
+  // tier, history window, outcome, tools, errors. A turn still "running" long after it started never
+  // finished, which is what a silence looks like from the server.
+  const DIAG_FIELDS=['context_tier','provider_history_policy','scoped_recent_count','turn_outcome','rounds','tools',
+    'browser_delivery_receipt_saved','execution_contract','prompt_components','semantic_temporal_rejected',
+    'semantic_repair_rounds','conversation_rotated','memory_checkpoint','checkpoint_error','work_consulted','sofia_consulted'];
+  async function turnDiagnostics({from,to,status,limit=60}={}){
+    if(from!=null&&!isDay(from))throw new ToolError('from: AAAA-MM-DD.');
+    if(to!=null&&!isDay(to))throw new ToolError('to: AAAA-MM-DD.');
+    if(status!=null&&!['running','success','error','skipped'].includes(String(status)))throw new ToolError('status: running, success, error o skipped.');
+    const cap=Math.min(Math.max(Number(limit)||60,1),200);
+    let q=sb.from('minds_agent_runs').select('id,feature,status,route,metadata,error,started_at,completed_at,latency_ms')
+      .eq('user_id',userId).in('feature',['isabella_chat','isabella_background']);
+    if(status)q=q.eq('status',String(status));
+    if(from)q=q.gte('started_at',new Date(Date.parse(from+'T00:00:00Z')-2*3600e3).toISOString());
+    if(to)q=q.lt('started_at',new Date(Date.parse(addDays(to,1)+'T00:00:00Z')).toISOString());
+    const rows=must(await q.order('started_at',{ascending:false}).limit(cap),'turn_diagnostics')||[];
+    const stamp=now().getTime();
+    return {timezone:tz,runs:rows.map(r=>{
+      const m=r.metadata&&typeof r.metadata==='object'?r.metadata:{},route=r.route&&typeof r.route==='object'?r.route:{};
+      const stalled=r.status==='running'&&stamp-Date.parse(r.started_at)>10*60e3;
+      const out={id:r.id,started_at:r.started_at,status:stalled?'never_finished':r.status,latency_ms:r.latency_ms??undefined,
+        background:r.feature==='isabella_background'||undefined,error:r.error?clip(r.error,300):undefined,
+        route:{complexity:route.complexity||undefined,source:route.source||undefined,work:route.work||undefined,project:route.project||undefined,
+          specialists:Array.isArray(route.specialists)&&route.specialists.length?route.specialists:undefined}};
+      for(const k of DIAG_FIELDS)if(m[k]!==undefined&&m[k]!==null)out[k]=m[k];
+      return out;
+    }),note:'No message content. never_finished = started more than 10 minutes ago and never closed.'};
+  }
+
   async function createTask({title,project,due_date,start_date,notes}={}){
     const t=String(title||'').trim();
     if(!t)throw new ToolError('La tarea necesita un título.');
@@ -312,5 +342,5 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
     return {saved:{thread_id:thread.id,thread:thread.title,project:names.get(thread.project_id)||null,messages:rows.length,summary_updated:!!patch.summary}};
   }
 
-  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,listChats,readChat,createTask,updateTask,saveToThread,resolveProject,projectList,threadById};
+  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,listChats,readChat,turnDiagnostics,createTask,updateTask,saveToThread,resolveProject,projectList,threadById};
 }
