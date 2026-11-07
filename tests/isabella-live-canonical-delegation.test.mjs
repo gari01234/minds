@@ -31,6 +31,11 @@ test('Only typed verified answers can be spoken, with source URLs stripped',()=>
   assert.equal(decide({...answered('texto'),outcome:{outcome:'answered',proposal_count:1,applied_count:0}}).ok,false);
 });
 
+test('Visible Live result, not only speech, uses verified status for action outcomes',()=>{
+  assert.match(clientCode,/\["proposal_created","action_applied","failed"\]\.includes\(outcome\.outcome\)/);
+  assert.match(clientCode,/\?outcome\.spoken:outcome\.reply\.slice\(0,5200\)/);
+});
+
 test('Proposals are pending; never voiced as completed actions',()=>{
   const {decide}=makeGate();
   const p={request_id:'proposal-1',kind:'task',action:'create',title:'Enviar informe'};
