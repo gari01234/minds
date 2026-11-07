@@ -28,7 +28,7 @@ function harness({rpcError=null,readError=null,reply=receipt,row=canonical}={}){
  };
  const context={window:{MINDS_SUPABASE:sb},state:{tasks},save:()=>{saves++},
    renderCalendar:()=>calls.push({kind:"render"}),closeModal:()=>{closed++},
-   say:(role,text)=>spoken.push({role,text}),Date,Error,RegExp};
+   say:(role,text)=>spoken.push({role,text}),sayEvent:(text,meta)=>spoken.push({role:'assistant',text,meta}),Date,Error,RegExp};
  const exec=vm.runInNewContext(fragment+"\napplyVerifiedTaskUpdate",context);
  return {exec,calls,tasks,spoken,results:()=>({saves,closed})};
 }
@@ -43,7 +43,7 @@ test("calendar approval writes before any local success and reads back canonical
  assert.equal(h.results().saves,1);
  assert.equal(h.results().closed,1);
  assert.equal(result.receipt_id,receipt.receipt_id);
- assert.match(h.spoken[0].text,/^Listo, «Besprechungsnotiz» queda para /);
+ assert.match(h.spoken[0].text,/^«Besprechungsnotiz» queda para /);
  assert.doesNotMatch(h.spoken[0].text,/Supabase|\d{4}-\d{2}-\d{2}/);
 });
 test("RPC failure never mutates local tasks or declares success",async()=>{

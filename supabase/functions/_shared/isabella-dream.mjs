@@ -12,6 +12,7 @@
 // Only the owner's global, scoped (version 1) chat turns are read: project and Work-thread turns
 // stay in their scope, and legacy rows (before exposure scopes) are never promoted.
 import {clip,localDay,TZ} from './window-tools.mjs';
+import {isSystemNotice,isSystemAuthored} from './system-notice.mjs';
 
 export const DREAM_AUDIENCE='minds-isabella-dream';
 export const DREAM_REPOSITORY='gari01234/minds';
@@ -29,13 +30,8 @@ export function trustedDreamWorkflow(c){
 }
 
 // Fixed texts of the app and of notices: not conversation (they will become system events, step 3).
-const TEMPLATE=[/^listo[.,]/i,/^empieza a las/i,/^próximo:/i,/^hola\. soy isabella\.?$/i,/^¿(añado|pongo) «/i,/^te preparé \d+ cambios/i,
-  /^tengo listo el cambio/i,/^no pude (comprobar|guardar|verificar|identificar|registrar)/i,/^isabella sigue trabajando/i,
-  /^de acuerdo, no hice ningún cambio/i,/^creación autorizada/i,/^no hubo una respuesta de texto/i,/^he preparado la revisión de/i];
-export function isTemplate(text){
-  const t=String(text||'').trim();
-  return t.length<400&&TEMPLATE.some(r=>r.test(t));
-}
+// Fixed app texts are not Isabella's words (shared with the chat history, see system-notice.mjs).
+export const isTemplate=isSystemNotice;
 export const normalizeName=v=>String(v||'').trim().toLowerCase().replace(/\s+/g,' ');
 
 const str={type:'string'};
@@ -96,7 +92,7 @@ export async function collectTranscript(sb,userId,since){
   if(convQ.error)throw convQ.error;
   const ids=(convQ.data||[]).map(c=>c.id);
   if(!ids.length)return {messages:[],last_at:null,more:false};
-  const q=await sb.from('conversation_messages').select('id,role,content,created_at').eq('user_id',userId).in('conversation_id',ids)
+  const q=await sb.from('conversation_messages').select('id,role,content,created_at,metadata').eq('user_id',userId).in('conversation_id',ids)
     .in('role',['user','assistant']).eq('provisional',false).eq('exposure_scope_version',1).eq('exposure_scope_kind','global')
     .gt('created_at',since).order('created_at',{ascending:true}).limit(LIMITS.messages+1);
   if(q.error)throw q.error;
@@ -106,7 +102,7 @@ export async function collectTranscript(sb,userId,since){
   if(tomb.error)throw tomb.error;
   const forgotten=new Set((tomb.data||[]).map(t=>String(t.source_id)));
   return {
-    messages:page.filter(m=>!forgotten.has(String(m.id))&&!(m.role==='assistant'&&isTemplate(m.content))).map(m=>({id:m.id,cuando:localStamp(m.created_at),
+    messages:page.filter(m=>!forgotten.has(String(m.id))&&!isSystemAuthored(m)).map(m=>({id:m.id,cuando:localStamp(m.created_at),
       autor:m.role==='user'?'Gari':'Isabella',texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
     last_at:page.length?page[page.length-1].created_at:null,more
   };

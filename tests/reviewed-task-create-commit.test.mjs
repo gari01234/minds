@@ -24,7 +24,7 @@ function harness({rpcError=null,reply=receipt,readError=null,row=canonical}={}){
   })})})})};
  const ctx={window:{MINDS_SUPABASE:sb},state:{tasks,categories:[],projects:[]},
   save:()=>{saves++},renderCalendar:()=>calls.push(["render"]),
-  closeModal:()=>{closed++},say:(role,text)=>spoken.push(text),Date};
+  closeModal:()=>{closed++},say:(role,text)=>spoken.push(text),sayEvent:text=>spoken.push(text),Date};
  const fn=vm.runInNewContext(snippet+"\napplyVerifiedTaskCreate",ctx);
  return {fn,calls,tasks,spoken,results:()=>({saves,closed})};
 }
@@ -37,7 +37,7 @@ test("reviewed task creation uses canonical RPC then read-back before any succes
  assert.equal(h.tasks[0].id,canonical.client_key);
  assert.equal(h.results().saves,1);
  assert.equal(r.receipt_id,receipt.receipt_id);
- assert.match(h.spoken[0],/^Listo, «Enviar Angebot ELT» está en tus tareas para /);
+ assert.match(h.spoken[0],/^«Enviar Angebot ELT» está en tus tareas para /);
  assert.doesNotMatch(h.spoken[0],/Supabase|\d{4}-\d{2}-\d{2}/);
  const quiet=harness();await quiet.fn(proposal,{quiet:true});assert.equal(quiet.spoken.length,0,"batch and inline reviews confirm once, elsewhere");
 });

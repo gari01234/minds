@@ -40,8 +40,8 @@ export function calendarProposalReply(proposal){
   }).format(d);
  }
  const noun=proposal.kind==="event"?"evento":"tarea";
- const intro=proposal.action==="update"?"He preparado la actualización de la ":"He preparado la ";
- return intro+noun+' "'+title+'"'+shown+
+ // System voice (Phase 1, step 3): the app states what is pending; it does not speak as Isabella.
+ return "Propuesta: "+(proposal.action==="update"?"actualizar ":"")+noun+' «'+title+'»'+shown+
    (proposal.project?" (proyecto "+String(proposal.project)+")":"")+
-   ". Queda pendiente de tu confirmación en la interfaz.";
+   " · pendiente de tu confirmación.";
 }

@@ -28,7 +28,7 @@ test('missing target and unavailable reads cannot become routine proposals',asyn
  await assert.rejects(bind({action:'update',target_id:'id'},{status:'ok',routines:[]}));
 });
 const applyCode=app.slice(app.indexOf('async function createRoutineProposal'),app.indexOf('async function dbWorkProjectByName'));
-function client(result){const messages=[],calls=[];const ctx=vm.createContext({window:{MINDS_SUPABASE:{rpc:async(...args)=>{calls.push(args);return result}}},closeModal(){},say:(role,msg)=>messages.push(msg)});vm.runInContext(applyCode,ctx);return {ctx,messages,calls};}
+function client(result){const messages=[],calls=[];const ctx=vm.createContext({window:{MINDS_SUPABASE:{rpc:async(...args)=>{calls.push(args);return result}}},closeModal(){},say:(role,msg)=>messages.push(msg),sayEvent:msg=>messages.push(msg)});vm.runInContext(applyCode,ctx);return {ctx,messages,calls};}
 test('routine RPC errors and unverified responses never announce success',async()=>{
  for(const result of [{error:{message:'routine_changed_since_review'}},{data:{status:'applied'}},{data:{status:'pending',receipt_id:'x'}}]){
   const {ctx,messages}=client(result);await assert.rejects(ctx.createRoutineProposal({request_id:'req'}));assert.equal(messages.length,0);

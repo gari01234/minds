@@ -16,7 +16,7 @@ function edge(slug){
 function proposalUI(){
   let nodes={},writes=0;const views=[];
   const c=vm.createContext({crypto:webcrypto,console,Date,Intl,Map,Set,window:{},state:{categories:[],projects:[],tasks:[],events:[]},$:s=>nodes[s],$$:()=>[],esc:s=>String(s??''),today:()=> '2026-09-29',cat:()=>'',project:()=>'',findTarget:()=>null,
-    modal:(title,html)=>{views.push({title,html});nodes={};for(const [,id] of html.matchAll(/id="([^"]+)"/g))nodes['#'+id]={value:'',onclick:null,isConnected:true,disabled:false};},closeModal:()=>{},say:()=>{},save:()=>{},proposalFeedback:()=>{},applyProposal:()=>{writes++}});
+    modal:(title,html)=>{views.push({title,html});nodes={};for(const [,id] of html.matchAll(/id="([^"]+)"/g))nodes['#'+id]={value:'',onclick:null,isConnected:true,disabled:false};},closeModal:()=>{},say:()=>{},sayEvent:()=>{},save:()=>{},proposalFeedback:()=>{},applyProposal:()=>{writes++}});
   const s=read('apps/isabella/app.js');vm.runInContext(s.slice(s.indexOf('function proposalLabel('),s.indexOf('function findTarget(')),c);
   return {c,views,node:id=>nodes['#'+id],writes:()=>writes};
 }
@@ -35,7 +35,7 @@ for(const [proposal,field] of [
 }
 test('invalid evidence cannot produce a success message',async()=>{
   const replies=[];let closed=false;
-  const c=vm.createContext({crypto:webcrypto,window:{MINDS_SUPABASE:{rpc:async(name,params)=>{assert.equal(name,'minds_save_work_claim');assert.equal(params.p_confirmed,true);return {error:{message:'source inaccessible'}}}}},dbWorkProjectByName:async()=>({id:'project',name:'Bernried'}),$:()=>({}),say:(r,m)=>replies.push(m),closeModal:()=>{closed=true}});
+  const c=vm.createContext({crypto:webcrypto,window:{MINDS_SUPABASE:{rpc:async(name,params)=>{assert.equal(name,'minds_save_work_claim');assert.equal(params.p_confirmed,true);return {error:{message:'source inaccessible'}}}}},dbWorkProjectByName:async()=>({id:'project',name:'Bernried'}),$:()=>({}),say:(r,m)=>replies.push(m),sayEvent:m=>replies.push(m),closeModal:()=>{closed=true}});
   const s=read('apps/isabella/app.js');vm.runInContext(s.slice(s.indexOf('async function createWorkClaimProposal('),s.indexOf('async function createSkillProposal(')),c);
   await c.createWorkClaimProposal({project:'Bernried',statement:'Example',source_file_id:'bad'});assert.equal(closed,false);assert.match(replies[0],/No se guardó/);
 });
