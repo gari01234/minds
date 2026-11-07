@@ -20,11 +20,12 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(page,/id="liveUnlock"[^>]*hidden/);
   assert.match(page,/las respuestas usan el agente y permisos existentes/i);
   assert.match(shell,/id="micButton"/);
+  assert.match(shell,/id="focusLiveLink"/);
   assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"/);
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=5/);
+  assert.match(page,/\.\/live\.js\?v=6/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -140,7 +141,7 @@ test('delegation requires an explicit reviewed utterance and typed MINDS receipt
   assert.match(page,/id="liveMindsText"/);
   assert.match(page,/id="liveMindsReview" class="live-minds-review hidden"/);
   assert.match(page,/id="liveMindsSend"/);
-  assert.match(page,/src="\.\/canonical\.js\?v=1"/);
+  assert.match(page,/src="\.\/canonical\.js\?v=2"/);
   assert.match(page,/src="\.\.\/turn-integrity\.js"/);
   assert.match(client,/session\.thinking\.append/);
   assert.match(client,/if\(!showReview\(id\)\)/);
