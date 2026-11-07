@@ -46,6 +46,8 @@ final class MINDSWebPortalSession: NSObject, WKNavigationDelegate, WKUIDelegate 
     var onNavigate: ((String, [String: String]) -> Void)?
     var onBadge: ((Int) -> Void)?
     var onSwitchAccount: ((WindowAccount) -> Void)?
+    // The other account's events for this page's calendar (read-only); nil when that account is signed out.
+    var otherCalendar: ((String, String) async throws -> [[String: Any]]?)?
 
     // The web view is made the first time the page is shown, never at launch.
     // AppModel (and this session) are created before UIApplicationMain; a web

@@ -124,11 +124,11 @@ test('voice belongs only to the existing canonical chat turn',()=>{
 });
 
 test('PWA includes new scripts and keeps existing transcription and canonical runtime',()=>{
-  for(const src of ["./voice-output.js?v=2","./app.js?v=135","./shell.js?v=110"])
+  for(const src of ["./voice-output.js?v=2","./app.js?v=136","./shell.js?v=110"])
     assert.ok(html.includes(src)&&sw.includes(src),src);
   assert.ok(html.includes('./voice-output.css?v=3')&&sw.includes('./voice-output.css?v=3'));
-  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=135'));
+  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=136'));
   assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.match(app,/window\.ISABELLA_AI\.ask\(/);
-  assert.match(sw,/isabella-shell-v177/);
+  assert.match(sw,/isabella-shell-v178/);
 });

@@ -435,6 +435,15 @@ actor BackendClient {
         return try JSONDecoder().decode([AgendaEvent].self, from: data)
     }
 
+    // Window's calendar of this person (RLS: owner only), for the office account's Kalender.
+    // nil when signed out of Window.
+    func calendarEvents(from: String, to: String) async throws -> [[String: Any]]? {
+        guard isSignedIn else { return nil }
+        guard let query = CalendarRange.query(from: from, to: to) else { throw BackendError.invalidResponse }
+        let token = try await access()
+        return CalendarRange.clean(try await network("rest/v1/isabella_events", query: query, token: token))
+    }
+
     // Siri reads an exact due-date slice, never the capped general agenda list.
     // Owner-scoped read model: four canonical sources, zero mutations.
     // No LLM summarization, heuristic score, or inferred approval.

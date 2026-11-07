@@ -32,6 +32,7 @@ Petición: `window.webkit.messageHandlers.windowNative.postMessage({ v: 1, type 
 | `app.info` | `{ v: 1, ok: true, app: { name, version, build, account, capabilities } }`. `account` es `personal` u `office` |
 | `nav.open` | `{ section, view? }` → la app cambia a la pestaña de esa sección (`assistant`, `feed`, `calendar`, `work`, `bandeja`, `ideas`). `view` solo para `bandeja`: `confirm`, `suggest` o `ideas`. `{ v: 1, ok: true }` |
 | `shell.badge` | `{ count }` (entero 0–999): el número de «Por confirmar» de la Bandeja, para el badge de la pestaña. Solo en Persönlich. `{ v: 1, ok: true }` |
+| `calendar.other` | `{ from, to }` (días `YYYY-MM-DD`, como máximo 120): los eventos de **la otra cuenta**, leídos con su propia sesión (RLS: solo los propios). `{ v: 1, ok: true, account, signedIn, events: [{ id, title, starts_at, ends_at, all_day }] }`. Nunca notas, lugares ni personas |
 | `account.switch` | `{ to }` (`personal` u `office`): la app muestra la otra cuenta, con su propio inicio de sesión si hace falta. `{ v: 1, ok: true }` |
 | otro | `{ v: 1, ok: false, error: "unsupported" }` |
 
@@ -45,5 +46,8 @@ Como cambiar de usuario en GitHub: **Persönlich** (Window, inicio con código p
 - En Office, las pestañas son Romy · Heute · Kalender · Work · Tools (secciones `assistant`, `feed`, `calendar`, `work`, `tools`). `projects` y `plans` se abren en Tools.
 - Se cambia desde el menú «•••» de la web ("Cambiar a Office" / "Zu Persönlich wechseln", solo si la app anuncia `account.switch`) o desde la pantalla de inicio de sesión de cada cuenta.
 - El widget, la Share Extension y Siri siguen usando solo la cuenta Persönlich.
+- **Los dos calendarios en las dos cuentas** (`calendar.other`): Tiempo (Window) muestra los eventos de Office y el Kalender de Office muestra los de Persönlich, rayados en gris y solo para leer.
+  - La página los dibuja y nada más: no entran en su estado, no se guardan ni se sincronizan, y el asistente no los recibe.
+  - En el navegador cada calendario se queda solo con lo suyo.
 
 Cambios incompatibles suben `v`. Las capacidades nuevas (escanear, adjuntar foto, compartir, Quick Look, háptica…) se añaden como tipos nuevos y se anuncian en `app.info.capabilities`.

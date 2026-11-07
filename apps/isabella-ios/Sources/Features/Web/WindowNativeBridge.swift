@@ -80,6 +80,28 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
             }
             portal?.onSwitchAccount?(target)
             return ["v": v, "ok": true]
+        case "calendar.other":
+            // Two calendars in both accounts: the other account's events, read with its own session.
+            // Days as YYYY-MM-DD, at most 120 of them; only id, title and times are returned.
+            let isDay: (String) -> Bool = { text in
+                text.count == 10 && text.enumerated().allSatisfy { index, char in
+                    index == 4 || index == 7 ? char == "-" : char.isASCII && char.isNumber
+                }
+            }
+            guard let from = body["from"] as? String, let to = body["to"] as? String,
+                  isDay(from), isDay(to),
+                  let provider = portal?.otherCalendar else {
+                return ["v": v, "ok": false, "error": "unsupported"]
+            }
+            let other = portal?.account == .office ? "personal" : "office"
+            do {
+                guard let events = try await provider(from, to) else {
+                    return ["v": v, "ok": true, "account": other, "signedIn": false, "events": [Any]()]
+                }
+                return ["v": v, "ok": true, "account": other, "signedIn": true, "events": events]
+            } catch {
+                return ["v": v, "ok": false, "error": "unavailable"]
+            }
         case "shell.badge":
             // «Por confirmar» in the Bandeja, as the page counted it: only a small whole number.
             guard let count = body["count"] as? Int, (0...999).contains(count) else {
@@ -90,7 +112,7 @@ final class WindowNativeBridge: NSObject, WKScriptMessageHandlerWithReply {
         case "app.info":
             let info = Bundle.main.infoDictionary ?? [:]
             let office = portal?.account == .office
-            var capabilities = ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs", "account.switch"]
+            var capabilities = ["session.get", "session.signIn", "session.signOut", "app.info", "nav.open", "shell.tabs", "account.switch", "calendar.other"]
             if !office { capabilities.append("shell.badge") }
             return ["v": v, "ok": true, "app": [
                 "name": "Window",

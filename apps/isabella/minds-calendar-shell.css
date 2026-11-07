@@ -782,3 +782,20 @@ body.window-app-shell .app .main-nav{display:none!important}
 /* Ahora | Ideas is the app's own switch above the page. */
 body.window-app-shell .situation-tabs [data-situation-view]{display:none!important}
 
+
+/* The other account's calendar (Window app): read-only, hatched gray, no hover lift, no drag. */
+body .app .week-timegrid .wk-event.other-account-entry,
+body .app .hours .event.other-account-entry{
+  --item-color:#8a8f98;
+  background:repeating-linear-gradient(135deg,rgba(138,143,152,.13) 0 6px,rgba(138,143,152,.05) 6px 12px);
+  border:1px dashed rgba(138,143,152,.6);border-left:3px solid #8a8f98;
+  box-shadow:none;cursor:default;color:#4b4f56;
+}
+body .app .week-timegrid .wk-event.other-account-entry:hover,
+body .app .hours .event.other-account-entry:hover{box-shadow:none;z-index:auto}
+body .app .week-timegrid .wk-event.other-account-entry b,
+body .app .hours .event.other-account-entry b{color:#4b4f56}
+.app .wk-chip.other-account-entry,.app .day-all .other-account-entry{display:flex;align-items:center;gap:6px;border:1px dashed rgba(138,143,152,.6);background:#f6f7f8;color:#4b4f56;cursor:default}
+body .app .agenda-item.other-account-entry{cursor:default}
+body .app .agenda-item.other-account-entry .meta{color:#8a8f98}
+.app .other-account-mark{display:inline-block;width:10px;height:10px;border-radius:50%;border:2px dashed #8a8f98;justify-self:center;margin-top:6px;flex:none}

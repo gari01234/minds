@@ -2986,7 +2986,45 @@ function fristChip(f){return `<button type="button" class="wk-chip frist-chip" d
 function bindFristen(){
   $$('[data-frist-project]').forEach(b=>b.onclick=e=>{e.stopPropagation();window.MINDS_WORK?.open?.(b.dataset.fristProject,'overview');document.querySelector('[data-nav="work"]')?.click()});
 }
-function renderCalendar(){loadAkteFristen();$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
+// Window iPhone app: the other account's calendar (Office here), read-only. Gari, 07.11.2026: two
+// calendars, Persönlich and Office, visible in both accounts. The app reads it with its own session
+// for that account and hands over only title and time. It never enters state, so it is neither
+// saved nor synchronized, and Isabella does not receive it. In the browser there is no other calendar.
+const OTHER_CALENDAR_LABEL='Office';
+const otherCalendar={key:'',at:0,rows:[],loading:false};
+function otherCalendarRows(r){
+  const start=new Date(r?.starts_at),end=new Date(r?.ends_at||r?.starts_at);
+  if(!r?.id||Number.isNaN(start.getTime()))return [];
+  const title=String(r.title||'Evento').slice(0,200),id='other:'+String(r.id);
+  if(r.all_day){
+    // An all-day event belongs to every day until its end (exclusive).
+    const out=[];let d=new Date(start.getFullYear(),start.getMonth(),start.getDate());
+    const last=Number.isNaN(end.getTime())||end<=start?d:new Date(end.getTime()-1);
+    for(let i=0;i<62&&d<=last;i++,d=addDays(d,1))out.push({id:id+':'+iso(d),title,date:iso(d),start:'',duration:0,allDay:true,otherAccount:true});
+    return out;
+  }
+  const minutes=Math.round((end-start)/60000);
+  return [{id,title,date:iso(start),start:pad(start.getHours())+':'+pad(start.getMinutes()),duration:Math.max(15,Math.min(24*60,minutes>0?minutes:60)),allDay:false,otherAccount:true}];
+}
+function loadOtherCalendar(force=false){
+  const native=window.WINDOW_NATIVE;
+  if(!windowShell||!windowShellCaps.includes('calendar.other')||otherCalendar.loading)return;
+  const first=fromIso(state.date.slice(0,8)+'01'),from=iso(addDays(first,-10)),to=iso(addDays(first,45)),key=from+'|'+to;
+  if(!force&&otherCalendar.key===key&&Date.now()-otherCalendar.at<5*60000)return;
+  otherCalendar.loading=true;
+  Promise.resolve(native.call('calendar.other',{from,to})).then(reply=>{
+    otherCalendar.loading=false;otherCalendar.at=Date.now();otherCalendar.key=key;
+    if(!reply?.ok)return;
+    const rows=(Array.isArray(reply.events)?reply.events:[]).slice(0,500).flatMap(otherCalendarRows);
+    const changed=JSON.stringify(rows)!==JSON.stringify(otherCalendar.rows);otherCalendar.rows=rows;
+    if(changed&&state.screen==='calendar')renderCalendar();
+  },()=>{otherCalendar.loading=false;otherCalendar.at=Date.now()});
+}
+function otherCalendarOn(day){const f=nativePlanFilters();return f?.personKey||f?.projectId?[]:otherCalendar.rows.filter(e=>e.date===day)}
+function otherTitle(e){return OTHER_CALENDAR_LABEL+' · '+(e.allDay?'todo el día':e.start)+' · '+e.title+' (solo lectura)'}
+function otherChip(e){return `<span class="wk-chip other-account-entry" title="${esc(otherTitle(e))}"><span class="wk-chip-label">${esc(e.title)}</span></span>`}
+function otherAgendaRow(e){return `<div class="agenda-item other-account-entry" title="${esc(otherTitle(e))}"><span class="other-account-mark" aria-hidden="true"></span><div class="agenda-main"><strong>${esc(e.title)}</strong><div class="meta">${esc(OTHER_CALENDAR_LABEL)} · solo lectura</div></div><div class="agenda-tail"><div class="atime">${esc(e.allDay?'Todo el día':e.start)}</div></div></div>`}
+function renderCalendar(){loadAkteFristen();loadOtherCalendar();$$('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===state.view));const d=fromIso(state.date);$('#calTitle').textContent=state.view==='month'?d.toLocaleDateString('es-ES',{month:'long'}):state.view==='week'?`Semana ${weekNo(d)}`:d.toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'});if(state.view==='month')month();else if(state.view==='week')week();else day()}
 function taskSpansDay(task,key){return !!window.MINDS_DESK_MODEL?.spansDay?.(task,key)}
 function spanUntilLabel(task){const d=fromIso(task.date);return 'hasta '+d.toLocaleDateString('es-ES',{day:'numeric',month:'short'}).replace('.','')}
 function workSessionPresentation(event){
@@ -3015,7 +3053,7 @@ function month(){
     const rs=addDays(start,r*7);h+=`<div class="mw">${weekNo(rs)}</div>`;
     for(let col=0;col<7;col++){
       const d=addDays(rs,col),di=iso(d),mut=d.getMonth()!==f.getMonth();
-      const colors=[...dayColors(di,nativePlanFilters()),...(akteFristenOn(di).length?['#d93025']:[])];
+      const colors=[...dayColors(di,nativePlanFilters()),...(akteFristenOn(di).length?['#d93025']:[]),...(otherCalendarOn(di).length?['#8a8f98']:[])];
       const teammateMinutes=nativePlanTeamAllocations(di,nativePlanFilters()).reduce((n,a)=>n+Number(a.minutes||0),0);
       h+=`<button class="mc ${col>4?'weekend':''} ${mut?'muted':''} ${di===today()?'today':''} ${di===state.date?'selected':''}" data-date="${di}"><span class="mn">${d.getDate()}</span><span class="dotset">${colors.map(color=>`<i style="--item-color:${color}"></i>`).join('')}</span>${teammateMinutes?`<span class="minds-team-month-time">${Math.round(teammateMinutes/60*10)/10} h equipo</span>`:''}</button>`;
     }
@@ -3031,10 +3069,11 @@ function month(){
     events:filters.personKey?[]:state.events.filter(e=>!filters.projectId||e.projectId===filters.projectId)};
   const {tasks:ta,events:ev}=window.MINDS_DESK_MODEL.monthAgendaGroups(visibleState,state.date);
   h+=`<div class="agenda"><div class="agenda-head">${esc(pretty(state.date))}${state.date===today()?' · Hoy':''}</div>`;
-  const fristen=akteFristenOn(state.date);
-  if(!ev.length&&!ta.length&&!fristen.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
+  const fristen=akteFristenOn(state.date),other=otherCalendarOn(state.date);
+  if(!ev.length&&!ta.length&&!fristen.length&&!other.length)h+='<div class="meta empty-day">No tienes nada previsto para este día.</div>';
   for(const f of fristen)h+=fristAgendaRow(f);
   for(const e of ev)h+=agendaRow('event',e);
+  for(const e of other.sort((a,b)=>Number(b.allDay)-Number(a.allDay)||a.start.localeCompare(b.start)))h+=otherAgendaRow(e);
   for(const {task,sessions} of ta){
     h+=agendaRow('task',task);
     if(sessions.length)h+='<div class="month-session-links">'+sessions.map(e=>`<button type="button" class="calendar-entry month-session-link" data-kind="event" data-id="${esc(e.id)}" data-date="${esc(e.date)}" aria-label="Editar sesión de ${esc(task.title)}">${esc(e.start)} · ${Number(e.duration)||0} min reservados</button>`).join('')+'</div>';
@@ -3051,7 +3090,7 @@ function week(){
   const days=[];
   for(let i=0;i<7;i++){
     const d=addDays(s,i),di=iso(d),
-      evAll=filters.personKey?[]:state.events.filter(x=>x.date===di&&(!filters.projectId||x.projectId===filters.projectId)).sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))),
+      evAll=filters.personKey?[]:[...state.events.filter(x=>x.date===di&&(!filters.projectId||x.projectId===filters.projectId)),...otherCalendarOn(di)].sort((a,b)=>String(a.start||'').localeCompare(String(b.start||''))),
       timed=evAll.filter(e=>!e.allDay&&clock(e.start)!==null&&Number(e.duration)>0),
       untimed=evAll.filter(e=>!timed.includes(e)),
       teamPlan=nativePlanTeamAllocations(di,filters),
@@ -3070,7 +3109,7 @@ function week(){
   let h=nativePlanToolbar()+nativePlanBand(projection.weeks[0])+`<div class="week week-timegrid" style="--wk-hour:${HOUR}px;--wk-hours:${hours}">`;
   h+='<div class="wk-head"><div class="wk-gutter"></div>'+days.map(x=>`<div class="wk-dayhead ${x.di===today()?'is-today':''}"><span>${esc(x.d.toLocaleDateString('es-ES',{weekday:'short'}).replace('.',''))}</span><strong>${x.d.getDate()}</strong></div>`).join('')+'</div>';
   h+='<div class="wk-allday"><div class="wk-gutter wk-allday-label">Todo el día</div>'+days.map(x=>`<div class="wday" data-week-date="${x.di}">${akteFristenOn(x.di).map(fristChip).join('')}${
-    x.untimed.map(e=>{const p=workSessionPresentation(e);return `<button class="calendar-entry event-item wk-chip wk-chip-event ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}">${esc(p.title)}</button>`}).join('')}${
+    x.untimed.map(e=>{if(e.otherAccount)return otherChip(e);const p=workSessionPresentation(e);return `<button class="calendar-entry event-item wk-chip wk-chip-event ${p.isSession?'is-work-session':''}" data-kind="event" data-id="${e.id}" data-date="${e.date}" style="--item-color:${itemColor(e)}">${esc(p.title)}</button>`}).join('')}${
     x.ta.map(t=>`<button class="calendar-entry task-item wk-chip ${t.done?'task-done':''}" draggable="true" data-kind="task" data-id="${t.id}" data-date="${t.date}" style="--item-color:${itemColor(t)}">${check(t)}<span class="wk-chip-label">${esc(t.title)}</span></button>`).join('')}${
     x.teamPlan.map(a=>`<button type="button" class="wk-chip minds-team-day-entry" data-team-task="${esc(a.task.id)}" title="Horas previstas, no calendario confirmado">${esc(a.person)} · ${esc(a.task.title)} · ${Number(a.minutes)} min previstos</button>`).join('')}</div>`).join('')+'</div>';
   h+='<div class="wk-body"><div class="wk-gutter wk-hours">'+Array.from({length:hours},(_,i)=>`<span style="top:${i*HOUR}px">${pad(fromH+i)}:00</span>`).join('')+'</div>';
@@ -3080,6 +3119,10 @@ function week(){
     for(const e of x.timed){
       const slot=lanes.get(e.id)||{lane:0,columns:1},at=clock(e.start),dur=Number(e.duration);
       const top=Math.max(0,(at-fromH*60)*PX),height=Math.max(18,Math.min(dur,(toH*60)-at)*PX-2);
+      if(e.otherAccount){
+        h+=`<div class="wk-event other-account-entry ${height<38?'is-compact':''}" title="${esc(otherTitle(e))}" style="top:${top.toFixed(1)}px;height:${height.toFixed(1)}px;--wk-left:${slot.lane/slot.columns};--wk-width:${1/slot.columns}">${height<38?`<b>${esc(e.start)} ${esc(e.title)}</b>`:`<b>${esc(e.title)}</b><span class="wk-time">${esc(range(e))} · ${esc(OTHER_CALENDAR_LABEL)}</span>`}</div>`;
+        continue;
+      }
       const p=workSessionPresentation(e),compact=height<38;
       h+=`<button type="button" class="calendar-entry event-item wk-event ${p.isSession?'is-work-session':''} ${compact?'is-compact':''}" data-kind="event" data-id="${esc(e.id)}" data-date="${esc(e.date)}" title="${esc(range(e)+' · '+p.title)}" style="top:${top.toFixed(1)}px;height:${height.toFixed(1)}px;--wk-left:${slot.lane/slot.columns};--wk-width:${1/slot.columns};--item-color:${itemColor(e)}">${
         compact?`<b>${esc(e.start)} ${esc(p.title)}</b>`:`<b>${esc(p.title)}</b><span class="wk-time">${esc(range(e))}</span>`}</button>`;
@@ -3090,12 +3133,13 @@ function week(){
   h+='</div></div>';$('#calendarContent').innerHTML=h;bindCalendarItems();bindNativePlanControls();bindFristen();
 }
 function day(){
-  const ev=state.events.filter(x=>x.date===state.date),ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt)
+  const other=otherCalendarOn(state.date);
+  const ev=[...state.events.filter(x=>x.date===state.date),...other.filter(e=>!e.allDay)],ta=state.tasks.filter(x=>x.date===state.date&&!x.archivedAt)
     .sort((a,b)=>Number(a.done)-Number(b.done)||taskOrder(a,b));
   const spans=state.tasks.filter(x=>taskSpansDay(x,state.date)).sort(taskOrder);
   const lanes=window.MINDS_DAY_LAYOUT?.layout(ev)||new Map();
   const dayFristen=akteFristenOn(state.date);
-  let h='<div class="day-all"><b>Todo el día</b><div>'+dayFristen.map(fristChip).join('')+
+  let h='<div class="day-all"><b>Todo el día</b><div>'+dayFristen.map(fristChip).join('')+other.filter(e=>e.allDay).map(otherChip).join('')+
     (ta.length||spans.length?ta.map(t=>'<button class="pill calendar-entry task-item '+(t.done?'task-done':'')+
       '" data-kind="task" data-id="'+esc(t.id)+'" data-date="'+esc(t.date)+
       '" style="--item-color:'+itemColor(t)+'"><span class="wk-check" aria-hidden="true"></span>'+esc(t.title)+'</button>').join('')+
@@ -3107,6 +3151,12 @@ function day(){
   for(const e of ev){
     const slot=lanes.get(e.id);
     if(!slot||slot.top<0||slot.top>=960||e.allDay)continue;
+    if(e.otherAccount){
+      h+='<div class="event other-account-entry" title="'+esc(otherTitle(e))+'" style="top:'+slot.top+'px;height:'+Math.max(12,slot.height)+
+        'px;--day-left:'+(slot.lane/slot.columns)+';--day-width:'+(1/slot.columns)+'"><b>'+esc(e.start)+' '+esc(e.title)+'</b>'+
+        (slot.height>=40?'<div class="meta">'+esc(OTHER_CALENDAR_LABEL)+' · solo lectura</div>':'')+'</div>';
+      continue;
+    }
     const presentation=workSessionPresentation(e);
     const width=1/slot.columns,left=slot.lane/slot.columns;
     h+='<button type="button" class="event calendar-entry event-item '+
