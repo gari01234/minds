@@ -4,3 +4,7 @@
 .focus-voice-option.is-unavailable{opacity:.52;cursor:default}
 #micButton.voice-speaking .chat-ui-icon{display:none}
 #micButton.voice-speaking::after{content:"";display:block;width:12px;height:12px;border-radius:2px;background:currentColor;margin:auto}
+
+/* Access continuous GPT-Live from the existing Focus surface; no second mic. */
+.focus-live-link{display:flex;align-items:center;justify-content:center;width:min(100%,520px);min-height:49px;margin:0 auto 14px;border:1px solid #dedee0;border-radius:99px;background:#fff;color:#202020;text-decoration:none;font-size:15px;font-weight:500}
+.focus-live-link:focus-visible{outline:2px solid #171717;outline-offset:3px}

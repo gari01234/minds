@@ -2,6 +2,16 @@
 
 Date: 6 November 2026. Base: `main f4b4d2b37a0bdcb74702bfaa9d7fd205341ce56a`.
 
+## Nuri + entry from Isabella Focus · 7 November 2026
+
+The owner successfully tested Brise with canonical MINDS and explicitly selected **Nuri** as the next default voice. Nuri is the default selected option in `apps/isabella/live/index.html` and the fallback in `isabella-live-session` when a legacy client omits the voice parameter. All 31 built-in voices remain selectable; Brise and Original I have not been removed. A voice selection does not establish any particular Spanish accent or quality in all languages; user acceptance is required.
+
+The **existing** `#micButton` and Focus transcription overlay now contain one link, `Conversar en vivo · Nuri`, to the live WebRTC interface. There is **no additional mic button** in Isabella's chat. The old dictation path, edited transcription, SpeechSynthesis opt-in, tool-capable chat and all permissions are preserved. Clicking the link cancels any active dictation, stops its media tracks and navigates to the same-origin Live page, avoiding two open microphones. The link itself remains usable without JavaScript. In browser recognition fallback, requested Spanish locale changes from `es-ES` to `es-MX`, independently of GPT-Live's voice synthesis.
+
+After a reviewed and typed `proposal_created` result, Live now links a **single** canonical UUID receipt directly to the primary Isabella `?review=<request_id>` handler; that handler already loads the owner-scoped pending decision from Supabase and invokes the existing confirm UI. Multiple proposals, invalid or absent receipts are not given a fabricated specific approval link. Live never approves a proposal or mutates an item by itself. Returning to the main UI closes the WebRTC page and its microphone. These links and the Focus entry are navigation only, not a new authorization mechanism.
+
+**The Focus-to-Live navigation and deep-link review still require physical iPhone/Window acceptance.** Browser CI cannot certify audio permissions after an in-app navigation. Continue to treat the existing reviewed-transcription gate as necessary for MINDS delegation; do not promote all voice fragments to trusted commands. This update does not claim continuous hands-free execution, direct spoken approval, or background audio support.
+
 ## Canonical MINDS delegation v0.1 · 7 November 2026
 
 **This section supersedes the isolated no-MINDS-access behavior described below, which remains as version history.** Brise/GPT-Live continues to handle natural speech; `isabella-chat` is the only engine allowed to handle MINDS facts, memory, projects, governed tools and permissions.

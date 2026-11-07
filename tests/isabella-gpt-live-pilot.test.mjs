@@ -20,11 +20,12 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(page,/id="liveUnlock"[^>]*hidden/);
   assert.match(page,/las respuestas usan el agente y permisos existentes/i);
   assert.match(shell,/id="micButton"/);
+  assert.match(shell,/id="focusLiveLink"/);
   assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"/);
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=5/);
+  assert.match(page,/\.\/live\.js\?v=6/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -39,12 +40,14 @@ test('Live voice choices are exactly the documented server allowlist',()=>{
   assert.equal(allOptions.length,32);
   assert.equal(new Set(options).size,options.length);
   assert.deepEqual([...options].sort(),[...accepted].sort());
-  assert.equal(options[0],'brise');
-  assert.match(page,/value="brise" selected/);
+  assert.equal(options[0],'nuri');
+  assert.match(page,/value="nuri" selected/);
+  assert.match(page,/value="brise"/);
+  assert.doesNotMatch(page,/value="brise" selected/);
   assert.match(page,/value="marin"/);
   assert.doesNotMatch(page,/value="marin" selected/);
   assert.equal((page.match(/<option value="[^"]+" selected>/g)||[]).length,1);
-  assert.match(broker,/const voice=body\?\.voice===undefined\?"brise":body\.voice/);
+  assert.match(broker,/const voice=body\?\.voice===undefined\?"nuri":body\.voice/);
   assert.match(page,/value="isabella-original-v1"/);
   assert.match(page,/id="liveOriginalNote"/);
   assert.match(page,/id="liveVoice"/);
@@ -138,7 +141,7 @@ test('delegation requires an explicit reviewed utterance and typed MINDS receipt
   assert.match(page,/id="liveMindsText"/);
   assert.match(page,/id="liveMindsReview" class="live-minds-review hidden"/);
   assert.match(page,/id="liveMindsSend"/);
-  assert.match(page,/src="\.\/canonical\.js\?v=1"/);
+  assert.match(page,/src="\.\/canonical\.js\?v=2"/);
   assert.match(page,/src="\.\.\/turn-integrity\.js"/);
   assert.match(client,/session\.thinking\.append/);
   assert.match(client,/if\(!showReview\(id\)\)/);
@@ -162,7 +165,7 @@ test('runtime starts idle; a backend failure is visible and never starts microph
     pause(){},play(){return Promise.resolve()}
   });
   const ids=Object.fromEntries(['liveStart','liveStop','liveAudio','liveUnlock','liveStatus','livePlayback','liveInput','liveOutput','liveVoice','liveOriginalNote','liveConsult','liveMindsReview','liveMindsText','liveMindsSend','liveMindsDismiss','liveMindsStatus','liveMindsAnswer','liveMindsChat'].map(k=>[k,node()]));
-  ids.liveVoice.value='brise';
+  ids.liveVoice.value='nuri';
   const shell={dataset:{}};
   const document={hidden:false,
     getElementById:id=>ids[id],

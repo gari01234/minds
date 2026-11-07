@@ -40,5 +40,20 @@
     return {ok:true,outcome:check.outcome,reply,spoken,
       hasReview:check.outcome==='proposal_created',hasSources:Array.isArray(result.sources)&&result.sources.length>0};
   }
-  root.ISABELLA_LIVE_CANONICAL=Object.freeze({admission,textForVoice});
+  // Navigation only. The destination app revalidates ownership and pending
+  // status; a voice transcript or model prose never authorizes a proposal.
+  function reviewLink(result,liveLocation){
+    const candidates=result?.proposal!=null?[result.proposal]:
+      Array.isArray(result?.proposals)?result.proposals:[];
+    if(candidates.length!==1)return null;
+    const id=String(candidates[0]?.request_id||"");
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))
+      return null;
+    try{
+      const destination=new URL("../",liveLocation);
+      destination.searchParams.set("review",id);
+      return destination.href;
+    }catch{return null}
+  }
+  root.ISABELLA_LIVE_CANONICAL=Object.freeze({admission,textForVoice,reviewLink});
 })(typeof window!=='undefined'?window:globalThis);

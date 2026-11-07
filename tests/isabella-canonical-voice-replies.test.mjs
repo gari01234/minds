@@ -113,17 +113,22 @@ test('voice belongs only to the existing canonical chat turn',()=>{
   assert.doesNotMatch(voiceSource,/openai\.com|supabase\.co|fetch\(|localStorage|sessionStorage/);
   assert.match(shell,/id="focusSpeakReply" type="checkbox"/);
   assert.match(shell,/id="micButton"/);
+  assert.match(shell,/id="focusLiveLink"/);
+  assert.match(shell,/href="\.\/live\/"[^>]*>Conversar en vivo · Nuri/);
+  assert.match(app,/\$\('#focusLiveLink'\)\.onclick=\(\)=>\{cancel\(\)/);
+  assert.match(app,/fallbackRec\.lang='es-MX'/);
+  assert.match(voiceSource,/voice-speaking/);
   assert.doesNotMatch(shell,/id="voiceStopButton"/);
   assert.match(app,/ISABELLA_VOICE_OUTPUT\?\.isSpeaking\(\)/);
   assert.match(voiceSource,/voice-speaking/);
 });
 
 test('PWA includes new scripts and keeps existing transcription and canonical runtime',()=>{
-  for(const src of ["./voice-output.js?v=2","./app.js?v=134","./shell.js?v=108"])
+  for(const src of ["./voice-output.js?v=2","./app.js?v=135","./shell.js?v=109"])
     assert.ok(html.includes(src)&&sw.includes(src),src);
-  assert.ok(html.includes('./voice-output.css?v=2')&&sw.includes('./voice-output.css?v=2'));
-  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=134'));
+  assert.ok(html.includes('./voice-output.css?v=3')&&sw.includes('./voice-output.css?v=3'));
+  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=135'));
   assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.match(app,/window\.ISABELLA_AI\.ask\(/);
-  assert.match(sw,/isabella-shell-v175/);
+  assert.match(sw,/isabella-shell-v176/);
 });
