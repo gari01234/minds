@@ -9,6 +9,39 @@ enum WindowAccount: String {
     case personal, office
 }
 
+// The other account's calendar for the Kalender/Tiempo page (read-only): a range of local days,
+// at most 120, sent as UTC instants. Only id, title and times leave this app's session.
+enum CalendarRange {
+    static let columns = "id,title,starts_at,ends_at,all_day"
+    static func query(from: String, to: String) -> [URLQueryItem]? {
+        let parser = DateFormatter()
+        parser.calendar = Calendar(identifier: .gregorian)
+        parser.locale = Locale(identifier: "en_US_POSIX")
+        parser.timeZone = .current
+        parser.dateFormat = "yyyy-MM-dd"
+        guard let start = parser.date(from: from), let last = parser.date(from: to), last >= start,
+              let end = Calendar.current.date(byAdding: .day, value: 1, to: last),
+              end.timeIntervalSince(start) <= 121 * 86_400 else { return nil }
+        let stamp = ISO8601DateFormatter()
+        return [URLQueryItem(name: "select", value: columns),
+                URLQueryItem(name: "starts_at", value: "gte." + stamp.string(from: start)),
+                URLQueryItem(name: "starts_at", value: "lt." + stamp.string(from: end)),
+                URLQueryItem(name: "order", value: "starts_at.asc"),
+                URLQueryItem(name: "limit", value: "500")]
+    }
+    // Only what the page draws: never notes, places or people.
+    static func clean(_ data: Data) -> [[String: Any]] {
+        guard let rows = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] else { return [] }
+        return rows.compactMap { row in
+            guard let id = row["id"].map({ String(describing: $0) }), let starts = row["starts_at"] as? String else { return nil }
+            var out: [String: Any] = ["id": id, "title": String((row["title"] as? String ?? "").prefix(200)),
+                                      "starts_at": starts, "all_day": row["all_day"] as? Bool ?? false]
+            if let ends = row["ends_at"] as? String { out["ends_at"] = ends }
+            return out
+        }
+    }
+}
+
 // TBA Office: the public address and publishable key (RLS and the JWT govern access),
 // from Config/App-Info.plist.
 enum OfficeConfig {
@@ -193,6 +226,14 @@ actor OfficeSession {
         let stored = try await valid()
         return BridgeSession(accessToken: stored.accessToken, expiresAt: stored.expiresAt,
                              userID: stored.userID, email: stored.email)
+    }
+
+    // The office calendar of this person (RLS: own events only), for Window's Tiempo. nil when signed out.
+    func calendarEvents(from: String, to: String) async throws -> [[String: Any]]? {
+        guard isSignedIn else { return nil }
+        guard let query = CalendarRange.query(from: from, to: to) else { throw BackendError.invalidResponse }
+        let token = try await valid().accessToken
+        return CalendarRange.clean(try await request("rest/v1/isabella_events", query: query, token: token))
     }
 
     func logout() async {

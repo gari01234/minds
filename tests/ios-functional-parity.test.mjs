@@ -99,7 +99,7 @@ test("the typed bridge answers only the top-level MINDS page and never carries t
   assert.match(bridge, /section == "bandeja", let view = body\["view"\] as\? String, \["confirm", "suggest", "ideas"\]\.contains\(view\)/);
   // The badge is only a small whole number.
   assert.match(bridge, /let count = body\["count"\] as\? Int, \(0\.\.\.999\)\.contains\(count\)/);
-  assert.match(bridge, /"nav\.open", "shell\.tabs", "account\.switch"\]/);
+  assert.match(bridge, /"nav\.open", "shell\.tabs", "account\.switch", "calendar\.other"\]/);
   assert.match(bridge, /if !office \{ capabilities\.append\("shell\.badge"\) \}/);
   assert.doesNotMatch(bridge, /refresh|evaluateJavaScript|WKUserScript|service_role/i);
   const doc = read("BRIDGE.md");
@@ -177,4 +177,27 @@ test("two accounts like GitHub users: the office has its own sign-in, session an
   assert.match(web, /<button id="switchToOffice" type="button" class="hidden">Cambiar a Office<\/button>/);
   assert.match(web, /includes\('account\.switch'\)/);
   assert.match(web, /native\.call\('account\.switch',\{to:'office'\}\)/);
+});
+
+test("both calendars in both accounts: the other account's events, read-only, through the app", () => {
+  const office = read("Sources/Services/OfficeSession.swift");
+  const backend = read("Sources/Services/BackendClient.swift");
+  // At most 120 days, only id, title and times; never notes, places or people.
+  assert.match(office, /static let columns = "id,title,starts_at,ends_at,all_day"/);
+  assert.match(office, /end\.timeIntervalSince\(start\) <= 121 \* 86_400/);
+  assert.match(office, /var out: \[String: Any\] = \["id": id, "title": String\(\(row\["title"\] as\? String \?\? ""\)\.prefix\(200\)\),/);
+  // Each account reads its own table with its own session (RLS: own events only).
+  assert.match(office, /return CalendarRange\.clean\(try await request\("rest\/v1\/isabella_events", query: query, token: token\)\)/);
+  assert.match(backend, /return CalendarRange\.clean\(try await network\("rest\/v1\/isabella_events", query: query, token: token\)\)/);
+  assert.match(app, /webPortal\.otherCalendar = \{ \[office\] from, to in try await office\.calendarEvents\(from: from, to: to\) \}/);
+  assert.match(app, /officePortal\.otherCalendar = \{ \[backend\] from, to in try await backend\.calendarEvents\(from: from, to: to\) \}/);
+  assert.match(bridge, /case "calendar\.other":/);
+  assert.match(bridge, /isDay\(from\), isDay\(to\),/);
+  assert.match(bridge, /"signedIn": false, "events": \[Any\]\(\)/);
+  // Window's Tiempo draws them read-only and never keeps them.
+  const web = readFileSync(new URL("../apps/isabella/app.js", import.meta.url), "utf8");
+  assert.match(web, /if\(!windowShell\|\|!windowShellCaps\.includes\('calendar\.other'\)\|\|otherCalendar\.loading\)return;/);
+  const helpers = web.slice(web.indexOf("function otherChip"), web.indexOf("function renderCalendar"));
+  assert.doesNotMatch(helpers, /data-kind|calendar-entry/);
+  assert.match(web, /function renderCalendar\(\)\{loadAkteFristen\(\);loadOtherCalendar\(\);/);
 });

@@ -65,6 +65,9 @@ final class AppModel {
         officePortal.onSessionLost = { [weak self] in self?.officeAuthenticated = false }
         officePortal.onNavigate = { [weak self] section, extra in self?.open(section: section, extra: extra) }
         officePortal.onSwitchAccount = { [weak self] target in self?.switchAccount(to: target) }
+        // Each page sees the other account's calendar, read-only, through the app's own sessions.
+        webPortal.otherCalendar = { [office] from, to in try await office.calendarEvents(from: from, to: to) }
+        officePortal.otherCalendar = { [backend] from, to in try await backend.calendarEvents(from: from, to: to) }
     }
 
     private static func initialAccount() -> WindowAccount {
