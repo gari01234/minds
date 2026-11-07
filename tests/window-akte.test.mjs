@@ -144,9 +144,9 @@ test('Steckbrief, search and fetch',async()=>{
   await assert.rejects(akte.fetchItem({id:'nonsense'}),/id no reconocido/);
 });
 
-test('Server: 16 lean tools (14 + Isabella chat history, 07.11.2026), German titles, one-click prompts, German Akte rule',()=>{
+test('Server: 17 lean tools (14 + Isabella chat history + turn diagnostics, 07.11.2026), German titles, one-click prompts, German Akte rule',()=>{
   const fn=read('supabase/functions/window-mcp/index.ts');
-  assert.equal((fn.match(/registerTool\(/g)||[]).length,16);
+  assert.equal((fn.match(/registerTool\(/g)||[]).length,17);
   // Prompts come from the shared Projektakte skill library (tests/window-akte-skills.test.mjs covers the names).
   assert.match(fn,/for\(const skill of AKTE_SKILLS\)\{[\s\S]*server\.registerPrompt\(skill\.prompt,/);
   assert.match(fn,/Everything you WRITE into Window[\s\S]*is in German/);

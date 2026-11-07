@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked} from "../_shared/cognitive.ts";
 import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import CREDIT from "../_shared/credit-model.mjs";
+import {localEventView} from "../_shared/local-agenda.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -126,7 +127,12 @@ Deno.serve(async(req:Request)=>{
         attentionDigest?sb.from("minds_attention_events").select("id,title,body,urgency,reason,reason_code,source_type,event_type,created_at").eq("user_id",routine.user_id).eq("route","briefing").eq("status","pending").order("created_at",{ascending:true}).limit(12):Promise.resolve({data:[],error:null})
       ]);
 
-      const [events,rawTasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      const [rawEvents,rawTasks,memories,convs,feedPref,modelClaims,attentionQ]=contextQueries.map((q,i)=>checked(q,"routine_context_"+i));
+      // Hours already local (Europe/Berlin or the routine's zone); the model never converts UTC itself.
+      const events=(rawEvents||[]).map((e:any)=>localEventView(e,tz));
+      // Still open from before today: part of today's brief (like Isabella's chat and Romy, 07.11.2026).
+      const overdue=checked(await sb.from("isabella_tasks").select("title,due_date,start_date,reminder_time,notes").eq("user_id",routine.user_id)
+        .is("completed_at",null).is("archived_at",null).lt("due_date",today).order("due_date",{ascending:true}).limit(20),"routine_overdue")||[];
       // Multi-day tasks already running today are part of today's agenda.
       const tasks=(rawTasks||[]).map((x:any)=>x.start_date&&x.due_date&&x.start_date<=today&&today<x.due_date?{...x,in_progress_today:true}:x);
       const urgencyRank:Record<string,number>={urgent:0,attention:1,info:2};
@@ -153,8 +159,9 @@ INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
 
 CONTEXTO DE AGENDA:
-Eventos próximos: ${JSON.stringify(events||[])}
+Eventos próximos (local_date, local_start_time y local_end_time ya están en hora local; úsalos tal cual y no conviertas zonas horarias): ${JSON.stringify(events||[])}
 Tareas próximas (in_progress_today:true = tarea de varios días que ya empezó y sigue abierta hoy; trátala como parte de hoy): ${JSON.stringify(tasks||[])}
+Tareas vencidas que siguen abiertas (venció la fecha y no están hechas; nómbralas aparte con su fecha, sin dramatizar): ${JSON.stringify(overdue)}
 
 MEMORIA RECIENTE:
 ${JSON.stringify(memories||[])}
