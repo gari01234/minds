@@ -4604,12 +4604,30 @@ function correctOperatingHypothesis(id,current){
   modal('Corregir regla de trabajo',`<div class="form"><div class="small">La corrección se guardará como la regla aceptada. La formulación original y tu revisión quedan en el historial.</div><label>Formulación correcta<textarea id="operatingCorrection" rows="5">${esc(current||'')}</textarea></label><button id="saveOperatingCorrection" class="primary">Usar esta regla</button></div>`);
   $('#saveOperatingCorrection').onclick=async()=>{const text=$('#operatingCorrection').value.trim();if(!text)return;await reviewOperatingHypothesis(id,'correct',text)};
 }
+// Isabella's nightly dreaming (08.11.2026): what she understood, the threads she wants to come back
+// to (Gari can dismiss them) and her diary of the night. Read-only except dismissing a thread.
+const DREAM_PAGE_LABELS={gari:'Tú',person:'Persona',topic:'Tema',relationship:'Nosotros',isabella:'Isabella'};
+function dreamSectionHtml(dream){
+  const diary=(dream.runs||[]).filter(r=>r?.metadata?.diario).slice(0,3).map(r=>`<div class="memory-row"><div class="row-main"><div>${esc(r.metadata.diario)}</div><div class="small">${esc(new Date(r.started_at).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}))}</div></div></div>`).join('')||'<div class="small">Todavía no hay un repaso nocturno.</div>';
+  const pages=(dream.pages||[]).map(e=>`<div class="memory-row"><div class="row-main"><div><strong>${esc(e.name)}</strong> · <span class="small">${esc(DREAM_PAGE_LABELS[e.entity_type]||e.entity_type)}</span></div><div class="small">${esc(e.metadata?.page?.resumen||'')}</div></div></div>`).join('')||'<div class="small">Aún nada.</div>';
+  const threads=(dream.threads||[]).map(t=>`<div class="memory-row"><div class="row-main"><div>${esc(t.title)}</div>${t.metadata?.quote?`<div class="small">«${esc(t.metadata.quote)}»</div>`:''}</div><button type="button" class="ghost small" data-dream-thread-dismiss="${esc(t.id)}">Descartar</button></div>`).join('')||'<div class="small">Ninguno ahora.</div>';
+  return `<div class="small section-label memory-section-title">Repaso de la noche</div>${diary}<div class="small section-label memory-section-title">Lo que Isabella entiende</div>${pages}<div class="small section-label memory-section-title">Hilos que quiere retomar</div>${threads}`;
+}
+async function loadDreamSection(sb){
+  const [runs,pages,threads]=await Promise.all([
+    sb.from('minds_agent_runs').select('started_at,metadata').eq('feature','isabella_dream').eq('status','success').order('started_at',{ascending:false}).limit(3),
+    sb.from('isabella_entities').select('entity_type,name,metadata').not('metadata->page','is',null).is('metadata->>forgotten_at',null).order('updated_at',{ascending:false}).limit(30),
+    sb.from('isabella_return_queue').select('id,title,metadata').eq('kind','conversation_thread').eq('status','ready').order('created_at',{ascending:false}).limit(6)
+  ]);
+  return {runs:runs.data||[],pages:pages.data||[],threads:threads.data||[]};
+}
 async function memoryPanel(){
   const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
-  let claims=[],operating=emptyOperatingModel();
+  let claims=[],operating=emptyOperatingModel(),dream={runs:[],pages:[],threads:[]};
   try{
     const sb=window.MINDS_SUPABASE,{data:{session}}=await sb.auth.getSession();
     if(session){
+      try{dream=await loadDreamSection(sb)}catch{}
       const [{data:claimRows},model]=await Promise.all([sb.from('isabella_model_claims').select('id,claim_type,claim,status,confidence,source_type,last_seen_at').in('status',['confirmed','hypothesis']).order('status',{ascending:true}).order('confidence',{ascending:false}).limit(60),loadOperatingModel()]);
       claims=claimRows||[];operating=model||emptyOperatingModel();
     }
@@ -4620,7 +4638,10 @@ async function memoryPanel(){
   const proposedHtml=proposed.length?proposed.map(x=>{const evidence=Array.isArray(x.evidence)?x.evidence:[];return `<div class="model-claim-row hypothesis"><div class="row-main"><div>${esc(x.statement||'')}</div><div class="small">Propuesta · ${esc(operatingDimensionLabels[x.dimension]||x.dimension)}</div>${x.rationale?`<p class="small">${esc(x.rationale)}</p>`:''}${evidence.length?`<details class="human-tech"><summary>Por qué lo propongo</summary>${evidence.map(e=>`<div class="small">${esc(e.summary||'')} · ${esc(e.provenance_class||'')}</div>`).join('')}</details>`:''}</div><div class="model-claim-actions"><button data-operating-accept="${esc(x.id)}">Sí, úsalo</button><button data-operating-correct="${esc(x.id)}" data-operating-text="${esc(x.statement||'')}">Corregir</button><button data-operating-reject="${esc(x.id)}">No</button></div></div>`}).join(''):'<div class="small">No hay nuevas reglas por revisar.</div>';
   const operatingHtml=`<div class="small">Isabella puede observar patrones operativos, pero ninguna inferencia cambia cómo trabaja contigo hasta que la confirmes.</div><div class="small section-label">Reglas confirmadas</div>${acceptedHtml}<div class="small section-label memory-section-title">Por revisar</div>${proposedHtml}<div class="small">Observaciones disponibles: ${Number(operating.observation_count||0)}</div>`;
   const memoryHtml=items.length?items.map((m,i)=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';const id=typeof m==='object'?(m.id||String(i)):String(i);return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
-  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}`);
+  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}${dreamSectionHtml(dream)}`);
+  document.querySelectorAll('[data-dream-thread-dismiss]').forEach(b=>b.onclick=async()=>{
+    try{const sb=window.MINDS_SUPABASE;await sb.from('isabella_return_queue').update({status:'dismissed',updated_at:new Date().toISOString()}).eq('id',b.dataset.dreamThreadDismiss);b.closest('.memory-row')?.remove()}catch{}
+  });
   document.querySelectorAll('[data-model-confirm]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelConfirm,'confirmed'));
   document.querySelectorAll('[data-model-reject]').forEach(b=>b.onclick=()=>void setModelClaimStatus(b.dataset.modelReject,'contradicted'));
   document.querySelectorAll('[data-model-correct]').forEach(b=>b.onclick=()=>correctModelClaim(b.dataset.modelCorrect,b.dataset.modelText||''));
