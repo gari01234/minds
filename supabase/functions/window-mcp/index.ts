@@ -48,7 +48,8 @@ How to work:
 - open_project lists entries waiting for Gari (offen_zu_bestaetigen, vorgeschlagene_aufgaben, widersprueche, found by Isabella's nightly Akte-Pflege). Mention them briefly at the start; Gari confirms them in Window.
 - E-mails or texts Gari pastes to keep: file_document (art "email", with von/an/datum/betreff), then point out deadlines and decisions you noticed and offer to record them.
 - create_task / update_task change Gari's real task list: do it when he asks; otherwise propose.
-- Keep tool calls lean: prefer open_topic over reading whole threads, and fetch only what you need.`;
+- Keep tool calls lean: prefer open_topic over reading whole threads, and fetch only what you need.
+- Isabella's chat history is readable (list_chats, read_chat) when Gari asks about it: it is what was said, not confirmed facts; never write it into the Akte without his OK.`;
 
 const text=(value:unknown)=>({content:[{type:"text" as const,text:typeof value==="string"?value:JSON.stringify(value)}]});
 const READ={readOnlyHint:true,destructiveHint:false,openWorldHint:false};
@@ -78,6 +79,10 @@ function buildServer(tools:ReturnType<typeof createWindowTools>,akte:ReturnType<
     inputSchema:z.object({id:z.string(),offset:z.number().int().min(0).optional()}),annotations:READ},run(a=>akte.fetchItem(a)));
   server.registerTool("list_tasks",{title:"Aufgaben",description:"Gari's tasks. range: 'today' (incl. overdue and multi-day tasks in progress), 'week', 'open', 'done_recent'. For another day such as tomorrow pass day:'YYYY-MM-DD' (also includes tasks still open from before, overdue:true). Optional project and title filter.",
     inputSchema:z.object({range:z.enum(["today","week","open","done_recent"]).optional(),day:z.string().optional(),project:z.string().optional(),query:z.string().optional(),limit:z.number().int().min(1).max(200).optional()}),annotations:READ},run(a=>tools.listTasks(a)));
+  server.registerTool("list_chats",{title:"Isabella-Chats",description:"Gari's conversations with Isabella in Window (read-only): the main chat and the Work threads, newest first, with ids for read_chat.",
+    inputSchema:z.object({}),annotations:READ},run(()=>tools.listChats()));
+  server.registerTool("read_chat",{title:"Isabella-Chat lesen",description:"Read Gari's conversation history with Isabella (read-only). Without chat_id: the main Isabella chat, newest page first, returned in chronological order. query searches the text of every Isabella chat. from/to are local days (YYYY-MM-DD). For older messages pass next_before as before. Historical conversation, not confirmed facts.",
+    inputSchema:z.object({chat_id:z.string().optional(),query:z.string().optional(),from:z.string().optional(),to:z.string().optional(),before:z.string().optional(),limit:z.number().int().min(1).max(200).optional(),max_chars:z.number().int().min(200).max(12000).optional()}),annotations:READ},run(a=>tools.readChat(a)));
   server.registerTool("list_events",{title:"Kalender",description:"Calendar events between from and to (YYYY-MM-DD, Europe/Berlin). Defaults to the next 7 days.",
     inputSchema:z.object({from:z.string().optional(),to:z.string().optional()}),annotations:READ},run(a=>tools.listEvents(a)));
   server.registerTool("create_task",{title:"Aufgabe anlegen",description:"Create a task in Gari's task list (title in German unless he wrote it otherwise). Dates YYYY-MM-DD; start_date makes it a multi-day task.",

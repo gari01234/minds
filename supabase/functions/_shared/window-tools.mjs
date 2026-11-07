@@ -199,6 +199,54 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
       messages:rows.reverse().map(m=>({role:m.role,author:m.role==='user'?'Gari':(m.metadata&&m.metadata.source==='claude_connector'?'Claude':'Isabella'),content:clip(m.content,6000),at:m.created_at}))};
   }
 
+  // Isabella's chat history, read-only (decision of Gari, 07.11.2026): his own conversations in the
+  // Isabella app and its Work threads. Theory is a separate project and stays out. Historical
+  // conversation, not confirmed facts.
+  async function isabellaChats(){
+    return must(await sb.from('conversations').select('id,app_scope,title,metadata,created_at,updated_at').eq('user_id',userId)
+      .in('app_scope',['isabella','work_thread']).order('updated_at',{ascending:false}).limit(100),'chats')||[];
+  }
+  async function listChats(){
+    const [chats,names]=await Promise.all([isabellaChats(),projectNames()]);
+    const threads=must(await sb.from('minds_work_threads').select('id,title,project_id,conversation_id').eq('user_id',userId).not('conversation_id','is',null).limit(300),'threads')||[];
+    const byConversation=new Map(threads.map(t=>[t.conversation_id,t]));
+    const main=chats.find(c=>c.app_scope==='isabella');
+    return {chats:chats.map(c=>{const t=byConversation.get(c.id);
+      return {id:c.id,title:t?t.title:(c.title||'Isabella'),kind:c.app_scope==='work_thread'?'work_thread':(c===main?'main':'chat'),
+        project:t?names.get(t.project_id)||undefined:undefined,started:c.created_at,last_activity:c.updated_at}}),
+      note:'read_chat without chat_id reads the main Isabella chat; with query it searches every chat listed here.'};
+  }
+  async function readChat({chat_id,query,from,to,before,limit=60,max_chars=4000}={}){
+    if(from!=null&&!isDay(from))throw new ToolError('from: AAAA-MM-DD.');
+    if(to!=null&&!isDay(to))throw new ToolError('to: AAAA-MM-DD.');
+    if(before!=null&&isNaN(Date.parse(String(before))))throw new ToolError('before: usa next_before de la página anterior.');
+    const cap=Math.min(Math.max(Number(limit)||60,1),200),chars=Math.min(Math.max(Number(max_chars)||4000,200),12000);
+    const chats=await isabellaChats(),title=new Map(chats.map(c=>[c.id,c.title||'Isabella']));
+    let ids;
+    if(chat_id){
+      const c=chats.find(x=>x.id===String(chat_id));
+      if(!c)throw new ToolError('No encuentro ese chat de Isabella (list_chats muestra los disponibles).');
+      ids=[c.id];
+    }else if(query)ids=chats.map(c=>c.id);
+    else{const main=chats.find(c=>c.app_scope==='isabella');ids=main?[main.id]:[]}
+    if(!ids.length)return {chat:null,messages:[],next_before:null};
+    let q=sb.from('conversation_messages').select('conversation_id,role,content,created_at,metadata').eq('user_id',userId)
+      .in('conversation_id',ids).in('role',['user','assistant']).eq('provisional',false);
+    if(query){const words=String(query).replace(/[%_,()]/g,' ').trim();if(words.length<2)throw new ToolError('La búsqueda necesita al menos dos caracteres.');q=q.ilike('content','%'+words+'%')}
+    // Local days in Europe/Berlin, widened by two hours like list_events.
+    if(from)q=q.gte('created_at',new Date(Date.parse(from+'T00:00:00Z')-2*3600e3).toISOString());
+    if(to)q=q.lt('created_at',new Date(Date.parse(addDays(to,1)+'T00:00:00Z')).toISOString());
+    if(before)q=q.lt('created_at',new Date(String(before)).toISOString());
+    const rows=must(await q.order('created_at',{ascending:false}).limit(cap+1),'chat_messages')||[];
+    const more=rows.length>cap,page=rows.slice(0,cap).reverse();
+    const author=m=>m.role==='user'?'Gari':(m.metadata&&m.metadata.source==='claude_connector'?'Claude':'Isabella');
+    return {chat:ids.length===1?{id:ids[0],title:title.get(ids[0])}:{search:String(query),chats:ids.length},
+      messages:page.map(m=>({at:m.created_at,author:author(m),chat:ids.length>1?title.get(m.conversation_id):undefined,
+        content:clip(m.content,chars)})),
+      next_before:more&&page.length?page[0].created_at:null,
+      note:'Historical conversation: what was said, not confirmed facts. Older messages: pass next_before as before.'};
+  }
+
   async function createTask({title,project,due_date,start_date,notes}={}){
     const t=String(title||'').trim();
     if(!t)throw new ToolError('La tarea necesita un título.');
@@ -264,5 +312,5 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
     return {saved:{thread_id:thread.id,thread:thread.title,project:names.get(thread.project_id)||null,messages:rows.length,summary_updated:!!patch.summary}};
   }
 
-  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,createTask,updateTask,saveToThread,resolveProject,projectList,threadById};
+  return {listProjects,overview,projectContext,searchFiles,readFile,listTasks,listEvents,listThreads,readThread,listChats,readChat,createTask,updateTask,saveToThread,resolveProject,projectList,threadById};
 }
