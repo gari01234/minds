@@ -127,7 +127,7 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
   assert.equal(calls.length,0);
   nodes.get('liveStart').emit('click');
   for(let i=0;i<12;i++)await Promise.resolve();
-  assert.equal(calls.length,1);
+  assert.equal(calls.length,1,'WebRTC not started: '+nodes.get('liveStatus').textContent);
   events.message({data:JSON.stringify({type:'session.input_transcript.delta',delta:'¿Qué tareas tengo hoy?'})});
   assert.equal(calls.length,1,'transcript alone does not call MINDS');
   events.message({data:JSON.stringify({type:'session.delegation.created',
