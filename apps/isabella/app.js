@@ -1,5 +1,8 @@
 (()=>{'use strict';
-const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+const assistantUi=(key,span)=>window.APP_PROFILE==='office'&&window.ASSISTANT_I18N
+  ?window.ASSISTANT_I18N.t(key):span;
+
 const KEY='isabella-staging-v03';
 const uid=()=>Math.random().toString(36).slice(2)+Date.now().toString(36);
 const pad=n=>String(n).padStart(2,'0');
@@ -851,7 +854,7 @@ function renderIdeaWorkspace(){
   }else{artifact.classList.add('hidden');artifact.innerHTML=''}
   const thread=$('#ideaWorkspaceThread');
   thread.innerHTML=(w.messages||[]).map(m=>{const parts=m.role==='assistant'?ideaWorkerParts(m.content):null,draft=parts?.artifact&&!content?parts.artifact:null;
-    return `<div class="idea-workspace-message ${m.role}"><div>${formatMessageText(parts?parts.reply:(m.content||''))}</div>${draft?`<div class="idea-message-draft"><div class="idea-artifact-label">${esc(draft.title||'BORRADOR')}</div><div class="idea-markdown-render">${formatMessageText(draft.content)}</div>${parts.complete?'':'<p class="idea-draft-cut">El borrador llegó incompleto. Pide a Isabella que lo continúe.</p>'}</div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}</div>`}).join('');
+    return `<div class="idea-workspace-message ${m.role}"><div>${formatMessageText(parts?parts.reply:(m.content||''))}</div>${draft?`<div class="idea-message-draft"><div class="idea-artifact-label">${esc(draft.title||'BORRADOR')}</div><div class="idea-markdown-render">${formatMessageText(draft.content)}</div>${parts.complete?'':'<p class="idea-draft-cut">El borrador llegó incompleto. Pide a Isabella que lo continúe.</p>'}</div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="feed-thread-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||assistantUi('source','Fuente'))}</a>`).join('')}</div>`:''}</div>`}).join('');
   requestAnimationFrame(()=>{const sc=$('#ideaWorkspaceScroll');if(sc)sc.scrollTop=sc.scrollHeight});
 }
 function downloadIdeaArtifact(w){
@@ -1182,13 +1185,18 @@ let pendingReplyTo=null;
 function isEventMessage(m){
   return m?.role==='assistant'&&(m.metadata?.author==='system'||!!window.MINDS_TURN_INTEGRITY?.isSystemNotice?.(m.text));
 }
-function replyAuthor(reply){return reply?.role==='assistant'?(isEventMessage(reply)?'Aviso':'Isabella'):'Tú'}
+function replyAuthor(reply){
+  if(window.APP_PROFILE==='office')return reply?.role==='assistant'
+    ?assistantUi(isEventMessage(reply)?'system_notice_short':'assistant_label',isEventMessage(reply)?'Aviso':'Isabella')
+    :assistantUi('you','Tú');
+  return reply?.role==='assistant'?(isEventMessage(reply)?'Aviso':'Isabella'):'Tú';
+}
 function replySnippet(text){return String(text||'').replace(/\s+/g,' ').trim().slice(0,180)}
 function renderReplyPreview(){
   const box=$('#chatReplyPreview');if(!box)return;
   if(!pendingReplyTo){box.classList.add('hidden');box.innerHTML='';return}
   box.classList.remove('hidden');
-  box.innerHTML=`<div><strong>Respondiendo a ${esc(replyAuthor(pendingReplyTo))}</strong><span>${esc(replySnippet(pendingReplyTo.text))}</span></div><button type="button" data-cancel-reply aria-label="Cancelar respuesta">×</button>`;
+  box.innerHTML=`<div><strong>${esc(assistantUi('replying_to','Respondiendo a'))} ${esc(replyAuthor(pendingReplyTo))}</strong><span>${esc(replySnippet(pendingReplyTo.text))}</span></div><button type="button" data-cancel-reply aria-label="${esc(assistantUi('cancel_reply','Cancelar respuesta'))}">×</button>`;
   box.querySelector('[data-cancel-reply]')?.addEventListener('click',()=>{pendingReplyTo=null;renderReplyPreview()});
 }
 function setReplyTarget(id){
@@ -1295,8 +1303,8 @@ function resolvedReviewText(m){
   const state=m?.metadata?.review_state,items=m?.metadata?.review_proposals;
   if(!Array.isArray(items)||!items.length)return null;
   if(state==='applied_verified')return confirmationText(items);
-  if(state==='rejected')return 'Propuesta cancelada. No se aplicó el cambio.';
-  if(state==='reviewed_locally')return 'Hecho. Échale un vistazo para comprobar que quedó como querías.';
+  if(state==='rejected')return assistantUi('review_cancelled','Propuesta cancelada. No se aplicó el cambio.');
+  if(state==='reviewed_locally')return assistantUi('review_locally','Hecho. Échale un vistazo para comprobar que quedó como querías.');
   return null;
 }
 // Isabella confirms like a person: one short sentence with what changed and when, in natural dates.
@@ -1356,8 +1364,8 @@ function renderMessages(forceBottom=false){
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
     const event=isEventMessage(m);
-    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${directUndo?`<div class="message-review-action"><button type="button" class="secondary" data-direct-undo-message="${esc(m.id||'')}">Deshacer</button></div>`:''}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
-      !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">Revisar propuesta pendiente</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">${esc(assistantUi('partial_reply','Respuesta interrumpida. El texto recibido es parcial.'))}<button type="button" data-continue-incomplete="${esc(m.id||'')}">${esc(assistantUi('continue_reply','Continuar respuesta'))}</button></div>`:''}${previews}${deliverables}${directUndo?`<div class="message-review-action"><button type="button" class="secondary" data-direct-undo-message="${esc(m.id||'')}">${esc(assistantUi('undo','Deshacer'))}</button></div>`:''}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
+      !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">${esc(assistantUi('review_pending','Revisar propuesta pendiente'))}</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="${esc(assistantUi('reaction_change','Cambiar reacción'))}">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="${esc(assistantUi('react','Reaccionar'))}">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="${esc(assistantUi('reply_message','Responder a este mensaje'))}">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
@@ -2469,8 +2477,8 @@ async function syncDurableChatJobs(){
       const resolved=['completed','incomplete','failed'].includes(status);
       const reply=status==='completed'?String(job.reply||''):
         status==='incomplete'?String(job.reply||'')||'La respuesta quedó interrumpida.':
-        status==='failed'?'Isabella no pudo terminar esta respuesta. Puedes intentarlo de nuevo.':
-        'Isabella sigue trabajando…';
+        status==='failed'?assistantUi('chat_failed','Isabella no pudo terminar esta respuesta. Puedes intentarlo de nuevo.'):
+        assistantUi('chat_working','Isabella sigue trabajando…');
       const desiredMeta={durable_request_id:key,durable_status:status,
         incomplete_response:status==='incomplete',
         incomplete_reason:status==='incomplete'?job.incomplete_reason||'provider_incomplete':null};
@@ -2509,11 +2517,11 @@ async function handle(text,attachments=[],replyTo=null,options={}){
     ?{source_turn_id:pending.source_turn_id,receipt_id:pending.receipt_id}:null;
   const userTurn=say('user',text||'Te envío esta imagen.',{id:durableRequestId||undefined,attachments:copy,replyTo,
     metadata:durableRequestId?{durable_request_id:durableRequestId}:{} });
-  clearReplyTarget();setChatActivity('Enviando a Isabella…');orb('thinking','Pensando…');setWorking($('#sendButton'),true);
+  clearReplyTarget();setChatActivity(assistantUi('sending','Enviando a Isabella…'));orb('thinking',assistantUi('chat_thinking','Pensando…'));setWorking($('#sendButton'),true);
   try{
     if(window.ISABELLA_AI?.ask){
-      setChatActivity('Isabella está preparando la respuesta…');
-      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,continuation:candidate,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity('Isabella está respondiendo…');streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
+      setChatActivity(assistantUi('chat_preparing','Isabella está preparando la respuesta…'));
+      const result=await window.ISABELLA_AI.ask(text||'Te envío esta imagen.',state,{attachments:copy,replyTo,durableRequestId,continuation:candidate,onProgress:event=>{if(event?.label){orb('thinking',event.label);setChatActivity(event.label)}},onTextDelta:(delta,full)=>{setChatActivity(assistantUi('chat_answering','Isabella está respondiendo…'));streamAssistantDelta(delta,full)},onTextReset:()=>clearAssistantStream()});
       state.pendingIntent=null;
       clearAssistantStream();
       if(result?.durable){
@@ -2521,7 +2529,7 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         // Reconciliation can complete before this acknowledgement reaches Safari.
         // Never append a second placeholder for the same accepted provider turn.
         const existing=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key);
-        if(!existing)say('assistant','Isabella sigue trabajando…',{metadata:{
+        if(!existing)say('assistant',assistantUi('chat_working','Isabella sigue trabajando…'),{metadata:{
           durable_request_id:key,durable_status:result.durable_status||'running'
         }});
         void syncDurableChatJobs();
@@ -4431,7 +4439,7 @@ function assistantPreferencesPanel(){
   const attention=canonicalAttentionPreferences(prefs.attention);
   const rules=[...(prefs.behaviorRules||[])];
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
-    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Isabella puede escribirme primero (como mucho una vez al día, solo si vale la pena)</span></label>
+    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>${esc(assistantUi('presence_switch','Isabella puede escribirme primero (como mucho una vez al día, solo si vale la pena)'))}</span></label>
     <div class="small">Lo decide cada día a partir de lo que hablasteis y de tu agenda; si no hay nada que valga la pena, no escribe.</div>
     <div class="small section-label">Cuándo quieres que te avise</div>
     <div class="small">Puedo mantener cosas vivas y trabajar en segundo plano sin interrumpirte cada vez. Si me dices explícitamente “avísame cuando termines”, esa petición tiene prioridad sobre estas reglas.</div>
@@ -4794,7 +4802,7 @@ async function memoryPanel(){
   const proposedHtml=proposed.length?proposed.map(x=>{const evidence=Array.isArray(x.evidence)?x.evidence:[];return `<div class="model-claim-row hypothesis"><div class="row-main"><div>${esc(x.statement||'')}</div><div class="small">Propuesta · ${esc(operatingDimensionLabels[x.dimension]||x.dimension)}</div>${x.rationale?`<p class="small">${esc(x.rationale)}</p>`:''}${evidence.length?`<details class="human-tech"><summary>Por qué lo propongo</summary>${evidence.map(e=>`<div class="small">${esc(e.summary||'')} · ${esc(e.provenance_class||'')}</div>`).join('')}</details>`:''}</div><div class="model-claim-actions"><button data-operating-accept="${esc(x.id)}">Sí, úsalo</button><button data-operating-correct="${esc(x.id)}" data-operating-text="${esc(x.statement||'')}">Corregir</button><button data-operating-reject="${esc(x.id)}">No</button></div></div>`}).join(''):'<div class="small">No hay nuevas reglas por revisar.</div>';
   const operatingHtml=`<div class="small">Isabella puede observar patrones operativos, pero ninguna inferencia cambia cómo trabaja contigo hasta que la confirmes.</div><div class="small section-label">Reglas confirmadas</div>${acceptedHtml}<div class="small section-label memory-section-title">Por revisar</div>${proposedHtml}<div class="small">Observaciones disponibles: ${Number(operating.observation_count||0)}</div>`;
   const memoryHtml=items.length?items.map((m,i)=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';const id=typeof m==='object'?(m.id||String(i)):String(i);return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
-  modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}${dreamSectionHtml(dream)}`);
+  modal(assistantUi('memory_title','Lo que Isabella sabe de mí'),`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}${dreamSectionHtml(dream)}`);
   const clearState=document.querySelector('[data-dream-clear-state]');
   if(clearState)clearState.onclick=async()=>{
     clearState.disabled=true;
