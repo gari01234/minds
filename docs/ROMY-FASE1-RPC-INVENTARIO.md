@@ -2,11 +2,11 @@
 
 Extraído el 08.11.2026 mediante consulta de solo lectura al catálogo de funciones de Window y contrastado con las firmas disponibles en Office. No incluye cuerpos SQL, secretos ni registros. La presencia en el catálogo no equivale a permiso seguro para usar la función en Office.
 
-Superficie inspeccionada: 50 nombres referenciados; 49 encontrados en Window, 2 ya existentes en Office, 47 pendientes. Las funciones `SECURITY DEFINER` requieren auditoría de identidad y ámbito antes de conceder `EXECUTE`; los RPC con acceso a otras áreas de Window no se trasplantan automáticamente.
+Superficie inspeccionada: 50 nombres referenciados; 50 encontrados en Window, 2 ya existentes en Office, 48 pendientes. Las funciones `SECURITY DEFINER` requieren auditoría de identidad y ámbito antes de conceder `EXECUTE`; los RPC con acceso a otras áreas de Window no se trasplantan automáticamente.
 
 | RPC | Office | SECURITY DEFINER en Window | Firma Window |
 | --- | --- | --- | --- |
-| `claim_due_isabella_routines` | pendiente | no | sin coincidencia en el catálogo actual |
+| `claim_due_isabella_routines` | pendiente | no | `p_limit integer` |
 | `isabella_entity_recall` | pendiente | no | `p_query text, p_limit integer` |
 | `isabella_recall_scoped` | pendiente | no | `p_query text, p_scope_key text, p_allow_cross_scope boolean, p_limit integer` |
 | `isabella_semantic_recall_scoped` | pendiente | no | `p_embedding vector, p_scope_key text, p_allow_cross_scope boolean, p_limit integer` |
