@@ -33,7 +33,9 @@ export function directToolHistorySafe(usedTools,roundStartedAt=0){
 export function withDefaultEventDuration(proposal){
   if(proposal?.kind!=="event"||proposal?.action!=="create"||
      typeof proposal?.time!=="string"||!/^([01]\d|2[0-3]):[0-5]\d$/.test(proposal.time)||
-     (proposal.duration_minutes!=null&&proposal.duration_minutes!==""))return proposal;
+     (proposal.duration_minutes!=null&&proposal.duration_minutes!==""))
+     return proposal?.kind==="event"&&proposal?.action==="create"
+       ?{...proposal,duration_defaulted:false}:proposal;
   return {...proposal,duration_minutes:60,duration_defaulted:true};
 }
 
