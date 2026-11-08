@@ -8,6 +8,8 @@ import {isDoclingReady,isDoclingConfigured,configureDoclingRuntime} from "../_sh
 import {hasDoclingWork,doclingTaskIsLost,heldPdfPageBatchEligible} from "../_shared/work-ingest-policy.mjs";
 import {configurePageBatchRuntime,pageModeEnabled} from "../_shared/work-docling-page-runtime.ts";
 import {costlyDocumentImage,decideDoclingFailure} from "../_shared/work-docling-failure-policy.mjs";
+import {resolveAssistantProfile} from "../_shared/assistant-profile.mjs";
+import {officeIngestAuthorized} from "../_shared/office-akte-access.mjs";
 const json=(v:any,status=200)=>new Response(JSON.stringify(v),{status,headers:{"Content-Type":"application/json"}});
 Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
@@ -15,6 +17,7 @@ Deno.serve(async(req:Request)=>{
   const url=Deno.env.get("SUPABASE_URL")||"",key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
   if(!url||!key)return json({error:"server_unconfigured"},503);
   const sb=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+  const officeProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user;
   const {data:secret}=await sb.from("isabella_runtime_secrets").select("value").eq("key","work_ingest_runner").maybeSingle();
   if(!secret?.value||String(body.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
   // Runtime secret lookup happens only after the private runner has authenticated.
@@ -126,6 +129,15 @@ Deno.serve(async(req:Request)=>{
   const results:any[]=[];
   for(const job of jobs||[]){
     try{
+      if(officeProfile&&!await officeIngestAuthorized(sb,job)){
+        const {error:blockedError}=await sb.from("minds_work_ingest_queue")
+          .update({status:"failed",last_error:"office_project_access_revoked",locked_at:null,
+            updated_at:new Date().toISOString()})
+          .eq("id",job.id).eq("user_id",job.user_id).eq("status","processing");
+        if(blockedError)throw new Error("office_ingest_guard_write_failed");
+        results.push({status:"blocked"});
+        continue;
+      }
       const x=await processWorkFile(sb,job),now=new Date().toISOString();
       if(x.status==="docling_pending"){
         // Polling in later Heartbeats does not increment extraction attempts.

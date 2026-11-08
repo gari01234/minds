@@ -126,7 +126,7 @@ Deno.serve(async(req:Request)=>{
   const url=Deno.env.get("SUPABASE_URL")||"";
   let publishable=Deno.env.get("SUPABASE_ANON_KEY")||"";
   try{const keys=JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")||"{}");publishable=keys?.default||publishable}catch{}
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!url||!publishable||!apiKey)return json({error:"server_not_configured"},503);
 
   const sb=createClient(url,publishable,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}});
