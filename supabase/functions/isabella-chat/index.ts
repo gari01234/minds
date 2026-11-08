@@ -12,7 +12,7 @@ import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_s
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
@@ -547,7 +547,7 @@ const calendarTools = [
   {
     type: "function",
     name: "create_event",
-    description: "Propose creating one calendar event. This does NOT execute the change; the UI will ask the user to confirm.",
+    description: "Propose creating an event. If the owner supplied a clock time but no duration, OMIT duration_minutes: the server defaults to 60 min and the UI marks it editable. Otherwise use the stated duration. Direct creation requires an exact owner quote and the owner direct-create preference; other mutations require review.",
     strict: false,
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
@@ -556,7 +556,7 @@ const calendarTools = [
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
       direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
       direct_event_duration_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event duration, NOT a default."}
-    }, required:["title","date","time","duration_minutes"] }
+    }, required:["title","date","time"] }
   },
   {
     type: "function",
@@ -3947,6 +3947,7 @@ pregunta cuál.`;
   let quickReplies:any[]=[];
   let webSources:any[]=[];
   let sourceTainted=!!routedWork||!!routedSofia;
+  let providerWebSeen=false;
   const usedTools:string[]=[];
   const specialistDelegations:any[]=[];
   const specialistCache=new Map<string,any>();
@@ -4012,6 +4013,7 @@ pregunta cuál.`;
   let semanticRepairRounds=0;
 
   for(let round=0;round<=budget.rounds;round++){
+    const roundStartedAt=usedTools.length;
     roundsUsed=round+1;
     // Only spend deeper reasoning AFTER a grounded semantic claim failed
     // structural validation. Normal calls keep the established fast budget.
@@ -4057,7 +4059,7 @@ pregunta cuál.`;
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
         message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
-    if((payload.output||[]).some((x:any)=>x.type==="web_search_call"))sourceTainted=true;
+    if((payload.output||[]).some((x:any)=>x.type==="web_search_call")){sourceTainted=true;providerWebSeen=true;}
     webSources=[...webSources,...extractSources(payload)]
       .filter((x:any,i:number,a:any[])=>a.findIndex((y:any)=>y.url===x.url)===i).slice(0,8);
 
@@ -4130,7 +4132,7 @@ pregunta cuál.`;
             server_local_date:temporal.current_date})});
         continue;
       }
-      const proposal:any=calendarGrounding.proposal;
+      const proposal:any=withDefaultEventDuration(calendarGrounding.proposal);
       const clock=validatedCalendarClock(proposal);
       if(clock.kind==="needs_clarification"){
         temporalGroundingIssues.push(String(clock.reason));
@@ -4154,13 +4156,20 @@ pregunta cuál.`;
           // or its server-verified pending clarification, never from retrieved text.
           const sourceText=verifiedContinuation?.source_message||effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
+          // Work route prefetch is not independent owner authority. A real tool
+          // read outside the three allowlisted lookups always disqualifies direct creation.
+          const directHistorySafe=!routedSofia&&!providerWebSeen&&
+            directToolHistorySafe(usedTools,roundStartedAt);
+          const explicitTime=call.name!=="create_event"||
+            exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt);
+          const explicitDuration=call.name!=="create_event"||
+            (proposal.duration_defaulted===true&&proposal.duration_minutes===60&&!String(args?.direct_event_duration_excerpt||"").trim())||
+            exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt);
           if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
-             !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
-             exactOwnerExcerpt(sourceText,quoted)&&
-             (call.name!=="create_event"||(
-               exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt)&&
-               exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt)
-             ))&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
+             directHistorySafe&&["create_task","create_event"].includes(String(call.name))&&
+             exactOwnerExcerpt(sourceText,quoted)&&exactOwnerTitle(sourceText,proposal.title)&&
+             explicitTime&&explicitDuration&&
+             browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
               .select("create_mode").eq("user_id",(await prefClient.auth.getUser()).data.user?.id||"").maybeSingle():null;
@@ -4168,7 +4177,10 @@ pregunta cuál.`;
           }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-            source_tainted:sourceTainted,round,background:!!background,
+            source_tainted:sourceTainted,
+            // Separate source provenance from authority: direct uses current owner quotes.
+            direct_owner_source_tainted:!(!routedSofia&&!providerWebSeen&&directToolHistorySafe(usedTools,roundStartedAt)),
+            round,background:!!background,
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
@@ -4176,7 +4188,8 @@ pregunta cuál.`;
                direct_timezone:temporal.timezone,
                ...(call.name==="create_event"?{
                  direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
-                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim()
+                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim(),
+                  direct_duration_defaulted:proposal.duration_defaulted===true
                }: {})}: {})
           });
           if(admission?.status==="suppressed"){
