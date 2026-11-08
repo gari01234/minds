@@ -23,7 +23,7 @@ Deno.serve(async(req:Request)=>{
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
   try{
-    const result=await runIsabellaPresence({sb,model,callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
+    const result=await runIsabellaPresence({sb,model,profile:Deno.env.get('ASSISTANT_PROFILE')||'window',callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
       push:presencePusher(sb),log:(...a:unknown[])=>console.error(...a)});
     return json(result,result.ok?200:207);
   }catch(e){
