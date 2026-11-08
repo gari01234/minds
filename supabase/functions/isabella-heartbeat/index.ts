@@ -235,7 +235,11 @@ Deno.serve(async(req:Request)=>{
       const situationalReview=assistantProfile.multi_user?{status:"profile_excluded"}:
         await runSituationalReview(sb,userId,routineTz,now,(candidate:any)=>publishCandidate(sb,userId,candidate));
       // Projektakte: Fristen due within two days and entries awaiting confirmation (daytime only, never throws).
-      const akteAttention=assistantProfile.multi_user?{status:"deferred_to_project_akte"}:await runAkteAttention(sb,userId,{now,tz:routineTz});
+      const akteAttention=await (async()=>{
+        if(assistantProfile.multi_user)return {status:"deferred_to_project_akte"};
+        const akteAttention=await runAkteAttention(sb,userId,{now,tz:routineTz});
+        return akteAttention;
+      })();
       const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0||situationalReview.status==="error";
       await finishRun(sb,run,heartbeatError?"error":"success",{
         timezone:routineTz,candidates:candidates.length,new_events:created,
@@ -252,7 +256,8 @@ Deno.serve(async(req:Request)=>{
   const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
   if(apiKey){
     const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
-    const presence=runIsabellaPresence({sb,model,profile:assistantProfile.id,callModel:presenceCaller(apiKey,model),relationship:profileRelationshipPolicy(relationshipPolicy("proactive"),assistantProfile.id),
+    const presence=runIsabellaPresence({sb,model,callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
+      profile:assistantProfile.id,
       push:assistantProfile.multi_user?async()=>({sent:0}):presencePusher(sb),log:(...a:unknown[])=>console.error(...a)})
       .then((r:any)=>console.log("isabella_presence",JSON.stringify((r.report||[]).map((x:any)=>({spoke:x.spoke,reason:x.reason,moment:x.moment||null})))))
       .catch((e:unknown)=>console.error("isabella_presence_failed",e instanceof Error?e.message:String(e)));
