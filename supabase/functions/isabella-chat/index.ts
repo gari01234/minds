@@ -3126,7 +3126,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   if (!message && !attachments.length) return json({ error: "message_required" }, 400);
   const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
   const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
-  let assistantOwner=assistantProfile.owner_name;
+  let assistantOwner: string | null=assistantProfile.owner_name;
   if(assistantProfile.multi_user){
     // Office identity comes only from a verified session and an active membership.
     const authenticated=(await supabaseClient(req)?.auth.getUser())?.data?.user;
@@ -4034,7 +4034,7 @@ pregunta cuál.`;
     ...(isabellaCoreEligible&&exposureScope.kind==="global"?FOLLOWUP_TOOLS:[])
   ]).filter((t:any)=>routineReviewSupported||!routineMutationTools.has(String(t.name||"")));
   if(assistantProfile.multi_user){
-    tools.splice(0,tools.length,...profileTools(tools,assistantProfile,assistantOwner));
+    tools.splice(0,tools.length,...profileTools(tools,assistantProfile.id,assistantOwner));
   }
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
@@ -4081,7 +4081,7 @@ pregunta cuál.`;
       skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
       (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
-  const providerInstructions=profileInstructions(modelInstructions,assistantProfile,assistantOwner);
+  const providerInstructions=profileInstructions(modelInstructions,assistantProfile.id,assistantOwner);
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
     sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
