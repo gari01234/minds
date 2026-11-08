@@ -1306,7 +1306,7 @@ function confirmationText(items,now=new Date()){
   const isCreate=p=>(p.action||'create')==='create';
   if(list.length===1){
     const p=list[0],t=title(p),w=when(p);
-    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
+    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+(p.duration_defaulted?' · 1 h · editable':'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
     if(t)return w?'«'+t+'» queda para '+w+'.':'Actualizado: «'+t+'».';
     return w?'La tarea queda para '+w+'.':'Actualizado.';
   }
@@ -2240,7 +2240,7 @@ async function applyDirectCalendarCreate(p){
     try{await window.ISABELLA_SYNC_PULL_NOW()}catch(e){console.warn('direct create sync pending',e)}
   }
   return {receipt_id:receipt.receipt_id,request_id:p.request_id,entity_id:row.id,
-    kind:p.kind,title:row.title,action:'create',
+    kind:p.kind,title:row.title,action:'create',duration_defaulted:p.duration_defaulted===true,
     date:p.kind==='task'?(row.due_date||null):new Date(row.starts_at).toLocaleDateString('sv-SE'),
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
     entity_client_key:receipt.entity_client_key};
