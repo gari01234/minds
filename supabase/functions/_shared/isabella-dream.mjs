@@ -305,7 +305,7 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
       await writeDreamState(sb,userId,{...state,...settled(!!t.more),reviewed_day:date,last_message_at:t.last_at||state.last_message_at||since,last_run:at,last_status:'ok'},at);
       report.push({status:'ok',more:t.more,mensajes:t.messages.length,paginas:applied.paginas.length,hipotesis:applied.hipotesis,hilos:applied.hilos.length});
     }catch(e){
-      const msg=e instanceof Error?e.message:String(e);log('isabella_dream_failed',msg);
+      const msg=assistantProfile.multi_user?'office_nightly_processing_failed':e instanceof Error?e.message:String(e);log('isabella_dream_failed',msg);
       if(e&&e.payload)await recordUsage(sb,userId,e.payload,model);
       // last_message_at stays, so the same conversation is read again next time.
       await writeDreamState(sb,userId,{...state,...(night?{nightly:{...state.nightly,running_at:null}}:{}),last_run:at,last_status:'error',last_error:clip(msg,200)},at).catch(()=>{});

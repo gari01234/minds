@@ -18,9 +18,10 @@ import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,dir
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
-import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
+import {readOfficeTerminplanMilestones} from "../_shared/office-terminplan.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
@@ -282,8 +283,9 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
   if(!conversationId){
     const created=await sb.from("conversations").insert({
       user_id:user.id,app_scope:"isabella",origin_kind:"global",
-      origin_anchor:{type:"assistant",id:"isabella",label:"Isabella"},
-      title:"Isabella",mode:"memory",metadata:{app:"isabella"}
+      origin_anchor:{type:"assistant",id:"isabella",label:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").assistant_name},
+      title:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").assistant_name,
+      mode:"memory",metadata:{app:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user?"romy":"isabella"}
     }).select("id").single();
     if(created.error||!created.data?.id)throw created.error||new Error("conversation_create_failed");
     conversationId=created.data.id;
@@ -2587,12 +2589,22 @@ async function searchCalendar(req: Request, args: any) {
       :Promise.resolve({data:null});
     const [{data:events},{data:tasks},{data:openBefore}]=await Promise.all([eq,tq,before]);
     const has=(x:any)=>!query||normalizeText((x?.title||"")+" "+(x?.notes||"")).includes(query);
+    // Only the Office profile reads Terminpläne, through the caller's own JWT
+    // and the explicit office_project_members allocation. Window is byte-identical.
+    let terminplan:null|{status:string,milestones:any[]}=null;
+    if(resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user){
+      const owner=(await sb.auth.getUser())?.data?.user;
+      terminplan=await readOfficeTerminplanMilestones(sb,{
+        userId:owner?.id||"",from:from||undefined,to:to||undefined,query,limit:40
+      });
+    }
     const responsibles=await taskResponsibles(sb,[...(tasks||[]),...(openBefore||[])]);
     const who=(x:any)=>{const l=responsibles.get(String(x.id));return l?.length?{responsable:l}:{}};
     return {
       ...(openBefore?{open_before:(openBefore||[]).filter(has).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,overdue:true,...who(x)}))}:{}),
       events:(events||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:x.all_day})),
-      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time,...who(x)}))
+      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time,...who(x)})),
+      ...(terminplan?{terminplan_status:terminplan.status,terminplan_milestones:terminplan.milestones}:{})
     };
   }catch{return {events:[],tasks:[]}}
 }
@@ -3063,9 +3075,24 @@ async function persistServerAssistantTurn(req:Request,row:any){
   const sb=supabaseClient(req);
   if(!sb)return false;
   try{
-    const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key",ignoreDuplicates:true});
+    const profile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
+    // Office browsers may only INSERT their own user turns. An assistant/system
+    // reply is server-authored, bound to the authenticated conversation owner,
+    // and persisted with the Office service client after independent owner checks.
+    let writer=sb;
+    if(profile.multi_user){
+      const owner=(await sb.auth.getUser()).data.user;
+      if(!owner||owner.id!==row.user_id)return false;
+      const checked=await sb.from("conversations").select("id").eq("user_id",owner.id)
+        .eq("id",row.conversation_id).eq("app_scope","isabella").maybeSingle();
+      if(checked.error||checked.data?.id!==row.conversation_id)return false;
+      const url=Deno.env.get("SUPABASE_URL")||"",key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
+      if(!url||!key)return false;
+      writer=createClient(url,key,{auth:{persistSession:false,autoRefreshToken:false}});
+    }
+    const {error}=await writer.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key",ignoreDuplicates:true});
     if(error)return false;
-    await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",row.conversation_id).eq("user_id",row.user_id);
+    await writer.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",row.conversation_id).eq("user_id",row.user_id);
     return true;
   }catch{return false}
 }
@@ -3113,7 +3140,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const phaseSnapshot=()=>({route:phaseRouteMs,context:phaseContextMs,rounds:phaseRoundsMs.slice(),total:Math.max(0,Math.round(performance.now()-turnStartedAt))});
   let activeConversation:any=null,activeRun:any=null;
   try{
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = (Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));
   if (!apiKey) {
     return json({
       error: "openai_not_configured",
@@ -3127,10 +3154,12 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
   const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
   let assistantOwner: string | null=assistantProfile.owner_name;
+  let assistantUserId: string | null=null;
   if(assistantProfile.multi_user){
     // Office identity comes only from a verified session and an active membership.
     const authenticated=(await supabaseClient(req)?.auth.getUser())?.data?.user;
     if(!authenticated)return json({error:"authentication_required"},401);
+    assistantUserId=authenticated.id;
     const membership=await supabaseClient(req)?.from("office_members")
       .select("display_name,is_active").eq("user_id",authenticated.id).maybeSingle();
     if(membership?.error||!membership?.data?.is_active)return json({error:"office_member_required"},403);
@@ -3200,7 +3229,9 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     activity:recentActivity(req,maxBudget.activity), feedback:recentProposalFeedback(req,maxBudget.feedback),
     claims:personalModel(req,maxBudget.claims), policy:personalModelPolicy(req),
     memory:!background?consolidatedMemory(req):Promise.resolve(null),
-    radar:!background&&!currentWorkThread?workRadar(supabaseClient(req),{tz:temporal.timezone}):Promise.resolve(null),
+    radar:!background&&!currentWorkThread?workRadar(supabaseClient(req),{
+      tz:temporal.timezone,profile:assistantProfile.id,
+      userId:assistantProfile.multi_user?assistantUserId:null}):Promise.resolve(null),
     agenda:canonicalAgendaContext(req,temporal.current_date,temporal.timezone)
   };
   // Speculative reads can finish before routing, including when a turn exits early.
@@ -4085,7 +4116,9 @@ pregunta cuál.`;
       skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
       (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
-  const providerInstructions=profileInstructions(modelInstructions,assistantProfile.id,assistantOwner);
+  // Same relationship contract for Romy (review 08.11.2026); profileInstructions adapts the names.
+  const safeModelInstructions=modelInstructions;
+  const providerInstructions=profileInstructions(safeModelInstructions,assistantProfile.id,assistantOwner);
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
     sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
@@ -4644,6 +4677,20 @@ pregunta cuál.`;
   const serverPersisted=!voiceDelegation&&browserReceiptSaved&&browserTurn
     ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
+  // Office never treats a model result or a proposal as delivered until the
+  // canonical owner-scoped conversation contains its server-authored reply.
+  if(assistantProfile.multi_user&&browserTurn&&!voiceDelegation&&!serverPersisted){
+    const card=canonicalAssistantRow({
+      userId:browserTurn.userId,conversationId:browserTurn.conversationId,requestId:clientMessageId,
+      content:reply,scope:exposureScope,sources:webSources,model,
+      author:assistantProfile.assistant_name.toLocaleLowerCase('de-DE'),
+      outcome:toolProposals.length?'proposal_created':outcomeReceipt.outcome
+    });
+    if(!card||!await persistServerAssistantTurn(req,{...card,
+      metadata:{...card.metadata,review_proposals:toolProposals}}))
+      return json({error:"office_assistant_delivery_unverified",
+        message:"Die Antwort konnte nicht als überprüfter Chat-Eintrag gespeichert werden."},503);
+  }
   const phase_ms=phaseSnapshot();
   await finishAgentRun(req,run,"success",{phase_ms,core_version:(coreSurface||leanSurface||workCoreEligible)?ISABELLA_CORE_VERSION:null,browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={

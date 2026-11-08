@@ -240,7 +240,7 @@ Deno.serve(async(req:Request)=>{
   if(!url||!publishable)return json({error:"server_not_configured"},503);
   const sb=createClient(url,publishable,{global:{headers:{Authorization:authHeader}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:{user},error:userError}=await sb.auth.getUser();if(userError||!user)return json({error:"unauthorized"},401);
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";if(!apiKey)return json({error:"server_not_configured"},503);
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";if(!apiKey)return json({error:"server_not_configured"},503);
   const context=body?.context&&typeof body.context==="object"?body.context:{};
   const force=!!body?.force,signature=String(body?.preference_signature||"").slice(0,120);
   const currentTitles=Array.isArray(body?.current_titles)?body.current_titles.map((x:any)=>String(x||"").trim()).filter(Boolean).slice(0,12):[];
