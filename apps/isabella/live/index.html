@@ -89,17 +89,19 @@
       <p id="liveVoiceHint">Nuri es la voz predeterminada de Isabella. Puedes elegir otra antes de iniciar una conversación.</p>
       <p id="liveOriginalNote" class="hidden">«Original I» es una voz sintética nueva, no una copia de Sky ni de ninguna actriz. Se crea una sola vez desde una descripción al iniciar la primera prueba, y queda disponible para tus próximas sesiones.</p>
     </div>
+    <label><input type="checkbox" id="liveManualReview"> Revisar la transcripción antes de consultar MINDS</label>
     <div class="live-actions">
       <button id="liveStart" type="button" class="primary">Iniciar conversación</button>
       <button id="liveStop" type="button" class="secondary" disabled>Finalizar</button>
     </div>
-    <p class="live-disclaimer">Conversación oral con Brise. Cuando consultes MINDS, revisa primero la transcripción: las respuestas usan el agente y permisos existentes y pueden quedar guardadas en la conversación canónica. No se autoriza ninguna acción por una transcripción sin revisar. Duración máxima de audio: 90 segundos.</p>
+    <p class="live-disclaimer">Window guarda el texto de lo hablado en tu chat. El audio dura hasta 90 segundos y no se guarda. Las propuestas se confirman en el chat.</p>
   </footer>
 </main>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="../../shared/supabase-client.js"></script>
 <script src="../turn-integrity.js"></script>
-<script src="./canonical.js?v=2"></script>
-<script src="./live.js?v=6"></script>
+<script src="./canonical.js?v=3"></script>
+<script src="./transcript.js?v=1"></script>
+<script src="./live.js?v=7"></script>
 </body>
 </html>

@@ -21,6 +21,17 @@
   let peer=null,microphone=null,channel=null,timeoutId=null;
   let active=false,epoch=0,sessionReady=false,remoteTrack=false,playbackStarted=false;
   let reviewTurn=null,reviewEdited=false;
+  const manualReview=$("liveManualReview");
+  let transcript=null,conversationId=null,delegatedText="",waitingDelegation=null,delegationTimer=null;
+  function makeTranscript(auth,conversation){
+    return window.ISABELLA_LIVE_TRANSCRIPT.turns({id:()=>crypto.randomUUID(),write:async turn=>{
+      const response=await fetch(auth.url+"/functions/v1/isabella-live-session",{method:"POST",keepalive:true,
+        headers:{apikey:auth.key,Authorization:"Bearer "+auth.token,"Content-Type":"application/json"},
+        body:JSON.stringify({action:"save_transcript",conversation_id:conversation,...turn})});
+      const receipt=await response.json();
+      if(!response.ok||receipt.saved!==true||receipt.turn_id!==turn.turn_id)throw Error("voice_write_failed");
+    },onError:()=>{status.textContent="Quedó una transcripción sin comprobar. Revisa el chat."}});
+  }
   const seenDelegations=new Set();
   const shownError={
     auth_required:"Inicia sesión en el chat de Isabella antes de usar Live.",
@@ -49,6 +60,9 @@
     if(reviewTurn?.busy){
       message="La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.";
     }
+    clearTimeout(delegationTimer);waitingDelegation=null;
+    if(transcript)void transcript.finish();
+    transcript=null;conversationId=null;delegatedText="";
     epoch++;active=false;sessionReady=false;remoteTrack=false;playbackStarted=false;
     reviewTurn=null;reviewEdited=false;
     review.classList.add("hidden");consult.classList.add("hidden");
@@ -73,7 +87,7 @@
   function showReview(delegationId=null){
     if(!active)return false;
     if(reviewTurn?.busy||reviewTurn&&!reviewTurn.done)return false;
-    const draft=(input.textContent==="—"?"":input.textContent).trim().slice(0,2000);
+    const draft=(delegationId?delegatedText:(input.textContent==="—"?"":input.textContent)).trim().slice(0,2000);
     reviewTurn={delegationId,epoch,requestId:null,busy:false,done:false};
     reviewEdited=false;reviewText.value=draft;
     review.classList.remove("hidden");
@@ -116,7 +130,7 @@
           recent_local_conversation:[],
           preferences:{}
         },background:false,attachments:[],stream:false,
-          surface:"chat_browser",client_message_id:turn.requestId})
+          surface:"chat_browser",client_message_id:turn.requestId,voice_delegation:true,voice_conversation_id:conversationId})
       });
       const result=await response.json().catch(()=>null);
       if(token!==epoch||turn!==reviewTurn)return;
@@ -184,6 +198,27 @@
     const before=node.textContent==="—"?"":node.textContent;
     node.textContent=(before+delta).slice(-1800);
   }
+  function tryDelegation(){
+    const waiting=waitingDelegation;
+    if(!waiting)return;
+    const owner=transcript?.ownerAt(waiting.offset);
+    if(!owner){
+      clearTimeout(delegationTimer);
+      delegationTimer=setTimeout(()=>{
+        if(waitingDelegation!==waiting)return;
+        waitingDelegation=null;
+        send({type:"session.commentary.append",delegation_id:waiting.id,content:"No recibí una frase completa. ¿Me la repites?"});
+      },1800);
+      return;
+    }
+    clearTimeout(delegationTimer);waitingDelegation=null;
+    const id=waiting.id;delegatedText=owner.text;
+    if(!showReview(id)){
+      send({type:"session.commentary.append",delegation_id:id,content:"Hay otra consulta en curso."});return;
+    }
+    if(manualReview?.checked)reviewStatus.textContent="Confirma o corrige el texto antes de enviarlo.";
+    else void sendToCanonical();
+  }
   function handleEvent(raw,token){
     if(token!==epoch)return;
     let event;
@@ -199,13 +234,16 @@
         review.classList.add("hidden");
         input.textContent="—";
       }
-      appendCaption(input,event.delta);
+      const part=transcript?.add("gari",event);
+      if(part?.author==="gari")input.textContent=part.text;else appendCaption(input,event.delta);
       if(reviewTurn&&!reviewTurn.busy&&!reviewTurn.done&&!reviewEdited){
         reviewText.value=String(input.textContent==="—"?"":input.textContent).slice(0,2000);
       }
       if(!reviewTurn&&input.textContent!=="—")consult.classList.remove("hidden");
+      if(waitingDelegation){clearTimeout(delegationTimer);delegationTimer=setTimeout(tryDelegation,250)}
     }else if(event?.type==="session.output_transcript.delta"){
-      appendCaption(output,event.delta);
+      const part=transcript?.add("isabella",event);
+      if(part?.author==="isabella")output.textContent=part.text;else appendCaption(output,event.delta);
     }else if(event?.type==="session.delegation.created"){
       // Delegation metadata does not contain the user's utterance. Its text
       // must be reviewed by the owner before invoking the existing MINDS backend.
@@ -215,12 +253,9 @@
         seenDelegations.add(id);
         // Suppress speculative spoken progress, then wait for reviewed input.
         send({type:"session.thinking.append",delegation_id:id,content:""});
-        if(!showReview(id)){
-          send({type:"session.commentary.append",delegation_id:id,
-            content:"Tengo otra consulta pendiente. Primero termina o cancela la revisión que aparece en pantalla."});
-        }else{
-          reviewStatus.textContent="MINDS necesita comprobar esta información. Confirma o corrige el texto antes de enviarlo.";
-        }
+        waitingDelegation={id,offset:event.offset_ms};
+        tryDelegation();
+
       }
     }else if(event?.type==="session.closed"){
       stop("La sesión terminó.");
@@ -346,6 +381,9 @@
          result.transport.sdp.length<50||!result.transport.sdp.startsWith("v=0")){
         throw new Error("La respuesta WebRTC no es válida.");
       }
+      conversationId=result.session?.conversation_id;
+      if(!conversationId)throw Error("No pude identificar tu chat para guardar la conversación.");
+      transcript=makeTranscript({url:cfg.url,key:cfg.publishableKey,token:session.access_token},conversationId);
       await connection.setRemoteDescription({type:"answer",sdp:result.transport.sdp});
       if(token!==epoch)return;
       state("active","Conectando el altavoz…");

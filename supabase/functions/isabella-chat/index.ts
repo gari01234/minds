@@ -1,3 +1,4 @@
+import {liveConversation} from "../_shared/live-context.mjs";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {openConversation,closeConversation} from "../_shared/conversations.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -3069,6 +3070,7 @@ Deno.serve(async (req: Request) => {
   const context = body?.context || {};
   const background = !!body?.background;
   const surface=String(body?.surface||"").trim();
+  const voiceDelegation=surface==="chat_browser"&&!background&&body?.voice_delegation===true;
   const routineReviewSupported=context.routine_review_version===1&&surface==="chat_browser";
   const routineMutationTools=new Set(["update_routine","pause_routine","resume_routine","delete_routine"]);
   const clientMessageId=String(body?.client_message_id||"").trim();
@@ -3148,7 +3150,11 @@ Deno.serve(async (req: Request) => {
     if(!browserTurnId(clientMessageId))
       return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
     try{
-      browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
+      if(voiceDelegation){
+        const sb=supabaseClient(req),owner=sb?(await sb.auth.getUser()).data.user:null;
+        if(!owner||!body.voice_conversation_id)throw new Error("voice_session_missing");
+        browserTurn={userId:owner.id,conversationId:await liveConversation(sb,owner.id,body.voice_conversation_id)};
+      }else browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
     }catch(e){
       return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
     }
@@ -4154,7 +4160,7 @@ pregunta cuál.`;
           // or its server-verified pending clarification, never from retrieved text.
           const sourceText=verifiedContinuation?.source_message||effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
-          if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
+          if(surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread&&!background&&!attachments.length&&
              !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
              exactOwnerExcerpt(sourceText,quoted)&&
              (call.name!=="create_event"||(
@@ -4465,7 +4471,7 @@ pregunta cuál.`;
   // A rejected/suppressed review tool is not a registered proposal. Replace
   // unverified model prose with a deterministic status; no phrase filters.
   const reviewAttemptWithoutReceipt=unregisteredReviewAttempt(usedTools,toolProposals,policyMode);
-  const directAuthorization=authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
+  const directAuthorization=voiceDelegation?null:authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
     reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
   }else if(reviewAttemptWithoutReceipt){
@@ -4495,7 +4501,7 @@ pregunta cuál.`;
   const browserReceiptSaved=recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
     ?await saveBrowserChatStreamReceipt(req,clientMessageId,reply,true,null):false;
   // Step 3a: an answered turn is in the conversation even if the app closed before it arrived.
-  const serverPersisted=browserReceiptSaved&&browserTurn
+  const serverPersisted=!voiceDelegation&&browserReceiptSaved&&browserTurn
     ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
   await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
@@ -4516,6 +4522,12 @@ pregunta cuál.`;
     responsePayload.memory_candidates=toolMemories;
     responsePayload.sources=webSources;
     responsePayload.artifacts=artifactResults;
+  }
+  if(voiceDelegation&&browserTurn&&toolProposals.length){
+    const card=canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,requestId:clientMessageId,
+      content:"Hay una propuesta pendiente de confirmar.",scope:exposureScope,author:"system",outcome:"proposal_created"});
+    if(!card||!await persistServerAssistantTurn(req,{...card,metadata:{...card.metadata,durable_status:"completed",review_proposals:toolProposals}}))
+      return json({error:"voice_review_delivery_failed",message:"No pude confirmar que la tarjeta llegara al chat."},503);
   }
   return json(responsePayload);
 
