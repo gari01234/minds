@@ -5,6 +5,9 @@ import {liveOriginAllowed,liveCorsOrigin,liveOwner,liveOriginalVoiceAllowed,live
 import {liveConversation,buildVoiceSessionContext,persistVoiceTurn,VOICE_GUIDE,withinBytes}
   from '../supabase/functions/_shared/live-context.mjs';
 import {ISABELLA_CORE} from '../supabase/functions/_shared/isabella-core.mjs';
+import {promptComponentSizes} from '../supabase/functions/_shared/light-conversation-context.mjs';
+import {readFileSync} from 'node:fs';
+import {runInNewContext} from 'node:vm';
 
 const A='11111111-1111-4111-8111-111111111111';
 const B='22222222-2222-4222-8222-222222222222';
@@ -72,4 +75,37 @@ test('Office Live rejects forged assistant transcript before any database write'
     text:'not provider verified',conversation_id:'fake-id'},'office'),/invalid_voice_turn/);
   await assert.rejects(()=>persistVoiceTurn(forbidden,A,{turn_id:'voice-2',author:'romy',
     text:'not provider verified',conversation_id:'fake-id'},'office'),/invalid_voice_turn/);
+});
+
+test('Phase 6: canonical spoken outcomes remain Spanish in Window and German in Office',()=>{
+  const src=readFileSync(new URL('../apps/isabella/live/canonical.js',import.meta.url),'utf8');
+  const make=profile=>{
+    const win={APP_PROFILE:profile};runInNewContext(src,{window:win,TextEncoder,URL});
+    return win.ISABELLA_LIVE_CANONICAL;
+  };
+  const payload={reply:'Bitte bestätigen',outcome:{outcome:'proposal_created'},proposals:[{request_id:A}]};
+  const validator=()=>({ok:true,typed:true,outcome:'proposal_created',applied_count:0});
+  const personal=make('window').admission(payload,validator,()=>null);
+  const office=make('office').admission(payload,validator,()=>null);
+  assert.match(personal.spoken,/propuesta en el chat/);
+  assert.match(office.spoken,/Vorschlag im Romy-Chat/);
+});
+
+test('Phase 6: measured voice prompt footprint, Window no-op and Office profile',()=>{
+  const data={hoy:'2026-01-02',tareas:[]};
+  const windowResult=buildVoiceSessionContext(data,[],'');
+  const officeResult=buildVoiceSessionContext(data,[],'',{profile:'office',owner:'Alex Beispiel'});
+  const original=promptComponentSizes({
+    instructions:windowResult.instructions,
+    context:JSON.stringify(windowResult.input),input:'',tools:[]
+  });
+  const configured=promptComponentSizes({
+    instructions:officeResult.instructions,
+    context:JSON.stringify(officeResult.input),input:'',tools:[]
+  });
+  assert.ok(original.instructions_chars>1000);
+  assert.ok(configured.instructions_chars>1000);
+  assert.equal(original.tools_count,0);
+  assert.equal(configured.tools_count,0);
+  console.log('romy_phase6_voice_prompt_component_sizes',JSON.stringify({window:original,office:configured}));
 });
