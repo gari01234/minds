@@ -5,8 +5,12 @@
 ## 0. Qué te pido
 Romy (TBA Office) tiene que funcionar **igual que Isabella** (Window), con el **mismo motor**, desplegado en Office con su propia base de datos. Cada mejora futura de Isabella debe llegar también a Romy sin volver a copiar nada a mano.
 
-- Haz un PR por fase (sección 5), en el repo que corresponda, con tests y documentación.
-- No fusiones, no despliegues y no apliques migraciones. Claude revisa, fusiona, aplica las migraciones y despliega.
+- **Haz las seis fases seguidas, sin esperar revisión entre una y otra** (decisión de Gari: Claude lo revisa todo al final).
+- Un PR por fase y por repo, **apilados**: la rama de cada fase sale de la rama de la fase anterior en ese repo, y su PR apunta a esa rama. Así cada fase se revisa por separado aunque dependa de la anterior.
+- Si una fase de Office necesita código del motor que todavía no está en `main` de minds, sincroniza desde la rama de la fase correspondiente e indica el commit.
+- Cada fase cumple su aceptación (sección 5) antes de empezar la siguiente: tests en verde y CI en verde donde exista.
+- Si te encuentras una decisión que no está en este encargo, no te pares: elige la opción más prudente, apúntala como pregunta abierta en el PR y sigue.
+- No fusiones, no despliegues y no apliques migraciones. Al final, Claude revisa, fusiona en orden, aplica las migraciones y despliega.
 - La documentación y los textos que ven Gari y sus colegas van en español (Window) o en alemán (Office). Los nombres de código siguen en inglés.
 
 ## 1. Decisiones de Gari (08.11.2026)
@@ -214,4 +218,11 @@ Pásalos al motor como capacidades del perfil `office`:
   - cómo volver atrás.
 - **Calidad:** tests en verde en los dos repos y `deno check` sin errores nuevos.
 - **Documentación:** en minds, un doc por fase en `docs/`; en Office, entrada en `docs/BITACORA.md` y `docs/ESTADO.md` actualizado.
-- **No fusiones.** Avisa a Gari cuando una fase esté lista para que Claude la revise.
+- **No fusiones.** Al terminar las seis fases, deja en el PR de la última fase un **resumen final**:
+  - los PRs de cada repo en el orden en que hay que fusionarlos;
+  - las migraciones de Office en orden;
+  - los secretos que tiene que poner Gari o Claude;
+  - las funciones a desplegar en Office;
+  - las preguntas abiertas y la opción que elegiste en cada una.
+
+  Entonces avisa a Gari para que Claude lo revise todo.
