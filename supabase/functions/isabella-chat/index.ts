@@ -3051,6 +3051,7 @@ Deno.serve(async (req: Request) => {
   const turnStartedAt=performance.now();
   let phaseRouteMs=0,phaseContextMs=0;
   const phaseRoundsMs:number[]=[];
+  const phaseSnapshot=()=>({route:phaseRouteMs,context:phaseContextMs,rounds:phaseRoundsMs.slice(),total:Math.max(0,Math.round(performance.now()-turnStartedAt))});
   let activeConversation:any=null,activeRun:any=null;
   try{
   const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -3236,9 +3237,10 @@ Deno.serve(async (req: Request) => {
   const scopedWindowReady=scopedHistoryReady(recent);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
+  await Promise.all([consolidatedPending,radarPending]);
   phaseContextMs=Math.max(0,Math.round(performance.now()-contextStartedAt));
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
-    await finishAgentRun(req,run,"skipped",{reason:"canonical_agenda_unavailable"});
+    await finishAgentRun(req,run,"skipped",{phase_ms:phaseSnapshot(),reason:"canonical_agenda_unavailable"});
     return json({fallback:true,reason:"canonical_agenda_unavailable"},409);
   }
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -3550,7 +3552,7 @@ pregunta cuál.`;
         await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId,exposure_scope:exposureScope});
       }
     }catch(e){
-      await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
     }
   }
 
@@ -3579,10 +3581,10 @@ pregunta cuál.`;
         const {data:same}=await service.from("minds_chat_jobs").select("id,status")
           .eq("user_id",user.id).eq("request_id",clientMessageId).maybeSingle();
         if(same)return json({durable:true,job_id:same.id,request_id:clientMessageId,status:same.status},202);
-        await finishAgentRun(req,run,"skipped",{reason:"another_chat_turn_in_progress"});
+        await finishAgentRun(req,run,"skipped",{phase_ms:phaseSnapshot(),reason:"another_chat_turn_in_progress"});
         return json({error:"another_chat_turn_in_progress",message:"Isabella está terminando la respuesta anterior. Espera a que termine antes de enviar otra."},423);
       }
-      await finishAgentRun(req,run,"error",{},insertError.message);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),},insertError.message);
       return json({error:"durable_job_create_failed",detail:insertError.message},500);
     }
     const model=turnModel.model;
@@ -3646,7 +3648,7 @@ pregunta cuál.`;
       await service.from("minds_chat_jobs").update({
         status:"failed",incomplete_reason:detail.slice(0,300),completed_at:new Date().toISOString(),updated_at:new Date().toISOString()
       }).eq("id",job.id);
-      await finishAgentRun(req,run,"error",{durable:true},detail);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),durable:true},detail);
       return json({durable:true,job_id:job.id,request_id:clientMessageId,status:"failed"},202);
     }
   }
@@ -3722,7 +3724,7 @@ pregunta cuál.`;
           });
         }catch(e){
           const detail=e instanceof Error?e.message:String(e);
-          await finishAgentRun(req,run,"error",{rounds:1,tools:[],direct_stream:true},detail);
+          await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:1,tools:[],direct_stream:true},detail);
           send("error",{message:detail});
         }finally{
           await closeConversation(supabaseClient(req),streamConversation);
@@ -4057,7 +4059,7 @@ pregunta cuál.`;
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
       const browserReceiptSaved=!!partial&&recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
         ?await saveBrowserChatStreamReceipt(req,clientMessageId,partial,false,reason):false;
-      await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
         tools:usedTools,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),prompt_components:footprint,
         browser_delivery_receipt_saved:browserReceiptSaved,
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
@@ -4066,7 +4068,7 @@ pregunta cuál.`;
     }
 
     if(!response.ok){
-      await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
         message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
@@ -4088,7 +4090,7 @@ pregunta cuál.`;
         return json({error:"clarification_invalid",
           message:"No pude formular una aclaración verificable."},409);
       const pending=await recordBrowserClarification(req,clientMessageId,question,capability);
-      await finishAgentRun(req,run,"success",{
+      await finishAgentRun(req,run,"success",{phase_ms:phaseSnapshot(),
         rounds:roundsUsed,tools:["request_clarification"],fast_path:fastAgenda,
         context_policy:"scoped_exposure_v1",provider_history_policy:"bounded_scoped",
         scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,
@@ -4458,12 +4460,14 @@ pregunta cuál.`;
   // Step 3a: a completed turn without any text (30.10) gets one plain retry before it can become a silence.
   if(!String(extractText(payload)||"").trim()&&!toolProposals.length&&!background&&!(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id)){
     try{
+      const retryStartedAt=performance.now();
       const retry=await fetch("https://api.openai.com/v1/responses",{method:"POST",
         headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
         body:JSON.stringify({model,instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
           reasoning:{effort:"low"},max_output_tokens:Math.max(budget.maxOutput,2400),prompt_cache_options:{mode:"implicit",ttl:"30m"},
           ...(tools.length?{tools,tool_choice:"none"}:{}),input})});
       const again=await retry.json();
+      phaseRoundsMs.push(Math.max(0,Math.round(performance.now()-retryStartedAt)));
       await recordUsage(req,"isabella_chat",model,again?.usage,{route,empty_reply_retry:true,context_tier:contextTier,agent_run_id:run?.id||null});
       if(retry.ok&&String(extractText(again)||"").trim())payload=again;
     }catch{/* the empty-response path below stays honest */}
@@ -4495,7 +4499,7 @@ pregunta cuál.`;
       :"No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
-  if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
+  if(!reply){await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
       request_id:clientMessageId,
@@ -4511,7 +4515,7 @@ pregunta cuál.`;
   const serverPersisted=browserReceiptSaved&&browserTurn
     ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
-  const phase_ms={route:phaseRouteMs,context:phaseContextMs,rounds:phaseRoundsMs.slice(0,12),total:Math.max(0,Math.round(performance.now()-turnStartedAt))};
+  const phase_ms=phaseSnapshot();
   await finishAgentRun(req,run,"success",{phase_ms,core_version:(coreSurface||leanSurface||workCoreEligible)?ISABELLA_CORE_VERSION:null,browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
@@ -4533,6 +4537,6 @@ pregunta cuál.`;
   }
   return json(responsePayload);
 
-  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
+  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{phase_ms:phaseSnapshot(),},detail);return json({error:"chat_failed",message:detail},500)}
   finally{await closeConversation(supabaseClient(req),activeConversation)}
 });
