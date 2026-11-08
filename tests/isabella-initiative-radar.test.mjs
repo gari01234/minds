@@ -91,7 +91,7 @@ test('Capability: the original detailed guidance returns when the turn needs it'
   assert.doesNotMatch(CORE_DETAILS.continuity,/No finjas emociones/,'no contradiction with the relationship contract');
   const deep=isabellaCoreInstructions({relationship:'R',route:{complexity:'deep'}});
   assert.match(deep,/DETALLE PARA ESTE TURNO/);
-  assert.match(chat,/scheduleAssessment,light:leanSurface,route,context:resolvedContext\}\)/);
+  assert.match(chat,/scheduleAssessment,light:leanSurface,route,context:workCoreContext\}\)/);
   // Context back to the full tier's sizes, compact.
   const big=n=>Array.from({length:n},(_,i)=>({id:i,claim:'c'}));
   assert.equal(coreConversationContext({personal_model_claims:big(40)}).personal_model_claims.length,32);
