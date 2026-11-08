@@ -251,7 +251,7 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
   // tier, history window, outcome, tools, errors. A turn still "running" long after it started never
   // finished, which is what a silence looks like from the server.
   const DIAG_FIELDS=['context_tier','provider_history_policy','scoped_recent_count','turn_outcome','rounds','tools',
-    'browser_delivery_receipt_saved','execution_contract','prompt_components','semantic_temporal_rejected',
+    'browser_delivery_receipt_saved','execution_contract','prompt_components','core_version','phase_ms','semantic_temporal_rejected',
     'semantic_repair_rounds','conversation_rotated','memory_checkpoint','checkpoint_error','work_consulted','sofia_consulted'];
   async function turnDiagnostics({from,to,status,limit=60}={}){
     if(from!=null&&!isDay(from))throw new ToolError('from: AAAA-MM-DD.');
@@ -272,7 +272,21 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
         background:r.feature==='isabella_background'||undefined,error:r.error?clip(r.error,300):undefined,
         route:{complexity:route.complexity||undefined,source:route.source||undefined,work:route.work||undefined,project:route.project||undefined,
           specialists:Array.isArray(route.specialists)&&route.specialists.length?route.specialists:undefined}};
-      for(const k of DIAG_FIELDS)if(m[k]!==undefined&&m[k]!==null)out[k]=m[k];
+      // Phase telemetry is numeric-only; never return untrusted metadata content.
+      const ms=(value)=>typeof value==='number'&&Number.isFinite(value)&&value>=0
+        ?Math.min(3600000,Math.round(value)):null;
+      for(const k of DIAG_FIELDS){
+        if(k==='phase_ms'){
+          const v=m.phase_ms;
+          if(v&&typeof v==='object'&&!Array.isArray(v)){
+            out.phase_ms={route:ms(v.route),context:ms(v.context),
+              rounds:(Array.isArray(v.rounds)?v.rounds:[]).slice(0,12).map(ms),
+              total:ms(v.total)};
+          }
+        }else if(k==='core_version'){
+          if(typeof m.core_version==='string'&&/^isabella-core-v[0-9]+$/.test(m.core_version))out.core_version=m.core_version;
+        }else if(m[k]!==undefined&&m[k]!==null)out[k]=m[k];
+      }
       return out;
     }),note:'No message content. never_finished = started more than 10 minutes ago and never closed.'};
   }

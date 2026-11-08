@@ -1,5 +1,6 @@
+import {liveConversation,loadVoiceContext,buildVoiceSessionContext,persistVoiceTurn} from "../_shared/live-context.mjs";
 // Isabella Live · owner-authenticated WebRTC SDP broker.
-// Audio pilot only: no separate MINDS memory, tool authority or persistent transcripts.
+// Window conserva los turnos de voz en su conversación global.
 // https://developers.openai.com/api/docs/guides/voice-webrtc
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {createClient} from "npm:@supabase/supabase-js@2";
@@ -129,6 +130,10 @@ Deno.serve(async(req:Request)=>{
       return json({error:"original_voice_unavailable"},503,origin);
     }
   }
+  if(body?.action==="save_transcript"){
+    try{return json(await persistVoiceTurn(id.client,user.id,body),200,origin)}
+    catch{return json({error:"voice_transcript_unconfirmed"},409,origin)}
+  }
   if(body?.action!==undefined)return json({error:"invalid_action"},400,origin);
   const voice=body?.voice===undefined?"nuri":body.voice;
   if(typeof voice!=="string"||(!LIVE_VOICES.has(voice)&&voice!==ORIGINAL_ALIAS))
@@ -153,20 +158,15 @@ Deno.serve(async(req:Request)=>{
 
   // GPT-Live is solely Isabella's voice. MINDS retains all memory, facts,
   // tool permissions, action receipts, approval decisions and canonical state.
+  let conversationId:string,voiceContext;
+  try{
+    conversationId=await liveConversation(id.client,user.id,null);
+    const context=await loadVoiceContext(id.client,user.id,conversationId);
+    voiceContext=buildVoiceSessionContext(context.data,context.recent,voice===ORIGINAL_ALIAS?ORIGINAL_PROMPT:"");
+  }catch{return json({error:"live_context_unavailable"},503,origin)}
   const session={
     model:"gpt-live-1",
-    instructions:[
-      "Eres la voz conversacional de Isabella, no un segundo agente. La memoria, el trabajo y los permisos residen exclusivamente en MINDS.",
-      "Habla con naturalidad y calidez, sin ceremonias, en español mexicano cuando Gari use español. No fuerces acento de España ni estadounidense. Si habla alemán, contesta en alemán.",
-      "Puedes mantener conversación informal y escuchar interrupciones; no alargues artificialmente el diálogo.",
-      "No tienes acceso directo a la memoria, proyectos, calendario, documentos ni herramientas de MINDS. Nunca inventes datos personales ni atribuyas hechos o acciones a MINDS sin una respuesta verificable.",
-      "Cuando te pregunten algo que requiera hechos de MINDS o una acción, solicita delegación al cliente. La aplicación debe mostrar la transcripción para que Gari la revise antes de ejecutar el mismo backend canónico.",
-      "La aplicación devuelve resultados comprobados mediante session.commentary.append. Explica únicamente los hechos y el estado de acción que te ha enviado MINDS, sin afirmar que una propuesta pendiente está aplicada.",
-      "Si hay una pregunta de aclaración, formula esa misma pregunta en voz natural. Si una consulta aún está pendiente, no inventes una respuesta ni un estado de éxito.",
-      "No afirmes ser humana ni tener conciencia o emociones propias. Evita inventar información y nunca pidas autorización para actuar fuera de los permisos vigentes.",
-      "Los cambios y las confirmaciones pertenecen al backend, nunca a tu interpretación de fragmentos de voz.",
-      ...(voice===ORIGINAL_ALIAS?[ORIGINAL_PROMPT]:[])
-    ].join(" "),
+    ...voiceContext,
     audio:{output:{voice:voiceValue}},
     delegation:{type:"client",acknowledgement_delay_ms:800},
     store:false
@@ -195,7 +195,7 @@ Deno.serve(async(req:Request)=>{
        !sessionId.startsWith("live_")){
       return json({error:"live_invalid_answer"},502,origin);
     }
-    return json({session:{id:sessionId},transport:{type:"webrtc",sdp:answer}},201,origin);
+    return json({session:{id:sessionId,conversation_id:conversationId},transport:{type:"webrtc",sdp:answer}},201,origin);
   }catch(e){
     console.error("isabella_live_session_error",e instanceof Error?e.name:"unknown");
     return json({error:"live_connection_failed"},502,origin);

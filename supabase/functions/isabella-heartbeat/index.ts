@@ -6,6 +6,7 @@ import {runSituationalReview} from "../_shared/situational-review-runner.mjs";
 import {runAkteAttention} from "../_shared/akte-attention.mjs";
 import {runIsabellaPresence,presenceCaller,PRESENCE_MODEL} from "../_shared/isabella-presence.mjs";
 import {presencePusher} from "../_shared/presence-push.ts";
+import {dreamDue} from "../_shared/isabella-dream.mjs";
 import {relationshipPolicy} from "../_shared/relationship-policy.ts";
 
 function json(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
@@ -251,6 +252,17 @@ Deno.serve(async(req:Request)=>{
       .catch((e:unknown)=>console.error("isabella_presence_failed",e instanceof Error?e.message:String(e)));
     const runtime=(globalThis as any).EdgeRuntime;
     if(runtime?.waitUntil)runtime.waitUntil(presence);else await presence;
+  }
+  // The nightly dream starts here too (02:00–06:00 local, before the 07:45 brief), as its own invocation
+  // so it keeps its own time budget. isabella-dream decides per night whether a pass is due; most calls
+  // stop there without a model call. Counts only in the log.
+  if(dreamDue({},new Date()).go){
+    const dream=fetch(url+"/functions/v1/isabella-dream",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({secret:String(secret.value)}),signal:AbortSignal.timeout(300000)})
+      .then(async(r:Response)=>{const v:any=await r.json().catch(()=>({}));console.log("isabella_dream",r.status,JSON.stringify((v.users||[]).map((x:any)=>x.status)),v.skipped||"")})
+      .catch((e:unknown)=>console.error("isabella_dream_failed",e instanceof Error?e.message:String(e)));
+    const runtime=(globalThis as any).EdgeRuntime;
+    if(runtime?.waitUntil)runtime.waitUntil(dream);else await dream;
   }
   return json({ok:results.every(x=>x.status==="success"),users:users.size,results},results.some(x=>x.status==="error")?500:200);
 });

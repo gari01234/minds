@@ -1,10 +1,10 @@
 name: Isabella dreaming
 # Once a night Isabella reviews what she talked about with Gari and consolidates her memory
-# (pattern: Anthropic, "The components of agent memory", 06.11.2026). Runs after the Akte-Pflege.
-# The Edge Function accepts only this workflow on main (GitHub OIDC token, audience minds-isabella-dream).
+# (pattern: Anthropic, "The components of agent memory", 06.11.2026).
+# Since 08.11.2026 the night's pass is started by isabella-heartbeat (pg_cron) between 02:00 and 06:00
+# local, because GitHub's schedule ran hours late (02:47 → 08:59). This workflow stays for a manual run;
+# the Edge Function accepts it only from main (GitHub OIDC token, audience minds-isabella-dream).
 on:
-  schedule:
-    - cron: '47 1 * * *'   # 02:47 (winter) / 03:47 (summer) in Berlin
   workflow_dispatch:
 permissions:
   contents: read
