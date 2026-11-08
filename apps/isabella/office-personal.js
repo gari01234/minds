@@ -44,7 +44,7 @@ async function setPresence(enabled){
   const next={...value,curiosityEnabled:enabled===true};
   const {error}=await sb.from('isabella_preferences').upsert({
     user_id:id,preference_key:'assistant',value:next,
-    status:'confirmed',confidence:1,source:'user'
+    status:'confirmed',confidence:1,evidence:[{source:'explicit_user_setting',kind:'presence_opt_in'}],updated_at:new Date().toISOString()
   },{onConflict:'user_id,preference_key'});
   if(error)throw error;
   return (await readOwnerPreference(id)).curiosityEnabled===enabled;
