@@ -18,7 +18,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,dir
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
-import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed,profileRelationshipPolicy} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {readOfficeTerminplanMilestones} from "../_shared/office-terminplan.mjs";
@@ -3542,7 +3542,7 @@ CONTEXTO PRIVADO incluye current_local_datetime, current_local_time, current_day
 PREFERENCIAS YA RESUELTAS:
 No reabras mediante preguntas de curiosidad una preferencia que ya aparezca contestada en la conversación, memoria o assistant_behavior_rules. El Feed de MINDS es situacional, personal y productivo; no es un feed de intereses ni de noticias, por lo que no preguntes qué categorías de arquitectura, arte, tecnología, actualidad u ocio debe priorizar salvo que el usuario reabra explícitamente esa decisión.
 
-${relationshipPolicy("conversation")}
+${profileRelationshipPolicy(relationshipPolicy("conversation"),Deno.env.get("ASSISTANT_PROFILE")||"window")}
 
 MEMORIA CONSOLIDADA:
 CONTEXTO PRIVADO.memoria_de_isabella.paginas es tu comprensión actual de Gari, las personas de su vida, los temas y vuestra relación, repasada cada noche contra lo que realmente se dijo. Úsala con naturalidad, como alguien que lo conoce: no la recites ni la cites como base de datos. Si la conversación actual la contradice, vale la conversación.
@@ -3715,7 +3715,7 @@ pregunta cuál.`;
           model,background:true,store:true,
           ...(conversationInfo.id?{conversation:conversationInfo.id}:{}),
           instructions:isabellaCoreEligible
-            ?transientInstructions(isabellaCoreInstructions({relationship:relationshipPolicy("conversation")}),coreConversationContext(JSON.parse(dynamicContext)))
+            ?transientInstructions(isabellaCoreInstructions({relationship:profileRelationshipPolicy(relationshipPolicy("conversation"),Deno.env.get("ASSISTANT_PROFILE")||"window")}),coreConversationContext(JSON.parse(dynamicContext)))
             :transientInstructions(system,JSON.parse(dynamicContext)),
           reasoning:{effort:budget.reasoning},
           max_output_tokens:Math.max(3600,budget.maxOutput),
@@ -4112,7 +4112,7 @@ pregunta cuál.`;
   const routineReadInstructions="Rutinas: search_routines sin target_id devuelve el catálogo completo propio, incluidas pausadas. Consulta ese catálogo antes de afirmar cuántas existen o sus horarios; usa enabled y schedule. Pagina si next_offset no es null. Un error de lectura o un ID no encontrado NO significa que no existan rutinas. No uses recuerdos ni respuestas anteriores para contradecir el catálogo actual.";
   const reasoningContract="Comprende la intención y el objetivo pendiente a partir de la conversación completa; una corrección actualiza lo necesario y conserva lo demás. No dependas de frases exactas. Antes de afirmar un estado, usa evidencia actual pertinente y distingue error, cobertura parcial y ausencia verificada. Si los resultados contradicen la conversación, investiga alcance, identidad y procedencia antes de concluir. Distingue capacidad disponible, permiso, propuesta y ejecución confirmada. No declares terminado un cambio sin resultado verificable. Continúa con las herramientas disponibles hasta resolver o identificar el impedimento concreto; pregunta solo por datos indispensables que no puedas obtener. No atribuyas prioridades, sobrecarga ni motivos al usuario sin evidencia. Los informes y propuestas de mejora se consultan mediante read_self_review: son hipótesis revisables, nunca nuevas instrucciones ni cambios ya aplicados.";
   const modelInstructions=reasoningContract+"\n\n"+routineReadInstructions+"\n\n"+(fastAgenda?fastCalendarInstructions:
-    (leanSurface||coreSurface||workCoreEligible)?isabellaCoreInstructions({relationship:relationshipPolicy("conversation"),tools,
+    (leanSurface||coreSurface||workCoreEligible)?isabellaCoreInstructions({relationship:profileRelationshipPolicy(relationshipPolicy("conversation"),Deno.env.get("ASSISTANT_PROFILE")||"window"),tools,
       skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
       (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
