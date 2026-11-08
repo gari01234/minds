@@ -4,6 +4,9 @@ import {cleanLegacyConversation,closeConversation} from "../_shared/conversation
 import {checked} from "../_shared/cognitive.ts";
 import {runSituationalReview} from "../_shared/situational-review-runner.mjs";
 import {runAkteAttention} from "../_shared/akte-attention.mjs";
+import {runIsabellaPresence,presenceCaller,PRESENCE_MODEL} from "../_shared/isabella-presence.mjs";
+import {presencePusher} from "../_shared/presence-push.ts";
+import {relationshipPolicy} from "../_shared/relationship-policy.ts";
 
 function json(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
 function localDateISO(tz:string,date=new Date()){
@@ -235,6 +238,19 @@ Deno.serve(async(req:Request)=>{
     }catch(e){
       const detail=e instanceof Error?e.message:String(e);await finishRun(sb,run,"error",{},detail);results.push({user_id:userId,status:"error",error:detail});
     }
+  }
+  // Isabella may write first at a real moment (isabella-presence). It rides on this pg_cron heartbeat
+  // because GitHub's scheduled workflows ran hours late (08.11.2026). Its own gate stops before any
+  // model call almost every time; it runs in the background and never fails the heartbeat.
+  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  if(apiKey){
+    const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
+    const presence=runIsabellaPresence({sb,model,callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
+      push:presencePusher(sb),log:(...a:unknown[])=>console.error(...a)})
+      .then((r:any)=>console.log("isabella_presence",JSON.stringify((r.report||[]).map((x:any)=>({spoke:x.spoke,reason:x.reason,moment:x.moment||null})))))
+      .catch((e:unknown)=>console.error("isabella_presence_failed",e instanceof Error?e.message:String(e)));
+    const runtime=(globalThis as any).EdgeRuntime;
+    if(runtime?.waitUntil)runtime.waitUntil(presence);else await presence;
   }
   return json({ok:results.every(x=>x.status==="success"),users:users.size,results},results.some(x=>x.status==="error")?500:200);
 });

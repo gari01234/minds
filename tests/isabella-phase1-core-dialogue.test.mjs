@@ -173,7 +173,11 @@ test('Step 8 v2: she speaks at real moments, not at fixed hours',()=>{
   assert.equal(presenceMoment({now:at('2026-11-09T18:30:00Z'),todayHadEvents:true}).kind,'cierre_del_dia');
   assert.equal(presenceMoment({now:at('2026-11-09T10:00:00Z')}),null,'no moment, no model call');
   const wf=read('.github/workflows/isabella-presence.yml');
-  assert.match(wf,/cron: '7,37 7-19 \* \* \*'/);
+  assert.doesNotMatch(wf,/schedule:/,'GitHub cron ran hours late: the heartbeat (pg_cron) runs the check');
+  const hb=read('supabase/functions/isabella-heartbeat/index.ts');
+  assert.match(hb,/runIsabellaPresence\(\{sb,model,callModel:presenceCaller\(apiKey,model\),relationship:relationshipPolicy\("proactive"\),/);
+  assert.match(hb,/if\(runtime\?\.waitUntil\)runtime\.waitUntil\(presence\);else await presence;/);
+  assert.match(hb,/\.catch\(\(e:unknown\)=>console\.error\("isabella_presence_failed"/,'never fails the heartbeat');
   assert.match(app,/preference_key:'presence_seen',value:\{at\}/);
   assert.match(app,/void markPresenceSeen\(\);\n\s+document\.addEventListener\('visibilitychange'/);
 });
