@@ -48,7 +48,7 @@ test('Work core restores exact legacy documentary paragraphs while preserving ro
   const sizes=promptComponentSizes({instructions:s,context:{},input:[],tools:[]});
   assert.ok(sizes.instructions_chars<32000,'Work instructions exceed target');
   assert.ok(sizes.instructions_chars<original.length,'Work core is not cheaper than legacy template');
-  assert.equal(ISABELLA_CORE_VERSION,'isabella-core-v2');
+  assert.equal(ISABELLA_CORE_VERSION,'isabella-core-v3');
 });
 test('Work retains all source context but exposes only three central autobiographical pages',()=>{
   const fixture={routed_work_context:{sources:[{id:'fixture',status:'proposed'}]},
@@ -79,7 +79,7 @@ test('Per-phase diagnostics are bounded, numeric only, and no text leaks through
       id:'run_1',feature:'isabella_chat',status:'success',
       route:{complexity:'standard'},started_at:'2026-11-08T06:00:00Z',
       metadata:{phase_ms:{route:23.4,context:140.6,rounds:[201.5,90],total:550,
-        contents:'should never be returned'},core_version:'isabella-core-v2',
+        contents:'should never be returned'},core_version:'isabella-core-v3',
         user_message:'private example must not appear'},
       latency_ms:550
     }],error:null})}
@@ -89,7 +89,7 @@ test('Per-phase diagnostics are bounded, numeric only, and no text leaks through
   const found=await tools.turnDiagnostics({limit:1});
   assert.equal(found.runs.length,1);
   assert.deepEqual(found.runs[0].phase_ms,{route:23,context:141,rounds:[202,90],total:550});
-  assert.equal(found.runs[0].core_version,'isabella-core-v2');
+  assert.equal(found.runs[0].core_version,'isabella-core-v3');
   assert.doesNotMatch(JSON.stringify(found),/should never be returned|private example/);
 });
 test('Prompt-component comparison measures all four dimensions with no real user content',()=>{

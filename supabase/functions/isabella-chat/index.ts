@@ -21,6 +21,7 @@ import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
+import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
@@ -1504,15 +1505,32 @@ async function consolidatedMemory(req: Request) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return null;
-    const [pagesQ, threadsQ, transientQ] = await Promise.all([
+    // Order matches the queries below: preferences, pages, threads (review of PR #311).
+    const [transientQ, pagesQ, threadsQ] = await Promise.all([
       sb.from("isabella_preferences").select("preference_key,value").in("preference_key",["isabella_estado","isabella_ayer"]),
       sb.from("isabella_entities").select("entity_type,name,metadata").not("metadata->page", "is", null).is("metadata->>forgotten_at", null).order("updated_at", { ascending: false }).limit(12),
-      sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at").eq("kind", "conversation_thread").eq("status", "ready").order("created_at", { ascending: false }).limit(4)
+      // Ten, so her own not-yet-due follow-ups (point 4f) never crowd out the threads.
+      sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at").eq("kind", "conversation_thread").eq("status", "ready").order("created_at", { ascending: false }).limit(10)
     ]);
     if (pagesQ.error || threadsQ.error) return null;
     return consolidatedMemoryView(pagesQ.data || [], threadsQ.data || [], Date.now(),transientQ.data || []);
   } catch {
     return null;
+  }
+}
+
+// Point 4f: Isabella's own follow-ups, written with the owner's client (RLS) into isabella_return_queue.
+async function followUpTool(req: Request, name: string, args: any, tz: string, turnId: string|null) {
+  try {
+    const sb = supabaseClient(req);
+    if (!sb) return { status: "error" };
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return { status: "unauthorized" };
+    return name === "schedule_follow_up"
+      ? await scheduleFollowUp(sb, { userId: user.id, args, tz, turnId })
+      : await cancelFollowUp(sb, { userId: user.id, args });
+  } catch {
+    return { status: "error" };
   }
 }
 
@@ -2669,7 +2687,7 @@ const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   request_clarification:"allow",web_search:"allow",read_contextual_autonomy:"allow",
   read_self_review:"allow",search_memory:"allow",search_routines:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",browse_work_sources:"allow",find_work_occurrences:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
-  remember_relation:"allow",remember_information:"allow",
+  remember_relation:"allow",remember_information:"allow",schedule_follow_up:"allow",cancel_follow_up:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",update_routine:"confirm",pause_routine:"confirm",resume_routine:"confirm",delete_routine:"confirm",create_chat_reminder:"confirm",
   update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",propose_expectation:"confirm",propose_commitment:"confirm",
@@ -3952,7 +3970,9 @@ pregunta cuál.`;
       strict:false,
       parameters:{type:"object",properties:{ingestion_id:{type:"string",description:"Completed minds_project_source_ingestions UUID."}},required:["ingestion_id"]}
     },
-    ...calendarTools
+    ...calendarTools,
+    // Point 4f: her own follow-ups, only in the global conversation (no authority outside the chat).
+    ...(isabellaCoreEligible&&exposureScope.kind==="global"?FOLLOWUP_TOOLS:[])
   ]).filter((t:any)=>routineReviewSupported||!routineMutationTools.has(String(t.name||"")));
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
@@ -4433,6 +4453,9 @@ pregunta cuál.`;
           :available.length
             ?{status:"available",monitoring:true,requested_condition:String(args?.requested_condition||""),channels:available}
             :{status:"watch_unavailable",monitoring:false,requested_condition:String(args?.requested_condition||""),channels,reason:"no_verified_autonomous_channel"};
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="schedule_follow_up"||call.name==="cancel_follow_up"){
+        const result=await followUpTool(req,call.name,args,context.timezone||"Europe/Berlin",run?.id||null);
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
         const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};

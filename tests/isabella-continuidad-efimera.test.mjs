@@ -47,3 +47,20 @@ test('mide las instrucciones de chat y repaso y la carga adicional con una fixtu
  assert.ok(after[1]-before[1]<2000);
  console.log('caracteres',JSON.stringify({chat:[before,after],repaso:[measure(DREAM_INSTRUCTIONS.split('\n').filter(l=>!l.startsWith('En estado')&&!l.startsWith('En ayer')&&!l.startsWith('En la página relacion')).join('\n'),{},oldInput,[oldSchema]),measure(DREAM_INSTRUCTIONS,{},newInput,[DREAM_SCHEMA])]}));
 });
+
+// Review of PR #311 (08.11.2026): the destructured names must follow the order of the queries, or the
+// chat would read the night's pages as preferences and the panel would show runs as feelings.
+test('Destructuring follows the query order in the chat and in the memory panel',()=>{
+  const src=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
+  const order=(text,marker)=>{
+    const at=text.indexOf(marker);assert.ok(at>=0,marker);
+    const names=marker.slice(marker.indexOf('[')+1,marker.indexOf(']')).split(',').map(s=>s.trim());
+    const body=text.slice(at,text.indexOf(']);',at));
+    const tablesInOrder=[...body.matchAll(/from\(["']([a-z_]+)["']\)/g)].map(m=>m[1]);
+    return Object.fromEntries(names.map((n,i)=>[n,tablesInOrder[i]]));
+  };
+  assert.deepEqual(order(src('supabase/functions/isabella-chat/index.ts'),'const [transientQ, pagesQ, threadsQ]'),
+    {transientQ:'isabella_preferences',pagesQ:'isabella_entities',threadsQ:'isabella_return_queue'});
+  assert.deepEqual(order(src('apps/isabella/app.js'),'const [temporary,runs,pages,threads]'),
+    {temporary:'isabella_preferences',runs:'minds_agent_runs',pages:'isabella_entities',threads:'isabella_return_queue'});
+});

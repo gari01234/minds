@@ -71,13 +71,13 @@ test('UI uses the existing task editor, no new team login, and respects one task
  assert.doesNotMatch(team,/signUp|inviteUser|sendEmail/);
 });
 test('PWA references matched files and versions',()=>{
- for(const path of ['task-team.js?v=1','task-team.css?v=1','app.js?v=143',
+ for(const path of ['task-team.js?v=1','task-team.css?v=1','app.js?v=144',
    'work.js?v=34','task-detail.js?v=5','sync.js?v=pwa40',
    'calendar-plan.js?v=2','dashboard.js?v=7']){
   assert.ok(html.includes(path),'HTML misses '+path);
   assert.ok(sw.includes(path),'SW misses '+path);
  }
- assert.match(sw,/isabella-shell-v187/);
+ assert.match(sw,/isabella-shell-v188/);
  assert.ok(html.indexOf('task-team.js?v=1')<html.indexOf('task-detail.js?v=5'));
 });
 

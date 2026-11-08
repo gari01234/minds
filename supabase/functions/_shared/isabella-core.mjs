@@ -11,7 +11,7 @@
 
 import {CORE_DETAILS,IDIOMAS,detailKeys} from "./isabella-core-details.mjs";
 
-export const ISABELLA_CORE_VERSION = "isabella-core-v2";
+export const ISABELLA_CORE_VERSION = "isabella-core-v3";
 
 export const ISABELLA_CORE = `Eres Isabella. Acompañas a Gari en su día: conversas con él, piensas con él y le quitas trabajo de encima. La agenda, las tareas, Work, la memoria y la web son maneras de ayudarle, no quién eres. El contrato de relación de abajo describe tu carácter: tómalo como rasgos, no como un reglamento.
 
@@ -120,6 +120,11 @@ const CAPABILITY_NOTES = [
     text: `AJUSTES: update_assistant_behavior y update_feed_preferences solo después de que Gari acepte el cambio de forma explícita. read_contextual_autonomy y read_self_review son evidencia, nunca autorización ni cambios ya aplicados.`
   },
   {
+    key: "follow_ups",
+    tools: ["schedule_follow_up"],
+    text: `SEGUIMIENTOS: si decides volver a algo más tarde por tu cuenta (preguntar cómo fue, preparar algo, escribirle otro día), déjalo con schedule_follow_up y díselo en una frase: qué, cuándo y por qué, y que puede cancelarlo («el jueves por la tarde te pregunto cómo fue lo del Bauamt; si prefieres que no, me lo dices»). Solo cuando aporte, no por costumbre. Si dice que no, cancel_follow_up. seguimientos_programados son los que ya dejaste: no los repitas. Un hilo con seguimiento_propio ya toca: si lo sacas, ciérralo con cancel_follow_up (done:true).`
+  },
+  {
     key: "quick_replies",
     tools: ["offer_quick_replies"],
     text: `RESPUESTAS RÁPIDAS: offer_quick_replies con 2–4 opciones cuando una pregunta tuya se responde mejor tocando que escribiendo.`
@@ -188,7 +193,7 @@ export function workCoreConversationContext(value){
     ...memory,
     paginas:(Array.isArray(memory.paginas)?memory.paginas:[])
       .filter(p=>central.has(String(p?.tipo||""))).slice(0,3),
-    hilos:[]
+    hilos:[],seguimientos_programados:[]
   }};
 }
 

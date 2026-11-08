@@ -137,7 +137,7 @@ Deno.serve(async(req:Request)=>{
           .order("updated_at",{ascending:false}).limit(12),
         sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at")
           .eq("user_id",routine.user_id).eq("kind","conversation_thread").eq("status","ready")
-          .order("created_at",{ascending:false}).limit(4)
+          .order("created_at",{ascending:false}).limit(10)
       ]);
 
       const [rawEvents,rawTasks,memories,convs,feedPref,modelClaims,attentionQ]=
@@ -148,6 +148,11 @@ Deno.serve(async(req:Request)=>{
       const memoria_de_isabella=pagesQ.error||threadsQ.error?null:
         consolidatedMemoryView(pagesQ.data||[],threadsQ.data||[],Date.now());
       const radar_work=await radarPending;
+      // Point 4f: what she told Gari she would come back to today (already announced; never a task).
+      const followUpsToday=memoria_de_isabella?[
+        ...(memoria_de_isabella.hilos||[]).filter((h:any)=>h.seguimiento_propio).map((h:any)=>({sobre:h.titulo,por_que:h.por_que})),
+        ...(memoria_de_isabella.seguimientos_programados||[]).filter((f:any)=>String(f.cuando||"").startsWith(today)).map((f:any)=>({sobre:f.sobre,cuando:f.cuando,por_que:f.por_que}))
+      ]:[];
       // Hours already local (Europe/Berlin or the routine's zone); the model never converts UTC itself.
       const events=(rawEvents||[]).map((e:any)=>localEventView(e,tz));
       // Still open from before today: part of today's brief (like Isabella's chat and Romy, 07.11.2026).
@@ -182,7 +187,10 @@ ${JSON.stringify(memoria_de_isabella)}
 
 RADAR DE WORK (radar_work, señales resumidas; para detalles hace falta consultar las fuentes):
 ${JSON.stringify(radar_work)}
-
+${followUpsToday.length?`
+LO QUE LE DIJISTE QUE HARÍAS HOY (seguimientos tuyos, ya anunciados; no son tareas suyas): ${JSON.stringify(followUpsToday)}
+Si encaja en esta rutina, menciónalo en una frase con tus palabras («esta tarde te pregunto cómo fue…»); no lo conviertas en tarea ni lo repitas si ya está claro.
+`:""}
 MEMORIA RECIENTE:
 ${JSON.stringify(memories||[])}
 

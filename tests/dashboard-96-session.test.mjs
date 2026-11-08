@@ -37,11 +37,11 @@ test('Tiempo presentation distinguishes reservations and guards orphan navigatio
   assert.match(app,/mutation\(kind,'delete',before,null,'manual'\)/);
 });
 test('all modified PWA asset URLs match between HTML and SW and rotate the cache',()=>{
-  for(const asset of ['app.js?v=143','dashboard.js?v=7','dashboard-model.js?v=5','dashboard-95-2.css?v=3']){
+  for(const asset of ['app.js?v=144','dashboard.js?v=7','dashboard-model.js?v=5','dashboard-95-2.css?v=3']){
     assert.ok(html.includes(asset),'HTML missing '+asset);
     assert.ok(sw.includes(asset),'SW missing '+asset);
   }
-  assert.match(sw,/isabella-shell-v187/);
+  assert.match(sw,/isabella-shell-v188/);
 });
 
 test('month groups each task once while preserving every independently editable booking',()=>{
