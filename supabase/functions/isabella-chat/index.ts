@@ -21,6 +21,7 @@ import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
 import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
+import {readOfficeTerminplanMilestones} from "../_shared/office-terminplan.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
@@ -2587,12 +2588,22 @@ async function searchCalendar(req: Request, args: any) {
       :Promise.resolve({data:null});
     const [{data:events},{data:tasks},{data:openBefore}]=await Promise.all([eq,tq,before]);
     const has=(x:any)=>!query||normalizeText((x?.title||"")+" "+(x?.notes||"")).includes(query);
+    // Only the Office profile reads Terminpläne, through the caller's own JWT
+    // and the explicit office_project_members allocation. Window is byte-identical.
+    let terminplan:null|{status:string,milestones:any[]}=null;
+    if(resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user){
+      const owner=(await sb.auth.getUser())?.data?.user;
+      terminplan=await readOfficeTerminplanMilestones(sb,{
+        userId:owner?.id||"",from:from||undefined,to:to||undefined,query,limit:40
+      });
+    }
     const responsibles=await taskResponsibles(sb,[...(tasks||[]),...(openBefore||[])]);
     const who=(x:any)=>{const l=responsibles.get(String(x.id));return l?.length?{responsable:l}:{}};
     return {
       ...(openBefore?{open_before:(openBefore||[]).filter(has).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,overdue:true,...who(x)}))}:{}),
       events:(events||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:x.all_day})),
-      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time,...who(x)}))
+      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time,...who(x)})),
+      ...(terminplan?{terminplan_status:terminplan.status,terminplan_milestones:terminplan.milestones}:{})
     };
   }catch{return {events:[],tasks:[]}}
 }
@@ -3127,10 +3138,12 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
   const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
   let assistantOwner: string | null=assistantProfile.owner_name;
+  let assistantUserId: string | null=null;
   if(assistantProfile.multi_user){
     // Office identity comes only from a verified session and an active membership.
     const authenticated=(await supabaseClient(req)?.auth.getUser())?.data?.user;
     if(!authenticated)return json({error:"authentication_required"},401);
+    assistantUserId=authenticated.id;
     const membership=await supabaseClient(req)?.from("office_members")
       .select("display_name,is_active").eq("user_id",authenticated.id).maybeSingle();
     if(membership?.error||!membership?.data?.is_active)return json({error:"office_member_required"},403);
@@ -3200,7 +3213,9 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     activity:recentActivity(req,maxBudget.activity), feedback:recentProposalFeedback(req,maxBudget.feedback),
     claims:personalModel(req,maxBudget.claims), policy:personalModelPolicy(req),
     memory:!background?consolidatedMemory(req):Promise.resolve(null),
-    radar:!background&&!currentWorkThread?workRadar(supabaseClient(req),{tz:temporal.timezone}):Promise.resolve(null),
+    radar:!background&&!currentWorkThread?workRadar(supabaseClient(req),{
+      tz:temporal.timezone,profile:assistantProfile.id,
+      userId:assistantProfile.multi_user?assistantUserId:null}):Promise.resolve(null),
     agenda:canonicalAgendaContext(req,temporal.current_date,temporal.timezone)
   };
   // Speculative reads can finish before routing, including when a turn exits early.
