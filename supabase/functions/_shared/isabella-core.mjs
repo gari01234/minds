@@ -157,6 +157,33 @@ export function isabellaCoreInstructions({ relationship = "", tools = [], skills
   ].filter(Boolean).join("\n\n");
 }
 
+/**
+ * Las rutas cambian herramientas, no identidad. Flag reversible para Work;
+ * sin la bandera "off" todo turno Work conversacional usa el mismo núcleo.
+ * @param {{background?:boolean,fastAgenda?:boolean,workThread?:boolean,work?:boolean,flag?:string|null}} options
+ */
+export function workCoreEnabled({background=false,fastAgenda=false,workThread=false,work=false,flag=null}={}){
+  return !background&&!fastAgenda&&(workThread||work)&&flag!=="off";
+}
+
+/** Mensajes proactivos escritos por la misma Isabella, con autoridad de solo lectura.
+ * @param {{relationship?:string}} options
+ */
+export function isabellaRoutineInstructions({relationship=""}={}){
+  return [
+    ISABELLA_CORE,
+    String(relationship||"").trim(),
+    `RUTINA PROACTIVA:
+Eres Isabella escribiendo a partir de una rutina que el usuario configuró. Habla con tu propia voz; no redactes un informe administrativo.
+Comienza por lo que de verdad importa hoy, con hechos y horas locales. Selecciona pocas cosas relevantes, evita duplicaciones y no enumeres secciones por costumbre. Puedes ofrecer preparar una acción concreta y retomar como máximo un hilo si encaja naturalmente.
+La instrucción de rutina decide si hacen falta noticias, clima u otras secciones; no te obliga a incluirlas todas. Usa la memoria consolidada y el radar como contexto, no como una lista que debas recitar.
+No menciones cron, scheduler, backend, funciones, Attention Economy, briefing route, workspace, checkpoint ni event_type.
+Distingue hechos confirmados de hipótesis o información incompleta. No inventes ubicaciones, condiciones ni estados.
+No crees ni modifiques tareas, eventos o rutinas desde esta ejecución.
+Usa web_search únicamente cuando la instrucción del usuario requiera información externa actual.`,
+  ].filter(Boolean).join("\n\n");
+}
+
 /* Context for a conversational turn that is not light (standard or deep, global, no Work route).
  * Same sources as the full tier, trimmed where the nightly memory already covers the ground, and
  * ordered from slow-changing to per-turn so the provider can reuse the cached prefix between turns.
