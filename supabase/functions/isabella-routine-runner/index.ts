@@ -1,7 +1,7 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {checked} from "../_shared/cognitive.ts";
-import {relationshipPolicy} from "../_shared/relationship-policy.ts";
+import {relationshipPolicy,ISABELLA_RELATIONSHIP_POLICY_VERSION} from "../_shared/relationship-policy.ts";
 import {isabellaRoutineInstructions} from "../_shared/isabella-core.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
@@ -253,7 +253,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       if(attentionEventIds.length){
         attentionConsumed=Number(checked(await sb.rpc("minds_consume_attention_briefing",{p_user:routine.user_id,p_event_ids:attentionEventIds,p_delivery_id:deliveryId}),"routine_attention_consume")||0);
       }
-      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,prompt_components:promptFootprint,...delivered});
+      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,relationship_policy_version:ISABELLA_RELATIONSHIP_POLICY_VERSION,prompt_components:promptFootprint,...delivered});
       results.push({id:routine.id,status:"sent",delivery_id:deliveryId});
     }catch(e){
       const detail=e instanceof Error?e.message:(()=>{try{return JSON.stringify(e)}catch{return String(e)}})();
