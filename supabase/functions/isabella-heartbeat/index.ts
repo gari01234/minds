@@ -190,19 +190,19 @@ Deno.serve(async(req:Request)=>{
         const top=overdue.slice(0,3).map((t:any)=>t.title),extra=Math.max(0,overdue.length-top.length);
         candidates.push({
           event_type:"overdue_digest",fingerprint:`overdue_digest:${overdue.map((t:any)=>String(t.id)).sort().join(",")}`,severity:"attention",
-          title:overdue.length===1?`Tarea vencida: ${top[0]}`:`${overdue.length} tareas vencidas`,
-          body:overdue.length===1?`Sigue pendiente desde ${overdue[0].due_date}.`:`${top.join(" · ")}${extra?` · +${extra} más`:""}`,
+          title:assistantProfile.multi_user?(overdue.length===1?`Überfällige Aufgabe: ${top[0]}`:`${overdue.length} überfällige Aufgaben`):(overdue.length===1?`Tarea vencida: ${top[0]}`:`${overdue.length} tareas vencidas`),
+          body:assistantProfile.multi_user?(overdue.length===1?`Offen seit ${overdue[0].due_date}.`:`${top.join(" · ")}${extra?` · +${extra} weitere`:""}`):(overdue.length===1?`Sigue pendiente desde ${overdue[0].due_date}.`:`${top.join(" · ")}${extra?` · +${extra} más`:""}`),
           project_id:overdue.every((t:any)=>t.project_id&&t.project_id===overdue[0].project_id)?overdue[0].project_id:null,
           source:{task_ids:overdue.map((t:any)=>t.id),due_dates:overdue.map((t:any)=>t.due_date)},ttl_hours:18
         });
       }
-      for(const e of (events.data||[]).slice(0,2))candidates.push({event_type:"upcoming_event",fingerprint:`event_upcoming:${e.id}:${e.starts_at}`,severity:"attention",title:`Próximo: ${e.title}`,body:`Empieza a las ${new Intl.DateTimeFormat("es-ES",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`,project_id:e.project_id||null,source:{event_id:e.id,starts_at:e.starts_at},ttl_hours:2});
+      for(const e of (events.data||[]).slice(0,2))candidates.push({event_type:"upcoming_event",fingerprint:`event_upcoming:${e.id}:${e.starts_at}`,severity:"attention",title:assistantProfile.multi_user?`Demnächst: ${e.title}`:`Próximo: ${e.title}`,body:assistantProfile.multi_user?`Beginnt um ${new Intl.DateTimeFormat("de-DE",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`:`Empieza a las ${new Intl.DateTimeFormat("es-ES",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`, project_id:e.project_id||null,source:{event_id:e.id,starts_at:e.starts_at},ttl_hours:2});
       for(const r of routines.data||[]){
         const failures=Math.max(1,Number(r?.metadata?.failure_retries||1));
         candidates.push({
           event_type:"routine_failure",fingerprint:`routine_failure:${r.id}:${r.metadata?.failure_episode_at||r.last_run_at||r.updated_at}`,severity:"urgent",
-          title:`Rutina con error: ${r.title}`,
-          body:failures>=2?`Ha fallado ${failures} veces. MINDS la mantiene registrada para diagnóstico.`:String(r.last_error||"La última ejecución falló."),
+          title:assistantProfile.multi_user?`Fehler bei Routine: ${r.title}`:`Rutina con error: ${r.title}`, 
+          body:failures>=2?(assistantProfile.multi_user?`${failures} Fehlversuche. Der Vorgang bleibt zur Prüfung erfasst.`:`Ha fallado ${failures} veces. MINDS la mantiene registrada para diagnóstico.`):String(r.last_error||(assistantProfile.multi_user?"Der letzte Durchlauf ist fehlgeschlagen.":"La última ejecución falló.")), 
           source:{routine_id:r.id,last_run_at:r.last_run_at,failure_retries:failures},
           surface:failures>=2,ttl_hours:24
         });
@@ -213,14 +213,14 @@ Deno.serve(async(req:Request)=>{
         }
         const tz=String(e.timezone||routineTz);
         const due=e.due_precision==="datetime"
-          ?new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"medium",timeStyle:"short"}).format(new Date(e.due_at))
-          :new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"medium"}).format(new Date(e.due_at));
+          ?new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"medium",timeStyle:"short"}).format(new Date(e.due_at))
+          :new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"medium"}).format(new Date(e.due_at));
         candidates.push({
           event_type:"expectation_due",
           fingerprint:`expectation_due:${e.id}:${e.due_at}`,
           severity:"attention",
-          title:`Esperabas: ${e.title}`,
-          body:`Se esperaba para ${due}. Todavía no tengo confirmación de que haya ocurrido.`,
+          title:assistantProfile.multi_user?`Erwartet: ${e.title}`:`Esperabas: ${e.title}`, 
+          body:assistantProfile.multi_user?`Erwartet für ${due}. Ob es eingetreten ist, wurde noch nicht bestätigt.`:`Se esperaba para ${due}. Todavía no tengo confirmación de que haya ocurrido.`, 
           project_id:e.project_id||null,
           source:{expectation_id:e.id,due_at:e.due_at,due_precision:e.due_precision,status:"due_unconfirmed"},
           metadata:{expectation_id:e.id},
