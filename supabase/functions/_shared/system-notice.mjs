@@ -12,7 +12,11 @@ export const SYSTEM_NOTICE_PATTERNS=[
   /^propuesta: /i,/^\d+ cambios preparados/i,/^guardados?( \d+ cambios)?\.?$/i,/^sin cambios\.?$/i,
   /^(agregado|actualizado|eliminado|archivada|marcada como completada)\.$/i,/^no se pudo (comprobar|verificar|responder)/i,
   /^falta la hora del evento/i,/^no quedó claro qué elemento/i,/^«[^»]{1,200}» (está en tus tareas|está en tu calendario|queda para)/i,
-  /^\d+ (tareas|eventos|elementos) añadid[oa]s/i,/^actualizad[oa]: «/i
+  /^\d+ (tareas|eventos|elementos) añadid[oa]s/i,/^actualizad[oa]: «/i,
+  // Office system lines; do not present them as Romy's own prose.
+  /^hinweis der app:/i,/^bestätigt: /i,/^verworfen: /i,
+  /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i,/^gespeichert\.?$/i,/^\d+ änderungen gespeichert/i,
+  /^die speicherung konnte nicht bestätigt werden/i
 ];
 export function isSystemNotice(text){
   const t=String(text||'').trim();

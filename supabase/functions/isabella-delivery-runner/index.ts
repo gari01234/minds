@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendPushNotification, WebPushError } from "npm:@mmmike/web-push@1.3.0/send";
 import { ensureVapidKeys, VAPID_SUBJECT, humanPushBody, endpointHash } from "../_shared/webpush.ts";
+import {resolveAssistantProfile} from "../_shared/assistant-profile.mjs";
 
 function json(data:unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -20,6 +21,10 @@ Deno.serve(async(req:Request)=>{
   const {data:secret,error:secretError}=await sb.from("isabella_runtime_secrets")
     .select("value").eq("key","delivery_runner").maybeSingle();
   if(secretError||!secret?.value||String(body?.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
+
+  // Office presence stays in the owner-scoped chat; never send device push.
+  if(resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user)
+    return json({ok:true,skipped:"office_chat_only"});
 
   let vapid;
   try{vapid=await ensureVapidKeys(sb)}

@@ -122,7 +122,7 @@ test('The rule travels with the tool: global chat only, never in routines or Wor
   assert.match(chat,/\.\.\.\(isabellaCoreEligible&&exposureScope\.kind==="global"\?FOLLOWUP_TOOLS:\[\]\)/);
   assert.match(chat,/schedule_follow_up:"allow",cancel_follow_up:"allow"/);
   assert.match(chat,/call\.name==="schedule_follow_up"\|\|call\.name==="cancel_follow_up"/);
-  assert.match(chat,/scheduleFollowUp\(sb, \{ userId: user\.id, args, tz, turnId \}\)/);
+  assert.match(chat,/scheduleFollowUp\(sb, \{ userId: user\.id, args, tz, turnId, ownerName \}\)/);
   assert.match(chat,/\.eq\("status", "ready"\)\.order\("created_at", \{ ascending: false \}\)\.limit\(10\)/);
 });
 

@@ -22,6 +22,8 @@ import {localStamp} from './turn-capability-contract.mjs';
 import {workRadar} from './isabella-radar.mjs';
 import {splitFollowUps} from './isabella-followups.mjs';
 
+import {resolveAssistantProfile,profileInstructions,profileOwnerForUser,profileFirstName,personaText,OFFICE_RELATIONSHIP_POLICY} from './assistant-profile.mjs';
+
 export const PRESENCE_AUDIENCE='minds-isabella-presence';
 export const PRESENCE_REPOSITORY='gari01234/minds';
 export const PRESENCE_MODEL='gpt-5.6-luna';
@@ -111,7 +113,10 @@ async function rows(q,label){const r=await q;if(r.error){const e=new Error(label
 const prefValue=(rowsList)=>rowsList[0]&&rowsList[0].value&&typeof rowsList[0].value==='object'?rowsList[0].value:{};
 
 /** What she knows at this moment, small: recent conversation, threads, core pages, agenda, Work radar. */
-export async function collectPresence(sb,userId,{now=new Date(),tz=TZ}={}){
+export async function collectPresence(sb,userId,{now=new Date(),tz=TZ,profile='window',owner=null}={}){
+  const p=typeof profile==='string'?resolveAssistantProfile(profile):profile;
+  const person=p.multi_user?profileFirstName(owner):p.owner_name;
+  if(!person)throw new TypeError('office_owner_name_required');
   const today=localDay(now,tz);
   const tomorrow=localDay(new Date(now.getTime()+864e5),tz);
   const afterTomorrow=localDay(new Date(now.getTime()+2*864e5),tz);
@@ -133,7 +138,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ}={}){
       .lte('due_date',afterTomorrow).order('due_date',{ascending:true}).limit(40),'tasks'),
     rows(sb.from('isabella_events').select('title,starts_at,ends_at,all_day').eq('user_id',userId)
       .gte('starts_at',new Date(now.getTime()-12*36e5).toISOString()).lte('starts_at',new Date(now.getTime()+60*36e5).toISOString()).order('starts_at',{ascending:true}).limit(30),'events'),
-    workRadar(sb,{now,tz,userId}),
+    workRadar(sb,{now,tz,userId,profile:p.id}),
     rows(sb.from('isabella_preferences').select('preference_key,value').eq('user_id',userId).in('preference_key',continuityKeys),'continuidad')
   ]);
   const value=prefValue(prefs),seenValue=prefValue(seen),stateValue=prefValue(state);
@@ -144,7 +149,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ}={}){
   const chrono=msgs.slice().reverse();
   const lastUser=msgs.find(m=>m.role==='user');
   const conversation=chrono.filter(m=>!isSystemAuthored(m)).slice(-PRESENCE_LIMITS.messages)
-    .map(m=>localStamp(m.created_at,tz)+(m.role==='user'?'Gari: ':'Isabella: ')+clip(String(m.content||'').trim(),PRESENCE_LIMITS.messageChars));
+    .map(m=>localStamp(m.created_at,tz)+(m.role==='user'?person+': ':p.assistant_name+': ')+clip(String(m.content||'').trim(),PRESENCE_LIMITS.messageChars));
   const views=events.map(e=>({raw:e,view:localEventView(e,tz)}));
   const dayName=d=>d===today?'hoy':d===tomorrow?'mañana':d===afterTomorrow?'pasado mañana':d;
   const ev=views.filter(x=>x.view.local_date>=today).map(({view:e})=>({title:e.title,dia:dayName(e.local_date),hora:e.all_day?'todo el día':e.local_start_time||null,hasta:e.local_end_time||undefined}));
@@ -209,15 +214,18 @@ async function writeState(sb,userId,value,at){
 
 /** One pass for every owner. Returns counts only (the repository is public: no content in logs).
  * @param {{sb:any,callModel:(a:{instructions:string,input:any})=>Promise<{value:any,payload:any}>,relationship?:string,now?:Date,model?:string,
- *   push?:(userId:string,text:string,day:string)=>Promise<{sent:number}>,log?:(...a:any[])=>void}} arg */
-export async function runIsabellaPresence({sb,callModel,relationship='',now=new Date(),model=PRESENCE_MODEL,push=async()=>({sent:0}),log=()=>{}}){
+ *   push?:(userId:string,text:string,day:string)=>Promise<{sent:number}>,log?:(...a:any[])=>void,profile?:string}} arg */
+export async function runIsabellaPresence({sb,callModel,relationship='',now=new Date(),model=PRESENCE_MODEL,push=async()=>({sent:0}),log=()=>{},profile='window'}){
+  const assistantProfile=resolveAssistantProfile(profile);
   const owners=await rows(sb.from('conversations').select('user_id').eq('app_scope','isabella').limit(100),'owners');
   const users=[...new Set(owners.map(r=>r.user_id).filter(Boolean))];
   const report=[];
   for(const userId of users){
+    const owner=await profileOwnerForUser(sb,userId,assistantProfile);
+    if(!owner){report.push({spoke:false,reason:'owner_inactive'});continue}
     const started=Date.now(),at=now.toISOString();
     try{
-      const ctx=await collectPresence(sb,userId,{now});
+      const ctx=await collectPresence(sb,userId,{now,profile:assistantProfile,owner});
       const due=ctx.dueFollowUp;
       let gate=presenceGate({now,enabled:ctx.enabled,sentToday:ctx.sentToday,lastUserAt:ctx.lastUserAt,lastAnyAt:ctx.lastAnyAt,hasMaterial:ctx.hasMaterial,state:ctx.state,promised:!!due});
       // A promised follow-up that cannot go now never blocks the day's own check.
@@ -234,7 +242,8 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
         :{...state,day:ctx.today,calls:Number(state.calls||0)+1,moments:[...(state.moments||[]),moment.kind].slice(-8),last_call_at:at};
       await writeState(sb,userId,nextState,at);
       const material={...ctx.material,hilos:ctx.material.hilos.filter(h=>h.kind!=='seguimiento'||['app_abierta','cierre_del_dia'].includes(moment.kind))};
-      const {value,payload}=await callModel({instructions:PRESENCE_INSTRUCTIONS+(relationship?'\n\n'+relationship:''),input:{momento:moment,...material}});
+      const momentForModel=assistantProfile.multi_user?{...moment,detail:personaText(moment.detail,{profile:assistantProfile,owner})}:moment;
+      const {value,payload}=await callModel({instructions:profileInstructions(PRESENCE_INSTRUCTIONS+(relationship?'\n\n'+relationship:''),assistantProfile,owner),input:{momento:momentForModel,...material}});
       const usage=payload&&payload.usage||{};
       await sb.from('minds_ai_usage').insert({user_id:userId,feature:'isabella_presence',model,input_tokens:usage.input_tokens||0,
         cached_input_tokens:usage.input_tokens_details&&usage.input_tokens_details.cached_tokens||0,output_tokens:usage.output_tokens||0,total_tokens:usage.total_tokens||0}).then(()=>{},()=>{});
@@ -253,7 +262,7 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
       // One per local day, enforced by the conversation's unique client_key as well.
       const ins=await sb.from('conversation_messages').upsert({user_id:userId,conversation_id:ctx.conversationId,role:'assistant',content:msg.text,
         model,provisional:false,citations:[],client_key:promised?promisedKey(due.id):presenceKey(ctx.today),exposure_scope_version:1,exposure_scope_kind:'global',
-        metadata:{app:'isabella',source:'isabella_presence',author:'isabella',basis:msg.basis,thread_id:msg.thread_id,moment:moment.kind}},
+        metadata:{app:assistantProfile.multi_user?'romy':'isabella',source:'isabella_presence',author:assistantProfile.multi_user?'romy':'isabella',basis:msg.basis,thread_id:msg.thread_id,moment:moment.kind}},
         {onConflict:'user_id,conversation_id,client_key',ignoreDuplicates:true}).select('id');
       if(ins.error)throw new Error('deliver: '+ins.error.message);
       const delivered=(ins.data||[]).length>0;
@@ -262,13 +271,13 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
         if(msg.thread_id)await sb.from('isabella_return_queue').update({status:'returned',updated_at:new Date().toISOString()})
           .eq('id',msg.thread_id).eq('user_id',userId).eq('status','ready').then(()=>{},()=>{});
       }else await settle();
-      const pushed=delivered?await push(userId,msg.text,ctx.today).catch(()=>({sent:0})):{sent:0};
+      const pushed=delivered&&!assistantProfile.multi_user?await push(userId,msg.text,ctx.today).catch(()=>({sent:0})):{sent:0};
       await sb.from('minds_agent_runs').insert({user_id:userId,feature:'isabella_presence',run_key:presenceKey(ctx.today),status:'success',
         route:{kind:'presence',moment:moment.kind},metadata:{spoke:delivered,basis:msg.basis,thread:!!msg.thread_id,reason:msg.reason,push_sent:pushed.sent||0},
         started_at:new Date(started).toISOString(),completed_at:new Date().toISOString(),latency_ms:Date.now()-started}).then(()=>{},()=>{});
       report.push({spoke:delivered,reason:delivered?msg.basis:'already_wrote_today',moment:moment.kind,push_sent:pushed.sent||0});
     }catch(e){
-      log('isabella_presence_user_failed',e instanceof Error?e.message:String(e));
+      log('isabella_presence_user_failed',assistantProfile.multi_user?'office_presence_failed':e instanceof Error?e.message:String(e));
       report.push({spoke:false,reason:'error'});
     }
   }
