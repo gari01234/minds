@@ -92,7 +92,7 @@ Deno.serve(async(req:Request)=>{
     try{
       const stored=await existingOriginalVoice(id.client,user.id);
       if(stored)return json({ready:true,reused:true},200,origin);
-      const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+      const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
       if(!apiKey)return json({error:"live_not_configured"},503,origin);
       const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),30000);
       let reply:Response;
@@ -159,7 +159,7 @@ Deno.serve(async(req:Request)=>{
      sdp.length>MAX_SDP||sdp.length<100||!/\nm=audio /m.test(sdp)){
     return json({error:"invalid_audio_sdp"},400,origin);
   }
-  const key=Deno.env.get("OPENAI_API_KEY")||"";
+  const key=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!key)return json({error:"live_not_configured"},503,origin);
 
   // GPT-Live is solely Isabella's voice. MINDS retains all memory, facts,

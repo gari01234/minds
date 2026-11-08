@@ -74,9 +74,15 @@ test('Presence budget is per member, respecting disable and quiet hours without 
   assert.equal(presenceGate({...active,now:new Date('2026-11-08T03:00:00.000Z')}).reason,'outside_hours');
   assert.equal(dreamDue({},now).go,false);
 });
-test('Office relationship cannot inherit Gari-specific rules; Window remains literal',()=>{
-  const individual='Gari and Isabella have a special relationship.';
+// Review 08.11.2026 (Gari: «has que ambas sean iguales»): Romy keeps Isabella's relationship contract,
+// with the names adapted to the member; nothing about Gari himself reaches another member's prompt.
+test('Office keeps the same relationship contract, adapted to the member; Window remains literal',()=>{
+  const individual='Isabella existe exclusivamente para Gari. Adapta el idioma al de Gari.';
   assert.equal(profileRelationshipPolicy(individual,'window'),individual);
-  assert.equal(profileRelationshipPolicy(individual,'office'),OFFICE_RELATIONSHIP_POLICY);
+  assert.equal(profileRelationshipPolicy(individual,'office'),individual);
   assert.equal(profileInstructions(individual,'window'),individual);
+  const office=profileInstructions(individual,'office','Persona Ejemplo');
+  assert.match(office,/^Romy existe exclusivamente para Persona\. Adapta el idioma al de Persona\./);
+  assert.doesNotMatch(office,/Gari|Isabella/);
+  assert.ok(typeof OFFICE_RELATIONSHIP_POLICY==='string');
 });

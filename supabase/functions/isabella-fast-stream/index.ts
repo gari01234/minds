@@ -128,7 +128,7 @@ async function finishRun(service:any,id:string|null,status:string,started:number
 Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return new Response("method_not_allowed",{status:405,headers:cors});
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   const uc=userClient(req),service=serviceClient();
   if(!apiKey||!uc||!service)return new Response("unavailable",{status:503,headers:cors});
   const {data:{user}}=await uc.auth.getUser();

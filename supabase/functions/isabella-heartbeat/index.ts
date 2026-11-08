@@ -141,7 +141,7 @@ async function runWatchChecks(sb:any,userId:string,timezone:string){
 }
 
 async function maintainConversationContext(sb:any,userId:string){
-  const apiKey=Deno.env.get("OPENAI_API_KEY");if(!apiKey)return {status:"unavailable"};
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));if(!apiKey)return {status:"unavailable"};
   const rows=checked(await sb.from("conversations").select("id,metadata,app_scope").eq("user_id",userId).in("app_scope",["isabella","sofia"]).order("updated_at",{ascending:false}),"context_maintenance_list")||[];
   const row=rows.find((r:any)=>r.metadata?.openai_conversation_id&&r.metadata?.context_policy!=="transient_v1");
   if(!row)return {status:"current"};
@@ -253,7 +253,7 @@ Deno.serve(async(req:Request)=>{
   // Isabella may write first at a real moment (isabella-presence). It rides on this pg_cron heartbeat
   // because GitHub's scheduled workflows ran hours late (08.11.2026). Its own gate stops before any
   // model call almost every time; it runs in the background and never fails the heartbeat.
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(apiKey){
     const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
     const presence=runIsabellaPresence({sb,model,callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),

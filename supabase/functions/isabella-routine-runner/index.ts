@@ -98,7 +98,7 @@ Deno.serve(async(req:Request)=>{
   let body:any={};try{body=await req.json()}catch{return json({error:"invalid_json"},400)}
   const url=Deno.env.get("SUPABASE_URL")||"";
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!url||!service||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
@@ -183,9 +183,8 @@ Deno.serve(async(req:Request)=>{
       const localNow=new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
       const originalSystem=isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")})+
         "\n\nRelationship policy: "+ISABELLA_RELATIONSHIP_POLICY_VERSION;
-      const profiledOriginalSystem=assistantProfile.multi_user
-        ?originalSystem.replaceAll(relationshipPolicy("proactive"),OFFICE_RELATIONSHIP_POLICY)
-        :originalSystem;
+      // Same relationship contract for Romy (review 08.11.2026); profileInstructions adapts the names.
+      const profiledOriginalSystem=originalSystem;
       const system=profileInstructions(profiledOriginalSystem,assistantProfile.id,assistantOwner);
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
