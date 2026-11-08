@@ -112,7 +112,7 @@ Deno.serve(async(req:Request)=>{
 
   for(const routine of routines||[]){
     // Office identity is always resolved against the owner of the claimed routine.
-    const assistantOwner=await profileOwnerForUser(sb,routine.user_id,assistantProfile);
+    const assistantOwner=await profileOwnerForUser(sb,routine.user_id,assistantProfile.id);
     const agentRun=await startRun(sb,routine.user_id,routine);
     const deliveryId=routine.metadata?.delivery_id;
     const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
@@ -183,7 +183,7 @@ Deno.serve(async(req:Request)=>{
       const localNow=new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
       const originalSystem=isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")})+
         "\n\nRelationship policy: "+ISABELLA_RELATIONSHIP_POLICY_VERSION;
-      const system=profileInstructions(originalSystem,assistantProfile,assistantOwner);
+      const system=profileInstructions(originalSystem,assistantProfile.id,assistantOwner);
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
@@ -225,7 +225,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
 
       phase="generating";
       const routineTools=[{type:"web_search",search_context_size:"low"}];
-      const routinePrompt=assistantProfile.multi_user?personaText(prompt,{profile:assistantProfile,owner:assistantOwner}):prompt;
+      const routinePrompt=assistantProfile.multi_user?personaText(prompt,{profile:assistantProfile.id,owner:assistantOwner}):prompt;
       const routineInput=[{role:"user",content:[{type:"input_text",text:routinePrompt}]}];
       routineFootprint=promptComponentSizes({instructions:system,context:{},input:routineInput,tools:routineTools});
       const response=await fetch("https://api.openai.com/v1/responses",{
