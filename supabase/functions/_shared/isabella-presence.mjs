@@ -214,7 +214,7 @@ async function writeState(sb,userId,value,at){
 
 /** One pass for every owner. Returns counts only (the repository is public: no content in logs).
  * @param {{sb:any,callModel:(a:{instructions:string,input:any})=>Promise<{value:any,payload:any}>,relationship?:string,now?:Date,model?:string,
- *   push?:(userId:string,text:string,day:string)=>Promise<{sent:number}>,log?:(...a:any[])=>void}} arg */
+ *   push?:(userId:string,text:string,day:string)=>Promise<{sent:number}>,log?:(...a:any[])=>void,profile?:string}} arg */
 export async function runIsabellaPresence({sb,callModel,relationship='',now=new Date(),model=PRESENCE_MODEL,push=async()=>({sent:0}),log=()=>{},profile='window'}){
   const assistantProfile=resolveAssistantProfile(profile);
   const owners=await rows(sb.from('conversations').select('user_id').eq('app_scope','isabella').limit(100),'owners');
