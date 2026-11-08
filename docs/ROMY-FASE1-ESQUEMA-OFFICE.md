@@ -8,6 +8,10 @@ En Office, el modelo privado requiere `auth.uid() = user_id` y una membresía ac
 
 Las claves y endpoints de las dos instalaciones permanecen segregados. Los valores de `isabella_runtime_secrets` se dejan vacíos; no se ejecuta el heartbeat hasta que el administrador configure sus parámetros fuera del código. No se permiten `DROP`, `TRUNCATE`, migraciones aplicadas a producción ni despliegues.
 
+## Implementación estructural en Office (sin aplicar)
+
+Office PR #57 tiene 90 tablas nuevas, 16 migraciones ordenadas, RLS de propietario/proyecto, vistas y procedimientos de runtime basados en metadatos del esquema de Window. Los workflows de PostgreSQL 17 efímero y Supabase local verifican RLS, privilegios negativos, RPC y ausencia de datos copiados. La migración contiene una plantilla inerte de heartbeat; no se ha ejecutado en producción. La aceptación es exclusivamente de estructura y autorización SQL, no de operación real del asistente.
+
 ## Aceptación y deudas
 La suite SQL de Office usa miembros/proyectos ficticios y transacción `ROLLBACK`. La CI de fase 1 debe aplicar todas las migraciones en una instancia local efímera y comprobar aislamiento de propietarios, equipos y credenciales.
 
