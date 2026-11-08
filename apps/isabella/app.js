@@ -1253,6 +1253,8 @@ function sayKeyed(id,role,text,meta={}){
   return existing;
 }
 function say(role,text,meta={}){
+  if(role==='assistant'&&text==='Isabella sigue trabajando…')
+    text=assistantUi('chat_working',text);
   const message={
     id:meta.id||uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
     replyTo:meta.replyTo&&meta.replyTo.id?{id:String(meta.replyTo.id),role:meta.replyTo.role==='assistant'?'assistant':'user',text:String(meta.replyTo.text||'')}:null,
@@ -1303,8 +1305,8 @@ function resolvedReviewText(m){
   const state=m?.metadata?.review_state,items=m?.metadata?.review_proposals;
   if(!Array.isArray(items)||!items.length)return null;
   if(state==='applied_verified')return confirmationText(items);
-  if(state==='rejected')return assistantUi('review_cancelled','Propuesta cancelada. No se aplicó el cambio.');
-  if(state==='reviewed_locally')return assistantUi('review_locally','Hecho. Échale un vistazo para comprobar que quedó como querías.');
+  if(state==='rejected')return typeof window!=='undefined'&&window.APP_PROFILE==='office' ? window.ASSISTANT_I18N?.t('review_cancelled')||'Propuesta cancelada. No se aplicó el cambio.' : 'Propuesta cancelada. No se aplicó el cambio.';
+  if(state==='reviewed_locally')return typeof window!=='undefined'&&window.APP_PROFILE==='office' ? window.ASSISTANT_I18N?.t('review_locally')||'Hecho. Échale un vistazo para comprobar que quedó como querías.' : 'Hecho. Échale un vistazo para comprobar que quedó como querías.';
   return null;
 }
 // Isabella confirms like a person: one short sentence with what changed and when, in natural dates.
@@ -1347,6 +1349,9 @@ function directUndoEligible(message,index,now=Date.now()){
     Date.parse(u.expires_at)>now&&!state.messages.slice(index+1).some(m=>m.role==='user');
 }
 function renderMessages(forceBottom=false){
+  // Keep the renderer executable by itself in the original Window regression harness.
+  const assistantUi=(key,span)=>typeof window!=='undefined'&&window.APP_PROFILE==='office'&&window.ASSISTANT_I18N
+    ?window.ASSISTANT_I18N.t(key):span;
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
   const nextRenderKey=messageRenderKey(state.messages);
@@ -1365,9 +1370,10 @@ function renderMessages(forceBottom=false){
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
     const event=isEventMessage(m);
     return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">${esc(assistantUi('partial_reply','Respuesta interrumpida. El texto recibido es parcial.'))}<button type="button" data-continue-incomplete="${esc(m.id||'')}">${esc(assistantUi('continue_reply','Continuar respuesta'))}</button></div>`:''}${previews}${deliverables}${directUndo?`<div class="message-review-action"><button type="button" class="secondary" data-direct-undo-message="${esc(m.id||'')}">${esc(assistantUi('undo','Deshacer'))}</button></div>`:''}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
-      !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">${esc(assistantUi('review_pending','Revisar propuesta pendiente'))}</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="${esc(assistantUi('reaction_change','Cambiar reacción'))}">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="${esc(assistantUi('react','Reaccionar'))}">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="${esc(assistantUi('reply_message','Responder a este mensaje'))}">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
+      !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">${esc(assistantUi('review_pending','Revisar propuesta pendiente'))}</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="${esc(assistantUi('reaction_change','Cambiar reacción'))}">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="${esc(assistantUi('reply_message','Responder a este mensaje'))}">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
+  if(window.APP_PROFILE==='office')box.querySelectorAll('.message-react').forEach(el=>el.setAttribute('aria-label',assistantUi('react','Reaccionar')));
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
   document.querySelectorAll('[data-direct-undo-message]').forEach(b=>{
@@ -2529,7 +2535,7 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         // Reconciliation can complete before this acknowledgement reaches Safari.
         // Never append a second placeholder for the same accepted provider turn.
         const existing=state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key);
-        if(!existing)say('assistant',assistantUi('chat_working','Isabella sigue trabajando…'),{metadata:{
+        if(!existing)say('assistant','Isabella sigue trabajando…',{metadata:{
           durable_request_id:key,durable_status:result.durable_status||'running'
         }});
         void syncDurableChatJobs();
