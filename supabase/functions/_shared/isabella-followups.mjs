@@ -44,7 +44,7 @@ export const FOLLOWUP_TOOLS=[
 export const FOLLOWUP_TOOL_NAMES=new Set(FOLLOWUP_TOOLS.map(t=>t.name));
 
 /** @param {any} sb user-scoped client (RLS) @param {{userId:string,args:any,tz?:string,now?:Date,turnId?:string|null}} o */
-export async function scheduleFollowUp(sb,{userId,args,tz='Europe/Berlin',now=new Date(),turnId=null}){
+export async function scheduleFollowUp(sb,{userId,args,tz='Europe/Berlin',now=new Date(),turnId=null,ownerName='Gari'}){
   const about=clip(args&&args.about,FOLLOWUP_LIMITS.titleChars),why=clip(args&&args.why,FOLLOWUP_LIMITS.reasonChars);
   const day=String(args&&args.day||''),time=args&&args.time?String(args.time):'09:00';
   const due=localToUtcIso(day,time,tz);
@@ -65,7 +65,7 @@ export async function scheduleFollowUp(sb,{userId,args,tz='Europe/Berlin',now=ne
     .select('id').single();
   if(ins.error||!ins.data)return {status:'error'};
   return {status:'scheduled',id:ins.data.id,due_local:day+(args&&args.time?' '+time:''),
-    note:'Díselo a Gari en una frase: qué harás, cuándo y por qué, y que puede cancelarlo.'};
+    note:'Díselo a '+ownerName+' en una frase: qué harás, cuándo y por qué, y que puede cancelarlo.'};
 }
 
 /** @param {any} sb @param {{userId:string,args:any}} o */
