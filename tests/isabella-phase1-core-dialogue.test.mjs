@@ -90,9 +90,9 @@ test('Step 6: core context keeps the agenda whole, trims what the night memory c
 test('Step 6: wiring — global turns use the core, Work keeps its prompt, telemetry names the tier',()=>{
   assert.match(chat,/const isabellaCoreEligible=!background&&!fastAgenda&&!currentWorkThread&&!route\.work;/);
   assert.match(chat,/const coreSurface=!leanSurface&&isabellaCoreEligible;/);
-  assert.match(chat,/\(leanSurface\|\|coreSurface\)\?isabellaCoreInstructions\(\{relationship:relationshipPolicy\("conversation"\),tools,/);
-  assert.match(chat,/system\+\(scheduleAssessment\?/,'Work-routed turns keep the full prompt');
-  assert.match(chat,/\(footprint as any\)\.core_version=coreSurface\|\|leanSurface\?ISABELLA_CORE_VERSION:null;/);
+  assert.match(chat,/\(leanSurface\|\|coreSurface\|\|workCoreSurface\)\?isabellaCoreInstructions\(\{relationship:relationshipPolicy\("conversation"\),tools,/);
+  assert.match(chat,/system\+\(scheduleAssessment\?/,'legacy Work prompt remains for ISABELLA_WORK_CORE=off');
+  assert.match(chat,/\(footprint as any\)\.core_version=coreSurface\|\|leanSurface\|\|workCoreSurface\?ISABELLA_CORE_VERSION:null;/);
 });
 
 test('Step 5: the recent window arrives as dialogue, same scope and size class',()=>{
@@ -133,7 +133,7 @@ test('Step 7: pending changes — her words travel only when they do not claim i
   assert.equal(verifiedPendingProse('Propuesta: añadir «X» · pendiente de tu confirmación.'),null,'a template is never her words');
   assert.equal(verifiedPendingProse(''),null);
   assert.equal(verifiedPendingProse('x'.repeat(2000)),null);
-  assert.match(chat,/const isabellaReply=toolProposals\.length&&isabellaCoreEligible\?verifiedPendingProse\(modelProse\):null;/);
+  assert.match(chat,/const isabellaReply=toolProposals\.length&&\(isabellaCoreEligible\|\|isabellaWorkCore\)\?verifiedPendingProse\(modelProse\):null;/);
   assert.match(chat,/isabella_reply:isabellaReply,/);
   assert.match(chat,/"Todavía no está aplicado: Gari lo confirma en la tarjeta\. No digas que está hecho\."/);
   // The app line stays the authority: her words go first, the system line with the card right after.
