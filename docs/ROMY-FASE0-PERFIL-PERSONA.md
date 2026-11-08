@@ -10,7 +10,7 @@ personaText, profileInstructions y profileTools mantienen el texto y las referen
 ## Aceptación pendiente para cerrar Fase 0
 Falta portar al perfil el resto de prompts de background (dream, presence, routines, runners), sustituir referencias personales residuales y enlazar todas las superficies visibles del chat con el diccionario. Por esa razón no se declara la aceptación completa y esta rama debe seguir como borrador.
 
-No hay migraciones, funciones desplegadas ni secretos nuevos. La ejecución de pruebas por GitHub Actions y la comprobación completa de byte-equivalence del flujo real todavía se deben verificar. La métrica de promptComponentSizes se imprime en el test con un turno sintético, sin servicios externos.
+No hay migraciones, funciones desplegadas ni secretos nuevos. GitHub Actions «Verify MINDS» pasó el 08.11.2026 en esta rama: 1.210 pruebas totales, 1.208 superadas, 0 fallidas, 2 omitidas; Deno check, Chromium y suites PostgreSQL efímeras en verde. La comparación del flujo real byte a byte entre despliegues sigue pendiente. El test `promptComponentSizes` con datos sintéticos arroja antes/después: instrucciones 16.055/16.163 caracteres; contexto 46/46; input 41/41; descripciones de herramientas 158/79, con 2/1 herramientas. No hay llamadas a servicios reales.
 
 ## Reversión
 Revertir el commit de esta rama; la configuración por defecto window sigue intacta. office no debe activarse hasta completar la aceptación de las fases.
