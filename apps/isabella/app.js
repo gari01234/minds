@@ -1306,7 +1306,7 @@ function confirmationText(items,now=new Date()){
   const isCreate=p=>(p.action||'create')==='create';
   if(list.length===1){
     const p=list[0],t=title(p),w=when(p);
-    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
+    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+(p.duration_defaulted?' · 1 h · editable':'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
     if(t)return w?'«'+t+'» queda para '+w+'.':'Actualizado: «'+t+'».';
     return w?'La tarea queda para '+w+'.':'Actualizado.';
   }
@@ -1713,7 +1713,7 @@ function proposalEditor(p,onDone){
   const cats=state.categories.map(x=>`<option value="${esc(x.name)}" ${x.name===categoryName?'selected':''}>${esc(x.name)}</option>`).join('');
   const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${esc(x.name)}" ${x.name===projectName?'selected':''}>${esc(x.name)}</option>`).join('');
   const specific=p.kind==='event'
-    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>`
+    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>${p.duration_defaulted?'<div class="small">1 h · editable (duración predeterminada)</div>':''}`
     :`<label>Recordatorio<input id="proposalReminder" type="time" value="${esc(reminder||'')}"></label>`;
   modal('Revisar antes de confirmar',`<div class="form proposal-editor">
     <label>Nombre<input id="proposalTitle" value="${esc(title)}"></label>
@@ -2204,8 +2204,9 @@ async function applyDirectCalendarCreate(p){
   return {receipt_id:receipt.receipt_id,request_id:p.request_id,
     kind:p.kind,title:row.title,action:'create',
     date:p.kind==='task'?(row.due_date||null):new Date(row.starts_at).toLocaleDateString('sv-SE'),
+    duration_defaulted:p.kind==='event'&&p.duration_defaulted===true,
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
-    entity_client_key:receipt.entity_client_key};
+    entity_client_key:receipt.entity_client_key,entity_id:receipt.entity_id};
 }
 function directCreationBatch(result,integrity){
   const direct=result?.direct_authorization;
