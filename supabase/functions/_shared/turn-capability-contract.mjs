@@ -49,15 +49,16 @@ export function localStamp(iso,timeZone="Europe/Berlin"){
  * that Gari refers back to), older ones 1200: at most ~4.8k chars more than before, while the
  * core prompt removed ~100k. Timestamps let her notice gaps ("tras dos días…").
  * @param {any[]} messages @param {string} current
- * @param {{limit?:number,chars?:number,recentChars?:number,recentCount?:number,timeZone?:string,prefix?:string,attachments?:any[]}} [opts] */
-export function dialogueTurnInput(messages,current,{limit=12,chars=1200,recentChars=2400,recentCount=4,timeZone="Europe/Berlin",prefix="",attachments=[]}={}){
+ * @param {{limit?:number,chars?:number,recentChars?:number,recentCount?:number,timeZone?:string,prefix?:string,attachments?:any[],profile?:string,ownerName?:string}} [opts] */
+export function dialogueTurnInput(messages,current,{limit=12,chars=1200,recentChars=2400,recentCount=4,timeZone="Europe/Berlin",prefix="",attachments=[],profile="window",ownerName="Gari"}={}){
   const rows=(Array.isArray(messages)?messages:[]).slice(-limit)
     .filter(x=>x&&["user","assistant"].includes(String(x.role))&&typeof x.content==="string"&&x.content.trim());
   const items=rows.map((x,i)=>{
     const cap=i>=rows.length-recentCount?recentChars:chars;
     const text=x.content.trim().slice(0,cap);
     const role=historyRole(x);
-    if(role==="sistema")return {role:"user",content:localStamp(x.created_at,timeZone)+"[Aviso de la app, no lo escribió Gari ni tú] "+text};
+    if(role==="sistema")return {role:"user",content:localStamp(x.created_at,timeZone)+
+      (profile==="office"?"[Hinweis der App, nicht von "+ownerName+" oder dir verfasst] ":"[Aviso de la app, no lo escribió Gari ni tú] ")+text};
     if(role==="assistant")return {role:"assistant",content:text};
     return {role:"user",content:localStamp(x.created_at,timeZone)+text};
   });
