@@ -12,7 +12,7 @@ import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_s
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch,directTitleInOwnerTurn,directPriorRoundsSafe,directToolsClean} from "../_shared/direct-calendar-contract.mjs";
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
@@ -408,6 +408,7 @@ function proposalFromTool(name: string, a: any) {
     date: a.date ?? null,
     time: a.time ?? null,
     duration_minutes: a.duration_minutes ?? null,
+    duration_defaulted: a.duration_defaulted===true,
     all_day: !!a.all_day,
     category: a.category ?? null,
     project: a.project ?? null,
@@ -550,13 +551,13 @@ const calendarTools = [
     description: "Propose creating one calendar event. This does NOT execute the change; the UI will ask the user to confirm.",
     strict: false,
     parameters: { type: "object", properties: {
-      title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
+      title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"}, duration_defaulted:{type:"boolean",description:"True only if owner did not specify duration or end; use 60 minutes, editable."},
        temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request, offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
       direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
-      direct_event_duration_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event duration, NOT a default."}
-    }, required:["title","date","time","duration_minutes"] }
+      direct_event_duration_excerpt:{type:"string",description:"Verbatim quote only when duration was explicitly stated. Omit for a defaulted 60-minute event."}
+    }, required:["title","date","time"] }
   },
   {
     type: "function",
@@ -3947,6 +3948,7 @@ pregunta cuál.`;
   let quickReplies:any[]=[];
   let webSources:any[]=[];
   let sourceTainted=!!routedWork||!!routedSofia;
+  // Work prefetch remains tainted for memory; direct creation requires its own owner-quote gate.
   const usedTools:string[]=[];
   const specialistDelegations:any[]=[];
   const specialistCache=new Map<string,any>();
@@ -4013,6 +4015,7 @@ pregunta cuál.`;
 
   for(let round=0;round<=budget.rounds;round++){
     roundsUsed=round+1;
+    const priorRoundTools=usedTools.slice();
     // Only spend deeper reasoning AFTER a grounded semantic claim failed
     // structural validation. Normal calls keep the established fast budget.
     const repairingSemantics=round>0&&temporalGroundingIssues.length>0&&
@@ -4106,6 +4109,10 @@ pregunta cuál.`;
         continue;
       }
       let rawProposal:any=proposalFromTool(call.name,args);
+      if(call.name==="create_event"&&args?.duration_defaulted===true&&
+         (args?.duration_minutes==null||Number(args.duration_minutes)===60)&&
+         !args?.direct_event_duration_excerpt)
+        rawProposal={...rawProposal,duration_minutes:60,duration_defaulted:true};
       if(rawProposal?.kind==="routine"&&rawProposal.action!=="create"){
         if(!routineReviewSupported){
           outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"client_update_required",guidance:"Reload MINDS to review routine changes. Do not create a replacement routine."})});continue;
@@ -4154,12 +4161,15 @@ pregunta cuál.`;
           // or its server-verified pending clarification, never from retrieved text.
           const sourceText=verifiedContinuation?.source_message||effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
+          const directSourceTainted=!!routedSofia||!directToolsClean(usedTools);
           if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
-             !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
-             exactOwnerExcerpt(sourceText,quoted)&&
+             !directSourceTainted&&directPriorRoundsSafe(round,priorRoundTools)&&
+             ["create_task","create_event"].includes(String(call.name))&&
+             exactOwnerExcerpt(sourceText,quoted)&&directTitleInOwnerTurn(sourceText,proposal?.title)&&
              (call.name!=="create_event"||(
                exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt)&&
-               exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt)
+               (proposal?.duration_defaulted===true&&proposal?.duration_minutes===60||
+                exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt))
              ))&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
@@ -4168,7 +4178,7 @@ pregunta cuál.`;
           }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-            source_tainted:sourceTainted,round,background:!!background,
+            source_tainted:sourceTainted,direct_source_tainted:directSourceTainted,round,background:!!background,
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
@@ -4176,7 +4186,8 @@ pregunta cuál.`;
                direct_timezone:temporal.timezone,
                ...(call.name==="create_event"?{
                  direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
-                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim()
+                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim(),
+                duration_defaulted:proposal?.duration_defaulted===true
                }: {})}: {})
           });
           if(admission?.status==="suppressed"){
