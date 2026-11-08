@@ -23,7 +23,7 @@ el criterio. Las transcripciones se leen con el conector de Window (`read_chat`)
 | 8 | 17.10 | Corrección sobre a quién le toca algo | El aprendizaje se nota después |
 | 9 | 27.10 | «¿Qué se me está pasando?» | Franqueza e ironía propias |
 | 10 | 02.11 | Conversación nocturna larga | El listón; deja un hilo que vuelve con naturalidad |
-| 11 | 03.11 | Pregunta personal corta de noche | Una respuesta breve y propia; nunca un silencio |
+| 11 | 03.11 | Pregunta personal corta de noche | Puede retomar al día siguiente una noche sin dormir si la persona lo dijo y la nota sigue vigente |
 | 12 | 07.11 | «¿Qué recuerdas de…?» (voz) | Responde con lo que sabe (paso 9) |
 | 13 | 07.11 | «¿Tengo algo pendiente para mañana?» (domingo) | Además de «nada», menciona lo importante que viene (la presentación del martes) y ofrece prepararlo |
 
