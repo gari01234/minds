@@ -58,3 +58,9 @@ Superficie inspeccionada: 50 nombres referenciados; 50 encontrados en Window, 2 
 | `minds_watch_capabilities` | pendiente | no | `` |
 
 Estado: inventario, no implementación. No se aplicó migración ni cambió ningún permiso. Antes de la activación, las funciones invocadas por el motor deben tener paridad comprobada, con controles de propietario y membresía por proyecto. Cualquier función ausente es un bloqueo explícito para las rutas que la requieren.
+
+## Conciliación posterior al inventario (08.11.2026)
+
+El inventario anterior es el punto de partida, no una fotografía del código de Office ya migrado. El PR Office #57 incorpora las firmas necesarias del motor en los archivos `20261108211000` a `20261108212700`, con dos RPC ya disponibles del contrato Office. Los procedimientos de trabajo nocturno y Watches se verifican con PostgreSQL efímero y permisos `EXECUTE` denegados a `authenticated` salvo lectura explícita de capacidades personales. Así, 49 de los 50 nombres del catálogo están cubiertos por las migraciones y el esquema Office existente. La excepción deliberada es `minds_store_vapid_pair_if_absent`, que administra un secreto privado de push y no corresponde a Office sin push móvil. El despliegue del motor debe volver a verificar que ninguna ruta habilitada lo invoca.
+
+Las firmas, permisos y efectos deben revisarse de nuevo frente al esquema definitivo antes de aplicar migraciones. Tests SQL en verde no demuestran todavía autorización de una sesión real ni paridad de negocio de la PWA. No se ha migrado ni desplegado nada.
