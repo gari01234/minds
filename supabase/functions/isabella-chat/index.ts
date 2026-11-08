@@ -3208,6 +3208,10 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const exposureHint=currentWorkThread?null:await latestExposureHint(req);
   const routeStartedAt=performance.now();
   const route=await routeRequest(req,effectiveMessage,apiKey,background,{exposure_hint_project:currentWorkThread?.project?.name||exposureHint?.project||null,server_scope_key:currentWorkThread?"work_thread:"+currentWorkThread.id:exposureHint?.scope_key||"global",server_conversation_id:currentWorkThread?.conversation_id||null});
+  if(assistantProfile.multi_user){
+    // Office does not route into personal Window-only knowledge surfaces.
+    route.sofia=false;
+  }
   phaseRouteMs=Math.max(0,Math.round(performance.now()-routeStartedAt));
   const contextStartedAt=performance.now();
   if(!background&&!currentWorkThread&&!route.project){
