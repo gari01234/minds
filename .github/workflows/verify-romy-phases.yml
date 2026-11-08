@@ -1,0 +1,42 @@
+name: Verify Romy stacked phases (isolated)
+on:
+  push:
+    branches: ['romy-isabella/**']
+  pull_request:
+    branches: ['romy-isabella/**']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Existing Window and Romy regression suite (no production credentials)
+        run: node --test tests/*.test.mjs
+      - name: Check shared browser modules
+        run: |
+          node --check apps/isabella/app.js
+          node --check apps/isabella/ai.js
+          node --check apps/isabella/turn-integrity.js
+          node --check apps/isabella/assistant-i18n.js
+          node scripts/build.mjs
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.8
+      - name: Type-check core and background profiles (no deploy)
+        run: |
+          deno check \
+            supabase/functions/isabella-chat/index.ts \
+            supabase/functions/isabella-chat-runner/index.ts \
+            supabase/functions/isabella-dream/index.ts \
+            supabase/functions/isabella-presence/index.ts \
+            supabase/functions/isabella-routine-runner/index.ts \
+            supabase/functions/isabella-heartbeat/index.ts \
+            supabase/functions/isabella-live-session/index.ts

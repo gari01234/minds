@@ -13,6 +13,8 @@
   const reviewAnswer=$("liveMindsAnswer"),reviewChat=$("liveMindsChat");
   const canonical=window.ISABELLA_LIVE_CANONICAL,integrity=window.MINDS_TURN_INTEGRITY;
   const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
+  const OFFICE_LIVE=window.APP_PROFILE==='office';
+  const lv=(spanish,german)=>OFFICE_LIVE?german:spanish;
   const ORIGINAL_VOICE="isabella-original-v1";
   const originalNote=$("liveOriginalNote");
   const updateVoiceHint=()=>originalNote.classList.toggle("hidden",voicePicker.value!==ORIGINAL_VOICE);
@@ -25,22 +27,25 @@
   let transcript=null,conversationId=null,delegatedText="",waitingDelegation=null,delegationTimer=null;
   function makeTranscript(auth,conversation){
     return window.ISABELLA_LIVE_TRANSCRIPT.turns({id:()=>crypto.randomUUID(),write:async turn=>{
+      // Office speech is a client-authored transcript; a model's unverified
+      // voice output must never be inserted as a canonical agent reply.
+      if(OFFICE_LIVE&&turn.author==='isabella')return;
       const response=await fetch(auth.url+"/functions/v1/isabella-live-session",{method:"POST",keepalive:true,
         headers:{apikey:auth.key,Authorization:"Bearer "+auth.token,"Content-Type":"application/json"},
         body:JSON.stringify({action:"save_transcript",conversation_id:conversation,...turn})});
       const receipt=await response.json();
       if(!response.ok||receipt.saved!==true||receipt.turn_id!==turn.turn_id)throw Error("voice_write_failed");
-    },onError:()=>{status.textContent="Quedó una transcripción sin comprobar. Revisa el chat."}});
+    },onError:()=>{status.textContent=lv("Quedó una transcripción sin comprobar. Revisa el chat.","Eine Sprachtranskription konnte nicht bestätigt werden. Bitte im Chat prüfen.")}});
   }
   const seenDelegations=new Set();
   const shownError={
-    auth_required:"Inicia sesión en el chat de Isabella antes de usar Live.",
-    invalid_session:"La sesión ha caducado. Vuelve a iniciar sesión en Isabella.",
-    live_not_configured:"Live todavía no está configurado en el servidor.",
-    live_capacity_unavailable:"Live no está disponible por capacidad del proveedor.",
-    live_provider_unavailable:"El proveedor no ha permitido iniciar esta sesión de voz.",
-    live_connection_failed:"No fue posible conectar la sesión de audio.",
-    invalid_audio_sdp:"Safari no generó una oferta WebRTC válida.",
+    auth_required:lv("Inicia sesión en el chat de Isabella antes de usar Live.","Bitte zuerst im TBA Office anmelden."),
+    invalid_session:lv("La sesión ha caducado. Vuelve a iniciar sesión en Isabella.","Die Anmeldung ist abgelaufen. Bitte erneut im Office anmelden."),
+    live_not_configured:lv("Live todavía no está configurado en el servidor.","Live ist im Office noch nicht konfiguriert."),
+    live_capacity_unavailable:lv("Live no está disponible por capacidad del proveedor.","Der Sprachdienst ist derzeit ausgelastet."),
+    live_provider_unavailable:lv("El proveedor no ha permitido iniciar esta sesión de voz.","Der Sprachdienst hat die Sitzung abgelehnt."),
+    live_connection_failed:lv("No fue posible conectar la sesión de audio.","Die Audioverbindung konnte nicht hergestellt werden."),
+    invalid_audio_sdp:lv("Safari no generó una oferta WebRTC válida.","Der Browser konnte keine gültige WebRTC-Verbindung vorbereiten."),
     original_voice_provider_unavailable:"La creación de la voz no se completó. Las voces existentes siguen disponibles.",
     original_voice_invalid_request:"OpenAI rechazó los parámetros de creación. Es un error técnico HTTP 400, no una confirmación de que la voz esté prohibida.",
     original_voice_access_denied:"La API rechazó el acceso para crear voces. Comprueba los permisos del proyecto OpenAI.",
@@ -56,9 +61,9 @@
     stopButton.disabled=value!=="connecting"&&value!=="active";
     voicePicker.disabled=value==="connecting"||value==="active";
   }
-  function stop(message="Conversación finalizada."){
+  function stop(message=lv("Conversación finalizada.","Gespräch beendet.")){
     if(reviewTurn?.busy){
-      message="La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.";
+      message=lv("La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.","Die Anfrage wurde bereits an Romy gesendet. Vor einer Wiederholung bitte den Chat prüfen.");
     }
     clearTimeout(delegationTimer);waitingDelegation=null;
     if(transcript)void transcript.finish();
@@ -93,8 +98,8 @@
     review.classList.remove("hidden");
     reviewAnswer.textContent="";reviewAnswer.classList.add("hidden");
     reviewChat.classList.add("hidden");reviewChat.href="../";
-    reviewChat.textContent="Abrir chat de Isabella para revisar el resultado";
-    reviewStatus.textContent="Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.";
+    reviewChat.textContent=lv("Abrir chat de Isabella para revisar el resultado","Romy-Chat zur Prüfung öffnen");
+    reviewStatus.textContent=lv("Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.","Bitte die Transkription prüfen. Ohne Bestätigung wird nichts gesendet.");
     reviewSend.disabled=false;reviewDismiss.disabled=false;
     consult.classList.add("hidden");
     return true;
@@ -105,12 +110,12 @@
     if(!active||!turn||turn.busy||turn.done||turn.epoch!==epoch)return;
     const message=String(reviewText.value||"").trim();
     if(!message||message.length>2000){
-      reviewStatus.textContent="Comprueba la frase: debe tener entre 1 y 2000 caracteres.";
+      reviewStatus.textContent=lv("Comprueba la frase: debe tener entre 1 y 2000 caracteres.","Bitte einen Text zwischen 1 und 2000 Zeichen eingeben.");
       return;
     }
     turn.busy=true;turn.requestId=crypto.randomUUID();
     reviewSend.disabled=true;reviewDismiss.disabled=true;
-    reviewStatus.textContent="Consultando a Isabella en MINDS…";
+    reviewStatus.textContent=lv("Consultando a Isabella en MINDS…","Romy wird gefragt …");
     const token=epoch;
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
@@ -135,12 +140,12 @@
       const result=await response.json().catch(()=>null);
       if(token!==epoch||turn!==reviewTurn)return;
       if(!response.ok||result?.error){
-        reviewStatus.textContent=String(result?.message||"No pude confirmar el resultado. Revisa el chat antes de repetir la petición.").slice(0,240);
+        reviewStatus.textContent=String(result?.message||lv("No pude confirmar el resultado. Revisa el chat antes de repetir la petición.","Das Ergebnis ist nicht bestätigt. Vor einer Wiederholung bitte den Chat prüfen.")).slice(0,240);
         reviewChat.classList.remove("hidden");turn.done=true;return;
       }
       const outcome=canonical?.admission?.(result,integrity?.validate,integrity?.summary);
       if(!outcome?.ok){
-        reviewStatus.textContent="La respuesta no tiene un comprobante completo y verificable. No la enviaré a la voz.";
+        reviewStatus.textContent=lv("La respuesta no tiene un comprobante completo y verificable. No la enviaré a la voz.","Es liegt kein vollständiger Prüfbeleg vor. Die Antwort wird nicht vorgelesen.");
         reviewChat.classList.remove("hidden");turn.done=true;return;
       }
       // The visible UI must obey the same verified receipts as speech.
@@ -156,25 +161,25 @@
           Array.isArray(result.proposals)?result.proposals:[];
         const specificReview=canonical?.reviewLink?.(result,window.location.href);
         reviewChat.textContent=specificReview
-          ?"Revisar propuesta en Isabella":"Revisar propuestas en Isabella";
+          ?lv("Revisar propuesta en Isabella","Vorschlag im Romy-Chat prüfen"):lv("Revisar propuestas en Isabella","Vorschläge im Romy-Chat prüfen");
         if(specificReview)reviewChat.href=specificReview;
       }
       reviewStatus.textContent=outcome.hasReview
-        ?"MINDS preparó una propuesta pendiente de revisión; no se ha aplicado."
+        ?lv("MINDS preparó una propuesta pendiente de revisión; no se ha aplicado.","Romy hat einen Vorschlag vorbereitet. Er ist noch nicht ausgeführt.")
         :outcome.outcome==="action_applied"
-          ?"MINDS confirmó la acción con comprobantes válidos."
-          :"Respuesta de Isabella confirmada por MINDS.";
+          ?lv("MINDS confirmó la acción con comprobantes válidos.","Die Aktion wurde mit gültigem Ausführungsbeleg bestätigt.")
+          :lv("Respuesta de Isabella confirmada por MINDS.","Die Antwort von Romy wurde bestätigt.");
       // A verified canonical result can be paraphrased by GPT-Live; a transcript
       // fragment, inferred intent or model claim never becomes an action receipt.
       if(!send({type:"session.commentary.append",
         delegation_id:turn.delegationId||null,content:outcome.spoken})){
-        reviewStatus.textContent+=" No se pudo enviar al canal de audio; consulta la respuesta escrita.";
+        reviewStatus.textContent+=lv(" No se pudo enviar al canal de audio; consulta la respuesta escrita."," Die Sprachausgabe ist fehlgeschlagen; bitte die schriftliche Antwort prüfen.");
       }
       turn.done=true;input.textContent="—";
     }catch{
       if(token!==epoch||turn!==reviewTurn)return;
       // The request may already have reached the backend. Do NOT retry it.
-      reviewStatus.textContent="No pude confirmar el resultado. MINDS podría haber recibido la petición. Comprueba el chat antes de volver a intentarlo.";
+      reviewStatus.textContent=lv("No pude confirmar el resultado. MINDS podría haber recibido la petición. Comprueba el chat antes de volver a intentarlo.","Das Ergebnis konnte nicht bestätigt werden. Die Anfrage könnte bereits angekommen sein. Bitte zuerst den Chat prüfen.");
       reviewChat.classList.remove("hidden");turn.done=true;
     }finally{
       if(token===epoch&&turn===reviewTurn){
@@ -207,16 +212,16 @@
       delegationTimer=setTimeout(()=>{
         if(waitingDelegation!==waiting)return;
         waitingDelegation=null;
-        send({type:"session.commentary.append",delegation_id:waiting.id,content:"No recibí una frase completa. ¿Me la repites?"});
+        send({type:"session.commentary.append",delegation_id:waiting.id,content:lv("No recibí una frase completa. ¿Me la repites?","Ich habe keinen vollständigen Satz gehört. Bitte wiederholen.")});
       },1800);
       return;
     }
     clearTimeout(delegationTimer);waitingDelegation=null;
     const id=waiting.id;delegatedText=owner.text;
     if(!showReview(id)){
-      send({type:"session.commentary.append",delegation_id:id,content:"Hay otra consulta en curso."});return;
+      send({type:"session.commentary.append",delegation_id:id,content:lv("Hay otra consulta en curso.","Eine andere Anfrage läuft bereits.")});return;
     }
-    if(manualReview?.checked)reviewStatus.textContent="Confirma o corrige el texto antes de enviarlo.";
+    if(manualReview?.checked)reviewStatus.textContent=lv("Confirma o corrige el texto antes de enviarlo.","Bitte den Text vor dem Senden prüfen oder korrigieren.");
     else void sendToCanonical();
   }
   function handleEvent(raw,token){
@@ -225,7 +230,7 @@
     try{event=JSON.parse(raw)}catch{return}
     if(event?.type==="session.started"){
       sessionReady=true;
-      state("active","Te escucho. Habla con naturalidad.");
+      state("active",lv("Te escucho. Habla con naturalidad.","Ich höre zu. Bitte sprich ganz normal."));
     }else if(event?.type==="session.input_transcript.delta"){
       // A completed review belongs to the previous turn. Never merge its
       // transcript into a subsequent utterance or hide manual consultation.
@@ -258,9 +263,9 @@
 
       }
     }else if(event?.type==="session.closed"){
-      stop("La sesión terminó.");
+      stop(lv("La sesión terminó.","Die Sitzung wurde beendet."));
     }else if(event?.type==="error"||event?.type==="session.error"){
-      state("active","El proveedor informó de un error de voz. Puedes finalizar y probar otra vez.");
+      state("active",lv("El proveedor informó de un error de voz. Puedes finalizar y probar otra vez.","Beim Sprachdienst ist ein Fehler aufgetreten. Bitte die Sitzung beenden."));
     }
   }
 
@@ -288,19 +293,19 @@
     if(attempt&&typeof attempt.catch==="function")attempt.catch(()=>{
       if(!active)return;
       unlock.classList.remove("hidden");
-      playback.textContent="Safari bloqueó la reproducción automática. Pulsa «Activar altavoz» o el control de reproducción.";
+      playback.textContent=lv("Safari bloqueó la reproducción automática. Pulsa «Activar altavoz» o el control de reproducción.","Die automatische Wiedergabe wurde blockiert. Bitte »Lautsprecher aktivieren« wählen.");
     });
   }
   audio.addEventListener("playing",()=>{
     if(!active||!remoteTrack)return;
     playbackStarted=true;
     unlock.classList.add("hidden");
-    playback.textContent="Safari ha iniciado la reproducción del audio. Confirma si lo escuchas realmente.";
+    playback.textContent=lv("Safari ha iniciado la reproducción del audio. Confirma si lo escuchas realmente.","Die Audioausgabe wurde gestartet. Bitte prüfen, ob Ton zu hören ist.");
   });
   audio.addEventListener("error",()=>{
     if(!active)return;
     unlock.classList.remove("hidden");
-    playback.textContent="No se pudo reproducir el audio remoto. Prueba «Activar altavoz».";
+    playback.textContent=lv("No se pudo reproducir el audio remoto. Prueba «Activar altavoz».","Die Audioausgabe funktioniert nicht. Bitte »Lautsprecher aktivieren« versuchen.");
   });
   unlock.addEventListener("click",tryPlay);
 
@@ -313,16 +318,16 @@
     input.textContent="—";output.textContent="—";
     reviewTurn=null;reviewEdited=false;seenDelegations.clear();
     review.classList.add("hidden");consult.classList.add("hidden");
-    playback.textContent="Esperando audio remoto…";
+    playback.textContent=lv("Esperando audio remoto…","Warte auf die Audioantwort …");
     unlock.classList.add("hidden");
-    state("connecting","Conectando el micrófono…");
-    timeoutId=setTimeout(()=>stop("Tiempo de prueba agotado (90 segundos)."),MAX_DURATION_MS);
+    state("connecting",lv("Conectando el micrófono…","Mikrofon wird verbunden …"));
+    timeoutId=setTimeout(()=>stop(lv("Tiempo de prueba agotado (90 segundos).","Die 90 Sekunden sind abgelaufen.")),MAX_DURATION_MS);
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
-      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error("No hay conexión con MINDS.");
+      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zu Romy."));
       const {data:{session},error}=await sb.auth.getSession();
-      if(error||!session?.access_token)throw new Error("Inicia sesión primero en el chat de Isabella.");
-      if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw new Error("Este navegador no admite la conexión de audio necesaria.");
+      if(error||!session?.access_token)throw new Error(lv("Inicia sesión primero en el chat de Isabella.","Bitte zuerst im Office anmelden."));
+      if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw new Error(lv("Este navegador no admite la conexión de audio necesaria.","Dieser Browser unterstützt die benötigte Audioverbindung nicht."));
       if(token!==epoch)return;
 
       microphone=await navigator.mediaDevices.getUserMedia({
@@ -351,20 +356,20 @@
         tryPlay();
       });
       connection.addEventListener("connectionstatechange",()=>{
-        if(token===epoch&&connection.connectionState==="failed")stop("La conexión de voz se interrumpió.");
+        if(token===epoch&&connection.connectionState==="failed")stop(lv("La conexión de voz se interrumpió.","Die Audioverbindung wurde unterbrochen."));
       });
       microphone.getAudioTracks().forEach(track=>connection.addTrack(track,microphone));
       channel=connection.createDataChannel("oai-events");
       channel.addEventListener("message",e=>handleEvent(e.data,token));
       channel.addEventListener("close",()=>{
-        if(token===epoch&&active)stop("El canal de voz se cerró.");
+        if(token===epoch&&active)stop(lv("El canal de voz se cerró.","Der Sprachkanal wurde geschlossen."));
       });
       const offer=await connection.createOffer();
       await connection.setLocalDescription(offer);
       await iceReady(connection);
       if(token!==epoch)return;
 
-      state("connecting","Abriendo sesión GPT‑Live…");
+      state("connecting",lv("Abriendo sesión GPT‑Live…","GPT-Live-Sitzung wird geöffnet …"));
       const response=await fetch(cfg.url+"/functions/v1/isabella-live-session",{
         method:"POST",
         headers:{
@@ -376,17 +381,17 @@
       });
       const result=await response.json().catch(()=>null);
       if(token!==epoch)return;
-      if(!response.ok)throw new Error(shownError[result?.error]||"El servidor rechazó la sesión de Live.");
+      if(!response.ok)throw new Error(shownError[result?.error]||lv("El servidor rechazó la sesión de Live.","Der Server hat die Live-Sitzung abgelehnt."));
       if(result?.transport?.type!=="webrtc"||typeof result.transport.sdp!=="string"||
          result.transport.sdp.length<50||!result.transport.sdp.startsWith("v=0")){
-        throw new Error("La respuesta WebRTC no es válida.");
+        throw new Error(lv("La respuesta WebRTC no es válida.","Die WebRTC-Antwort ist ungültig."));
       }
       conversationId=result.session?.conversation_id;
-      if(!conversationId)throw Error("No pude identificar tu chat para guardar la conversación.");
+      if(!conversationId)throw Error(lv("No pude identificar tu chat para guardar la conversación.","Der zugehörige Chat konnte nicht verifiziert werden."));
       transcript=makeTranscript({url:cfg.url,key:cfg.publishableKey,token:session.access_token},conversationId);
       await connection.setRemoteDescription({type:"answer",sdp:result.transport.sdp});
       if(token!==epoch)return;
-      state("active","Conectando el altavoz…");
+      state("active",lv("Conectando el altavoz…","Lautsprecher wird verbunden …"));
     }catch(error){
       if(token!==epoch)return;
       const name=error instanceof Error?error.message:"unknown";

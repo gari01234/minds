@@ -176,7 +176,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
   let activeConversation:any=null,activeRun:any=null;
   try{
-  const apiKey=Deno.env.get("OPENAI_API_KEY");if(!apiKey)return json({error:"missing_openai_key"},500);
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));if(!apiKey)return json({error:"missing_openai_key"},500);
   let body:any={};try{body=await req.json()}catch{return json({error:"invalid_json"},400)}
   const message=String(body?.message||"").trim();if(!message)return json({error:"message_required"},400);
   const background=!!body?.background,budget=cognitiveBudget(message,background);

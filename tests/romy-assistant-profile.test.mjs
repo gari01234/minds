@@ -109,7 +109,8 @@ test("Chat does not resolve Office identity in Window and never accepts a client
   assert.match(source,/assistantProfile.multi_user/);
   assert.match(source,/office_members/);
   assert.match(source,/\.eq\("user_id",authenticated\.id\)/);
-  assert.match(source,/profileInstructions\(modelInstructions,assistantProfile\.id,assistantOwner\)/);
+  assert.match(source,/const safeModelInstructions=modelInstructions;/);
+  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner\)/);
   assert.doesNotMatch(source,/body\?\.owner_name|body\?\.assistant_profile/);
   assert.match(source,/instructions:transientInstructions\(providerInstructions,/);
   assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner\)\)/);
@@ -181,4 +182,14 @@ test("Office system notes name the verified owner, never the Window owner", asyn
   assert.match(w[0].content,/Aviso de la app, no lo escribió Gari ni tú/);
   assert.match(o[0].content,/Hinweis der App, nicht von Alex oder dir verfasst/);
   assert.doesNotMatch(o[0].content,/\\bGari\\b|\\bIsabella\\b/);
+});
+
+// Review 08.11.2026: Office already keeps its OpenAI key as TBA_OFFICE_OPENAI_API_KEY; the shared engine
+// reads it as a fallback, so Romy works without a renamed secret. Window keeps OPENAI_API_KEY first.
+test("The engine reads Office's existing OpenAI secret as a fallback", () => {
+  for (const f of ["isabella-chat","isabella-dream","isabella-presence","isabella-routine-runner","isabella-live-session"]) {
+    const src = read(`supabase/functions/${f}/index.ts`);
+    if (!src.includes("OPENAI_API_KEY")) continue;
+    assert.doesNotMatch(src, /Deno\.env\.get\("OPENAI_API_KEY"\)(?!\|\|Deno\.env\.get\("TBA_OFFICE_OPENAI_API_KEY"\))/, f);
+  }
 });
