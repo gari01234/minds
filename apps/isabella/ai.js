@@ -238,8 +238,31 @@ async function ask(message,state,options={}){
   // Do not infer read-only intent from the absence of a known action phrase.
   // They remain available to a future server-verified read-only contract,
   // never as the browser's default for an ordinary conversation.
-  const {data,error}=await sb.functions.invoke('isabella-chat',{body:{message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null,
-    continuation:options.continuation||null}});
+  const body={message:String(message),context:{...compact(state),reply_context:replyContext},background:!!options.background,attachments:Array.isArray(options.attachments)?options.attachments.slice(0,3):[],work_thread_id:options.workThread?.id||null,surface:options.background?'background':'chat_browser',client_message_id:options.durableRequestId||null,
+    continuation:options.continuation||null};
+  const cfg=window.MINDS_SUPABASE_CONFIG;
+  if(!options.background&&body.client_message_id&&typeof window.ISABELLA_FINAL_ROUND?.ask==='function'&&cfg?.url&&cfg?.publishableKey){
+    const recover=async()=>{
+      for(let i=0;i<85;i++){
+        const {data,error}=await sb.from('minds_chat_stream_delivery_receipts').select('final_delivery')
+          .eq('request_id',body.client_message_id).maybeSingle();
+        if(error)return null;
+        if(data?.final_delivery?.terminal)return data.final_delivery.terminal.body;
+        await new Promise(resolve=>setTimeout(resolve,1400));
+      }
+      return null;
+    };
+    const send=()=>fetch(cfg.url+'/functions/v1/isabella-chat',{method:'POST',
+      headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
+      body:JSON.stringify({...body,stream_mode:'final_round'})});
+    let data=await window.ISABELLA_FINAL_ROUND.ask({send,recover,onDelta:options.onTextDelta,onReset:options.onTextReset});
+    if(data?.pending)data=await recover();
+    if(!data)throw new Error('No pude recuperar el resultado de este turno.');
+    if(data.error&&data.execution_started!==false)throw new Error(data.message||data.error);
+    if(!data.error)return data;
+    // The server explicitly declined before starting execution. Reuse the original request identity.
+  }
+  const {data,error}=await sb.functions.invoke('isabella-chat',{body});
   if(error){
     // Network/proxy transport failure does not imply the server stopped working.
     // Recover the same completed read-only request by its owner-scoped receipt;

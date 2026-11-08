@@ -53,7 +53,7 @@ test('The radar reads with the caller\'s client and never breaks a turn',async()
 });
 
 test('Global turns carry the radar (core and light); Work routes keep their own context',()=>{
-  assert.match(chat,/const radarPending=isabellaCoreEligible&&exposureScope\.kind==="global"\?workRadar\(supabaseClient\(req\)/);
+  assert.match(chat,/const radarPending=isabellaCoreEligible&&exposureScope\.kind==="global"\?early\.radar:Promise/);
   assert.match(chat,/radar_work:radar,/);
   const radar={proyectos:[{proyecto:'Bernried'}]};
   assert.deepEqual(coreConversationContext({radar_work:radar}).radar_work,radar);

@@ -1,3 +1,4 @@
+import {readModelRound,finalRoundResponse} from "../_shared/final-round.mjs";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {openConversation,closeConversation} from "../_shared/conversations.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -3047,6 +3048,38 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
+  let body: any;
+  try { body = await req.json(); }
+  catch { return json({ error: "invalid_json" }, 400); }
+
+  if(body?.stream_mode!=="final_round")return executeTurn(req,body);
+  if(body.surface!=="chat_browser"||body.background||body.stream===true||body.durable===true||!browserTurnId(body.client_message_id))
+    return json({error:"unsupported_stream_mode"},400);
+  const client=supabaseClient(req), service=serviceClient();
+  const owner=client?(await client.auth.getUser()).data.user:null;
+  if(!owner||!service)return json({error:"stream_auth_required"},401);
+  const table="minds_chat_stream_delivery_receipts";
+  const id=body.client_message_id;
+  const fingerprint=await sha256Hex(new TextEncoder().encode(JSON.stringify([body.message,body.attachments,body.work_thread_id,body.continuation,body.context?.reply_context])));
+  const claim=await service.from(table).insert({user_id:owner.id,request_id:id,status:"incomplete",reply:"",
+    incomplete_reason:"final_round_running",final_delivery:{fingerprint}});
+  if(claim.error){
+    if(claim.error.code!=="23505")return json({error:"stream_receipt_unavailable",execution_started:false},503);
+    const saved=await client!.from(table).select("final_delivery").eq("user_id",owner.id).eq("request_id",id).maybeSingle();
+    const receipt=saved.data?.final_delivery;
+    if(receipt?.fingerprint!==fingerprint)return json({error:"request_id_conflict"},409);
+    return receipt.terminal?json(receipt.terminal.body,receipt.terminal.status):json({pending:true},202);
+  }
+  return finalRoundResponse({headers:cors,execute:(emit:(text:string)=>void)=>executeTurn(req,body,emit),
+    keepAlive:(job:Promise<void>)=>{(globalThis as any).EdgeRuntime?.waitUntil(job)},
+    save:async(terminal:any)=>{
+      const result=await service.from(table).update({final_delivery:{fingerprint,terminal}})
+        .eq("user_id",owner.id).eq("request_id",id).select("request_id").single();
+      if(result.error||!result.data)throw new Error("final_receipt_unavailable");
+    }});
+});
+
+async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   let activeConversation:any=null,activeRun:any=null;
   try{
   const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -3056,10 +3089,6 @@ Deno.serve(async (req: Request) => {
       message: "Falta configurar OPENAI_API_KEY en Supabase Edge Function Secrets."
     }, 503);
   }
-
-  let body: any;
-  try { body = await req.json(); }
-  catch { return json({ error: "invalid_json" }, 400); }
 
   const message = userMessage(String(body?.message || ""));
   const attachments = Array.isArray(body?.attachments)?body.attachments.slice(0,3):[];
@@ -3119,6 +3148,19 @@ Deno.serve(async (req: Request) => {
   const requestedWorkThreadId=String(body?.work_thread_id||"").trim();
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
+  const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
+  const tentativeScope=currentWorkThread?"work_thread:"+currentWorkThread.id:"global";
+  const maxBudget=cognitiveBudget(effectiveMessage,attachments,false);
+  const early={
+    history:recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,tentativeScope,!currentWorkThread),
+    activity:recentActivity(req,maxBudget.activity), feedback:recentProposalFeedback(req,maxBudget.feedback),
+    claims:personalModel(req,maxBudget.claims), policy:personalModelPolicy(req),
+    memory:!background?consolidatedMemory(req):Promise.resolve(null),
+    radar:!background&&!currentWorkThread?workRadar(supabaseClient(req),{tz:temporal.timezone}):Promise.resolve(null),
+    agenda:canonicalAgendaContext(req,temporal.current_date,temporal.timezone)
+  };
+  // Speculative reads can finish before routing, including when a turn exits early.
+  for(const pending of Object.values(early))void Promise.resolve(pending).catch(()=>{});
   const exposureHint=currentWorkThread?null:await latestExposureHint(req);
   const route=await routeRequest(req,effectiveMessage,apiKey,background,{exposure_hint_project:currentWorkThread?.project?.name||exposureHint?.project||null,server_scope_key:currentWorkThread?"work_thread:"+currentWorkThread.id:exposureHint?.scope_key||"global",server_conversation_id:currentWorkThread?.conversation_id||null});
   if(!background&&!currentWorkThread&&!route.project){
@@ -3190,19 +3232,19 @@ Deno.serve(async (req: Request) => {
   const occurrenceCoverageEvents:any[]=[];
   const occurrenceInitialTerms=new Map<string,string[]>();
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
-  const consolidatedPending=!background&&!currentWorkThread&&exposureScope.kind==="global"?consolidatedMemory(req):Promise.resolve(null);
+  const consolidatedPending=!background&&!currentWorkThread&&exposureScope.kind==="global"?early.memory:Promise.resolve(null);
   // Isabella's radar of Work for global turns (08.11): topics, deadlines, pending confirmations, contradictions.
-  const radarPending=isabellaCoreEligible&&exposureScope.kind==="global"?workRadar(supabaseClient(req),{tz:context.timezone||"Europe/Berlin"}):Promise.resolve(null);
+  const radarPending=isabellaCoreEligible&&exposureScope.kind==="global"?early.radar:Promise.resolve(null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
-    recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
+    exposureScope.key===tentativeScope?early.history:recentConversation(req,effectiveMessage,currentWorkThread?.conversation_id||null,exposureScope.key,!currentWorkThread),
     fastAgenda?Promise.resolve([]):longTermRecall(req,effectiveMessage,budget.lexical,exposureScope.key,explicitCrossScope,run?.id||null),
-    fastAgenda?Promise.resolve([]):recentActivity(req,budget.activity),
+    fastAgenda?Promise.resolve([]):early.activity.then(rows=>rows.slice(-budget.activity)),
     initialSemantic&&!fastAgenda?semanticRecall(req,effectiveMessage,apiKey,budget.semantic,budget.indexBatch,exposureScope.key,explicitCrossScope,run?.id||null):Promise.resolve([]),
-    fastAgenda?Promise.resolve([]):recentProposalFeedback(req,budget.feedback),
+    fastAgenda?Promise.resolve([]):early.feedback.then(rows=>rows.slice(-budget.feedback)),
     fastAgenda?Promise.resolve([]):entityRecall(req, effectiveMessage,budget.entities),
     background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req),
-    fastAgenda?Promise.resolve([]):personalModel(req,budget.claims),
-    fastAgenda?Promise.resolve(null):personalModelPolicy(req),
+    fastAgenda?Promise.resolve([]):early.claims.then(rows=>rows.slice(0,budget.claims)),
+    fastAgenda?Promise.resolve(null):early.policy,
     background?Promise.resolve([]):standingIntentMatches(req,effectiveMessage,route.project),
     background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
@@ -3225,8 +3267,7 @@ Deno.serve(async (req: Request) => {
   // Canonical scoped recent messages + specific verified clarifications are the
   // only browser history; no accidental 80k–160k OpenAI provider replay.
   const scopedWindowReady=scopedHistoryReady(recent);
-  const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
-  const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
+  const canonicalAgenda=await early.agenda;
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
     await finishAgentRun(req,run,"skipped",{reason:"canonical_agenda_unavailable"});
     return json({fallback:true,reason:"canonical_agenda_unavailable"},409);
@@ -4026,7 +4067,7 @@ pregunta cuál.`;
       method:"POST",
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
       body:JSON.stringify({
-        model,
+        model,...(emit?{stream:true}:{}),
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
         instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
         reasoning:{effort:repairingSemantics?"medium":reasoningEffort},
@@ -4037,7 +4078,7 @@ pregunta cuál.`;
         input
       })
     });
-    payload=await response.json();
+    payload=emit?await readModelRound(response,emit,round===budget.rounds):await response.json();
     await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,context_tier:contextTier,prompt_components:footprint,conversation_rotated:!!conversationInfo.rotated,agent_run_id:run?.id||null});
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
@@ -4447,10 +4488,10 @@ pregunta cuál.`;
     try{
       const retry=await fetch("https://api.openai.com/v1/responses",{method:"POST",
         headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
-        body:JSON.stringify({model,instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
+        body:JSON.stringify({model,...(emit?{stream:true}:{}),instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
           reasoning:{effort:"low"},max_output_tokens:Math.max(budget.maxOutput,2400),prompt_cache_options:{mode:"implicit",ttl:"30m"},
           ...(tools.length?{tools,tool_choice:"none"}:{}),input})});
-      const again=await retry.json();
+      const again=emit?await readModelRound(retry,emit,true):await retry.json();
       await recordUsage(req,"isabella_chat",model,again?.usage,{route,empty_reply_retry:true,context_tier:contextTier,agent_run_id:run?.id||null});
       if(retry.ok&&String(extractText(again)||"").trim())payload=again;
     }catch{/* the empty-response path below stays honest */}
@@ -4521,4 +4562,4 @@ pregunta cuál.`;
 
   }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
   finally{await closeConversation(supabaseClient(req),activeConversation)}
-});
+}

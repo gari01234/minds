@@ -77,7 +77,7 @@ test('PWA references matched files and versions',()=>{
   assert.ok(html.includes(path),'HTML misses '+path);
   assert.ok(sw.includes(path),'SW misses '+path);
  }
- assert.match(sw,/isabella-shell-v183/);
+ assert.match(sw,/isabella-shell-v185/);
  assert.ok(html.indexOf('task-team.js?v=1')<html.indexOf('task-detail.js?v=5'));
 });
 
