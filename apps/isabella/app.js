@@ -48,7 +48,7 @@ function messageRenderKey(messages){
     (m.sources||[]).map(s=>[s.url,s.title]),
     !!m.metadata?.incomplete_response,
     (m.metadata?.review_proposals||[]).map(p=>p.request_id),
-    m.metadata?.review_state||'',
+    m.metadata?.review_state||'',m.metadata?.direct_undo?.status||'',m.metadata?.direct_undo?.expires_at||'',
     (m.quickReplies||[]).map(q=>[q.label,q.value])
   ]));
 }
@@ -1350,8 +1350,16 @@ function renderMessages(forceBottom=false){
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
-  document.querySelectorAll('[data-direct-undo-message]').forEach(b=>b.onclick=()=>{
-    void undoDirectCalendarMessage(String(b.dataset.directUndoMessage||''));
+  document.querySelectorAll('[data-direct-undo-message]').forEach(b=>{
+    const id=b.dataset.directUndoMessage;
+    b.onclick=()=>void undoDirectCalendarMessage(id);
+    const expires=state.messages.find(m=>m.id===id)?.metadata?.direct_undo?.expires_at;
+    setTimeout(()=>{
+      const current=state.messages.find(m=>m.id===id);
+      if(current?.metadata?.direct_undo?.status==='ready'&&Date.parse(expires)<=Date.now()){
+        current.metadata.direct_undo=null;save();renderMessages();
+      }
+    },Math.max(0,Date.parse(expires)-Date.now())+1);
   });
   document.querySelectorAll('[data-review-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.reviewMessage);
@@ -2540,15 +2548,10 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         const directUndo=undoItems.length?{
           status:'ready',expires_at:new Date(Date.now()+10*60*1000).toISOString(),items:undoItems
         }:null;
-        const directMessage=sayEvent(report,{metadata:{exposure_scope:exposure,
+        sayEvent(report,{metadata:{exposure_scope:exposure,
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
           action_receipts:undoItems,direct_undo:directUndo,
           review_proposals:failed.map(x=>x.proposal)}});
-        if(directUndo)setTimeout(()=>{
-          if(directMessage.metadata?.direct_undo===directUndo&&directUndo.status==='ready'){
-            directMessage.metadata.direct_undo=null;save();renderMessages();
-          }
-        },10*60*1000);
         save();
         return;
       }

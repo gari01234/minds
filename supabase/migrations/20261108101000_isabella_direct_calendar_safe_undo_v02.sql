@@ -89,7 +89,7 @@ BEGIN
     SELECT 1 FROM public.conversation_messages m
     WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
       AND m.provenance_class='owner' AND m.exposure_scope_version=1
-      AND position(lower(v_evidence) in lower(m.content))>0
+      AND position(v_evidence in m.content)>0
   ) INTO v_authorization_exists;
   IF NOT v_authorization_exists THEN RAISE EXCEPTION 'direct_authorization_source_missing'; END IF;
   IF p_candidate->'recurrence' IS NOT NULL AND
@@ -121,7 +121,7 @@ BEGIN
       SELECT 1 FROM public.conversation_messages m
       WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
         AND m.provenance_class='owner' AND m.exposure_scope_version=1
-        AND position(lower(v_event_time_quote) in lower(m.content))>0
+        AND position(v_event_time_quote in m.content)>0
     )
   THEN RAISE EXCEPTION 'event_time_not_explicit'; END IF;
   IF coalesce((v_decision.context->>'direct_duration_defaulted')::boolean,false) THEN
@@ -137,7 +137,7 @@ BEGIN
          SELECT 1 FROM public.conversation_messages m
          WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
            AND m.provenance_class='owner' AND m.exposure_scope_version=1
-           AND position(lower(v_event_duration_quote) in lower(m.content))>0
+           AND position(v_event_duration_quote in m.content)>0
        )
     THEN RAISE EXCEPTION 'event_time_or_duration_not_explicit'; END IF;
   END IF;
@@ -246,6 +246,14 @@ BEGIN
      OR v_decision.context->>'direct_calendar_authority' IS DISTINCT FROM 'explicit_owner_v1'
      OR v_decision.context->>'direct_authorization_turn_id' IS NULL
   THEN RAISE EXCEPTION 'not_a_direct_owner_create'; END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM public.conversation_messages m
+      WHERE m.user_id=v_user AND m.role='user' AND m.provenance_class='owner' AND m.exposure_scope_version=1
+        AND m.client_key=v_decision.context->>'direct_authorization_turn_id'
+        AND NOT EXISTS (SELECT 1 FROM public.conversation_messages newer
+          WHERE newer.user_id=v_user AND newer.role='user' AND newer.provenance_class='owner'
+            AND newer.conversation_id=m.conversation_id AND newer.created_at>m.created_at))
+  THEN RAISE EXCEPTION 'direct_undo_superseded'; END IF;
 
   IF v_receipt.entity_kind='task' THEN
     SELECT * INTO v_task FROM public.isabella_tasks

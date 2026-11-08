@@ -51,7 +51,7 @@ test("server does not infer permission from shadow scores, memory or model prose
  assert.match(server,/directHistorySafe/);
  assert.match(server,/exactOwnerTitle\(sourceText,proposal\.title\)/);
  assert.match(server,/direct_owner_source_tainted:/);
- assert.match(server,/direct_authorization_turn_id:verifiedContinuation\?\.source_turn_id\|\|clientMessageId/);
+ assert.match(server,/direct_authorization_turn_id:clientMessageId/);
  assert.match(server,/direct_authorization:directAuthorization/);
  assert.match(server,/authorizedDirectBatch\(toolProposals,directAuthorizedIds,usedTools\)/);
  assert.match(server,/direct_user_excerpt/);
@@ -71,7 +71,7 @@ test("direct execution can only follow valid typed candidates and canonical read
  assert.match(app,/No existe una creación autorizada y verificable/);
  assert.match(app,/La lectura canónica no coincide con el recibo/);
  assert.match(app,/await applyDirectCalendarCreate\(p\)/);
- assert.match(app,/action_receipts:committed\.map/);
+ assert.match(app,/const undoItems=committed\.map/); assert.match(app,/action_receipts:undoItems/);
 });
 test("database enforces owner preference, canonical quote, candidate and receipt",()=>{
  for(const regexp of [

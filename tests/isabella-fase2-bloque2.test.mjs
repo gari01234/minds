@@ -36,11 +36,11 @@ test('60-minute fallback is server-generated only, with visible editable mark',(
   assert.equal(v.duration_minutes,60);
   assert.equal(v.duration_defaulted,true);
   assert.equal(withDefaultEventDuration({...draft,duration_minutes:45}).duration_defaulted,false);
-  assert.equal(withDefaultEventDuration({...draft,time:'not-a-clock'}),draft);
+  const invalid={...draft,time:'not-a-clock'}; assert.equal(withDefaultEventDuration(invalid),invalid);
   assert.match(server,/withDefaultEventDuration\(calendarGrounding\.proposal\)/);
   assert.match(server,/direct_duration_defaulted:proposal\.duration_defaulted===true/);
   assert.match(client,/1 h · editable/);
-  assert.match(client,/proposal\.duration_defaulted/);
+  assert.match(client,/p\.duration_defaulted/);
 });
 test('SQL independently verifies receipt, global owner quote, title, default and no retrieved authority',()=>{
   for(const text of ['CREATE OR REPLACE FUNCTION public.minds_commit_direct_calendar_create_v01',
@@ -66,7 +66,7 @@ test('Undo is an authenticated atomic receipt-bound exception, not a general del
   assert.match(migration,/RETURN jsonb_build_object\('status','undone','count',v_count/);
   assert.match(client,/minds_undo_direct_calendar_batch_v01/);
   assert.match(client,/No pude confirmar Deshacer/);
-  assert.match(client,/if\(directUndo\)setTimeout/);
+  assert.match(client,/Date\.parse\(expires\)<=Date\.now\(\)/);
   assert.match(client,/directUndoEligible\(m,index\)/);
   assert.match(client,/state\.messages\.slice\(index\+1\)\.some\(m=>m\.role==='user'\)/);
 });

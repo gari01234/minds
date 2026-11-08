@@ -3509,9 +3509,7 @@ Solo el servidor puede habilitar ejecución directa según permiso vigente.
 Las modificaciones y eliminaciones requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
 Mantén el proyecto explícito; no inventes horas ni fechas. Una creación directa
-de evento exige fecha, hora y duración respaldadas explícitamente por la orden
-del usuario; usa direct_event_time_excerpt y direct_event_duration_excerpt
-como citas literales. Sin ellas, usa request_clarification o la revisión habitual.
+de evento exige una hora citada en direct_event_time_excerpt. Si dijo duración u hora de fin, cítala en direct_event_duration_excerpt. Si no, omite la duración para aplicar una hora editable.
 Si falta un dato esencial, pide aclaración. Cuando título, fecha, hora y duración de un evento están expresos y coherentes, llama create_event: no preguntes si te refieres a esos mismos valores. El servidor comprobará temporal_grounding y permisos. No consultes otros ámbitos.
 Si el usuario señala que una fecha de una tarea recién propuesta o creada
 está equivocada, identifica la tarea en los mensajes recientes y la agenda.
@@ -4154,7 +4152,7 @@ pregunta cuál.`;
         if(mode==="confirm"){
           // Directness comes exclusively from this owner's current utterance
           // or its server-verified pending clarification, never from retrieved text.
-          const sourceText=verifiedContinuation?.source_message||effectiveMessage;
+          const sourceText=effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
           // Work route prefetch is not independent owner authority. A real tool
           // read outside the three allowlisted lookups always disqualifies direct creation.
@@ -4169,7 +4167,7 @@ pregunta cuál.`;
              directHistorySafe&&["create_task","create_event"].includes(String(call.name))&&
              exactOwnerExcerpt(sourceText,quoted)&&exactOwnerTitle(sourceText,proposal.title)&&
              explicitTime&&explicitDuration&&
-             browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
+             browserTurnId(clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
               .select("create_mode").eq("user_id",(await prefClient.auth.getUser()).data.user?.id||"").maybeSingle():null;
@@ -4177,14 +4175,13 @@ pregunta cuál.`;
           }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-            source_tainted:sourceTainted,
+            source_tainted:sourceTainted,round,background:!!background,
             // Separate source provenance from authority: direct uses current owner quotes.
             direct_owner_source_tainted:!(!routedSofia&&!providerWebSeen&&directToolHistorySafe(usedTools,roundStartedAt)),
-            round,background:!!background,
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
-               direct_authorization_turn_id:verifiedContinuation?.source_turn_id||clientMessageId,
+               direct_authorization_turn_id:clientMessageId,
                direct_timezone:temporal.timezone,
                ...(call.name==="create_event"?{
                  direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
@@ -4478,7 +4475,7 @@ pregunta cuál.`;
   // A rejected/suppressed review tool is not a registered proposal. Replace
   // unverified model prose with a deterministic status; no phrase filters.
   const reviewAttemptWithoutReceipt=unregisteredReviewAttempt(usedTools,toolProposals,policyMode);
-  const directAuthorization=authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
+  const directAuthorization=providerWebSeen?null:authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
     reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
   }else if(reviewAttemptWithoutReceipt){
