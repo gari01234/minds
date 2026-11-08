@@ -61,7 +61,7 @@ test('every successful sync rechecks owner receipts without executing an action'
  assert.match(segment,/Date\.parse\(t\.updated_at\)!==Date\.parse\(r\.after_state\.updated_at\)/);
  assert.match(html,/app\.js\?v=145/);
  assert.match(html,/sync\.js\?v=pwa40/);
- assert.match(sw,/isabella-shell-v189/);
+ assert.match(sw,/isabella-shell-v190/);
  assert.match(sw,/app\.js\?v=145/);
  assert.match(sw,/sync\.js\?v=pwa40/);
 });
