@@ -51,7 +51,7 @@ test('Failure notices are honest, in the app\'s voice, and recognised as system 
 
 test('Server: answered turns are written by the server; failures leave a notice; empty text gets one retry',()=>{
   assert.match(chat,/browserTurn=await persistCanonicalBrowserOwnerTurn\(req,clientMessageId,effectiveMessage,exposureScope\);/);
-  assert.match(chat,/const serverPersisted=browserReceiptSaved&&browserTurn\n\s+\?await persistServerAssistantTurn\(req,canonicalAssistantRow\(\{userId:browserTurn\.userId,conversationId:browserTurn\.conversationId,/);
+  assert.match(chat,/const serverPersisted=!voiceDelegation&&browserReceiptSaved&&browserTurn\n\s+\?await persistServerAssistantTurn\(req,canonicalAssistantRow\(\{userId:browserTurn\.userId,conversationId:browserTurn\.conversationId,/);
   assert.match(chat,/upsert\(row,\{onConflict:"user_id,conversation_id,client_key",ignoreDuplicates:true\}\)/);
   assert.match(chat,/message:await failTurn\(isOutOfCredit\(response\.status,payload\)\?"credit":"error"\)/);
   assert.match(chat,/return json\(\{error:"empty_response",message:await failTurn\("empty"\)\},502\)/);

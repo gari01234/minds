@@ -1,3 +1,6 @@
+import {continuityView} from './continuity-view.mjs';
+import {beforeToday,reviewedEvents,splitDreamEvidence,saveTransient,durableDream} from './dream-continuity.mjs';
+import {splitFollowUps,FOLLOWUP_KIND,FOLLOWUP_LIMITS} from './isabella-followups.mjs';
 // Window · Isabella's nightly "dreaming" (Gari, 08.11.2026: adopt Anthropic's pattern and prompts).
 // Pattern from Anthropic, "The components of agent memory" (06.11.2026) and the cookbook
 // "Dreaming with a dynamic workflow": transcripts are the ground truth; at night Isabella reads
@@ -41,8 +44,11 @@ export const DREAM_SCHEMA=obj({
   paginas:{type:'array',items:obj({
     tipo:{type:'string',enum:Object.keys(PAGE_TYPES)},nombre:str,resumen:str,
     hechos:{type:'array',items:obj({texto:str,fecha:str,fuente:str,estado:{type:'string',enum:['vigente','reemplazado','conflicto','incierto']}})}})},
-  hipotesis:{type:'array',items:obj({tipo:{type:'string',enum:CLAIM_TYPES},afirmacion:str,cita:str,fecha:str})},
+  hipotesis:{type:'array',items:obj({tipo:{type:'string',enum:CLAIM_TYPES},afirmacion:str,cita:str,fecha:str,episodios:{type:'array',maxItems:4,items:obj({fecha:str,cita:str})}})},
   hilos:{type:'array',items:obj({titulo:str,por_que:str,cita:str,fecha_cita:str,dias_vigencia:{type:'integer'}})},
+  estado:{type:'array',maxItems:3,items:obj({texto:str,cita:str,fecha:str,dias_vigencia:{type:'integer',minimum:3,maximum:5}})},
+  ayer:obj({fecha:str,resumen:str,abierto:{type:'array',maxItems:3,items:str}}),
+  seguimientos:{type:'array',maxItems:2,items:obj({evento:str})},
   correcciones:{type:'array',items:obj({que:str,por_que:str})}
 });
 
@@ -65,6 +71,9 @@ export const DREAM_INSTRUCTIONS=[
   '- Resúmenes automáticos, avisos y confirmaciones de la app no son conversación: ignóralos.',
   '- Hipótesis: como mucho 3, solo patrones con evidencia en lo que Gari dijo o hizo, con una cita literal breve. Son hipótesis: Gari las confirma o las rechaza. No repitas una que ya está en el modelo personal.',
   '- Hilos: como mucho 2. Algo que Gari dijo y que quedó abierto o que merece volver a conversarse, con su cita literal (máximo 200 caracteres). Nunca tareas, citas ni agenda (eso ya lo cubren otras partes), nunca algo que él cerró, nunca algo que ya está en los hilos abiertos. dias_vigencia entre 3 y 14.',
+  'En estado copia únicamente el marcador [estado_N] de la persona que habla, en texto y en cita, y su fecha. Vale de tres a cinco días. No infieras estados ni diagnósticos. Nunca traslades estos marcadores ni datos de ánimo o sueño al diario, páginas, hipótesis, hilos ni ayer.',
+  'En ayer resume en tres líneas y hasta tres asuntos abiertos exclusivamente la conversación de fecha_repasada. Sin conversación, devuelve resumen vacío. En seguimientos elige únicamente el id de un evento realmente importante de eventos_repasados. No presupongas que asistió ni cómo fue.',
+  'En la página relacion conserva expresiones, bromas y referencias compartidas que vuelven, con fecha. Para un patrón repetido, cita episodios con fechas distintas como evidencia. Un episodio aislado no establece un patrón.',
   '- Mejor nada que algo débil. Listas vacías son un buen resultado.',
   '- diario: 2 a 5 frases en español para Gari, en primera persona: qué aprendiste, qué corregiste y qué hilos guardas. Si no hubo nada nuevo, dilo en una frase.'
 ].join('\n');
@@ -102,7 +111,7 @@ export async function collectTranscript(sb,userId,since){
   if(tomb.error)throw tomb.error;
   const forgotten=new Set((tomb.data||[]).map(t=>String(t.source_id)));
   return {
-    messages:page.filter(m=>!forgotten.has(String(m.id))&&!isSystemAuthored(m)).map(m=>({id:m.id,cuando:localStamp(m.created_at),
+    messages:page.filter(m=>!forgotten.has(String(m.id))&&!isSystemAuthored(m)).map(m=>({id:m.id,at:m.created_at,cuando:localStamp(m.created_at),
       autor:m.role==='user'?'Gari':'Isabella',texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
     last_at:page.length?page[page.length-1].created_at:null,more
   };
@@ -124,7 +133,8 @@ export async function currentMemory(sb,userId,now){
       resumen:String(e.metadata.page.resumen||''),hechos:Array.isArray(e.metadata.page.hechos)?e.metadata.page.hechos:[]})),
     modelo_personal:(claimsQ.data||[]).map(c=>({tipo:c.claim_type,afirmacion:c.claim,estado:c.status==='confirmed'?'confirmado':'hipótesis'})),
     hilos_abiertos:(threadsQ.data||[]).filter(t=>!(t.metadata&&t.metadata.expires_at&&Date.parse(t.metadata.expires_at)<stamp))
-      .map(t=>({titulo:t.title,por_que:t.reason,cita:t.metadata&&t.metadata.quote||''})),
+      .map(t=>({titulo:t.title,por_que:t.reason,cita:t.metadata&&t.metadata.quote||'',
+        ...(t.metadata&&t.metadata.kind===FOLLOWUP_KIND?{seguimiento_propio:true,cuando:t.metadata.due_local||t.metadata.due_at}:{})})),
     memorias_explicitas:(memQ.data||[]).map(m=>({tipo:m.kind,tema:m.subject||undefined,contenido:clip(m.content,400)}))
   };
 }
@@ -133,7 +143,7 @@ const nonEmpty=v=>String(v||'').trim();
 const day=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):null;
 
 // Applies one night's result. Pages are versioned (last 3 kept) so nothing is lost.
-export async function applyDream(sb,userId,value,now,{log=()=>{}}={}){
+export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],reviewDate=beforeToday(now),transcript=[]}={}){
   const at=iso(now),out={paginas:[],hipotesis:0,hilos:[],correcciones:0};
   for(const p of (value&&value.paginas||[]).slice(0,LIMITS.pages)){
     const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?'Gari':p&&p.tipo==='relacion'?'Gari e Isabella':p&&p.tipo==='isabella'?'Isabella':'');
@@ -164,29 +174,43 @@ export async function applyDream(sb,userId,value,now,{log=()=>{}}={}){
   for(const h of (value&&value.hipotesis||[]).slice(0,LIMITS.hypotheses)){
     const claim=clip(nonEmpty(h&&h.afirmacion),500);
     if(!claim||!CLAIM_TYPES.includes(h.tipo)||known.has(normalizeName(claim)))continue;
+    const episodes=h.tipo==='pattern'?(h.episodios||[]).filter(e=>e.cita?.trim()&&transcript.some(m=>
+      m.autor==='Gari'&&m.cuando.slice(0,10)===e.fecha&&m.texto.includes(e.cita))).slice(0,4):[];
+    if(h.tipo==='pattern'&&new Set(episodes.map(e=>e.fecha)).size<2)continue;
     const r=await sb.from('isabella_model_claims').insert({user_id:userId,claim_type:h.tipo,claim,status:'hypothesis',confidence:0.55,source_type:'observed',
-      evidence:[{source:'isabella_dream',quote:clip(nonEmpty(h.cita),300),date:day(h.fecha),at}],metadata:{source:'isabella_dream'}});
+      evidence:[{source:'isabella_dream',quote:clip(nonEmpty(h.cita),300),date:day(h.fecha),at},...episodes.map(e=>({source:'isabella_dream',quote:clip(e.cita,200),date:e.fecha}))],metadata:{source:'isabella_dream'}});
     if(r.error){log('dream_claim_failed',r.error.message);continue}
     known.add(normalizeName(claim));out.hipotesis++;
   }
   // Threads expire; at most a few stay open.
   const open=await sb.from('isabella_return_queue').select('id,title,metadata').eq('user_id',userId).eq('kind','conversation_thread').eq('status','ready').limit(50);
   if(open.error)throw open.error;
-  const stamp=now.getTime(),alive=[];
+  // Her own follow-ups from the chat (point 4f) are deduplicated against but never use up the night's slots.
+  const stamp=now.getTime(),alive=[],own=[];
   for(const t of open.data||[]){
     if(t.metadata&&t.metadata.expires_at&&Date.parse(t.metadata.expires_at)<stamp){
       const r=await sb.from('isabella_return_queue').update({status:'dismissed',metadata:{...t.metadata,expired:true},updated_at:at}).eq('id',t.id).eq('user_id',userId);
       if(r.error)throw r.error;
-    }else alive.push(normalizeName(t.title));
+    }else (t.metadata&&t.metadata.kind===FOLLOWUP_KIND?own:alive).push(normalizeName(t.title));
   }
+  const taken=n=>alive.includes(n)||own.includes(n);
   for(const h of (value&&value.hilos||[]).slice(0,LIMITS.threads)){
     const title=clip(nonEmpty(h&&h.titulo),200);
-    if(!title||alive.includes(normalizeName(title))||alive.length>=LIMITS.openThreads)continue;
+    if(!title||taken(normalizeName(title))||alive.length>=LIMITS.openThreads)continue;
     const days=Math.min(14,Math.max(3,Number(h.dias_vigencia)||7));
     const r=await sb.from('isabella_return_queue').insert({user_id:userId,kind:'conversation_thread',title,reason:clip(nonEmpty(h.por_que),500)||title,status:'ready',
       metadata:{quote:clip(nonEmpty(h.cita),220),quote_date:day(h.fecha_cita),expires_at:iso(stamp+days*864e5),source:'isabella_dream'}});
     if(r.error)throw r.error;
     alive.push(normalizeName(title));out.hilos.push(title);
+  }
+  for(const follow of (value?.seguimientos||[]).slice(0,2)){
+    const event=events.find(e=>e.id===follow.evento);
+    if(!event||!event.titulo||alive.length>=LIMITS.openThreads||taken(normalizeName(event.titulo)))continue;
+    const expires=new Date(Date.parse(reviewDate+'T23:59:59Z')+2*864e5).toISOString();
+    const result=await sb.from('isabella_return_queue').insert({user_id:userId,kind:'conversation_thread',status:'ready',title:event.titulo,
+      reason:'Preguntar cómo fue si viene al caso.',metadata:{kind:'seguimiento',event_id:event.id,quote_date:reviewDate,expires_at:expires,source:'isabella_dream'}});
+    if(result.error)throw result.error;
+    alive.push(normalizeName(event.titulo));out.hilos.push(event.titulo);
   }
   out.correcciones=(value&&value.correcciones||[]).length;
   return out;
@@ -215,38 +239,67 @@ export function dreamCaller(apiKey,model=DREAM_MODEL,fetchImpl=fetch){
 }
 
 // One pass: for each owner with an Isabella chat, read what is new and consolidate it.
-export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_MODEL,log=()=>{}}){
+// The night's window when the heartbeat (pg_cron, every 15 min) starts the dream: 02:00–06:00 local,
+// before the 07:45 brief. GitHub's scheduled workflow ran hours late (08.11.2026: 02:47 → 08:59).
+export const DREAM_NIGHT={firstHour:2,lastHour:6,attempts:3,passes:6,runningMinutes:10};
+const hourIn=(date,tz=TZ)=>Number(new Intl.DateTimeFormat('en-GB',{timeZone:tz,hour:'2-digit',hourCycle:'h23'}).format(date));
+
+/** Whether tonight's pass should run now. Pure. A pass the runtime killed counts as an attempt, so a
+ * failing night stops after a few tries instead of calling the model every 15 minutes. */
+export function dreamDue(state,now=new Date(),tz=TZ){
+  const h=hourIn(now,tz);
+  if(h<DREAM_NIGHT.firstHour||h>=DREAM_NIGHT.lastHour)return {go:false,reason:'outside_night'};
+  const day=localDay(now,tz),n=state&&state.nightly&&state.nightly.day===day?state.nightly:{day};
+  if(n.done&&!state.more)return {go:false,reason:'done_tonight'};
+  if(Number(n.attempts||0)>=DREAM_NIGHT.attempts||Number(n.passes||0)>=DREAM_NIGHT.passes)return {go:false,reason:'night_budget'};
+  if(n.running_at&&now.getTime()-Date.parse(n.running_at)<DREAM_NIGHT.runningMinutes*60000)return {go:false,reason:'running'};
+  return {go:true,reason:'due',nightly:{...n,attempts:Number(n.attempts||0)+1,passes:Number(n.passes||0)+1,running_at:iso(now)}};
+}
+
+export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_MODEL,log=()=>{},due=false}){
   const at=iso(now);
+  if(due&&!dreamDue({},now).go)return {ok:true,more:false,users:[],skipped:'outside_night'};
   const owners=await sb.from('conversations').select('user_id').eq('app_scope','isabella').limit(100);
   if(owners.error)throw owners.error;
   const users=[...new Set((owners.data||[]).map(r=>r.user_id).filter(Boolean))];
   const report=[];
   for(const userId of users){
     const started=Date.now();
-    const state=await readDreamState(sb,userId);
+    let state=await readDreamState(sb,userId);
+    // Heartbeat path: one pass per call, tracked per night; the manual workflow runs regardless.
+    const night=due?dreamDue(state,now):null;
+    if(night&&!night.go){report.push({status:night.reason});continue}
+    if(night){state={...state,nightly:night.nightly};await writeDreamState(sb,userId,state,at)}
+    const settled=more=>night?{more,nightly:{...state.nightly,attempts:0,running_at:null,done:!more}}:{more};
     const since=state.last_message_at||iso(now.getTime()-FIRST_RUN_DAYS*864e5);
     try{
       const t=await collectTranscript(sb,userId,since);
-      if(!t.messages.length){
-        await writeDreamState(sb,userId,{...state,last_message_at:t.last_at||state.last_message_at||since,last_run:at,last_status:'nothing_new'},at);
+      const date=beforeToday(now);
+      const events=await reviewedEvents(sb,userId,date);
+      if(!t.messages.length&&(!events.length||state.reviewed_day===date)){
+        await saveTransient(sb,userId,{}, {date,now});
+        await writeDreamState(sb,userId,{...state,...settled(false),last_message_at:t.last_at||state.last_message_at||since,last_run:at,last_status:'nothing_new'},at);
         report.push({status:'nothing_new'});continue;
       }
       const memory=await currentMemory(sb,userId,now);
-      const input={hoy:localDay(now,TZ),ultimo_repaso:String(since).slice(0,10),memoria_actual:memory,transcripcion_nueva:t.messages};
-      const {value,payload}=await callModel(input);
+      const {transcript,quotes}=splitDreamEvidence(t.messages);
+      const input={fecha_repasada:date,eventos_repasados:events,hoy:localDay(now,TZ),ultimo_repaso:String(since).slice(0,10),memoria_actual:memory,transcripcion_nueva:transcript};
+      const {value:raw,payload}=await callModel(input);
+      await saveTransient(sb,userId,raw,{date,now,quotes,transcript});
+      const value=durableDream(raw);
       await recordUsage(sb,userId,payload,model);
-      const applied=await applyDream(sb,userId,value,now,{log});
+      const applied=await applyDream(sb,userId,value,now,{log,events,reviewDate:date,transcript});
       const diario=clip(nonEmpty(value&&value.diario),1200);
       await sb.from('minds_agent_runs').insert({user_id:userId,feature:'isabella_dream',status:'success',route:{model,since,more:t.more},
         metadata:{diario,mensajes:t.messages.length,paginas:applied.paginas,hipotesis:applied.hipotesis,hilos:applied.hilos,
           correcciones:(value&&value.correcciones||[]).slice(0,10)},started_at:new Date(started).toISOString(),completed_at:iso(Date.now()),latency_ms:Date.now()-started});
-      await writeDreamState(sb,userId,{...state,last_message_at:t.last_at,last_run:at,last_status:'ok'},at);
+      await writeDreamState(sb,userId,{...state,...settled(!!t.more),reviewed_day:date,last_message_at:t.last_at||state.last_message_at||since,last_run:at,last_status:'ok'},at);
       report.push({status:'ok',more:t.more,mensajes:t.messages.length,paginas:applied.paginas.length,hipotesis:applied.hipotesis,hilos:applied.hilos.length});
     }catch(e){
       const msg=e instanceof Error?e.message:String(e);log('isabella_dream_failed',msg);
       if(e&&e.payload)await recordUsage(sb,userId,e.payload,model);
       // last_message_at stays, so the same conversation is read again next time.
-      await writeDreamState(sb,userId,{...state,last_run:at,last_status:'error',last_error:clip(msg,200)},at).catch(()=>{});
+      await writeDreamState(sb,userId,{...state,...(night?{nightly:{...state.nightly,running_at:null}}:{}),last_run:at,last_status:'error',last_error:clip(msg,200)},at).catch(()=>{});
       await sb.from('minds_agent_runs').insert({user_id:userId,feature:'isabella_dream',status:'error',route:{model},metadata:{},error:clip(msg,300),
         started_at:new Date(started).toISOString(),completed_at:iso(Date.now()),latency_ms:Date.now()-started}).then(()=>{},()=>{});
       report.push({status:'error'});
@@ -257,15 +310,22 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
 
 // What a chat turn sees of the consolidated memory: a small index of pages and at most two live
 // threads (Anthropic: keep the injected layer small; details stay below and are searched).
-export function consolidatedMemoryView(pages,threads,stamp=Date.now()){
+export function consolidatedMemoryView(pages,threads,stamp=Date.now(),preferences=[]){
   const typeOf=Object.fromEntries(Object.entries(PAGE_TYPES).map(([k,v])=>[v,k]));
   const core=new Set(['gari','relacion','isabella']);
+  const follow=splitFollowUps(threads,stamp);
   return {
+    ...continuityView(preferences,stamp),
     paginas:(pages||[]).filter(e=>typeOf[e.entity_type]&&e.metadata&&e.metadata.page).slice(0,LIMITS.pagesInContext).map(e=>{
       const tipo=typeOf[e.entity_type];
       return {tipo,nombre:e.name,resumen:clip(String(e.metadata.page.resumen||''),core.has(tipo)?700:300)};
     }),
-    hilos:(threads||[]).filter(t=>!(t.metadata&&t.metadata.expires_at&&Date.parse(t.metadata.expires_at)<stamp)).slice(0,2)
-      .map(t=>({id:t.id,titulo:t.title,por_que:t.reason,cita:t.metadata&&t.metadata.quote||'',fecha_cita:t.metadata&&t.metadata.quote_date||null}))
+    // Her own follow-ups (point 4f) that are due come first: she said she would come back to them.
+    // Those not yet due stay out of the openings but she knows them, so she never schedules or announces twice.
+    hilos:[...follow.due,...follow.others.filter(t=>!(t.metadata&&t.metadata.expires_at&&Date.parse(t.metadata.expires_at)<stamp))].slice(0,2)
+      .map(t=>({id:t.id,titulo:t.title,por_que:t.reason,cita:t.metadata&&t.metadata.quote||'',fecha_cita:t.metadata&&t.metadata.quote_date||null,
+        ...(t.metadata&&t.metadata.kind===FOLLOWUP_KIND?{seguimiento_propio:true}:{})})),
+    seguimientos_programados:follow.scheduled.slice(0,FOLLOWUP_LIMITS.open)
+      .map(t=>({id:t.id,sobre:t.title,cuando:t.metadata.due_local||t.metadata.due_at,por_que:t.reason}))
   };
 }

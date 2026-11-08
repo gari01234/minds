@@ -66,6 +66,7 @@ const moments=[
   }],
   ['11 · pregunta personal corta de noche','una respuesta breve y propia; nunca un silencio (paso 3a)',()=>{
     assert.ok(ISABELLA_CORE.includes('Una línea es una respuesta válida'));
+    assert.match(ISABELLA_CORE,/como_esta: retoma sus palabras una vez/);
     assert.ok(ISABELLA_CORE.includes('Sí puedes tener perspectiva, gustos y reacciones propias'));
   }],
   ['12 · «¿qué recuerdas de…?»','responder con lo que sabe (la voz llega en el paso 9)',()=>{

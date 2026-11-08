@@ -12,7 +12,7 @@ test("semantic repair is only triggered after a grounded claim fails validation"
 });
 test("semantic repair does not bypass review, receipts or semantic source constraints",()=>{
  assert.match(s,/verifyCalendarSemanticProposal\(rawProposal,args\?\.temporal_grounding/);
- assert.match(s,/exactOwnerExcerpt\(sourceText,quoted\)/);
+ assert.match(s,/ownerTexts\.some\(t=>exactOwnerExcerpt\(t,quoted\)\)/);
  assert.match(s,/recordShadowDecision\(req/);
  assert.match(s,/toolProposals\.push\(proposalForReview\)/);
  assert.match(s,/create_event:"confirm"/);

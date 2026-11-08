@@ -48,7 +48,7 @@ function messageRenderKey(messages){
     (m.sources||[]).map(s=>[s.url,s.title]),
     !!m.metadata?.incomplete_response,
     (m.metadata?.review_proposals||[]).map(p=>p.request_id),
-    m.metadata?.review_state||'',
+    m.metadata?.review_state||'',m.metadata?.direct_undo?.status||'',m.metadata?.direct_undo?.expires_at||'',
     (m.quickReplies||[]).map(q=>[q.label,q.value])
   ]));
 }
@@ -1306,7 +1306,7 @@ function confirmationText(items,now=new Date()){
   const isCreate=p=>(p.action||'create')==='create';
   if(list.length===1){
     const p=list[0],t=title(p),w=when(p);
-    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
+    if(isCreate(p))return p.kind==='event'?'«'+t+'» está en tu calendario'+(w?' '+w:'')+(p.duration_defaulted?' · 1 h · editable':'')+'.':'«'+t+'» está en tus tareas'+(w?' para '+w:'')+'.';
     if(t)return w?'«'+t+'» queda para '+w+'.':'Actualizado: «'+t+'».';
     return w?'La tarea queda para '+w+'.':'Actualizado.';
   }
@@ -1320,6 +1320,12 @@ function confirmationText(items,now=new Date()){
   return 'Guardados '+list.length+' cambios.';
 }
 
+function directUndoEligible(message,index,now=Date.now()){
+  const u=message?.metadata?.direct_undo;
+  return message?.role==='assistant'&&u?.status==='ready'&&
+    Array.isArray(u.items)&&u.items.length>=1&&u.items.length<=20&&
+    Date.parse(u.expires_at)>now&&!state.messages.slice(index+1).some(m=>m.role==='user');
+}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
@@ -1330,19 +1336,31 @@ function renderMessages(forceBottom=false){
     return;
   }
   const snapshot=captureAssistantScroll();
-  box.innerHTML=state.messages.map(m=>{
+  box.innerHTML=state.messages.map((m,index)=>{
+    const directUndo=directUndoEligible(m,index);
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
     const artifactSurface=artifactSurfaceGroups(m.artifacts);
     const displayText=resolvedReviewText(m)??cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
     const event=isEventMessage(m);
-    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
+    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${directUndo?`<div class="message-review-action"><button type="button" class="secondary" data-direct-undo-message="${esc(m.id||'')}">Deshacer</button></div>`:''}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
       !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">Revisar propuesta pendiente</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
+  document.querySelectorAll('[data-direct-undo-message]').forEach(b=>{
+    const id=b.dataset.directUndoMessage;
+    b.onclick=()=>void undoDirectCalendarMessage(id);
+    const expires=state.messages.find(m=>m.id===id)?.metadata?.direct_undo?.expires_at;
+    setTimeout(()=>{
+      const current=state.messages.find(m=>m.id===id);
+      if(current?.metadata?.direct_undo?.status==='ready'&&Date.parse(expires)<=Date.now()){
+        current.metadata.direct_undo=null;save();renderMessages();
+      }
+    },Math.max(0,Date.parse(expires)-Date.now())+1);
+  });
   document.querySelectorAll('[data-review-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.reviewMessage);
     const items=Array.isArray(m?.metadata?.review_proposals)?m.metadata.review_proposals:[];
@@ -1713,7 +1731,7 @@ function proposalEditor(p,onDone){
   const cats=state.categories.map(x=>`<option value="${esc(x.name)}" ${x.name===categoryName?'selected':''}>${esc(x.name)}</option>`).join('');
   const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${esc(x.name)}" ${x.name===projectName?'selected':''}>${esc(x.name)}</option>`).join('');
   const specific=p.kind==='event'
-    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>`
+    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>${p.duration_defaulted?'<div class="small">1 h · editable (duración predeterminada)</div>':''}`
     :`<label>Recordatorio<input id="proposalReminder" type="time" value="${esc(reminder||'')}"></label>`;
   modal('Revisar antes de confirmar',`<div class="form proposal-editor">
     <label>Nombre<input id="proposalTitle" value="${esc(title)}"></label>
@@ -2204,8 +2222,69 @@ async function applyDirectCalendarCreate(p){
   return {receipt_id:receipt.receipt_id,request_id:p.request_id,
     kind:p.kind,title:row.title,action:'create',
     date:p.kind==='task'?(row.due_date||null):new Date(row.starts_at).toLocaleDateString('sv-SE'),
+    duration_defaulted:p.kind==='event'&&p.duration_defaulted===true,
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
-    entity_client_key:receipt.entity_client_key};
+    entity_client_key:receipt.entity_client_key,entity_id:receipt.entity_id};
+}
+// This is a narrow reversal of an owner-quoted create, not a general delete.
+async function undoDirectCalendarMessage(messageId){
+  const message=state.messages.find(m=>m.id===messageId),idx=state.messages.indexOf(message);
+  if(idx<0||!directUndoEligible(message,idx))return;
+  const undo=message.metadata.direct_undo;
+  const requests=undo.items.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id}));
+  if(!requests.length||requests.some(x=>!x.request_id||!x.receipt_id))return;
+  undo.status='processing';save();renderMessages();
+  const sb=window.MINDS_SUPABASE;
+  try{
+    if(!sb)throw new Error('MINDS no está conectado.');
+    const {data:sessionData,error:authError}=await sb.auth.getSession();
+    const owner=sessionData?.session?.user?.id;
+    if(authError||!owner)throw new Error('Tu sesión no está autenticada.');
+    // One atomic server transaction: either the entire original batch reverses
+    // or none does. Never retry on an ambiguous network error.
+    const {data:result,error:undoError}=await sb.rpc('minds_undo_direct_calendar_batch_v01',{p_items:requests});
+    if(undoError||result?.status!=='undone'||result?.count!==requests.length||
+       !Array.isArray(result.receipts)||result.receipts.length!==requests.length)
+      throw new Error(undoError?.message||'No tengo un comprobante completo de Deshacer.');
+    for(let i=0;i<undo.items.length;i++){
+      const original=undo.items[i],receipt=result.receipts[i];
+      if(receipt?.status!=='undone'||!receipt.undo_receipt_id||
+         receipt.request_id!==original.request_id||
+         receipt.original_receipt_id!==original.receipt_id||
+         receipt.entity_client_key!==original.entity_client_key||
+         receipt.entity_kind!==original.kind)
+        throw new Error('El comprobante no coincide con la creación original.');
+    }
+    // A write receipt is necessary but not sufficient. Verify canonical state
+    // for each item before showing "Deshecho".
+    for(const original of undo.items){
+      const table=original.kind==='task'?'isabella_tasks':'isabella_events';
+      const {data:row,error:readError}=await sb.from(table)
+        .select(original.kind==='task'?'client_key,archived_at':'client_key')
+        .eq('user_id',owner).eq('client_key',original.entity_client_key).maybeSingle();
+      if(readError||(original.kind==='task'?!row?.archived_at:!!row))
+        throw new Error('No pude comprobar la reversión en la fuente de verdad.');
+    }
+    for(const original of undo.items){
+      if(original.kind==='task'){
+        const task=state.tasks.find(t=>t.id===original.entity_client_key||t.clientKey===original.entity_client_key);
+        if(task)task.archivedAt=new Date().toISOString();
+      }else{
+        state.events=state.events.filter(e=>e.id!==original.entity_client_key&&e.clientKey!==original.entity_client_key);
+      }
+    }
+    undo.status='undone';message.metadata.direct_undo=null;
+    save();renderCalendar();renderMessages();
+    if(typeof window.ISABELLA_SYNC_PULL_NOW==='function'){
+      try{await window.ISABELLA_SYNC_PULL_NOW()}catch{}
+    }
+    sayEvent('Deshecho.');
+  }catch(e){
+    // The transaction may have committed before the network was lost.
+    // Disable replay; direct deletions require a new reviewed operation.
+    message.metadata.direct_undo=null;save();renderMessages();
+    sayEvent('No pude confirmar Deshacer. Comprueba tus tareas y calendario antes de volver a intentarlo.');
+  }
 }
 function directCreationBatch(result,integrity){
   const direct=result?.direct_authorization;
@@ -2402,6 +2481,8 @@ async function syncDurableChatJobs(){
 let voiceTurnEpoch=0;
 async function handle(text,attachments=[],replyTo=null,options={}){
   const voiceTurn=++voiceTurnEpoch;
+  // A new owner message closes the previous ten-minute Undo option.
+  for(const m of state.messages)if(m.metadata?.direct_undo)m.metadata.direct_undo=null;
   window.ISABELLA_VOICE_OUTPUT?.stop();
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
@@ -2462,10 +2543,14 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         const report=failed.length
           ?(text?text+' ':'')+'No pude guardar '+naturalList(missing)+', así que '+(failed.length===1?'no lo doy por hecho':'no los doy por hechos')+'. Puedes revisarlo abajo.'
           :text;
+        const undoItems=committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
+          kind:x.kind,entity_client_key:x.entity_client_key}));
+        const directUndo=undoItems.length?{
+          status:'ready',expires_at:new Date(Date.now()+10*60*1000).toISOString(),items:undoItems
+        }:null;
         sayEvent(report,{metadata:{exposure_scope:exposure,
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
-          action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
-            kind:x.kind,entity_client_key:x.entity_client_key})),
+          action_receipts:undoItems,direct_undo:directUndo,
           review_proposals:failed.map(x=>x.proposal)}});
         save();
         return;
@@ -4664,16 +4749,21 @@ const DREAM_PAGE_LABELS={gari:'Tú',person:'Persona',topic:'Tema',relationship:'
 function dreamSectionHtml(dream){
   const diary=(dream.runs||[]).filter(r=>r?.metadata?.diario).slice(0,3).map(r=>`<div class="memory-row"><div class="row-main"><div>${esc(r.metadata.diario)}</div><div class="small">${esc(new Date(r.started_at).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}))}</div></div></div>`).join('')||'<div class="small">Todavía no hay un repaso nocturno.</div>';
   const pages=(dream.pages||[]).map(e=>`<div class="memory-row"><div class="row-main"><div><strong>${esc(e.name)}</strong> · <span class="small">${esc(DREAM_PAGE_LABELS[e.entity_type]||e.entity_type)}</span></div><div class="small">${esc(e.metadata?.page?.resumen||'')}</div></div></div>`).join('')||'<div class="small">Aún nada.</div>';
-  const threads=(dream.threads||[]).map(t=>`<div class="memory-row"><div class="row-main"><div>${esc(t.title)}</div>${t.metadata?.quote?`<div class="small">«${esc(t.metadata.quote)}»</div>`:''}</div><button type="button" class="ghost small" data-dream-thread-dismiss="${esc(t.id)}">Descartar</button></div>`).join('')||'<div class="small">Ninguno ahora.</div>';
-  return `<div class="small section-label memory-section-title">Repaso de la noche</div>${diary}<div class="small section-label memory-section-title">Lo que Isabella entiende</div>${pages}<div class="small section-label memory-section-title">Hilos que quiere retomar</div>${threads}`;
+  // Her own follow-ups (point 4f) say when she will come back; «Cancelar» closes them like any thread.
+  const when=iso=>{const d=new Date(iso);return isNaN(d)?'':d.toLocaleString('es-ES',{weekday:'long',day:'numeric',month:'long',hour:'2-digit',minute:'2-digit'})};
+  const threads=(dream.threads||[]).map(t=>{const own=t.metadata?.kind==='seguimiento_propio';return `<div class="memory-row"><div class="row-main"><div>${esc(t.title)}</div>${own?`<div class="small">Volverá a esto: ${esc(when(t.metadata.due_at))}</div>`:t.metadata?.quote?`<div class="small">«${esc(t.metadata.quote)}»</div>`:''}</div><button type="button" class="ghost small" data-dream-thread-dismiss="${esc(t.id)}">${own?'Cancelar':'Descartar'}</button></div>`}).join('')||'<div class="small">Ninguno ahora.</div>';
+  const temporary=(dream.temporary||[]).map(x=>`<div class="memory-row"><div class="row-main">«${esc(x.cita)}»<div class="small">${esc(x.fecha)}</div></div></div>`).join('');
+  return `${temporary?'<div class="small section-label memory-section-title">Cómo me he sentido</div>'+temporary+'<button type="button" data-dream-clear-state>Borrar estas notas</button>':''}<div class="small section-label memory-section-title">Repaso de la noche</div>${diary}<div class="small section-label memory-section-title">Lo que Isabella entiende</div>${pages}<div class="small section-label memory-section-title">Hilos que quiere retomar</div>${threads}`;
 }
 async function loadDreamSection(sb){
-  const [runs,pages,threads]=await Promise.all([
+  // Order matches the queries below (review of PR #311).
+  const [temporary,runs,pages,threads]=await Promise.all([
+    sb.from('isabella_preferences').select('value').eq('preference_key','isabella_estado').maybeSingle(),
     sb.from('minds_agent_runs').select('started_at,metadata').eq('feature','isabella_dream').eq('status','success').order('started_at',{ascending:false}).limit(3),
     sb.from('isabella_entities').select('entity_type,name,metadata').not('metadata->page','is',null).is('metadata->>forgotten_at',null).order('updated_at',{ascending:false}).limit(30),
-    sb.from('isabella_return_queue').select('id,title,metadata').eq('kind','conversation_thread').eq('status','ready').order('created_at',{ascending:false}).limit(6)
+    sb.from('isabella_return_queue').select('id,title,metadata').eq('kind','conversation_thread').eq('status','ready').order('created_at',{ascending:false}).limit(10)
   ]);
-  return {runs:runs.data||[],pages:pages.data||[],threads:threads.data||[]};
+  return {temporary:(temporary.data?.value?.items||[]).filter(x=>x.cita&&Date.parse(x.expires_at)>Date.now()),runs:runs.data||[],pages:pages.data||[],threads:threads.data||[]};
 }
 async function memoryPanel(){
   const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
@@ -4693,6 +4783,18 @@ async function memoryPanel(){
   const operatingHtml=`<div class="small">Isabella puede observar patrones operativos, pero ninguna inferencia cambia cómo trabaja contigo hasta que la confirmes.</div><div class="small section-label">Reglas confirmadas</div>${acceptedHtml}<div class="small section-label memory-section-title">Por revisar</div>${proposedHtml}<div class="small">Observaciones disponibles: ${Number(operating.observation_count||0)}</div>`;
   const memoryHtml=items.length?items.map((m,i)=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';const id=typeof m==='object'?(m.id||String(i)):String(i);return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
   modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}${dreamSectionHtml(dream)}`);
+  const clearState=document.querySelector('[data-dream-clear-state]');
+  if(clearState)clearState.onclick=async()=>{
+    clearState.disabled=true;
+    try{
+      const sb=window.MINDS_SUPABASE,{data:{user}}=await sb.auth.getUser();
+      if(!user)throw new Error();
+      const result=await sb.from('isabella_preferences').update({value:{items:[],forgot_before:Date.now()},updated_at:new Date().toISOString()})
+        .eq('user_id',user.id).eq('preference_key','isabella_estado').select('updated_at').single();
+      if(result.error||!result.data)throw new Error();
+      await memoryPanel();
+    }catch{clearState.disabled=false;clearState.textContent='No pude borrarlas. Reintentar';}
+  };
   document.querySelectorAll('[data-dream-thread-dismiss]').forEach(b=>b.onclick=async()=>{
     try{const sb=window.MINDS_SUPABASE;await sb.from('isabella_return_queue').update({status:'dismissed',updated_at:new Date().toISOString()}).eq('id',b.dataset.dreamThreadDismiss);b.closest('.memory-row')?.remove()}catch{}
   });

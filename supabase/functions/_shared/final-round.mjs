@@ -60,7 +60,9 @@ export function finalRoundResponse({execute,save,headers,keepAlive}) {
         try {
           const response = await execute(delta=>{if(delta)send('delta',{text:delta})});
           const terminal = {status:response.status,body:await response.json()};
-          await save(terminal);
+          // The turn already ran and the server already wrote its answer: a failed copy for recovery
+          // must not turn a delivered result into an error (review of PR #310).
+          try { await save(terminal); } catch { /* recovery falls back to the conversation itself */ }
           send(response.ok?'final':'error', terminal.body);
         } catch {
           send('error',{error:'final_round_unavailable',message:'No pude verificar el resultado. Comprueba el chat antes de repetir la petición.'});

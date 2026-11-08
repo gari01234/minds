@@ -20,3 +20,13 @@ El historial se precarga para un solo ámbito. Cuando el clasificador resuelve o
 La prueba usa `promptComponentSizes()` y un reloj simulado. Los resultados cuantifican el solapamiento posible en la fixture. La latencia de Window depende del dispositivo, de las fuentes y del proveedor. Los cambios de transporte no añaden instrucciones al modelo.
 
 Pruebas en `tests/isabella-final-round.test.mjs`, junto con los contratos de ámbitos, transporte y tarjetas existentes. Tras revisión, aplicar manualmente `20261108123000_isabella_final_round_receipt.sql`, desplegar `isabella-chat` y publicar la PWA. Para volver atrás, restaurar la PWA y la función anteriores. La columna opcional puede permanecer.
+
+## Revisión (Claude, 08.11.2026)
+
+Cambios hechos en la revisión:
+
+- **Solo se transmite la conversación.** Si el turno prepara un cambio (una propuesta o una creación directa), deja de transmitirse texto, para que antes de la tarjeta no aparezca un borrador del tipo «ya lo agregué». Lo hace `emitText`.
+- **Las negativas antes de ejecutar llevan `execution_started:false`.** Son el modo no admitido, la sesión ausente y el comprobante no disponible. Con eso, la app usa la vía JSON con el mismo identificador. Antes de aplicar la migración, la reclamación falla con otro código y la app sigue igual que hoy.
+- **Un fallo al guardar la copia de recuperación ya no convierte en error un turno que sí terminó.** La respuesta ya está escrita por el servidor (paso 3a).
+- **Integrado con lo publicado:** los tiempos por fase siguen en `executeTurn`. Las lecturas anticipadas alimentan también el núcleo de Work (`early.memory`). Se conservan las herramientas de seguimientos y `voice_delegation`.
+- **Despliegue:** isabella-chat se despliega después de aplicar `20261108123000_isabella_final_round_receipt.sql` con el workflow «Apply a Supabase migration».

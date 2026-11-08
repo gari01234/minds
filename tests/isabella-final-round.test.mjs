@@ -42,3 +42,34 @@ test('parallel scheduling uses the same model inputs and overlaps independent re
  assert.equal(await run(false),150);assert.equal(await run(true),120);
  console.log('fixture',JSON.stringify(a));
 });
+
+// Review of PR #310 (Claude, 08.11.2026).
+const server=readFileSync(new URL('../supabase/functions/isabella-chat/index.ts',import.meta.url),'utf8');
+test('A failed recovery copy never turns a delivered turn into an error',async()=>{
+ const canonical={reply:'Aquí sigo.',outcome:{outcome:'answered'}};
+ const response=finalRoundResponse({headers:{},execute:async emit=>{emit('Aquí');return Response.json(canonical)},save:async()=>{throw new Error('db down')}});
+ const deltas=[];
+ assert.deepEqual(JSON.parse(JSON.stringify(await client.read(response,d=>deltas.push(d)))),canonical);
+ assert.deepEqual(deltas,['Aquí']);
+});
+test('Without stream_mode nothing changes; refusals before running let the app take the JSON path',()=>{
+ assert.match(server,/if\(body\?\.stream_mode!=="final_round"\)return executeTurn\(req,body\);/);
+ assert.match(server,/json\(\{error:"unsupported_stream_mode",execution_started:false\},400\)/);
+ assert.match(server,/json\(\{error:"stream_auth_required",execution_started:false\},401\)/);
+ // Before the migration the claim fails with another code than 23505: same fallback, nothing ran.
+ assert.match(server,/if\(claim\.error\.code!=="23505"\)return json\(\{error:"stream_receipt_unavailable",execution_started:false\},503\);/);
+});
+test('Streaming shows plain conversation only; a prepared change never flashes a draft',()=>{
+ assert.match(server,/const emitText=\(delta:string\)=>\{if\(emit&&!toolProposals\.length&&!directAuthorizedIds\.length\)emit\(delta\)\};/);
+ assert.match(server,/readModelRound\(response,emitText,round===budget\.rounds\)/);
+ assert.match(server,/readModelRound\(retry,emitText,true\)/);
+ assert.doesNotMatch(server,/readModelRound\([a-z]+,emit,/);
+});
+test('The streamed turn is the same turn: server copy, empty-reply retry, voice, timings and follow-ups stay',()=>{
+ const turn=server.slice(server.indexOf('async function executeTurn('));
+ for(const must of ['persistServerAssistantTurn(req,canonicalAssistantRow(','// Step 3a: a completed turn without any text','voiceDelegation',
+   'phaseRoundsMs.push(','phase_ms','FOLLOWUP_TOOLS','early.memory','await early.agenda'])assert.ok(turn.includes(must),must);
+ // The read receipt is merged by key and never overwrites the final_round copy.
+ const save=server.slice(server.indexOf('async function saveBrowserChatStreamReceipt'),server.indexOf('// Step 3a: the server writes'));
+ assert.match(save,/onConflict:"user_id,request_id"/);assert.doesNotMatch(save,/final_delivery/);
+});

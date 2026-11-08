@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
-import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch}
+import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch}
  from "../supabase/functions/_shared/direct-calendar-contract.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const server=read("supabase/functions/isabella-chat/index.ts");
@@ -23,6 +23,16 @@ test("a missing or inferred event duration cannot enter direct mode",()=>{
  assert.equal(exactFieldExcerpt(source,"60 minutos"),false);
  assert.equal(exactFieldExcerpt(source,""),false);
 });
+test("reads do not authorize mutations; exact current title and default duration remain bounded",()=>{
+ assert.equal(exactOwnerTitle("Agrega tarea: Revisar el informe.", "revisar el informe"),true);
+ assert.equal(exactOwnerTitle("Agrega tarea: Revisar el informe.", "Enviar aviso"),false);
+ assert.equal(directToolHistorySafe(["search_calendar","search_memory","create_task"],2),true);
+ assert.equal(directToolHistorySafe(["search_work","create_task"],1),false);
+ assert.equal(directToolHistorySafe(["create_task","search_memory","create_task"],1),false);
+ assert.equal(authorizedDirectBatch([proposal],[uuid],["search_calendar","create_task"])?.mode,"direct_create_v1");
+ assert.equal(withDefaultEventDuration({kind:"event",action:"create",time:"10:00",duration_minutes:null}).duration_defaulted,true);
+ assert.equal(withDefaultEventDuration({kind:"event",action:"create",time:"10:00",duration_minutes:45}).duration_defaulted,false);
+});
 test("only explicit create-only fully registered batches can execute",()=>{
  assert.deepEqual(authorizedDirectBatch([proposal],[uuid],["create_task"]),{
    version:1,mode:"direct_create_v1",request_ids:[uuid]});
@@ -35,11 +45,15 @@ test("only explicit create-only fully registered batches can execute",()=>{
  ])assert.equal(authorizedDirectBatch(ps,ids,tools),null);
 });
 test("server does not infer permission from shadow scores, memory or model prose",()=>{
- assert.match(server,/exactOwnerExcerpt\(sourceText,quoted\)/);
+ assert.match(server,/ownerTexts\.some\(t=>exactOwnerExcerpt\(t,quoted\)\)/);
+  assert.match(server,/const ownerTexts=directOwnerTexts\(verifiedContinuation,effectiveMessage\);/);
  assert.match(server,/minds_calendar_execution_preferences/);
  assert.match(server,/pref\?\.data\?\.create_mode==="direct"/);
- assert.match(server,/!sourceTainted&&round===0/);
- assert.match(server,/direct_authorization_turn_id:verifiedContinuation\?\.source_turn_id\|\|clientMessageId/);
+ assert.match(server,/directHistorySafe/);
+ assert.match(server,/ownerTexts\.some\(t=>exactOwnerTitle\(t,proposal\.title\)\)/);
+ assert.match(server,/direct_source_turn_id:verifiedContinuation\.source_turn_id/);
+ assert.match(server,/direct_owner_source_tainted:/);
+ assert.match(server,/direct_authorization_turn_id:clientMessageId/);
  assert.match(server,/direct_authorization:directAuthorization/);
  assert.match(server,/authorizedDirectBatch\(toolProposals,directAuthorizedIds,usedTools\)/);
  assert.match(server,/direct_user_excerpt/);
@@ -59,7 +73,7 @@ test("direct execution can only follow valid typed candidates and canonical read
  assert.match(app,/No existe una creación autorizada y verificable/);
  assert.match(app,/La lectura canónica no coincide con el recibo/);
  assert.match(app,/await applyDirectCalendarCreate\(p\)/);
- assert.match(app,/action_receipts:committed\.map/);
+ assert.match(app,/const undoItems=committed\.map/); assert.match(app,/action_receipts:undoItems/);
 });
 test("database enforces owner preference, canonical quote, candidate and receipt",()=>{
  for(const regexp of [

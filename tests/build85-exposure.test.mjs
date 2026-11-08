@@ -122,7 +122,7 @@ test('Build 85.3 durable memory candidates preserve current-user evidence and ca
 
 test('Build 85.3 source taint is turn-local and blocks autobiographical promotion after external tools',()=>{
   assert.ok(chat.includes('let sourceTainted=false'));
-  assert.ok(chat.includes('if((payload.output||[]).some((x:any)=>x.type==="web_search_call"))sourceTainted=true'));
+  assert.ok(chat.includes('if((payload.output||[]).some((x:any)=>x.type==="web_search_call")){sourceTainted=true;providerWebSeen=true;}'));
   assert.ok(chat.includes('if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name))sourceTainted=true'));
   assert.ok(chat.includes('currentUserEvidenceGate(String(call.name||""),args,effectiveMessage,background,sourceTainted)'));
   assert.ok(chat.includes('status:"blocked_by_memory_provenance"'));

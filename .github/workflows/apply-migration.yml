@@ -1,0 +1,65 @@
+name: Apply a Supabase migration
+# Manual on purpose, like the deploy: merging a migration never changes the database by itself.
+# Gari decided on 08.11.2026 that Claude may apply reviewed migrations this way (blocks 2 and 3 of
+# Isabella phase 2). It applies one file that is already on main, through the Management API, so it is
+# recorded in the migration history. Destructive statements are refused here; those need Gari's
+# explicit OK for that specific change and are applied by hand.
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: 'File name in supabase/migrations (e.g. 20261108101000_isabella_direct_calendar_safe_undo_v02.sql)'
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: supabase-migration
+  cancel-in-progress: false
+jobs:
+  apply:
+    if: github.repository == 'gari01234/minds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: supabase
+    timeout-minutes: 10
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJECT_REF: lodexwyyynlarkqgkyhy
+      MIGRATION: ${{ inputs.migration }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check the file and refuse destructive statements
+        run: |
+          set -euo pipefail
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then echo "::error::SUPABASE_ACCESS_TOKEN is missing in the 'supabase' environment."; exit 1; fi
+          if ! [[ "$MIGRATION" =~ ^[0-9]{14}_[a-z0-9_]+\.sql$ ]] || [ ! -f "supabase/migrations/$MIGRATION" ]; then
+            echo "::error::Unknown migration: $MIGRATION"; exit 1
+          fi
+          f="supabase/migrations/$MIGRATION"
+          # Schema-level destruction anywhere, and data changes as top-level statements, are refused.
+          if grep -Eiq '\b(drop[[:space:]]+(table|schema|policy|column|database|view|materialized|trigger|index|function|type|extension)|truncate|alter[[:space:]]+table[^;]*[[:space:]]drop)\b' "$f"; then
+            echo "::error::$MIGRATION contains a destructive statement; it needs Gari's explicit OK and is applied by hand."; exit 1
+          fi
+          if grep -Eiq '^(delete|update|insert)[[:space:]]' "$f"; then
+            echo "::error::$MIGRATION changes data at the top level; it is applied by hand after Gari's OK."; exit 1
+          fi
+          echo "lines=$(wc -l < "$f")"
+      - name: Apply through the Management API
+        run: |
+          set -euo pipefail
+          name="${MIGRATION%.sql}"; name="${name#*_}"
+          api="https://api.supabase.com/v1/projects/$PROJECT_REF/database/migrations"
+          auth=(-H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN")
+          # Already applied under the same name: nothing to do.
+          code=$(curl -sS -o history.json -w '%{http_code}' "${auth[@]}" "$api")
+          if [ "$code" = "200" ] && jq -e --arg n "$name" 'any(.[]?; .name==$n)' history.json >/dev/null; then
+            echo "already_applied"; exit 0
+          fi
+          jq -n --rawfile q "supabase/migrations/$MIGRATION" --arg n "$name" '{query:$q,name:$n}' > body.json
+          code=$(curl -sS -o result.json -w '%{http_code}' -X POST "${auth[@]}" -H 'Content-Type: application/json' \
+            -H "Idempotency-Key: $MIGRATION" --data @body.json "$api")
+          echo "status=$code"
+          # Only the error message, never the SQL or any data.
+          if [ "$code" != "200" ] && [ "$code" != "201" ]; then jq -r '.message // .error // "failed"' result.json | head -c 400; echo; exit 1; fi
+          echo "applied"
