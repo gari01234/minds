@@ -28,6 +28,7 @@ export async function liveConversation(sb,owner,id,profile='window'){
   return added.data.id;
 }
 const compact=(s,n)=>withinBytes(s,n);
+/** @param {any} data @param {any[]} recent @param {string} [extra] @param {{profile?:string,owner?:string|null}} [options] */
 export function buildVoiceSessionContext(data,recent,extra='',{profile='window',owner=null}={}){
   // UTF-8 bytes upper-bound byte-pair tokens, including emoji. Reserve per-message framing.
   const p=resolveAssistantProfile(profile);
