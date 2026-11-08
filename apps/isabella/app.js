@@ -4665,15 +4665,17 @@ function dreamSectionHtml(dream){
   const diary=(dream.runs||[]).filter(r=>r?.metadata?.diario).slice(0,3).map(r=>`<div class="memory-row"><div class="row-main"><div>${esc(r.metadata.diario)}</div><div class="small">${esc(new Date(r.started_at).toLocaleDateString('es-ES',{weekday:'long',day:'numeric',month:'long'}))}</div></div></div>`).join('')||'<div class="small">Todavía no hay un repaso nocturno.</div>';
   const pages=(dream.pages||[]).map(e=>`<div class="memory-row"><div class="row-main"><div><strong>${esc(e.name)}</strong> · <span class="small">${esc(DREAM_PAGE_LABELS[e.entity_type]||e.entity_type)}</span></div><div class="small">${esc(e.metadata?.page?.resumen||'')}</div></div></div>`).join('')||'<div class="small">Aún nada.</div>';
   const threads=(dream.threads||[]).map(t=>`<div class="memory-row"><div class="row-main"><div>${esc(t.title)}</div>${t.metadata?.quote?`<div class="small">«${esc(t.metadata.quote)}»</div>`:''}</div><button type="button" class="ghost small" data-dream-thread-dismiss="${esc(t.id)}">Descartar</button></div>`).join('')||'<div class="small">Ninguno ahora.</div>';
-  return `<div class="small section-label memory-section-title">Repaso de la noche</div>${diary}<div class="small section-label memory-section-title">Lo que Isabella entiende</div>${pages}<div class="small section-label memory-section-title">Hilos que quiere retomar</div>${threads}`;
+  const temporary=(dream.temporary||[]).map(x=>`<div class="memory-row"><div class="row-main">«${esc(x.cita)}»<div class="small">${esc(x.fecha)}</div></div></div>`).join('');
+  return `${temporary?'<div class="small section-label memory-section-title">Cómo me he sentido</div>'+temporary+'<button type="button" data-dream-clear-state>Borrar estas notas</button>':''}<div class="small section-label memory-section-title">Repaso de la noche</div>${diary}<div class="small section-label memory-section-title">Lo que Isabella entiende</div>${pages}<div class="small section-label memory-section-title">Hilos que quiere retomar</div>${threads}`;
 }
 async function loadDreamSection(sb){
-  const [runs,pages,threads]=await Promise.all([
+  const [runs,pages,threads,temporary]=await Promise.all([
+    sb.from('isabella_preferences').select('value').eq('preference_key','isabella_estado').maybeSingle(),
     sb.from('minds_agent_runs').select('started_at,metadata').eq('feature','isabella_dream').eq('status','success').order('started_at',{ascending:false}).limit(3),
     sb.from('isabella_entities').select('entity_type,name,metadata').not('metadata->page','is',null).is('metadata->>forgotten_at',null).order('updated_at',{ascending:false}).limit(30),
     sb.from('isabella_return_queue').select('id,title,metadata').eq('kind','conversation_thread').eq('status','ready').order('created_at',{ascending:false}).limit(6)
   ]);
-  return {runs:runs.data||[],pages:pages.data||[],threads:threads.data||[]};
+  return {temporary:(temporary.data?.value?.items||[]).filter(x=>x.cita&&Date.parse(x.expires_at)>Date.now()),runs:runs.data||[],pages:pages.data||[],threads:threads.data||[]};
 }
 async function memoryPanel(){
   const items=(state.memory||[]).filter(m=>typeof m!=='object'||m.status!=='deleted');
@@ -4693,6 +4695,18 @@ async function memoryPanel(){
   const operatingHtml=`<div class="small">Isabella puede observar patrones operativos, pero ninguna inferencia cambia cómo trabaja contigo hasta que la confirmes.</div><div class="small section-label">Reglas confirmadas</div>${acceptedHtml}<div class="small section-label memory-section-title">Por revisar</div>${proposedHtml}<div class="small">Observaciones disponibles: ${Number(operating.observation_count||0)}</div>`;
   const memoryHtml=items.length?items.map((m,i)=>{const text=typeof m==='object'?m.content:String(m),kind=typeof m==='object'?(m.kind||'context'):'context';const id=typeof m==='object'?(m.id||String(i)):String(i);return `<div class="memory-row"><div class="row-main"><div>${esc(text)}</div><div class="small">${esc(kind)}</div></div><button data-memory-edit="${esc(id)}">Editar</button><button data-memory-delete="${esc(id)}">×</button></div>`}).join(''):'<div class="small">Todavía no he guardado memoria personal.</div>';
   modal('Lo que Isabella sabe de mí',`<div class="small section-label">Modelo personal</div><div class="personal-model-list">${modelHtml}</div><div class="small section-label memory-section-title">Cómo trabajo</div><div class="personal-model-list">${operatingHtml}</div><div class="small section-label memory-section-title">Memoria explícita</div>${memoryHtml}${dreamSectionHtml(dream)}`);
+  const clearState=document.querySelector('[data-dream-clear-state]');
+  if(clearState)clearState.onclick=async()=>{
+    clearState.disabled=true;
+    try{
+      const sb=window.MINDS_SUPABASE,{data:{user}}=await sb.auth.getUser();
+      if(!user)throw new Error();
+      const result=await sb.from('isabella_preferences').update({value:{items:[],forgot_before:Date.now()},updated_at:new Date().toISOString()})
+        .eq('user_id',user.id).eq('preference_key','isabella_estado').select('updated_at').single();
+      if(result.error||!result.data)throw new Error();
+      await memoryPanel();
+    }catch{clearState.disabled=false;clearState.textContent='No pude borrarlas. Reintentar';}
+  };
   document.querySelectorAll('[data-dream-thread-dismiss]').forEach(b=>b.onclick=async()=>{
     try{const sb=window.MINDS_SUPABASE;await sb.from('isabella_return_queue').update({status:'dismissed',updated_at:new Date().toISOString()}).eq('id',b.dataset.dreamThreadDismiss);b.closest('.memory-row')?.remove()}catch{}
   });

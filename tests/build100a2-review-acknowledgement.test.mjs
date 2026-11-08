@@ -14,8 +14,8 @@ test('rendered outcome overrides old model response without creating an unsuppor
  assert.match(renderText(m),/^La tarea queda para el \S+ 27 de octubre/);assert.doesNotMatch(renderText(m),/Supabase|2026-10-27/);
  m.metadata.review_state='rejected';assert.match(renderText(m),/cancelada/);
  assert.match(app,/resolvedReviewText\(m\)\?\?cleanGeneratedDeliverableText/);
- assert.match(html,/app\.js\?v=141/);assert.match(sw,/isabella-shell-v183/);
- assert.match(sw,/app\.js\?v=141/);
+ assert.match(html,/app\.js\?v=143/);assert.match(sw,/isabella-shell-v186/);
+ assert.match(sw,/app\.js\?v=143/);
 });
 const recovery=between('let reviewReceiptRecoveryBusy=false;','function finalizeInlineReview(proposals,status){');
 const make=(status='accepted',date='2026-10-27')=>{

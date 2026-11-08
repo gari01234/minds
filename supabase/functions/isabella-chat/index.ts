@@ -1503,12 +1503,13 @@ async function consolidatedMemory(req: Request) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return null;
-    const [pagesQ, threadsQ] = await Promise.all([
+    const [pagesQ, threadsQ, transientQ] = await Promise.all([
+      sb.from("isabella_preferences").select("preference_key,value").in("preference_key",["isabella_estado","isabella_ayer"]),
       sb.from("isabella_entities").select("entity_type,name,metadata").not("metadata->page", "is", null).is("metadata->>forgotten_at", null).order("updated_at", { ascending: false }).limit(12),
       sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at").eq("kind", "conversation_thread").eq("status", "ready").order("created_at", { ascending: false }).limit(4)
     ]);
     if (pagesQ.error || threadsQ.error) return null;
-    return consolidatedMemoryView(pagesQ.data || [], threadsQ.data || [], Date.now());
+    return consolidatedMemoryView(pagesQ.data || [], threadsQ.data || [], Date.now(),transientQ.data || []);
   } catch {
     return null;
   }
