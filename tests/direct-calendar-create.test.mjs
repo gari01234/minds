@@ -45,11 +45,13 @@ test("only explicit create-only fully registered batches can execute",()=>{
  ])assert.equal(authorizedDirectBatch(ps,ids,tools),null);
 });
 test("server does not infer permission from shadow scores, memory or model prose",()=>{
- assert.match(server,/exactOwnerExcerpt\(sourceText,quoted\)/);
+ assert.match(server,/ownerTexts\.some\(t=>exactOwnerExcerpt\(t,quoted\)\)/);
+  assert.match(server,/const ownerTexts=directOwnerTexts\(verifiedContinuation,effectiveMessage\);/);
  assert.match(server,/minds_calendar_execution_preferences/);
  assert.match(server,/pref\?\.data\?\.create_mode==="direct"/);
  assert.match(server,/directHistorySafe/);
- assert.match(server,/exactOwnerTitle\(sourceText,proposal\.title\)/);
+ assert.match(server,/ownerTexts\.some\(t=>exactOwnerTitle\(t,proposal\.title\)\)/);
+ assert.match(server,/direct_source_turn_id:verifiedContinuation\.source_turn_id/);
  assert.match(server,/direct_owner_source_tainted:/);
  assert.match(server,/direct_authorization_turn_id:clientMessageId/);
  assert.match(server,/direct_authorization:directAuthorization/);

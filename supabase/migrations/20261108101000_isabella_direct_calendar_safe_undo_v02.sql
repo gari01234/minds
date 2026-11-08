@@ -21,6 +21,8 @@ DECLARE
   v_event_time_quote text;
   v_event_duration_quote text;
   v_owner_turn uuid;
+  v_source_turn uuid;
+  v_turns text[];
   v_authorization_exists boolean;
   v_action text;
   v_title text;
@@ -82,14 +84,19 @@ BEGIN
   THEN RAISE EXCEPTION 'direct_authorization_excerpt_missing'; END IF;
   BEGIN
     v_owner_turn:=(v_decision.context->>'direct_authorization_turn_id')::uuid;
+    -- After a server-verified clarification («¿a qué hora?» → «a las 10») the clarified owner
+    -- turn may hold the title or a quote; the answering turn stays the authorizing one.
+    v_source_turn:=nullif(v_decision.context->>'direct_source_turn_id','')::uuid;
   EXCEPTION WHEN OTHERS THEN
     RAISE EXCEPTION 'direct_authorization_source_invalid';
   END;
+  v_turns:=array_remove(ARRAY[v_owner_turn::text,v_source_turn::text],NULL);
+  -- Quotes are literal but case-insensitive, as in v01.
   SELECT EXISTS(
     SELECT 1 FROM public.conversation_messages m
-    WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
+    WHERE m.user_id=v_user AND m.client_key=ANY(v_turns) AND m.role='user'
       AND m.provenance_class='owner' AND m.exposure_scope_version=1
-      AND position(v_evidence in m.content)>0
+      AND position(lower(v_evidence) in lower(m.content))>0
   ) INTO v_authorization_exists;
   IF NOT v_authorization_exists THEN RAISE EXCEPTION 'direct_authorization_source_missing'; END IF;
   IF p_candidate->'recurrence' IS NOT NULL AND
@@ -102,7 +109,7 @@ BEGIN
     lower(coalesce(p_candidate->>'title','')), '[^[:alnum:] ]+', ' ', 'g'), '[[:space:]]+', ' ', 'g'));
   IF length(v_normalized_title)<3 OR NOT EXISTS(
     SELECT 1 FROM public.conversation_messages m
-    WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
+    WHERE m.user_id=v_user AND m.client_key=ANY(v_turns) AND m.role='user'
       AND m.provenance_class='owner' AND m.exposure_scope_version=1
       AND position(v_normalized_title in btrim(regexp_replace(regexp_replace(
         lower(m.content),'[^[:alnum:] ]+',' ','g'),'[[:space:]]+',' ','g')))>0
@@ -119,9 +126,9 @@ BEGIN
   IF v_event_time_quote IS NULL OR length(v_event_time_quote)<3 OR length(v_event_time_quote)>160 OR
     NOT EXISTS(
       SELECT 1 FROM public.conversation_messages m
-      WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
+      WHERE m.user_id=v_user AND m.client_key=ANY(v_turns) AND m.role='user'
         AND m.provenance_class='owner' AND m.exposure_scope_version=1
-        AND position(v_event_time_quote in m.content)>0
+        AND position(lower(v_event_time_quote) in lower(m.content))>0
     )
   THEN RAISE EXCEPTION 'event_time_not_explicit'; END IF;
   IF coalesce((v_decision.context->>'direct_duration_defaulted')::boolean,false) THEN
@@ -135,9 +142,9 @@ BEGIN
        length(v_event_duration_quote)<3 OR length(v_event_duration_quote)>160 OR
        NOT EXISTS(
          SELECT 1 FROM public.conversation_messages m
-         WHERE m.user_id=v_user AND m.client_key=v_owner_turn::text AND m.role='user'
+         WHERE m.user_id=v_user AND m.client_key=ANY(v_turns) AND m.role='user'
            AND m.provenance_class='owner' AND m.exposure_scope_version=1
-           AND position(v_event_duration_quote in m.content)>0
+           AND position(lower(v_event_duration_quote) in lower(m.content))>0
        )
     THEN RAISE EXCEPTION 'event_time_or_duration_not_explicit'; END IF;
   END IF;

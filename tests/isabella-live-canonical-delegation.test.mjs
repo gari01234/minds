@@ -11,7 +11,7 @@ const clientCode=read('apps/isabella/live/live.js');
 function makeGate(){
   const window={};
   runInNewContext(contractCode,{window});
-  runInNewContext(gateCode,{window,URL});
+  runInNewContext(gateCode,{window,URL,TextEncoder});
   const integrity=window.MINDS_TURN_INTEGRITY,gate=window.ISABELLA_LIVE_CANONICAL;
   return {integrity,gate,decide:r=>gate.admission(r,integrity.validate,integrity.summary)};
 }
@@ -44,7 +44,7 @@ test('Proposals are pending; never voiced as completed actions',()=>{
   const admission=decide(result);
   assert.equal(admission.ok,true);
   assert.equal(admission.hasReview,true);
-  assert.match(admission.spoken,/No he aplicado ningún cambio/);
+  assert.match(admission.spoken,/propuesta en el chat para que la confirmes/);
   assert.doesNotMatch(admission.spoken,/Ya guardé/);
   assert.equal(decide({...result,proposal:{...p,request_id:''}}).ok,false);
 });
@@ -81,7 +81,7 @@ test('Clarification must match a verified source receipt',()=>{
   assert.equal(decide({...r,pending_clarification:{...r.pending_clarification,question:'otra pregunta'}}).ok,false);
 });
 
-test('Capturing voice and receiving delegation never calls canonical backend without owner review',async()=>{
+for(const manual of [true,false])test('La delegación usa el turno actual: '+(manual?'revisión manual':'consulta automática'),async()=>{
   const {integrity,gate}=makeGate();
   const nodes=new Map(),calls=[],sent=[],events={},listeners={};
   const mediaStops=[];
@@ -99,10 +99,10 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
   for(const id of ['liveStart','liveStop','liveVoice','liveAudio','liveUnlock',
     'liveStatus','livePlayback','liveInput','liveOutput','liveConsult',
     'liveMindsReview','liveMindsText','liveMindsSend','liveMindsDismiss',
-    'liveMindsStatus','liveMindsAnswer','liveMindsChat','liveOriginalNote']){
+    'liveMindsStatus','liveMindsAnswer','liveMindsChat','liveOriginalNote','liveManualReview']){
     nodes.set(id,node());
   }
-  nodes.get('liveVoice').value='nuri';
+  nodes.get('liveVoice').value='nuri';nodes.get('liveManualReview').checked=manual;
   const doc={hidden:false,querySelector:()=>({dataset:{}}),
     getElementById:id=>nodes.get(id),
     addEventListener:(kind,fn)=>{listeners['doc_'+kind]=fn}};
@@ -124,7 +124,9 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
     ISABELLA_LIVE_CANONICAL:gate,MINDS_TURN_INTEGRITY:integrity,RTCPeerConnection:Peer,
     addEventListener:(kind,fn)=>{listeners[kind]=fn}
   };
+  runInNewContext(read('apps/isabella/live/transcript.js'),{window:win});
   let nonce=0;
+  const canonicalCalls=()=>calls.filter(x=>x.url.endsWith('/isabella-chat'));
   runInNewContext(clientCode,{
     document:doc,window:win,RTCPeerConnection:Peer,
     navigator:{language:'es-MX',mediaDevices:{getUserMedia:async()=>({
@@ -134,9 +136,10 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
     crypto:{randomUUID:()=> 'id-'+(++nonce)},MediaStream:class{},
     setTimeout:()=>1,clearTimeout:()=>{},
     fetch:async(url,options)=>{
+      if(JSON.parse(options.body).action==='save_transcript')return {ok:true,json:async()=>({saved:true,turn_id:JSON.parse(options.body).turn_id})};
       calls.push({url,options});
       if(url.endsWith('/isabella-live-session'))return {ok:true,status:201,
-        json:async()=>({transport:{type:'webrtc',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n'}})};
+        json:async()=>({session:{conversation_id:'test-chat'},transport:{type:'webrtc',sdp:'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=rtpmap:111 opus/48000/2\r\n'}})};
       if(url.endsWith('/isabella-chat'))return {ok:true,status:200,
         json:async()=>answered('Según MINDS, tienes dos tareas pendientes hoy.')};
       throw Error('unexpected endpoint');
@@ -152,20 +155,21 @@ test('Capturing voice and receiving delegation never calls canonical backend wit
   assert.equal(calls.length,1,'transcript alone does not call MINDS');
   events.message({data:JSON.stringify({type:'session.delegation.created',
     delegation:{target:'client',id:'item_12345'},offset_ms:1000})});
-  assert.equal(calls.length,1,'delegation alone does not call MINDS');
-  assert.equal(nodes.get('liveMindsReview').classList.contains('hidden'),false);
-  assert.equal(nodes.get('liveMindsText').value,'¿Qué tareas tengo hoy?');
-  assert.ok(sent.some(e=>e.type==='session.thinking.append'&&e.delegation_id==='item_12345'));
-  nodes.get('liveMindsText').value='¿Qué tareas tengo mañana?';
-  nodes.get('liveMindsText').emit('input');
-  nodes.get('liveMindsSend').emit('click');
+  if(manual){
+    assert.equal(canonicalCalls().length,0);
+    assert.equal(nodes.get('liveMindsText').value,'¿Qué tareas tengo hoy?');
+    nodes.get('liveMindsText').value='¿Qué tareas tengo mañana?';
+    nodes.get('liveMindsText').emit('input');
+    nodes.get('liveMindsSend').emit('click');
+  }
   await new Promise(resolve=>setTimeout(resolve,0));
-  assert.equal(calls.length,2,'one canonical request');
-  const request=JSON.parse(calls[1].options.body);
-  assert.equal(request.message,'¿Qué tareas tengo mañana?');
+  assert.equal(canonicalCalls().length,1);
+  const request=JSON.parse(canonicalCalls()[0].options.body);
+  assert.equal(request.message,manual?'¿Qué tareas tengo mañana?':'¿Qué tareas tengo hoy?');
+  assert.equal(request.voice_delegation,true);
   assert.equal(request.surface,'chat_browser');
   assert.equal(request.context.locale,'es-MX');
-  assert.equal(request.client_message_id,'id-2');
+  assert.match(request.client_message_id,/^id-/);
   assert.equal(nodes.get('liveMindsSend').disabled,true);
   assert.ok(sent.some(e=>e.type==='session.commentary.append'&&e.delegation_id==='item_12345'&&/dos tareas pendientes/.test(e.content)));
   nodes.get('liveMindsSend').emit('click');

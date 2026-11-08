@@ -1,3 +1,4 @@
+import {liveConversation} from "../_shared/live-context.mjs";
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import {openConversation,closeConversation} from "../_shared/conversations.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -12,13 +13,15 @@ import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_s
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
-import {isabellaCoreInstructions,coreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
+import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
+import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
+import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
@@ -1502,14 +1505,32 @@ async function consolidatedMemory(req: Request) {
   try {
     const sb = supabaseClient(req);
     if (!sb) return null;
-    const [pagesQ, threadsQ] = await Promise.all([
+    // Order matches the queries below: preferences, pages, threads (review of PR #311).
+    const [transientQ, pagesQ, threadsQ] = await Promise.all([
+      sb.from("isabella_preferences").select("preference_key,value").in("preference_key",["isabella_estado","isabella_ayer"]),
       sb.from("isabella_entities").select("entity_type,name,metadata").not("metadata->page", "is", null).is("metadata->>forgotten_at", null).order("updated_at", { ascending: false }).limit(12),
-      sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at").eq("kind", "conversation_thread").eq("status", "ready").order("created_at", { ascending: false }).limit(4)
+      // Ten, so her own not-yet-due follow-ups (point 4f) never crowd out the threads.
+      sb.from("isabella_return_queue").select("id,title,reason,metadata,created_at").eq("kind", "conversation_thread").eq("status", "ready").order("created_at", { ascending: false }).limit(10)
     ]);
     if (pagesQ.error || threadsQ.error) return null;
-    return consolidatedMemoryView(pagesQ.data || [], threadsQ.data || [], Date.now());
+    return consolidatedMemoryView(pagesQ.data || [], threadsQ.data || [], Date.now(),transientQ.data || []);
   } catch {
     return null;
+  }
+}
+
+// Point 4f: Isabella's own follow-ups, written with the owner's client (RLS) into isabella_return_queue.
+async function followUpTool(req: Request, name: string, args: any, tz: string, turnId: string|null) {
+  try {
+    const sb = supabaseClient(req);
+    if (!sb) return { status: "error" };
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return { status: "unauthorized" };
+    return name === "schedule_follow_up"
+      ? await scheduleFollowUp(sb, { userId: user.id, args, tz, turnId })
+      : await cancelFollowUp(sb, { userId: user.id, args });
+  } catch {
+    return { status: "error" };
   }
 }
 
@@ -2666,7 +2687,7 @@ const ACTION_POLICY:Record<string,"allow"|"confirm"|"deny">={
   request_clarification:"allow",web_search:"allow",read_contextual_autonomy:"allow",
   read_self_review:"allow",search_memory:"allow",search_routines:"allow",search_calendar:"allow",read_task_origin:"allow",check_watch_capability:"allow",search_commitments:"allow",read_commitment_workspace:"allow",open_commitment_workspace:"allow",write_commitment_workspace:"allow",start_mission_run:"allow",read_mission_run:"allow",control_mission_run:"allow",search_generated_artifacts:"allow",search_work:"allow",browse_work_sources:"allow",find_work_occurrences:"allow",search_work_threads:"allow",read_work_file:"allow",analyze_project_source:"allow",consult_sofia:"allow",load_skill:"allow",delegate_specialist:"allow",orchestrate_specialists:"allow",
   offer_quick_replies:"allow",create_artifact:"allow",execute_artifact_task:"allow",record_personal_model_claim:"allow",update_personal_model_claim:"allow",
-  remember_relation:"allow",remember_information:"allow",
+  remember_relation:"allow",remember_information:"allow",schedule_follow_up:"allow",cancel_follow_up:"allow",
   create_event:"confirm",update_event:"confirm",delete_event:"confirm",create_task:"confirm",update_task:"confirm",
   delete_task:"confirm",complete_task:"confirm",archive_task:"confirm",create_routine:"confirm",update_routine:"confirm",pause_routine:"confirm",resume_routine:"confirm",delete_routine:"confirm",create_chat_reminder:"confirm",
   update_feed_preferences:"confirm",update_assistant_behavior:"confirm",create_standing_intent:"confirm",propose_expectation:"confirm",propose_commitment:"confirm",
@@ -3047,6 +3068,10 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
+  const turnStartedAt=performance.now();
+  let phaseRouteMs=0,phaseContextMs=0;
+  const phaseRoundsMs:number[]=[];
+  const phaseSnapshot=()=>({route:phaseRouteMs,context:phaseContextMs,rounds:phaseRoundsMs.slice(),total:Math.max(0,Math.round(performance.now()-turnStartedAt))});
   let activeConversation:any=null,activeRun:any=null;
   try{
   const apiKey = Deno.env.get("OPENAI_API_KEY");
@@ -3069,6 +3094,7 @@ Deno.serve(async (req: Request) => {
   const context = body?.context || {};
   const background = !!body?.background;
   const surface=String(body?.surface||"").trim();
+  const voiceDelegation=surface==="chat_browser"&&!background&&body?.voice_delegation===true;
   const routineReviewSupported=context.routine_review_version===1&&surface==="chat_browser";
   const routineMutationTools=new Set(["update_routine","pause_routine","resume_routine","delete_routine"]);
   const clientMessageId=String(body?.client_message_id||"").trim();
@@ -3120,7 +3146,10 @@ Deno.serve(async (req: Request) => {
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
   const exposureHint=currentWorkThread?null:await latestExposureHint(req);
+  const routeStartedAt=performance.now();
   const route=await routeRequest(req,effectiveMessage,apiKey,background,{exposure_hint_project:currentWorkThread?.project?.name||exposureHint?.project||null,server_scope_key:currentWorkThread?"work_thread:"+currentWorkThread.id:exposureHint?.scope_key||"global",server_conversation_id:currentWorkThread?.conversation_id||null});
+  phaseRouteMs=Math.max(0,Math.round(performance.now()-routeStartedAt));
+  const contextStartedAt=performance.now();
   if(!background&&!currentWorkThread&&!route.project){
     const fileProject=await projectFromExplicitWorkFile(req,effectiveMessage);
     if(fileProject){
@@ -3148,7 +3177,11 @@ Deno.serve(async (req: Request) => {
     if(!browserTurnId(clientMessageId))
       return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
     try{
-      browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
+      if(voiceDelegation){
+        const sb=supabaseClient(req),owner=sb?(await sb.auth.getUser()).data.user:null;
+        if(!owner||!body.voice_conversation_id)throw new Error("voice_session_missing");
+        browserTurn={userId:owner.id,conversationId:await liveConversation(sb,owner.id,body.voice_conversation_id)};
+      }else browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
     }catch(e){
       return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
     }
@@ -3180,6 +3213,8 @@ Deno.serve(async (req: Request) => {
   const initialSemantic=!background&&!!route.deep_memory;
   // Global conversational turns share Isabella's core (Phase 1, step 6). Work keeps its own prompt.
   const isabellaCoreEligible=!background&&!fastAgenda&&!currentWorkThread&&!route.work;
+  // Explicit rollback: ISABELLA_WORK_CORE=off retains the old Work prompt.
+  const workCoreEligible=!background&&!fastAgenda&&!!(currentWorkThread||route.work)&&Deno.env.get("ISABELLA_WORK_CORE")!=="off";
   // Work source-audit turns need the originals, not an unsolicited 180k-char
   // interpretive Project Model snapshot. All source/tool permissions remain.
   const sourceFirstWorkPrefetch=sourceFirstWorkPrefetchEligible({route,message:effectiveMessage,background,fastAgenda,
@@ -3190,7 +3225,7 @@ Deno.serve(async (req: Request) => {
   const occurrenceCoverageEvents:any[]=[];
   const occurrenceInitialTerms=new Map<string,string[]>();
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
-  const consolidatedPending=!background&&!currentWorkThread&&exposureScope.kind==="global"?consolidatedMemory(req):Promise.resolve(null);
+  const consolidatedPending=!background&&((!currentWorkThread&&exposureScope.kind==="global")||workCoreEligible)?consolidatedMemory(req):Promise.resolve(null);
   // Isabella's radar of Work for global turns (08.11): topics, deadlines, pending confirmations, contradictions.
   const radarPending=isabellaCoreEligible&&exposureScope.kind==="global"?workRadar(supabaseClient(req),{tz:context.timezone||"Europe/Berlin"}):Promise.resolve(null);
   const [recentDb, recalled, activity, semantic, proposalFeedback, entityMemory, skills, modelClaims, modelPolicy, standingIntents, expectations, commitments, routedWork, routedSofia, memoryCheckpoint] = await Promise.all([
@@ -3227,8 +3262,10 @@ Deno.serve(async (req: Request) => {
   const scopedWindowReady=scopedHistoryReady(recent);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
+  await Promise.all([consolidatedPending,radarPending]);
+  phaseContextMs=Math.max(0,Math.round(performance.now()-contextStartedAt));
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
-    await finishAgentRun(req,run,"skipped",{reason:"canonical_agenda_unavailable"});
+    await finishAgentRun(req,run,"skipped",{phase_ms:phaseSnapshot(),reason:"canonical_agenda_unavailable"});
     return json({fallback:true,reason:"canonical_agenda_unavailable"},409);
   }
   const system = `Eres Isabella, la asistente personal de Gari. Tu núcleo conversacional es GPT-5.6 Luna: debes comportarte como una asistente general capaz de responder preguntas sobre prácticamente cualquier tema, razonar, explicar, investigar, escribir, comparar ideas y mantener una conversación natural. El calendario NO es tu propósito principal; calendario, tareas, memoria, web y otras capacidades son herramientas adicionales a tu inteligencia general.
@@ -3538,7 +3575,7 @@ pregunta cuál.`;
         await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":user","user",effectiveMessage,{request_id:clientMessageId,exposure_scope:exposureScope});
       }
     }catch(e){
-      await finishAgentRun(req,run,"error",{},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),},String(e));return json({error:"conversation_state_error",detail:String(e)},500);
     }
   }
 
@@ -3567,10 +3604,10 @@ pregunta cuál.`;
         const {data:same}=await service.from("minds_chat_jobs").select("id,status")
           .eq("user_id",user.id).eq("request_id",clientMessageId).maybeSingle();
         if(same)return json({durable:true,job_id:same.id,request_id:clientMessageId,status:same.status},202);
-        await finishAgentRun(req,run,"skipped",{reason:"another_chat_turn_in_progress"});
+        await finishAgentRun(req,run,"skipped",{phase_ms:phaseSnapshot(),reason:"another_chat_turn_in_progress"});
         return json({error:"another_chat_turn_in_progress",message:"Isabella está terminando la respuesta anterior. Espera a que termine antes de enviar otra."},423);
       }
-      await finishAgentRun(req,run,"error",{},insertError.message);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),},insertError.message);
       return json({error:"durable_job_create_failed",detail:insertError.message},500);
     }
     const model=turnModel.model;
@@ -3634,7 +3671,7 @@ pregunta cuál.`;
       await service.from("minds_chat_jobs").update({
         status:"failed",incomplete_reason:detail.slice(0,300),completed_at:new Date().toISOString(),updated_at:new Date().toISOString()
       }).eq("id",job.id);
-      await finishAgentRun(req,run,"error",{durable:true},detail);
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),durable:true},detail);
       return json({durable:true,job_id:job.id,request_id:clientMessageId,status:"failed"},202);
     }
   }
@@ -3710,7 +3747,7 @@ pregunta cuál.`;
           });
         }catch(e){
           const detail=e instanceof Error?e.message:String(e);
-          await finishAgentRun(req,run,"error",{rounds:1,tools:[],direct_stream:true},detail);
+          await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:1,tools:[],direct_stream:true},detail);
           send("error",{message:detail});
         }finally{
           await closeConversation(supabaseClient(req),streamConversation);
@@ -3931,7 +3968,9 @@ pregunta cuál.`;
       strict:false,
       parameters:{type:"object",properties:{ingestion_id:{type:"string",description:"Completed minds_project_source_ingestions UUID."}},required:["ingestion_id"]}
     },
-    ...calendarTools
+    ...calendarTools,
+    // Point 4f: her own follow-ups, only in the global conversation (no authority outside the chat).
+    ...(isabellaCoreEligible&&exposureScope.kind==="global"?FOLLOWUP_TOOLS:[])
   ]).filter((t:any)=>routineReviewSupported||!routineMutationTools.has(String(t.name||"")));
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
@@ -3962,14 +4001,15 @@ pregunta cuál.`;
   // Phase 1, step 6: every global conversational turn (light, standard, deep) speaks from the same
   // core; Work-routed turns and Work threads keep the full Work prompt and context.
   const coreSurface=!leanSurface&&isabellaCoreEligible;
-  const contextTier=fastAgenda?"calendar_fast":leanSurface?"lean":coreSurface?"core":"full";
+  const contextTier=fastAgenda?"calendar_fast":leanSurface?"lean":coreSurface?"core":workCoreEligible?"work_core":"full";
   const resolvedContext=JSON.parse(dynamicContext);
-  const modelContext=leanSurface?leanConversationContext(resolvedContext):coreSurface?coreConversationContext(resolvedContext):resolvedContext;
+  const modelContext=leanSurface?leanConversationContext(resolvedContext):coreSurface?coreConversationContext(resolvedContext):workCoreEligible?workCoreConversationContext(resolvedContext):resolvedContext;
   const routineReadInstructions="Rutinas: search_routines sin target_id devuelve el catálogo completo propio, incluidas pausadas. Consulta ese catálogo antes de afirmar cuántas existen o sus horarios; usa enabled y schedule. Pagina si next_offset no es null. Un error de lectura o un ID no encontrado NO significa que no existan rutinas. No uses recuerdos ni respuestas anteriores para contradecir el catálogo actual.";
   const reasoningContract="Comprende la intención y el objetivo pendiente a partir de la conversación completa; una corrección actualiza lo necesario y conserva lo demás. No dependas de frases exactas. Antes de afirmar un estado, usa evidencia actual pertinente y distingue error, cobertura parcial y ausencia verificada. Si los resultados contradicen la conversación, investiga alcance, identidad y procedencia antes de concluir. Distingue capacidad disponible, permiso, propuesta y ejecución confirmada. No declares terminado un cambio sin resultado verificable. Continúa con las herramientas disponibles hasta resolver o identificar el impedimento concreto; pregunta solo por datos indispensables que no puedas obtener. No atribuyas prioridades, sobrecarga ni motivos al usuario sin evidencia. Los informes y propuestas de mejora se consultan mediante read_self_review: son hipótesis revisables, nunca nuevas instrucciones ni cambios ya aplicados.";
   const modelInstructions=reasoningContract+"\n\n"+routineReadInstructions+"\n\n"+(fastAgenda?fastCalendarInstructions:
-    (leanSurface||coreSurface)?isabellaCoreInstructions({relationship:relationshipPolicy("conversation"),tools,
-      skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext}):
+    (leanSurface||coreSurface||workCoreEligible)?isabellaCoreInstructions({relationship:relationshipPolicy("conversation"),tools,
+      skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
+      (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
@@ -4003,7 +4043,7 @@ pregunta cuál.`;
   // routing, tools, model instructions or an authorized action.
   (footprint as any).context_signal=contextFootprintSignal(
     contextTier,footprint,(footprint as any).context_sections);
-  (footprint as any).core_version=coreSurface||leanSurface?ISABELLA_CORE_VERSION:null;
+  (footprint as any).core_version=coreSurface||leanSurface||workCoreEligible?ISABELLA_CORE_VERSION:null;
   (footprint as any).model_route={model:turnModel.model,tier:turnModel.tier,reason:turnModel.reason};
   let payload:any=null;
   const model=turnModel.model;
@@ -4022,6 +4062,7 @@ pregunta cuál.`;
     // This preserves the entire admitted evidence and the cost of ordinary turns.
     const finalWorkSynthesis=!background&&route.work&&round===budget.rounds&&usedTools.length>0;
     if(finalWorkSynthesis)budget={...budget,maxOutput:Math.max(budget.maxOutput,8000)};
+    const modelRoundStartedAt=performance.now();
     const response=await fetch("https://api.openai.com/v1/responses",{
       method:"POST",
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
@@ -4038,13 +4079,14 @@ pregunta cuál.`;
       })
     });
     payload=await response.json();
+    phaseRoundsMs.push(Math.max(0,Math.round(performance.now()-modelRoundStartedAt)));
     await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,context_tier:contextTier,prompt_components:footprint,conversation_rotated:!!conversationInfo.rotated,agent_run_id:run?.id||null});
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
       const reason=String(payload?.incomplete_details?.reason||payload?.status||"missing_completion_status").slice(0,160);
       const browserReceiptSaved=!!partial&&recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
         ?await saveBrowserChatStreamReceipt(req,clientMessageId,partial,false,reason):false;
-      await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
         tools:usedTools,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),prompt_components:footprint,
         browser_delivery_receipt_saved:browserReceiptSaved,
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
@@ -4053,7 +4095,7 @@ pregunta cuál.`;
     }
 
     if(!response.ok){
-      await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
+      await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
         message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
@@ -4075,7 +4117,7 @@ pregunta cuál.`;
         return json({error:"clarification_invalid",
           message:"No pude formular una aclaración verificable."},409);
       const pending=await recordBrowserClarification(req,clientMessageId,question,capability);
-      await finishAgentRun(req,run,"success",{
+      await finishAgentRun(req,run,"success",{phase_ms:phaseSnapshot(),
         rounds:roundsUsed,tools:["request_clarification"],fast_path:fastAgenda,
         context_policy:"scoped_exposure_v1",provider_history_policy:"bounded_scoped",
         scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,
@@ -4152,20 +4194,23 @@ pregunta cuál.`;
         if(mode==="confirm"){
           // Directness comes exclusively from this owner's current utterance
           // or its server-verified pending clarification, never from retrieved text.
-          const sourceText=effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
           // Work route prefetch is not independent owner authority. A real tool
           // read outside the three allowlisted lookups always disqualifies direct creation.
           const directHistorySafe=!routedSofia&&!providerWebSeen&&
             directToolHistorySafe(usedTools,roundStartedAt);
+          // Owner words: this turn and, after a server-verified clarification, the turn it answers
+          // («agrega reunión con X mañana» → «¿a qué hora?» → «a las 10»). Each quote must sit whole
+          // inside one of them (review of PR #307).
+          const ownerTexts=directOwnerTexts(verifiedContinuation,effectiveMessage);
           const explicitTime=call.name!=="create_event"||
-            exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt);
+            ownerTexts.some(t=>exactFieldExcerpt(t,args?.direct_event_time_excerpt));
           const explicitDuration=call.name!=="create_event"||
             (proposal.duration_defaulted===true&&proposal.duration_minutes===60&&!String(args?.direct_event_duration_excerpt||"").trim())||
-            exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt);
-          if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
+            ownerTexts.some(t=>exactFieldExcerpt(t,args?.direct_event_duration_excerpt));
+          if(surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread&&!background&&!attachments.length&&
              directHistorySafe&&["create_task","create_event"].includes(String(call.name))&&
-             exactOwnerExcerpt(sourceText,quoted)&&exactOwnerTitle(sourceText,proposal.title)&&
+             ownerTexts.some(t=>exactOwnerExcerpt(t,quoted))&&ownerTexts.some(t=>exactOwnerTitle(t,proposal.title))&&
              explicitTime&&explicitDuration&&
              browserTurnId(clientMessageId)){
             const prefClient=supabaseClient(req);
@@ -4181,7 +4226,10 @@ pregunta cuál.`;
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
+               // The answering turn authorizes (Undo closes with the next utterance after it);
+               // the clarified turn may hold the title (verified by the server, never by the model).
                direct_authorization_turn_id:clientMessageId,
+               ...(verifiedContinuation?.source_turn_id&&browserTurnId(verifiedContinuation.source_turn_id)?{direct_source_turn_id:verifiedContinuation.source_turn_id}:{}),
                direct_timezone:temporal.timezone,
                ...(call.name==="create_event"?{
                  direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
@@ -4422,6 +4470,9 @@ pregunta cuál.`;
             ?{status:"available",monitoring:true,requested_condition:String(args?.requested_condition||""),channels:available}
             :{status:"watch_unavailable",monitoring:false,requested_condition:String(args?.requested_condition||""),channels,reason:"no_verified_autonomous_channel"};
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
+      }else if(call.name==="schedule_follow_up"||call.name==="cancel_follow_up"){
+        const result=await followUpTool(req,call.name,args,context.timezone||"Europe/Berlin",run?.id||null);
+        outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
         const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
         const result=await storeEntityRelation(req,args,provenance);
@@ -4455,12 +4506,14 @@ pregunta cuál.`;
   // Step 3a: a completed turn without any text (30.10) gets one plain retry before it can become a silence.
   if(!String(extractText(payload)||"").trim()&&!toolProposals.length&&!background&&!(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id)){
     try{
+      const retryStartedAt=performance.now();
       const retry=await fetch("https://api.openai.com/v1/responses",{method:"POST",
         headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
         body:JSON.stringify({model,instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
           reasoning:{effort:"low"},max_output_tokens:Math.max(budget.maxOutput,2400),prompt_cache_options:{mode:"implicit",ttl:"30m"},
           ...(tools.length?{tools,tool_choice:"none"}:{}),input})});
       const again=await retry.json();
+      phaseRoundsMs.push(Math.max(0,Math.round(performance.now()-retryStartedAt)));
       await recordUsage(req,"isabella_chat",model,again?.usage,{route,empty_reply_retry:true,context_tier:contextTier,agent_run_id:run?.id||null});
       if(retry.ok&&String(extractText(again)||"").trim())payload=again;
     }catch{/* the empty-response path below stays honest */}
@@ -4470,12 +4523,12 @@ pregunta cuál.`;
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
   // Phase 1, step 7: the system line below stays the authority on what is pending; Isabella's own
   // words travel next to it when they do not claim the change is already done.
-  const isabellaReply=toolProposals.length&&isabellaCoreEligible?verifiedPendingProse(modelProse):null;
+  const isabellaReply=toolProposals.length&&(isabellaCoreEligible||workCoreEligible)?verifiedPendingProse(modelProse):null;
   const outcomeReceipt=turnOutcomeReceipt({proposals:toolProposals});
   // A rejected/suppressed review tool is not a registered proposal. Replace
   // unverified model prose with a deterministic status; no phrase filters.
   const reviewAttemptWithoutReceipt=unregisteredReviewAttempt(usedTools,toolProposals,policyMode);
-  const directAuthorization=providerWebSeen?null:authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
+  const directAuthorization=providerWebSeen||voiceDelegation?null:authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
     reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
   }else if(reviewAttemptWithoutReceipt){
@@ -4492,7 +4545,7 @@ pregunta cuál.`;
       :"No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
-  if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
+  if(!reply){await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
       request_id:clientMessageId,
@@ -4505,10 +4558,11 @@ pregunta cuál.`;
   const browserReceiptSaved=recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
     ?await saveBrowserChatStreamReceipt(req,clientMessageId,reply,true,null):false;
   // Step 3a: an answered turn is in the conversation even if the app closed before it arrived.
-  const serverPersisted=browserReceiptSaved&&browserTurn
+  const serverPersisted=!voiceDelegation&&browserReceiptSaved&&browserTurn
     ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
-  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  const phase_ms=phaseSnapshot();
+  await finishAgentRun(req,run,"success",{phase_ms,core_version:(coreSurface||leanSurface||workCoreEligible)?ISABELLA_CORE_VERSION:null,browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
@@ -4527,8 +4581,14 @@ pregunta cuál.`;
     responsePayload.sources=webSources;
     responsePayload.artifacts=artifactResults;
   }
+  if(voiceDelegation&&browserTurn&&toolProposals.length){
+    const card=canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,requestId:clientMessageId,
+      content:"Hay una propuesta pendiente de confirmar.",scope:exposureScope,author:"system",outcome:"proposal_created"});
+    if(!card||!await persistServerAssistantTurn(req,{...card,metadata:{...card.metadata,durable_status:"completed",review_proposals:toolProposals}}))
+      return json({error:"voice_review_delivery_failed",message:"No pude confirmar que la tarjeta llegara al chat."},503);
+  }
   return json(responsePayload);
 
-  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
+  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{phase_ms:phaseSnapshot(),},detail);return json({error:"chat_failed",message:detail},500)}
   finally{await closeConversation(supabaseClient(req),activeConversation)}
 });

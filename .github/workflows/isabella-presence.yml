@@ -4,9 +4,9 @@ name: Isabella presence
 # opened the app, a conversation ended, the eve of something, the end of the day), at most three
 # small calls a day. Outside 9–21 h, or when she already wrote today, nothing happens. Logs carry counts only.
 # The Edge Function accepts only this workflow on main (GitHub OIDC token, audience minds-isabella-presence).
+# The regular check runs inside isabella-heartbeat (pg_cron, every 15 minutes): GitHub's scheduled
+# workflows ran hours late on 08.11.2026. This workflow stays for manual checks only.
 on:
-  schedule:
-    - cron: '7,37 7-19 * * *'   # every 30 min, 08:07–20:37 (winter) / 09:07–21:37 (summer) in Berlin
   workflow_dispatch:
 permissions:
   contents: read

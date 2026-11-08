@@ -1,14 +1,22 @@
 // A user's reversible direct-create preference is not inferred from model output.
 // A canonical owner excerpt and a server-admitted decision must support it.
+// Quotes are literal but not case-sensitive: the model often copies «Mañana a las 10» from
+// «mañana a las 10». Same rule as the SQL (lower() on both sides), as in v01 (review of PR #307).
+const lower=v=>String(v||"").toLocaleLowerCase("es");
 export function exactOwnerExcerpt(source, excerpt){
-  const original=String(source||"");
   const quote=String(excerpt||"").trim();
-  return quote.length>=8&&quote.length<=900&&original.includes(quote);
+  return quote.length>=8&&quote.length<=900&&lower(source).includes(lower(quote));
 }
 export function exactFieldExcerpt(source,excerpt){
   const quote=String(excerpt||"").trim();
-  return quote.length>=3&&quote.length<=160&&
-    String(source||"").includes(quote);
+  return quote.length>=3&&quote.length<=160&&lower(source).includes(lower(quote));
+}
+// The owner's words for a direct creation: this turn and, after a server-verified clarification,
+// the turn it answers. Retrieved text never enters here.
+export function directOwnerTexts(continuation,currentMessage){
+  const own=[String(currentMessage||"")];
+  const source=continuation&&typeof continuation.source_message==="string"?continuation.source_message:"";
+  return source.trim()?[source,...own]:own;
 }
 // The normalized title must already be present in the owner's literal message.
 // Neither a Work prefetch nor a model-generated suggestion can supply new title words.

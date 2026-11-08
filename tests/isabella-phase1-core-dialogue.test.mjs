@@ -90,9 +90,10 @@ test('Step 6: core context keeps the agenda whole, trims what the night memory c
 test('Step 6: wiring — global turns use the core, Work keeps its prompt, telemetry names the tier',()=>{
   assert.match(chat,/const isabellaCoreEligible=!background&&!fastAgenda&&!currentWorkThread&&!route\.work;/);
   assert.match(chat,/const coreSurface=!leanSurface&&isabellaCoreEligible;/);
-  assert.match(chat,/\(leanSurface\|\|coreSurface\)\?isabellaCoreInstructions\(\{relationship:relationshipPolicy\("conversation"\),tools,/);
-  assert.match(chat,/system\+\(scheduleAssessment\?/,'Work-routed turns keep the full prompt');
-  assert.match(chat,/\(footprint as any\)\.core_version=coreSurface\|\|leanSurface\?ISABELLA_CORE_VERSION:null;/);
+  assert.match(chat,/\(leanSurface\|\|coreSurface\|\|workCoreEligible\)\?isabellaCoreInstructions\(\{relationship:relationshipPolicy\("conversation"\),tools,/);
+  assert.match(chat,/system\+\(scheduleAssessment\?/,'ISABELLA_WORK_CORE=off retains the full Work prompt');
+  assert.match(chat,/Deno\.env\.get\("ISABELLA_WORK_CORE"\)!=="off"/);
+  assert.match(chat,/\(footprint as any\)\.core_version=coreSurface\|\|leanSurface\|\|workCoreEligible\?ISABELLA_CORE_VERSION:null;/);
 });
 
 test('Step 5: the recent window arrives as dialogue, same scope and size class',()=>{
@@ -133,7 +134,7 @@ test('Step 7: pending changes — her words travel only when they do not claim i
   assert.equal(verifiedPendingProse('Propuesta: añadir «X» · pendiente de tu confirmación.'),null,'a template is never her words');
   assert.equal(verifiedPendingProse(''),null);
   assert.equal(verifiedPendingProse('x'.repeat(2000)),null);
-  assert.match(chat,/const isabellaReply=toolProposals\.length&&isabellaCoreEligible\?verifiedPendingProse\(modelProse\):null;/);
+  assert.match(chat,/const isabellaReply=toolProposals\.length&&\(isabellaCoreEligible\|\|workCoreEligible\)\?verifiedPendingProse\(modelProse\):null;/);
   assert.match(chat,/isabella_reply:isabellaReply,/);
   assert.match(chat,/"Todavía no está aplicado: Gari lo confirma en la tarjeta\. No digas que está hecho\."/);
   // The app line stays the authority: her words go first, the system line with the card right after.
@@ -173,7 +174,11 @@ test('Step 8 v2: she speaks at real moments, not at fixed hours',()=>{
   assert.equal(presenceMoment({now:at('2026-11-09T18:30:00Z'),todayHadEvents:true}).kind,'cierre_del_dia');
   assert.equal(presenceMoment({now:at('2026-11-09T10:00:00Z')}),null,'no moment, no model call');
   const wf=read('.github/workflows/isabella-presence.yml');
-  assert.match(wf,/cron: '7,37 7-19 \* \* \*'/);
+  assert.doesNotMatch(wf,/schedule:/,'GitHub cron ran hours late: the heartbeat (pg_cron) runs the check');
+  const hb=read('supabase/functions/isabella-heartbeat/index.ts');
+  assert.match(hb,/runIsabellaPresence\(\{sb,model,callModel:presenceCaller\(apiKey,model\),relationship:relationshipPolicy\("proactive"\),/);
+  assert.match(hb,/if\(runtime\?\.waitUntil\)runtime\.waitUntil\(presence\);else await presence;/);
+  assert.match(hb,/\.catch\(\(e:unknown\)=>console\.error\("isabella_presence_failed"/,'never fails the heartbeat');
   assert.match(app,/preference_key:'presence_seen',value:\{at\}/);
   assert.match(app,/void markPresenceSeen\(\);\n\s+document\.addEventListener\('visibilitychange'/);
 });

@@ -27,7 +27,7 @@ test('Owner-only direct evidence is quoted, title-normalized and not supplied by
     ['search_work','create_task']),null);
   assert.match(server,/direct_owner_source_tainted:/);
   assert.match(server,/directHistorySafe&&!providerWebSeen|!routedSofia&&!providerWebSeen/);
-  assert.match(server,/exactOwnerTitle\(sourceText,proposal\.title\)/);
+  assert.match(server,/ownerTexts\.some\(t=>exactOwnerTitle\(t,proposal\.title\)\)/);
   assert.match(server,/directToolHistorySafe\(usedTools,roundStartedAt\)/);
 });
 test('60-minute fallback is server-generated only, with visible editable mark',()=>{
@@ -46,7 +46,7 @@ test('SQL independently verifies receipt, global owner quote, title, default and
   for(const text of ['CREATE OR REPLACE FUNCTION public.minds_commit_direct_calendar_create_v01',
     "v_decision.context->>'direct_owner_source_tainted'",
     'direct_title_not_in_owner_turn','m.provenance_class=\'owner\'',
-    "m.exposure_scope_version=1","m.client_key=v_owner_turn::text",
+    "m.exposure_scope_version=1","m.client_key=ANY(v_turns)","ARRAY[v_owner_turn::text,v_source_turn::text]",
     'event_default_duration_invalid',"v_event_duration_quote IS NOT NULL",
     "v_decision.context->>'direct_duration_defaulted'","v_duration<1 OR v_duration>720"])
     assert.ok(migration.includes(text),text);
@@ -150,4 +150,38 @@ test('Block 2 keeps existing instruction/context/input budget, with a small expl
   assert.equal(before.input_chars,after.input_chars);
   assert.ok(after.tools_chars>before.tools_chars);
   console.log('prompt_component_sizes_block2',JSON.stringify({before,after}));
+});
+
+// Review of PR #307 (08.11.2026): two things that already worked must keep working.
+test('Quotes are literal but not case-sensitive, in the code and in the SQL',async()=>{
+  const {exactOwnerExcerpt,exactFieldExcerpt}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
+  assert.equal(exactOwnerExcerpt('mañana a las 10 reunión con el equipo','Mañana a las 10 reunión'),true);
+  assert.equal(exactFieldExcerpt('Reunión MAÑANA a las 10','a las 10'),true);
+  assert.equal(exactFieldExcerpt('reunión a las 10','A LAS 10'),true);
+  assert.equal(exactOwnerExcerpt('mañana a las 10','mañana a las 11'),false,'still literal');
+  assert.equal(exactFieldExcerpt('a las 10','a'),false,'still a minimum length');
+  for(const s of ['position(lower(v_evidence) in lower(m.content))>0','position(lower(v_event_time_quote) in lower(m.content))>0',
+    'position(lower(v_event_duration_quote) in lower(m.content))>0'])assert.ok(migration.includes(s),s);
+  assert.doesNotMatch(migration,/position\(v_evidence in m\.content\)/);
+});
+
+test('After «¿a qué hora?», the answer and the clarified message together authorize a direct creation',async()=>{
+  const {directOwnerTexts,exactOwnerExcerpt,exactFieldExcerpt}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
+  const continuation={source_message:'Agrega reunión con el Bauamt mañana',source_turn_id:'22222222-2222-4222-8222-222222222222'};
+  const texts=directOwnerTexts(continuation,'A las 10');
+  assert.deepEqual(texts,['Agrega reunión con el Bauamt mañana','A las 10']);
+  assert.ok(texts.some(t=>exactOwnerExcerpt(t,'agrega reunión con el Bauamt mañana')));
+  assert.ok(texts.some(t=>exactOwnerTitle(t,'Reunión con el Bauamt')));
+  assert.ok(texts.some(t=>exactFieldExcerpt(t,'a las 10')));
+  assert.equal(texts.some(t=>exactOwnerExcerpt(t,'mañana A las 10 con el Bauamt')),false,'a quote never spans two messages');
+  assert.deepEqual(directOwnerTexts(null,'Anota llamar a Ana'),['Anota llamar a Ana']);
+  assert.deepEqual(directOwnerTexts({source_message:'  '},'x'),['x']);
+  // The answering turn authorizes (Undo closes with the next message); the clarified one may hold the title.
+  assert.match(server,/direct_authorization_turn_id:clientMessageId,/);
+  assert.match(server,/direct_source_turn_id:verifiedContinuation\.source_turn_id/);
+  assert.match(migration,/v_source_turn:=nullif\(v_decision\.context->>'direct_source_turn_id',''\)::uuid;/);
+  assert.match(migration,/v_turns:=array_remove\(ARRAY\[v_owner_turn::text,v_source_turn::text\],NULL\);/);
+  // Voice delegation never creates directly (main), nor does a turn that saw the web (#307).
+  assert.match(server,/surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread/);
+  assert.match(server,/const directAuthorization=providerWebSeen\|\|voiceDelegation\?null:/);
 });

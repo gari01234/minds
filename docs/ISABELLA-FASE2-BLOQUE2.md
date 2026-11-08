@@ -48,3 +48,18 @@ La aceptación manual, tras aprobación y despliegue, debe usar una **tarea inve
 Orden: revisar y aplicar migración SQL; desplegar `isabella-chat`; publicar PWA. No hay cambios de otras Edge Functions. El usuario puede volver a `create_mode:'review'` inmediatamente si detecta un problema. Para restaurar código anterior, revertir la PR y, si se ha aplicado la migración, aprobar una nueva migración `CREATE OR REPLACE` restaurando la función anterior: no borrar políticas/tablas ni el historial.
 
 **No fusionar o desplegar desde este encargo.**
+
+## Revisión (Claude, 08.11.2026)
+
+Dos cosas que ya funcionaban se habían perdido. Ahora vuelven, en el código y en el SQL:
+
+- **Las citas son literales, pero no distinguen mayúsculas**, igual que en v01: «Mañana a las 10» vale para «mañana a las 10». Se aplica a `exactOwnerExcerpt` y `exactFieldExcerpt`, y a `lower()` en las tres comprobaciones de `minds_commit_direct_calendar_create_v01`.
+- **La aclaración sigue siendo directa.** Ejemplo: «agrega reunión con X mañana» → «¿a qué hora?» → «a las 10».
+  - **Qué puede contener cada cita:** el turno que responde autoriza (`direct_authorization_turn_id`; Deshacer se cierra con el siguiente mensaje). El turno aclarado, verificado por el servidor (`direct_source_turn_id`), puede contener el título o una cita.
+  - **Límite:** cada cita tiene que estar entera dentro de uno de los dos mensajes. Una cita que junte partes de ambos no vale.
+  - **Excepciones:** la delegación de voz y los turnos que vieron la web no crean nada directamente.
+
+Comprobado con un PostgreSQL local y tablas mínimas:
+- la continuación con otra mayúscula se aplica;
+- sin el turno aclarado se rechaza (`direct_authorization_source_missing`);
+- Deshacer elimina el evento.
