@@ -3140,7 +3140,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const phaseSnapshot=()=>({route:phaseRouteMs,context:phaseContextMs,rounds:phaseRoundsMs.slice(),total:Math.max(0,Math.round(performance.now()-turnStartedAt))});
   let activeConversation:any=null,activeRun:any=null;
   try{
-  const apiKey = Deno.env.get("OPENAI_API_KEY");
+  const apiKey = (Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));
   if (!apiKey) {
     return json({
       error: "openai_not_configured",
@@ -4116,9 +4116,8 @@ pregunta cuál.`;
       skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
       (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
-  const safeModelInstructions=assistantProfile.multi_user
-    ?modelInstructions.replaceAll(relationshipPolicy("conversation"),OFFICE_RELATIONSHIP_POLICY)
-    :modelInstructions;
+  // Same relationship contract for Romy (review 08.11.2026); profileInstructions adapts the names.
+  const safeModelInstructions=modelInstructions;
   const providerInstructions=profileInstructions(safeModelInstructions,assistantProfile.id,assistantOwner);
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({

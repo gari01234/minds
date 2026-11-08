@@ -19,7 +19,7 @@ Deno.serve(async(req:Request)=>{
     const {payload}=await jwtVerify(token,jwks,{issuer:"https://token.actions.githubusercontent.com",audience:PRESENCE_AUDIENCE,maxTokenAge:"10 minutes"});
     if(!trustedPresenceWorkflow(payload))throw new Error("workflow");
   }catch{return json({error:"unauthorized_workflow"},401)}
-  const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"",apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"",apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!url||!service||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;

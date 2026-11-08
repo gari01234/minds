@@ -27,8 +27,12 @@ export const OFFICE_RELATIONSHIP_POLICY =
   "Ante incertidumbre, pregunta de forma precisa; ante una acción, respeta los permisos y los recibos canónicos. " +
   "La iniciativa debe merecer la atención de la persona, sin generar mensajes para mantenerla conversando.";
 /** @param {string} windowPolicy @param {string} [profile] */
+// Review 08.11.2026 (Claude): Gari decided Romy and Isabella are the same. Romy keeps Isabella's own
+// relationship contract; personaText turns its names into Romy and the member (profileInstructions).
+// The neutral text above stays exported only for reference and older tests.
 export function profileRelationshipPolicy(windowPolicy,profile='window'){
-  return resolveAssistantProfile(profile).multi_user?OFFICE_RELATIONSHIP_POLICY:windowPolicy;
+  resolveAssistantProfile(profile);
+  return windowPolicy;
 }
 
 export const OFFICE_LANGUAGE_RULE =
