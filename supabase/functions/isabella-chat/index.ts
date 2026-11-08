@@ -3050,6 +3050,9 @@ async function persistServerAssistantTurn(req:Request,row:any){
 }
 
 Deno.serve(async (req: Request) => {
+  const startedMs=Date.now();
+  const phaseMs:{route:number,context:number,rounds:number[]}={route:0,context:0,rounds:[]};
+  const phaseSnapshot=()=>({route:phaseMs.route,context:phaseMs.context,rounds:[...phaseMs.rounds],total:Math.max(0,Date.now()-startedMs)});
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
 
@@ -3126,7 +3129,9 @@ Deno.serve(async (req: Request) => {
   const currentWorkThread=requestedWorkThreadId?await resolveWorkThread(req,requestedWorkThreadId,true):null;
   if(requestedWorkThreadId&&!currentWorkThread)return json({error:"work_thread_not_found"},404);
   const exposureHint=currentWorkThread?null:await latestExposureHint(req);
+  const routeStarted=Date.now();
   const route=await routeRequest(req,effectiveMessage,apiKey,background,{exposure_hint_project:currentWorkThread?.project?.name||exposureHint?.project||null,server_scope_key:currentWorkThread?"work_thread:"+currentWorkThread.id:exposureHint?.scope_key||"global",server_conversation_id:currentWorkThread?.conversation_id||null});
+  phaseMs.route=Math.max(0,Date.now()-routeStarted);
   if(!background&&!currentWorkThread&&!route.project){
     const fileProject=await projectFromExplicitWorkFile(req,effectiveMessage);
     if(fileProject){
@@ -3198,6 +3203,7 @@ Deno.serve(async (req: Request) => {
   const occurrenceCoverageEvents:any[]=[];
   const occurrenceInitialTerms=new Map<string,string[]>();
   const currentUserMessageFingerprint=await sha256Hex(new TextEncoder().encode(effectiveMessage)).catch(()=>null);
+  const contextStarted=Date.now();
   const consolidatedPending=!background&&!currentWorkThread&&exposureScope.kind==="global"?consolidatedMemory(req):Promise.resolve(null);
   // Isabella's radar of Work for global turns (08.11): topics, deadlines, pending confirmations, contradictions.
   const radarPending=isabellaCoreEligible&&exposureScope.kind==="global"?workRadar(supabaseClient(req),{tz:context.timezone||"Europe/Berlin"}):Promise.resolve(null);
@@ -3235,6 +3241,7 @@ Deno.serve(async (req: Request) => {
   const scopedWindowReady=scopedHistoryReady(recent);
   const temporal=localTemporalContext(context.timezone||"Europe/Berlin");
   const canonicalAgenda=await canonicalAgendaContext(req,temporal.current_date,temporal.timezone);
+  phaseMs.context=Math.max(0,Date.now()-contextStarted);
   if(wantsDurable&&readOnlyDailyAgendaIntent(effectiveMessage)&&canonicalAgenda.status!=="ok"){
     await finishAgentRun(req,run,"skipped",{reason:"canonical_agenda_unavailable"});
     return json({fallback:true,reason:"canonical_agenda_unavailable"},409);
@@ -4034,6 +4041,7 @@ pregunta cuál.`;
     // This preserves the entire admitted evidence and the cost of ordinary turns.
     const finalWorkSynthesis=!background&&route.work&&round===budget.rounds&&usedTools.length>0;
     if(finalWorkSynthesis)budget={...budget,maxOutput:Math.max(budget.maxOutput,8000)};
+    const roundStarted=Date.now();
     const response=await fetch("https://api.openai.com/v1/responses",{
       method:"POST",
       headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
@@ -4050,6 +4058,7 @@ pregunta cuál.`;
       })
     });
     payload=await response.json();
+    phaseMs.rounds.push(Math.max(0,Date.now()-roundStarted));
     await recordUsage(req,background?"isabella_background":"isabella_chat",model,payload?.usage,{round,route,initial_semantic:initialSemantic,fast_path:fastAgenda,semantic_repair:repairingSemantics,context_tier:contextTier,prompt_components:footprint,conversation_rotated:!!conversationInfo.rotated,agent_run_id:run?.id||null});
     if(response.ok&&payload?.status!=="completed"){
       const partial=String(extractText(payload)||"").trim();
@@ -4058,7 +4067,7 @@ pregunta cuál.`;
         ?await saveBrowserChatStreamReceipt(req,clientMessageId,partial,false,reason):false;
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,incomplete_response:true,incomplete_reason:reason,partial_chars:partial.length,
         tools:usedTools,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),prompt_components:footprint,
-        browser_delivery_receipt_saved:browserReceiptSaved,
+        browser_delivery_receipt_saved:browserReceiptSaved,phase_ms:phaseSnapshot(),
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
       if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
       return json({error:"incomplete_response",message:await failTurn("incomplete"),incomplete:true},502);
@@ -4510,7 +4519,7 @@ pregunta cuál.`;
   const serverPersisted=browserReceiptSaved&&browserTurn
     ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
-  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,core_version:(footprint as any).core_version,phase_ms:phaseSnapshot(),prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,
