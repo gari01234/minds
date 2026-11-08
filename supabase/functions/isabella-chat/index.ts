@@ -4100,7 +4100,8 @@ pregunta cuál.`;
     :boundedGlobalChat&&isabellaCoreEligible
       // Phase 1, step 5: Isabella's own conversation as dialogue (same scope, same window).
       ?dialogueTurnInput(recent,turnText,{prefix:continuationEvidence?continuationEvidence+"\n\n":"",
-        attachments:attachmentInputs,timeZone:temporal.timezone||"Europe/Berlin"})
+        attachments:attachmentInputs,timeZone:temporal.timezone||"Europe/Berlin",
+        profile:assistantProfile.id,ownerName:assistantOwner||"Gari"})
     :boundedGlobalChat
       ?[{role:"user",content:[
         {type:"input_text",text:(continuationEvidence?continuationEvidence+"\\n\\n":"")+boundedScopedTurn(recent,turnText)},
