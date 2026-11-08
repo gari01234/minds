@@ -205,7 +205,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
         instructions:system,
         context:{memoria_de_isabella:memoriaDeIsabella,radar_work:radarWork,
           agenda:{events,tasks,overdue},memories,modelClaims},
-        input:prompt,tools:[{type:"web_search",search_context_size:"low"}]
+        input:[{role:"user",content:[{type:"input_text",text:prompt}]}],tools:[{type:"web_search",search_context_size:"low"}]
       });
       phase="generating";
       const response=await fetch("https://api.openai.com/v1/responses",{
