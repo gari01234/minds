@@ -7,10 +7,12 @@ El perfil de servidor se selecciona únicamente desde ASSISTANT_PROFILE. Si la v
 
 personaText, profileInstructions y profileTools mantienen el texto y las referencias exactamente iguales para window. La transformación office afecta instrucciones y descripciones de herramientas antes de enviarlas al proveedor, con una regla lingüística adicional y exclusión de capacidades ajenas a Office. Los identificadores internos en minúsculas siguen intactos. Se prepara un diccionario compartido de chat (es/de) y la detección bilingüe de avisos de sistema.
 
-## Aceptación pendiente para cerrar Fase 0
-Falta portar al perfil el resto de prompts de background (dream, presence, routines, runners), sustituir referencias personales residuales y enlazar todas las superficies visibles del chat con el diccionario. Por esa razón no se declara la aceptación completa y esta rama debe seguir como borrador.
+## Aceptación de Fase 0 (código sin desplegar)
+Los tests verifican que el perfil `window` es un no-op, que Office obtiene el nombre de una membresía autenticada activa, que las herramientas excluidas no se ofrecen ni se ejecutan y que los avisos alemanes no se atribuyen a Romy. Se portaron las instrucciones del repaso nocturno, presencia y rutinas al perfil, sin alterar la rama Window. En el turno sintético, `promptComponentSizes()` registró antes 16055 caracteres de instrucciones y 158 de herramientas (dos), y después 16163 de instrucciones y 79 de herramientas (una); contexto 46 e input 41 en ambos casos. Estas cifras son del fixture, no mediciones de tráfico real.
 
-No hay migraciones, funciones desplegadas ni secretos nuevos. GitHub Actions «Verify MINDS» pasó el 08.11.2026 en esta rama: 1.210 pruebas totales, 1.208 superadas, 0 fallidas, 2 omitidas; Deno check, Chromium y suites PostgreSQL efímeras en verde. La comparación del flujo real byte a byte entre despliegues sigue pendiente. El test `promptComponentSizes` con datos sintéticos arroja antes/después: instrucciones 16.055/16.163 caracteres; contexto 46/46; input 41/41; descripciones de herramientas 158/79, con 2/1 herramientas. No hay llamadas a servicios reales.
+CI de minds: `Verify MINDS` correcto en el último commit de aceptación comprobado el 08.11.2026; 1211 tests aprobados y 0 fallidos, más Deno check. Office fase 0: CI correcta. No se han aplicado migraciones ni desplegado funciones. Las integraciones Office con Storage/RLS/Work/PWA, las pruebas de aislamiento SQL y las superficies del chat quedan para las fases respectivas.
+
+**Pregunta abierta y decisión provisional:** para el perfil Office se conserva el comportamiento de los procesos proactivos sin push móvil; hasta que el aislamiento de la fase 1 esté verificado no se configuran ni despliegan ejecutores. Las funciones específicas de Office no deben utilizar endpoints de Window.
 
 ## Reversión
 Revertir el commit de esta rama; la configuración por defecto window sigue intacta. office no debe activarse hasta completar la aceptación de las fases.
