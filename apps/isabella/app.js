@@ -2519,11 +2519,15 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         const report=failed.length
           ?(text?text+' ':'')+'No pude guardar '+naturalList(missing)+', así que '+(failed.length===1?'no lo doy por hecho':'no los doy por hechos')+'. Puedes revisarlo abajo.'
           :text;
-        sayEvent(report,{metadata:{exposure_scope:exposure,
+        const createdMessage=sayEvent(report,{metadata:{exposure_scope:exposure,
+          direct_create_undo:committed.length>0&&failed.length===0,
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
           action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
             kind:x.kind,entity_client_key:x.entity_client_key})),
           review_proposals:failed.map(x=>x.proposal)}});
+        if(createdMessage.metadata.direct_create_undo)
+          setTimeout(()=>{lastMessagesRenderKey=null;renderMessages()},10*60*1000);
+        lastMessagesRenderKey=null;renderMessages();
         save();
         return;
       }
