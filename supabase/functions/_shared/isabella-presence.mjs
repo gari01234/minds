@@ -243,7 +243,7 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
       await writeState(sb,userId,nextState,at);
       const material={...ctx.material,hilos:ctx.material.hilos.filter(h=>h.kind!=='seguimiento'||['app_abierta','cierre_del_dia'].includes(moment.kind))};
       const momentForModel=assistantProfile.multi_user?{...moment,detail:personaText(moment.detail,{profile:assistantProfile,owner})}:moment;
-      const {value,payload}=await callModel({instructions:profileInstructions(PRESENCE_INSTRUCTIONS+(assistantProfile.multi_user?'\n\n'+OFFICE_RELATIONSHIP_POLICY:(relationship?'\n\n'+relationship:'')),assistantProfile,owner),input:{momento:momentForModel,...material}});
+      const {value,payload}=await callModel({instructions:profileInstructions(PRESENCE_INSTRUCTIONS+(relationship?'\n\n'+relationship:''),assistantProfile,owner),input:{momento:momentForModel,...material}});
       const usage=payload&&payload.usage||{};
       await sb.from('minds_ai_usage').insert({user_id:userId,feature:'isabella_presence',model,input_tokens:usage.input_tokens||0,
         cached_input_tokens:usage.input_tokens_details&&usage.input_tokens_details.cached_tokens||0,output_tokens:usage.output_tokens||0,total_tokens:usage.total_tokens||0}).then(()=>{},()=>{});

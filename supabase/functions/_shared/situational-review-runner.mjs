@@ -43,7 +43,7 @@ function responseText(payload){
     .flatMap(x=>x.content||[]).map(x=>x.text||x.output_text||"").join("").trim();
 }
 async function evaluate(context){
-  const key=Deno.env.get("OPENAI_API_KEY");if(!key)throw new Error("review_model_unavailable");
+  const key=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));if(!key)throw new Error("review_model_unavailable");
   const instructions=[
     "Eres la evaluación contextual acotada de los planes de Isabella. Devuelve como máximo una propuesta, o propose:false.",
     "Busca incompatibilidades materiales entre una tarea aún abierta y circunstancias comprobadas: hora, calendario y clima si existe.",

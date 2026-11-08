@@ -37,7 +37,7 @@ Deno.serve(async(req:Request)=>{
   const auth=req.headers.get("Authorization")||"";if(!auth)return json({error:"unauthorized"},401);
   let body:any={};try{body=await req.json()}catch{return json({error:"invalid_json"},400)}
   const url=Deno.env.get("SUPABASE_URL")||"";let key=Deno.env.get("SUPABASE_ANON_KEY")||"";try{const keys=JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS")||"{}");key=keys?.default||key}catch{}
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";if(!url||!key||!apiKey)return json({error:"server_not_configured"},503);
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";if(!url||!key||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,key,{global:{headers:{Authorization:auth}},auth:{persistSession:false,autoRefreshToken:false}});
   const {data:{user},error}=await sb.auth.getUser();if(error||!user)return json({error:"unauthorized"},401);
   const c=body?.context||{};
