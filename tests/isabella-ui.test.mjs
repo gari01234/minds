@@ -1162,7 +1162,7 @@ test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
   assert.equal(simple('¿Qué tal?'),false);
   assert.ok(chat.includes('fastAgenda?[...clarificationTools,...fastAgendaTools'));
   assert.ok(chat.includes('background||budget.depth==="light"?Promise.resolve([]):skillCatalog(req)'));
-  assert.ok(chat.includes('!background&&!fastAgenda&&route.project?searchWork'));
+  assert.ok(chat.includes('!background&&!fastAgenda&&route.project?lightWork?Promise.resolve(deferredLightWorkContext(route.project)):searchWork'));
   const setStart=chat.indexOf('const fastAgendaToolNames=new Set(');
   const setEnd=chat.indexOf(');',setStart);
   const fastSet=chat.slice(setStart,setEnd);
