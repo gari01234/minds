@@ -19,7 +19,7 @@ test("typed routing never uses sentence-specific regex to select lean context",(
   {fastAgenda:true},{background:true}])
   assert.equal(leanConversationEligible({...base,...props}),false,JSON.stringify(props));
  assert.match(source,/leanConversationEligible\(\{/);
- assert.match(source,/leanSurface\?leanConversationContext\(resolvedContext\):coreSurface\?coreConversationContext\(resolvedContext\):resolvedContext/);
+ assert.match(source,/leanSurface\?leanConversationContext\(resolvedContext\):coreSurface\?coreConversationContext\(resolvedContext\):workCoreContext/);
  assert.match(source,/tools\}\);/);
 });
 test("complete owned calendar snapshots, scoped referents, personal rules remain intact",()=>{
@@ -70,7 +70,7 @@ test("telemetry is numeric-only, with separate instruction/context/input/tool fo
  assert.equal(out.tools_count,1);
  assert.ok(!JSON.stringify(out).includes("private evidence"));
  assert.match(source,/prompt_components:footprint/);
- assert.match(source,/const contextTier=fastAgenda\?"calendar_fast":leanSurface\?"lean":coreSurface\?"core":"full";/);
+ assert.match(source,/const contextTier=fastAgenda\?"calendar_fast":leanSurface\?"lean":coreSurface\?"core":workCoreSurface\?"work_core":"full";/);
  assert.match(source,/context_tier:contextTier/);
 });
 test("governed tools and direct calendar receipts remain unchanged by the lean tier",()=>{
