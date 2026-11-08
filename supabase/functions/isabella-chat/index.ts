@@ -18,6 +18,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,dir
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
+import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
@@ -3124,6 +3125,18 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const attachments = Array.isArray(body?.attachments)?body.attachments.slice(0,3):[];
   if (!message && !attachments.length) return json({ error: "message_required" }, 400);
   const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
+  const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
+  let assistantOwner=assistantProfile.owner_name;
+  if(assistantProfile.multi_user){
+    // Office identity comes only from a verified session and an active membership.
+    const authenticated=(await supabaseClient(req)?.auth.getUser())?.data?.user;
+    if(!authenticated)return json({error:"authentication_required"},401);
+    const membership=await supabaseClient(req)?.from("office_members")
+      .select("display_name,is_active").eq("user_id",authenticated.id).maybeSingle();
+    if(membership?.error||!membership?.data?.is_active)return json({error:"office_member_required"},403);
+    assistantOwner=profileFirstName(membership.data.display_name);
+    if(!assistantOwner)return json({error:"office_member_display_name_required"},403);
+  }
 
   const context = body?.context || {};
   const background = !!body?.background;
@@ -4020,6 +4033,9 @@ pregunta cuál.`;
     // Point 4f: her own follow-ups, only in the global conversation (no authority outside the chat).
     ...(isabellaCoreEligible&&exposureScope.kind==="global"?FOLLOWUP_TOOLS:[])
   ]).filter((t:any)=>routineReviewSupported||!routineMutationTools.has(String(t.name||"")));
+  if(assistantProfile.multi_user){
+    tools.splice(0,tools.length,...profileTools(tools,assistantProfile,assistantOwner));
+  }
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
   let verifiedTemporalClaims=0;
@@ -4065,6 +4081,7 @@ pregunta cuál.`;
       skills:(skills||[]).map((s:any)=>skillPromptSummary(s)),scheduleAssessment,light:leanSurface,route,context:resolvedContext})+
       (workCoreEligible?"\n\nDETALLE WORK PARA ESTE TURNO\n"+CORE_DETAILS.work:""):
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
+  const providerInstructions=profileInstructions(modelInstructions,assistantProfile,assistantOwner);
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
     sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
@@ -4089,7 +4106,7 @@ pregunta cuál.`;
         {type:"input_text",text:(continuationEvidence?continuationEvidence+"\\n\\n":"")+boundedScopedTurn(recent,turnText)},
         ...attachmentInputs]}]
       :[{role:"user",content:[{type:"input_text",text:turnText},...attachmentInputs]}];
-  const footprint=promptComponentSizes({instructions:modelInstructions,
+  const footprint=promptComponentSizes({instructions:providerInstructions,
     context:fastAgenda?fastCalendarContext:modelContext,input,tools});
   (footprint as any).work_project_model_prefetch=sourceFirstWorkPrefetch?"deferred_source_first":"full";
   (footprint as any).context_sections=contextSectionSizes(fastAgenda?fastCalendarContext:modelContext);
@@ -4123,7 +4140,7 @@ pregunta cuál.`;
       body:JSON.stringify({
         model,...(emit?{stream:true}:{}),
         ...(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id?{conversation:conversationInfo.id}:{}),
-        instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
+        instructions:transientInstructions(providerInstructions,fastAgenda?fastCalendarContext:modelContext),
         reasoning:{effort:repairingSemantics?"medium":reasoningEffort},
         max_output_tokens:repairingSemantics?Math.max(budget.maxOutput,2200):budget.maxOutput,
         prompt_cache_options:{mode:"implicit",ttl:"30m"},
@@ -4563,7 +4580,7 @@ pregunta cuál.`;
       const retryStartedAt=performance.now();
       const retry=await fetch("https://api.openai.com/v1/responses",{method:"POST",
         headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
-        body:JSON.stringify({model,...(emit?{stream:true}:{}),instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
+        body:JSON.stringify({model,...(emit?{stream:true}:{}),instructions:transientInstructions(providerInstructions,fastAgenda?fastCalendarContext:modelContext),
           reasoning:{effort:"low"},max_output_tokens:Math.max(budget.maxOutput,2400),prompt_cache_options:{mode:"implicit",ttl:"30m"},
           ...(tools.length?{tools,tool_choice:"none"}:{}),input})});
       const again=emit?await readModelRound(retry,emitText,true):await retry.json();

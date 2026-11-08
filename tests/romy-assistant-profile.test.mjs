@@ -1,0 +1,117 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import vm from "node:vm";
+import {
+  resolveAssistantProfile, profileFirstName, personaText,
+  profileInstructions, profileTools, OFFICE_LANGUAGE_RULE
+} from "../supabase/functions/_shared/assistant-profile.mjs";
+import { isabellaCoreInstructions } from "../supabase/functions/_shared/isabella-core.mjs";
+import { relationshipPolicy } from "../supabase/functions/_shared/relationship-policy.ts";
+import { promptComponentSizes } from "../supabase/functions/_shared/light-conversation-context.mjs";
+import { SYSTEM_NOTICE_PATTERNS } from "../supabase/functions/_shared/system-notice.mjs";
+
+const read = path => readFileSync(new URL("../" + path, import.meta.url), "utf8");
+
+test("Window profile is a strict identity, including nested tool contracts", () => {
+  const p = resolveAssistantProfile();
+  assert.equal(p.id, "window");
+  assert.equal(p.multi_user, false);
+  assert.equal(p.timezone, "Europe/Berlin");
+  const input = isabellaCoreInstructions({
+    relationship: "Contrato de prueba",
+    tools: [{type: "function", name: "search_work", description: "Search Gari's Work"}]
+  });
+  assert.strictEqual(profileInstructions(input, p), input);
+  assert.strictEqual(personaText(input, {profile: p}), input);
+  const tools = [{type: "function", name: "consult_sofia", description: "For Gari"}];
+  assert.strictEqual(profileTools(tools, p), tools);
+  assert.strictEqual(profileTools(tools, p)[0], tools[0]);
+});
+
+test("Office owner is taken from authenticated member display name, not client input", () => {
+  const p = resolveAssistantProfile("office");
+  assert.equal(p.owner_source, "office_members.display_name");
+  assert.equal(profileFirstName("  Alex Beispiel  "), "Alex");
+  assert.equal(profileFirstName(""), null);
+  assert.throws(() => personaText("Gari", {profile: p}), /office_owner_name_required/);
+  const context = isabellaCoreInstructions({relationship: "Isabella habla con Gari."});
+  const result = profileInstructions(context, p, "Alex Beispiel");
+  assert.match(result, /Eres Romy/);
+  assert.match(result, /Alex/);
+  assert.doesNotMatch(result, /\bGari\b|\bIsabella\b/);
+  assert.ok(result.endsWith(OFFICE_LANGUAGE_RULE));
+});
+
+test("Office strips excluded tools and localizes only descriptions, not schema keys", () => {
+  const original = [
+    {type:"web_search"},
+    {type:"function",name:"consult_sofia",description:"Sofía para Gari"},
+    {type:"function",name:"update_feed_preferences",description:"Update feed"},
+    {type:"function",name:"create_task",description:"Create for Gari",parameters:{
+      type:"object",properties:{user_excerpt:{type:"string",description:"Gari's exact words"}}
+    }}
+  ];
+  const out = profileTools(original, "office", "Alex Beispiel");
+  assert.deepEqual(out.map(t=>t.name||t.type), ["web_search","create_task"]);
+  assert.equal(out[1].description, "Create for Alex");
+  assert.equal(out[1].parameters.properties.user_excerpt.description, "Alex's exact words");
+  assert.equal(original[3].description, "Create for Gari");
+  assert.equal(original[3].parameters.properties.user_excerpt.description, "Gari's exact words");
+  assert.equal(out[1].parameters.properties.user_excerpt.type, "string");
+  assert.throws(() => resolveAssistantProfile("other"), /unsupported_assistant_profile/);
+});
+
+test("German fixed app notices are identical server/browser patterns", () => {
+  const root = {};
+  vm.runInNewContext(read("apps/isabella/turn-integrity.js"), {window:root, globalThis:root});
+  assert.deepEqual(Array.from(root.MINDS_TURN_INTEGRITY.SYSTEM_NOTICE_PATTERNS, String),
+    SYSTEM_NOTICE_PATTERNS.map(String));
+  for(const value of ["Hinweis der App: wiederholen", "Bestätigt: Aufgabe",
+    "Verworfen: Aufgabe", "Keine Antwort möglich: Zeitüberschreitung"]) {
+    assert.ok(SYSTEM_NOTICE_PATTERNS.some(pattern => pattern.test(value)), value);
+  }
+});
+
+test("Shared chat dictionary chooses Spanish by default, German only for Office", () => {
+  for(const [profile,locale,undo,assistant] of [
+    [undefined,"es","Deshacer","Isabella"],["window","es","Deshacer","Isabella"],
+    ["office","de","Rückgängig","Romy"]
+  ]) {
+    const root = {APP_PROFILE:profile};
+    vm.runInNewContext(read("apps/isabella/assistant-i18n.js"), {window:root, globalThis:root});
+    assert.equal(root.ASSISTANT_I18N.locale,locale);
+    assert.equal(root.ASSISTANT_I18N.t("undo"),undo);
+    assert.ok(root.ASSISTANT_I18N.t("presence_enabled").includes(assistant));
+  }
+});
+
+test("Prompt-component budget: Office transformation is measured without live services", () => {
+  const tools = [{type:"function",name:"create_task",description:"Create task for Gari"},
+    {type:"function",name:"consult_sofia",description:"Read Sofía for Gari"}];
+  const instructions = isabellaCoreInstructions({relationship:"Contrato de prueba",tools});
+  const context = {current_date:"2026-11-08",today_tasks:[]};
+  const input = [{role:"user",content:"Hallo, Romy"}];
+  const before = promptComponentSizes({instructions,context,input,tools});
+  const officeTools = profileTools(tools,"office","Alex Beispiel");
+  const after = promptComponentSizes({
+    instructions:profileInstructions(instructions,"office","Alex Beispiel"),
+    context,input,tools:officeTools
+  });
+  assert.equal(before.input_chars,after.input_chars);
+  assert.equal(before.context_chars,after.context_chars);
+  assert.ok(after.tools_chars < before.tools_chars);
+  console.log("romy_phase0_prompt_component_sizes",JSON.stringify({before,after}));
+});
+
+test("Chat does not resolve Office identity in Window and never accepts a client-supplied owner name", () => {
+  const source = read("supabase/functions/isabella-chat/index.ts");
+  assert.match(source,/assistantProfile.multi_user/);
+  assert.match(source,/office_members/);
+  assert.match(source,/\.eq\("user_id",authenticated\.id\)/);
+  assert.match(source,/profileInstructions\(modelInstructions,assistantProfile,assistantOwner\)/);
+  assert.doesNotMatch(source,/body\?\.owner_name|body\?\.assistant_profile/);
+  assert.match(source,/instructions:transientInstructions\(providerInstructions,/);
+  assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile,assistantOwner\)\)/);
+  assert.ok(relationshipPolicy("conversation").length>0);
+});
