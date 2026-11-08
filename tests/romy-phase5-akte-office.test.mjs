@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {officeIngestAuthorized} from '../supabase/functions/_shared/office-akte-access.mjs';
 import assert from 'node:assert/strict';
 import {
   PFLEGE_INSTRUCTIONS,OFFICE_PFLEGE_INSTRUCTIONS,trustedPflegeWorkflow,
@@ -83,4 +84,30 @@ test('Office Akte never writes anything for projects with no active team',async(
   assert.equal(r.ok,true);
   assert.equal(r.model_runs,0);
   assert.deepEqual(r.projects,[{status:'no_active_team'}]);
+});
+
+test('Office Docling ingestion rejects revoked member, wrong project and foreign files',async()=>{
+  const job={project_id:P,user_id:A,file_id:'file-p'};
+  const make=(memberActive=true,fileUser=A,projectStatus='aktiv',teamAllowed=true)=>{
+    const data={
+      office_project_members:teamAllowed?[{project_id:P,user_id:A}]:[],
+      office_members:[{user_id:A,is_active:memberActive}],
+      office_projects:[{id:P,status:projectStatus}],
+      minds_work_files:[{id:'file-p',user_id:fileUser,project_id:P}]
+    };
+    const sb={from(table){
+      const filters=[];
+      const q={select(){return q},eq(k,v){filters.push(x=>x[k]===v);return q},
+        async maybeSingle(){return {data:(data[table]||[]).find(x=>filters.every(f=>f(x)))||null,error:null}}};
+      return q;
+    }};
+    return sb;
+  };
+  assert.equal(await officeIngestAuthorized(make(),job),true);
+  assert.equal(await officeIngestAuthorized(make(false),job),false);
+  assert.equal(await officeIngestAuthorized(make(true,A,'archiviert'),job),false);
+  assert.equal(await officeIngestAuthorized(make(true,A,'aktiv',false),job),false);
+  assert.equal(await officeIngestAuthorized(make(true,B),job),false);
+  assert.equal(await officeIngestAuthorized(make(),{...job,project_id:Q}),false);
+  assert.equal(await officeIngestAuthorized(make(),{...job,file_id:'another'}),false);
 });
