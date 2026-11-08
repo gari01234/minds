@@ -109,7 +109,7 @@ Deno.serve(async(req:Request)=>{
   if(kind==="image"){
     const prompt=String(body?.instruction||body?.content||"").trim();
     if(!prompt)return json({error:"instruction_required"},400);
-    const apiKey=Deno.env.get("OPENAI_API_KEY")||"";if(!apiKey)return json({error:"openai_not_configured"},503);
+    const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";if(!apiKey)return json({error:"openai_not_configured"},503);
     const size=["1024x1024","1536x1024","1024x1536"].includes(String(body?.size||""))?String(body.size):"1024x1024";
     const quality=["low","medium","high"].includes(String(body?.quality||""))?String(body.quality):"low";
     model="gpt-image-2.5-flare";

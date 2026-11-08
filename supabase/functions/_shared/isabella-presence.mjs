@@ -22,7 +22,7 @@ import {localStamp} from './turn-capability-contract.mjs';
 import {workRadar} from './isabella-radar.mjs';
 import {splitFollowUps} from './isabella-followups.mjs';
 
-import {resolveAssistantProfile,profileInstructions,profileOwnerForUser,profileFirstName,personaText} from './assistant-profile.mjs';
+import {resolveAssistantProfile,profileInstructions,profileOwnerForUser,profileFirstName,personaText,OFFICE_RELATIONSHIP_POLICY} from './assistant-profile.mjs';
 
 export const PRESENCE_AUDIENCE='minds-isabella-presence';
 export const PRESENCE_REPOSITORY='gari01234/minds';
@@ -138,7 +138,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ,profile='w
       .lte('due_date',afterTomorrow).order('due_date',{ascending:true}).limit(40),'tasks'),
     rows(sb.from('isabella_events').select('title,starts_at,ends_at,all_day').eq('user_id',userId)
       .gte('starts_at',new Date(now.getTime()-12*36e5).toISOString()).lte('starts_at',new Date(now.getTime()+60*36e5).toISOString()).order('starts_at',{ascending:true}).limit(30),'events'),
-    workRadar(sb,{now,tz,userId}),
+    workRadar(sb,{now,tz,userId,profile:p.id}),
     rows(sb.from('isabella_preferences').select('preference_key,value').eq('user_id',userId).in('preference_key',continuityKeys),'continuidad')
   ]);
   const value=prefValue(prefs),seenValue=prefValue(seen),stateValue=prefValue(state);
@@ -277,7 +277,7 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
         started_at:new Date(started).toISOString(),completed_at:new Date().toISOString(),latency_ms:Date.now()-started}).then(()=>{},()=>{});
       report.push({spoke:delivered,reason:delivered?msg.basis:'already_wrote_today',moment:moment.kind,push_sent:pushed.sent||0});
     }catch(e){
-      log('isabella_presence_user_failed',e instanceof Error?e.message:String(e));
+      log('isabella_presence_user_failed',assistantProfile.multi_user?'office_presence_failed':e instanceof Error?e.message:String(e));
       report.push({spoke:false,reason:'error'});
     }
   }

@@ -6,6 +6,7 @@
 // Triggered once a night by .github/workflows/akte-pflege.yml with a GitHub OIDC token.
 import {createWindowTools,norm,clip,isDay,localDay,TZ} from './window-tools.mjs';
 import {createAkteTools} from './window-akte.mjs';
+import {resolveAssistantProfile} from './assistant-profile.mjs';
 
 export const PFLEGE_AUDIENCE='minds-akte-pflege';
 export const PFLEGE_REPOSITORY='gari01234/minds';
@@ -17,6 +18,14 @@ const LIMITS={files:12,fileChars:6000,totalFileChars:45000,messages:80,messageCh
 export function trustedPflegeWorkflow(c){
   return !!c&&c.repository===PFLEGE_REPOSITORY&&c.repository_id==='1387794687'&&c.ref==='refs/heads/main'&&
     c.workflow_ref===PFLEGE_REPOSITORY+'/.github/workflows/akte-pflege.yml@refs/heads/main'&&
+    ['schedule','workflow_dispatch'].includes(c.event_name)&&/^\d+$/.test(String(c.run_id||''));
+}
+
+// The Office deployment uses GitHub OIDC from its own repository, never a Window token.
+export function trustedOfficePflegeWorkflow(c){
+  const repo='TBArchitekten/tbarchitekten.github.io';
+  return !!c&&c.repository===repo&&c.ref==='refs/heads/main'&&
+    c.workflow_ref===repo+'/.github/workflows/romy-akte-pflege.yml@refs/heads/main'&&
     ['schedule','workflow_dispatch'].includes(c.event_name)&&/^\d+$/.test(String(c.run_id||''));
 }
 
@@ -180,10 +189,10 @@ async function recordUsage(sb,userId,projectId,payload,model){
 
 // Default model caller: OpenAI Responses API with a strict JSON schema.
 export function openaiCaller(apiKey,model=PFLEGE_MODEL,fetchImpl=fetch){
-  return async(input)=>{
+  return async(input,{profile='window'}={})=>{
     const res=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(90000),
       headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,reasoning:{effort:'low'},max_output_tokens:3000,instructions:PFLEGE_INSTRUCTIONS,
+      body:JSON.stringify({model,reasoning:{effort:'low'},max_output_tokens:3000,instructions:profile==='office'?OFFICE_PFLEGE_INSTRUCTIONS:PFLEGE_INSTRUCTIONS,
         text:{format:{type:'json_schema',name:'akte_pflege',strict:true,schema:PFLEGE_SCHEMA}},
         input:[{role:'user',content:[{type:'input_text',text:JSON.stringify(input)}]}]})});
     let payload={};try{payload=await res.json()}catch{}
@@ -194,7 +203,149 @@ export function openaiCaller(apiKey,model=PFLEGE_MODEL,fetchImpl=fetch){
 }
 
 // One nightly pass over every user's projects.
-export async function runAktePflege({sb,callModel,now=new Date(),model=PFLEGE_MODEL,log=()=>{}}){
+
+export const OFFICE_PFLEGE_INSTRUCTIONS=PFLEGE_INSTRUCTIONS
+  .replace('Du bist Isabella, die Sachbearbeiterin von Garis Architekturbüro.',
+    'Du bist Romy, die Assistenz für gemeinsam berechtigte Office-Projektakten.')
+  .replace('Bauherr, Gari, Fachplaner','Projektverantwortliche oder Fachplaner')
+  .replace('Garis Büro','das zuständige Projektteam')
+  .replace('ein Satz auf Spanisch für Gari','ein Satz auf Deutsch für das Projektteam')+
+  '\nNur Dokumente aus dem ausdrücklich autorisierten Projekt, niemals private Kollegen-Chats.'+
+  '\nAlle neuen Einträge sind Vorschläge. Keine bestätigte Entscheidung ohne menschliche Prüfung.';
+
+async function officeRows(query,label){
+  const r=await query;
+  if(r.error)throw Error(label+'_unavailable');
+  return r.data||[];
+}
+
+// The project is team-shared, while the originating file and source remain
+// owner-attributed. This function never scans private conversation histories.
+export async function collectOfficeAkteSources(sb,projectId,since){
+  const files=await officeRows(sb.from('minds_work_files')
+    .select('id,user_id,project_id,name,index_status,created_at,updated_at,source_kind,metadata')
+    .eq('project_id',projectId).eq('index_status','indexed').gt('updated_at',since)
+    .order('updated_at',{ascending:true}).limit(LIMITS.files),'office_project_files');
+  const out=[];let remaining=LIMITS.totalFileChars;
+  for(const file of files){
+    if(remaining<500)break;
+    if(file.metadata?.visibility==='private'||file.metadata?.scope==='personal')continue;
+    const rows=await officeRows(sb.from('minds_work_source_segments')
+      .select('file_id,project_id,source_version,segment_no,content,locator')
+      .eq('project_id',projectId).eq('file_id',file.id)
+      .order('segment_no',{ascending:true}).limit(80),'office_source_segments');
+    if(!rows.length)continue;
+    const version=rows[rows.length-1]?.source_version||rows[0].source_version;
+    const same=rows.filter(x=>x.source_version===version);
+    const text=short(same.map(x=>String(x.content||'')).join('\n\n'),
+      Math.min(LIMITS.fileChars,remaining));
+    if(!text)continue;
+    remaining-=text.length;
+    out.push({id:file.id,source_version:version,datei:file.name,art:file.source_kind,
+      aktualisiert:String(file.updated_at||'').slice(0,10),text,
+      seiten:same.map(x=>x.locator?.page||x.locator?.page_start).filter(Boolean).slice(0,20)});
+  }
+  return out;
+}
+function officeEvidence(source,title,quote){
+  const normalized=nonEmpty(title),q=nonEmpty(quote);
+  return normalized.length>=3&&q.length>=8&&q.length<=200&&source&&source.text.includes(q);
+}
+export function officeAkteProposals(result,sources,existingTitles=[]){
+  const known=[...existingTitles],byFile=new Map(sources.map(x=>[norm(x.datei),x]));
+  const out=[];
+  for(const [key,type,max] of [
+    ['fristen','deadline',LIMITS.fristen],
+    ['entscheidungen','decision',LIMITS.entscheidungen],
+    ['aufgaben','commitment',LIMITS.aufgaben]
+  ]){
+    for(const candidate of (Array.isArray(result?.[key])?result[key]:[]).slice(0,max)){
+      const title=nonEmpty(candidate.titel),source=byFile.get(norm(candidate.quelle));
+      if(!officeEvidence(source,title,candidate.zitat)||known.some(x=>nearDuplicate(title,x)))continue;
+      if(type==='deadline'&&!day(candidate.datum))continue;
+      out.push({memory_type:type,title:short(title,200),body:short(candidate.grund,1500),
+        source_file_id:source.id,source_version:source.source_version,
+        quote:short(candidate.zitat,200),date:type==='deadline'?candidate.datum:null});
+      known.push(title);
+    }
+  }
+  return out;
+}
+
+export async function runOfficeAktePflege({sb,callModel,now=new Date(),model=PFLEGE_MODEL,log=()=>{}}){
+  const at=iso(now);
+  const projects=await officeRows(sb.from('office_projects').select('id,name,status')
+    .eq('status','aktiv').limit(500),'office_projects');
+  const projectIds=projects.map(x=>x.id);
+  if(!projectIds.length)return {ok:true,model_runs:0,projects:[]};
+  const team=await officeRows(sb.from('office_project_members')
+    .select('project_id,user_id').in('project_id',projectIds).limit(2000),'office_project_members');
+  const members=await officeRows(sb.from('office_members').select('user_id,is_active')
+    .eq('is_active',true).limit(500),'office_members');
+  const active=new Set(members.map(x=>x.user_id));
+  const report=[];let runs=0;
+  for(const project of projects){
+    if(runs>=LIMITS.projectsPerRun)break;
+    const authorized=team.filter(x=>x.project_id===project.id&&active.has(x.user_id))
+      .map(x=>x.user_id).sort();
+    if(!authorized.length){report.push({status:'no_active_team'});continue}
+    const author=authorized[0]; // storage owner, NOT claimed human author
+    const claim=await sb.rpc('office_romy_claim_akte_project',{p_project_id:project.id});
+    if(claim.error)throw Error('office_akte_claim_unavailable');
+    if(claim.data!==true){report.push({status:'already_claimed'});continue}
+    const stateRow=await sb.from('office_romy_akte_maintenance_state')
+      .select('last_run_at').eq('project_id',project.id).maybeSingle();
+    if(stateRow.error)throw Error('office_akte_state_unavailable');
+    const since=stateRow.data?.last_run_at||iso(now.getTime()-FIRST_RUN_DAYS*864e5);
+    try{
+      const files=await collectOfficeAkteSources(sb,project.id,since);
+      if(!files.length){
+        await officeRows(sb.from('office_romy_akte_maintenance_state').update({
+          last_run_at:at,last_status:'nothing_new',lease_until:null,updated_at:at
+        }).eq('project_id',project.id).select('project_id'),'office_akte_noop');
+        report.push({status:'nothing_new'});continue;
+      }
+      const existing=await officeRows(sb.from('minds_work_memory')
+        .select('memory_type,title,status').eq('project_id',project.id)
+        .in('memory_type',['deadline','decision','commitment','open_question'])
+        .limit(400),'office_akte_register');
+      const input={projekt:project.name,heute:localDay(now,TZ),
+        aktuelle_eintraege:existing.map(x=>({art:x.memory_type,titel:x.title,status:x.status})),
+        neue_dokumente:files.map(x=>({datei:x.datei,art:x.art,text:x.text,seiten:x.seiten}))};
+      runs++;
+      const {value,payload}=await callModel(input,{profile:'office'});
+      await recordUsage(sb,author,project.id,payload,model);
+      const proposals=officeAkteProposals(value,files,existing.map(x=>x.title));
+      if(proposals.length){
+        const data=proposals.map(x=>({
+          user_id:author,project_id:project.id,memory_type:x.memory_type,title:x.title,
+          body:x.body,status:'proposed',occurred_at:x.date||null,
+          metadata:{author_kind:'system',proposal_origin:'romy_akte_pflege',
+            source_file_id:x.source_file_id,source_version:x.source_version,
+            source_quote:x.quote,requires_human_review:true}
+        }));
+        await officeRows(sb.from('minds_work_memory').insert(data).select('id'),'office_akte_proposals');
+      }
+      await officeRows(sb.from('office_romy_akte_maintenance_state').update({
+        last_run_at:at,last_status:'ok',lease_until:null,
+        metadata:{proposal_count:proposals.length},updated_at:at
+      }).eq('project_id',project.id).select('project_id'),'office_akte_finish');
+      report.push({status:'ok',proposed:proposals.length});
+    }catch(e){
+      // Never emit model prompts, project titles, file names or colleague data to logs.
+      log('office_akte_pflege_failed','project_processing_failed');
+      await sb.from('office_romy_akte_maintenance_state').update({
+        last_status:'error',lease_until:null,updated_at:at
+      }).eq('project_id',project.id);
+      report.push({status:'error'});
+    }
+  }
+  return {ok:!report.some(x=>x.status==='error'),model_runs:runs,projects:report};
+}
+
+export async function runAktePflege({sb,callModel,now=new Date(),model=PFLEGE_MODEL,log=()=>{},profile='window'}){
+  if(resolveAssistantProfile(profile).multi_user)
+    return runOfficeAktePflege({sb,callModel,now,model,log});
   const at=iso(now);
   const [projectsQ,windowQ]=await Promise.all([
     sb.from('isabella_projects').select('id,user_id,name,client_key,archived').limit(500),

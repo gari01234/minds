@@ -215,7 +215,7 @@ Deno.serve(async(req:Request)=>{
 
   const url=Deno.env.get("SUPABASE_URL")||"";
   const service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
-  const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!url||!service||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
 
