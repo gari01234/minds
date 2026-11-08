@@ -12,7 +12,7 @@ import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_s
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch,safeDirectToolHistory,titleInCurrentOwnerMessage} from "../_shared/direct-calendar-contract.mjs";
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
@@ -555,8 +555,8 @@ const calendarTools = [
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
       direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
-      direct_event_duration_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event duration, NOT a default."}
-    }, required:["title","date","time","duration_minutes"] }
+      direct_event_duration_excerpt:{type:"string",description:"Exact quote only when the owner specified a duration. Otherwise the event defaults to 60 minutes."}
+    }, required:["title","date","time"] }
   },
   {
     type: "function",
@@ -3509,10 +3509,10 @@ Solo el servidor puede habilitar ejecución directa según permiso vigente.
 Las modificaciones y eliminaciones requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
 Mantén el proyecto explícito; no inventes horas ni fechas. Una creación directa
-de evento exige fecha, hora y duración respaldadas explícitamente por la orden
+de evento exige fecha y hora respaldadas explícitamente por la orden
 del usuario; usa direct_event_time_excerpt y direct_event_duration_excerpt
-como citas literales. Sin ellas, usa request_clarification o la revisión habitual.
-Si falta un dato esencial, pide aclaración. Cuando título, fecha, hora y duración de un evento están expresos y coherentes, llama create_event: no preguntes si te refieres a esos mismos valores. El servidor comprobará temporal_grounding y permisos. No consultes otros ámbitos.
+como citas literales cuando existan; si no hay duración, usa 60 minutos con duration_defaulted:true y muestra «1 h · editable». Sin hora, pide aclaración.
+Si falta un dato esencial, pide aclaración. Cuando título, fecha y hora de un evento están expresos y coherentes, llama create_event: no preguntes si te refieres a esos mismos valores. El servidor comprobará temporal_grounding y permisos. No consultes otros ámbitos.
 Si el usuario señala que una fecha de una tarea recién propuesta o creada
 está equivocada, identifica la tarea en los mensajes recientes y la agenda.
 Si hay una única coincidencia, usa update_task como propuesta de corrección;
@@ -3948,6 +3948,7 @@ pregunta cuál.`;
   let webSources:any[]=[];
   let sourceTainted=!!routedWork||!!routedSofia;
   const usedTools:string[]=[];
+  let directSourceBlocked=!!routedSofia||attachments.length>0;
   const specialistDelegations:any[]=[];
   const specialistCache=new Map<string,any>();
   const specialistOrchestrations:any[]=[];
@@ -4057,7 +4058,7 @@ pregunta cuál.`;
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
         message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
-    if((payload.output||[]).some((x:any)=>x.type==="web_search_call"))sourceTainted=true;
+    if((payload.output||[]).some((x:any)=>x.type==="web_search_call")){sourceTainted=true;directSourceBlocked=true;}
     webSources=[...webSources,...extractSources(payload)]
       .filter((x:any,i:number,a:any[])=>a.findIndex((y:any)=>y.url===x.url)===i).slice(0,8);
 
@@ -4089,6 +4090,7 @@ pregunta cuál.`;
     }
 
     const outputs:any[]=[];
+    const roundStartTools=usedTools.length;
     for(const call of calls){
       const args=safeArgs(call);
       usedTools.push(String(call.name||""));
@@ -4100,12 +4102,20 @@ pregunta cuál.`;
         })});
         continue;
       }
-      if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name))sourceTainted=true;
+      if(["search_generated_artifacts","search_work","search_work_threads","read_work_file","analyze_project_source","compare_project_source","consult_sofia"].includes(call.name)){sourceTainted=true;directSourceBlocked=true;}
       if(mode==="deny"){
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"blocked_by_policy"})});
         continue;
       }
       let rawProposal:any=proposalFromTool(call.name,args);
+      // A missing owner duration is not evidence: use a marked 60-minute
+      // default, never a model-supplied duration inferred from sources.
+      if(call.name==="create_event"&&rawProposal){
+        const source=verifiedContinuation?.source_message||effectiveMessage;
+        if(!exactFieldExcerpt(source,args?.direct_event_duration_excerpt)){
+          rawProposal={...rawProposal,duration_minutes:60,duration_defaulted:true};
+        }
+      }
       if(rawProposal?.kind==="routine"&&rawProposal.action!=="create"){
         if(!routineReviewSupported){
           outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({status:"client_update_required",guidance:"Reload MINDS to review routine changes. Do not create a replacement routine."})});continue;
@@ -4155,11 +4165,14 @@ pregunta cuál.`;
           const sourceText=verifiedContinuation?.source_message||effectiveMessage;
           const quoted=String(args?.direct_user_excerpt||"").trim();
           if(surface==="chat_browser"&&!currentWorkThread&&!background&&!attachments.length&&
-             !sourceTainted&&round===0&&["create_task","create_event"].includes(String(call.name))&&
+             !directSourceBlocked&&safeDirectToolHistory(usedTools,roundStartTools)&&
+             ["create_task","create_event"].includes(String(call.name))&&
+             titleInCurrentOwnerMessage(reviewedProposal.title,effectiveMessage)&&
              exactOwnerExcerpt(sourceText,quoted)&&
              (call.name!=="create_event"||(
                exactFieldExcerpt(sourceText,args?.direct_event_time_excerpt)&&
-               exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt)
+               (reviewedProposal.duration_defaulted===true||
+                 exactFieldExcerpt(sourceText,args?.direct_event_duration_excerpt))
              ))&&browserTurnId(verifiedContinuation?.source_turn_id||clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
@@ -4168,7 +4181,7 @@ pregunta cuál.`;
           }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
-            source_tainted:sourceTainted,round,background:!!background,
+            source_tainted:directAllowed?false:sourceTainted,round,background:!!background,
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
             ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
                direct_authorization_excerpt:quoted,
@@ -4176,7 +4189,8 @@ pregunta cuál.`;
                direct_timezone:temporal.timezone,
                ...(call.name==="create_event"?{
                  direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
-                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim()
+                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim(),
+                 direct_event_duration_defaulted:reviewedProposal.duration_defaulted===true
                }: {})}: {})
           });
           if(admission?.status==="suppressed"){
