@@ -83,7 +83,7 @@ export async function loadVoiceContext(sb,owner,conversationId,now=new Date()){
   return {data,recent:messages.data||[]};
 }
 export async function persistVoiceTurn(sb,owner,body,profile='window'){
-  if(!/^[\w-]{1,140}$/.test(body.turn_id||'')||!['gari','isabella','owner'].includes(body.author)||!liveTranscriptAuthorAllowed(body.author,profile)||typeof body.text!=='string'||!body.text.trim()||bytes(body.text)>24000)throw new Error('invalid_voice_turn');
+  if(!/^[\w-]{1,140}$/.test(body.turn_id||'')||!(resolveAssistantProfile(profile).multi_user?['gari','owner']:['gari','isabella']).includes(body.author)||!liveTranscriptAuthorAllowed(body.author,profile)||typeof body.text!=='string'||!body.text.trim()||bytes(body.text)>24000)throw new Error('invalid_voice_turn');
   if(!body.conversation_id)throw new Error('missing_conversation');
   const conversationId=await liveConversation(sb,owner,body.conversation_id,profile);
   const key='live:'+body.turn_id, role=body.author==='gari'||body.author==='owner'?'user':'assistant';
