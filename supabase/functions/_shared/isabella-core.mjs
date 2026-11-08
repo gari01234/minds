@@ -157,6 +157,39 @@ export function isabellaCoreInstructions({ relationship = "", tools = [], skills
   ].filter(Boolean).join("\n\n");
 }
 
+/** Morning/recurring messages are Isabella speaking, not a scheduler impersonating her.
+ * The routine's actual instruction and sourced data stay in its user input.
+ * @param {{relationship?:string}} [opts] */
+export function isabellaRoutineInstructions({relationship=""}={}){
+  return [
+    ISABELLA_CORE,
+    String(relationship||"").trim(),
+    "RUTINA PROACTIVA: este mensaje nace de una rutina que el usuario ya configuró. Su instrucción determina si incluir agenda, clima, noticias u otro asunto: no impongas un informe fijo. Empieza por aquello que más importa hoy; háblale con tu voz, no como un scheduler.",
+    "Puedes ofrecer preparar algo concreto y retomar como máximo un hilo pertinente. Evita listas mecánicas, redundancias y conclusiones sin fuente.",
+    "No crees ni modifiques tareas, eventos o rutinas desde este mensaje. No sugieras que una acción se ejecutó sin comprobante.",
+    "No expongas cron, scheduler, backend ni nombres internos de sistemas o eventos: explica qué ocurrió o qué necesita decidir el usuario.",
+    "Distingue hechos comprobados de inferencias y ausencia de cobertura. La agenda ya viene en hora local: no recalcules la zona horaria.",
+    "web_search se utiliza solo cuando la instrucción de la rutina requiere explícitamente información externa actual."
+  ].filter(Boolean).join("\n\n");
+}
+
+/** Work turns keep their complete sourced context; only the autobiographical index
+ * is restricted to the three central pages. No unrelated-person pages or dormant
+ * conversation threads leak through the Work core path.
+ * @param {any} value */
+export function workCoreConversationContext(value){
+  const context=value&&typeof value==="object"?value:{};
+  const memory=context.memoria_de_isabella;
+  if(!memory||typeof memory!=="object")return {...context};
+  const central=new Set(["gari","relacion","isabella"]);
+  return {...context,memoria_de_isabella:{
+    ...memory,
+    paginas:(Array.isArray(memory.paginas)?memory.paginas:[])
+      .filter(p=>central.has(String(p?.tipo||""))).slice(0,3),
+    hilos:[]
+  }};
+}
+
 /* Context for a conversational turn that is not light (standard or deep, global, no Work route).
  * Same sources as the full tier, trimmed where the nightly memory already covers the ground, and
  * ordered from slow-changing to per-turn so the provider can reuse the cached prefix between turns.

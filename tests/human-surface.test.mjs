@@ -96,7 +96,9 @@ test('Build 72 humanizes proactive durable-work messages and briefings',()=>{
   assert.ok(mission.includes('El progreso sigue guardado y no he hecho ningún cambio externo.'));
   assert.ok(!mission.includes('El progreso anterior sigue guardado en su Mission Workspace'));
   assert.ok(routine.includes('COSAS QUE DECIDISTE NO INTERRUMPIR ANTES:'));
-  assert.ok(routine.includes('Tampoco expongas términos internos de MINDS'));
+  const core=read('supabase/functions/_shared/isabella-core.mjs');
+  assert.ok(routine.includes('isabellaRoutineInstructions'));
+  assert.ok(core.includes('No expongas cron, scheduler, backend ni nombres internos de sistemas o eventos'));
   assert.ok(push.includes('quotedSubject(title,"Trabajo terminado:")'));
   assert.ok(push.includes('quotedSubject(title,"No pude terminar:")'));
 });
