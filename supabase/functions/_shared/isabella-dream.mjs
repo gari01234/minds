@@ -15,6 +15,7 @@ import {splitFollowUps,FOLLOWUP_KIND,FOLLOWUP_LIMITS} from './isabella-followups
 // Only the owner's global, scoped (version 1) chat turns are read: project and Work-thread turns
 // stay in their scope, and legacy rows (before exposure scopes) are never promoted.
 import {clip,localDay,TZ} from './window-tools.mjs';
+import {resolveAssistantProfile,profileInstructions,profileFirstName,profileOwnerForUser} from './assistant-profile.mjs';
 import {isSystemNotice,isSystemAuthored} from './system-notice.mjs';
 
 export const DREAM_AUDIENCE='minds-isabella-dream';
@@ -96,7 +97,9 @@ export async function writeDreamState(sb,userId,state,at){
 }
 
 // The new transcript: the owner's global, scoped turns in the Isabella chats, without app texts.
-export async function collectTranscript(sb,userId,since){
+export async function collectTranscript(sb,userId,since,{profile='window',owner=null}={}){
+  const p=typeof profile==='string'?resolveAssistantProfile(profile):profile;
+  const person=p.multi_user?profileFirstName(owner):p.owner_name;
   const convQ=await sb.from('conversations').select('id').eq('user_id',userId).eq('app_scope','isabella').limit(20);
   if(convQ.error)throw convQ.error;
   const ids=(convQ.data||[]).map(c=>c.id);
@@ -112,7 +115,7 @@ export async function collectTranscript(sb,userId,since){
   const forgotten=new Set((tomb.data||[]).map(t=>String(t.source_id)));
   return {
     messages:page.filter(m=>!forgotten.has(String(m.id))&&!isSystemAuthored(m)).map(m=>({id:m.id,at:m.created_at,cuando:localStamp(m.created_at),
-      autor:m.role==='user'?'Gari':'Isabella',texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
+      autor:m.role==='user'?person:p.assistant_name,texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
     last_at:page.length?page[page.length-1].created_at:null,more
   };
 }
@@ -143,10 +146,13 @@ const nonEmpty=v=>String(v||'').trim();
 const day=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):null;
 
 // Applies one night's result. Pages are versioned (last 3 kept) so nothing is lost.
-export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],reviewDate=beforeToday(now),transcript=[]}={}){
+export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],reviewDate=beforeToday(now),transcript=[],profile='window',owner=null}={}){
+  const p=typeof profile==='string'?resolveAssistantProfile(profile):profile;
+  const person=p.multi_user?profileFirstName(owner):p.owner_name;
+  if(!person)throw new TypeError('office_owner_name_required');
   const at=iso(now),out={paginas:[],hipotesis:0,hilos:[],correcciones:0};
   for(const p of (value&&value.paginas||[]).slice(0,LIMITS.pages)){
-    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?'Gari':p&&p.tipo==='relacion'?'Gari e Isabella':p&&p.tipo==='isabella'?'Isabella':'');
+    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?person:p&&p.tipo==='relacion'?person+' e '+(profile==='office'?'Romy':'Isabella'):p&&p.tipo==='isabella'?(profile==='office'?'Romy':'Isabella'):'');
     if(!type||!name)continue;
     const hechos=(Array.isArray(p.hechos)?p.hechos:[]).filter(h=>nonEmpty(h&&h.texto)).slice(0,LIMITS.factsPerPage)
       .map(h=>({texto:clip(nonEmpty(h.texto),400),fecha:day(h.fecha),fuente:clip(nonEmpty(h.fuente),160),estado:h.estado||'vigente'}));
@@ -175,7 +181,7 @@ export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],revie
     const claim=clip(nonEmpty(h&&h.afirmacion),500);
     if(!claim||!CLAIM_TYPES.includes(h.tipo)||known.has(normalizeName(claim)))continue;
     const episodes=h.tipo==='pattern'?(h.episodios||[]).filter(e=>e.cita?.trim()&&transcript.some(m=>
-      m.autor==='Gari'&&m.cuando.slice(0,10)===e.fecha&&m.texto.includes(e.cita))).slice(0,4):[];
+      m.autor===person&&m.cuando.slice(0,10)===e.fecha&&m.texto.includes(e.cita))).slice(0,4):[];
     if(h.tipo==='pattern'&&new Set(episodes.map(e=>e.fecha)).size<2)continue;
     const r=await sb.from('isabella_model_claims').insert({user_id:userId,claim_type:h.tipo,claim,status:'hypothesis',confidence:0.55,source_type:'observed',
       evidence:[{source:'isabella_dream',quote:clip(nonEmpty(h.cita),300),date:day(h.fecha),at},...episodes.map(e=>({source:'isabella_dream',quote:clip(e.cita,200),date:e.fecha}))],metadata:{source:'isabella_dream'}});
@@ -225,10 +231,10 @@ async function recordUsage(sb,userId,payload,model){
 
 // Default model caller: OpenAI Responses API with a strict JSON schema.
 export function dreamCaller(apiKey,model=DREAM_MODEL,fetchImpl=fetch){
-  return async(input)=>{
+  return async(input,{profile='window',owner=null}={})=>{
     const res=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(240000),
       headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,reasoning:{effort:'medium'},max_output_tokens:8000,instructions:DREAM_INSTRUCTIONS,store:false,
+      body:JSON.stringify({model,reasoning:{effort:'medium'},max_output_tokens:8000,instructions:profileInstructions(DREAM_INSTRUCTIONS,profile,owner),store:false,
         text:{format:{type:'json_schema',name:'isabella_dream',strict:true,schema:DREAM_SCHEMA}},
         input:[{role:'user',content:[{type:'input_text',text:JSON.stringify(input)}]}]})});
     let payload={};try{payload=await res.json()}catch{}
@@ -256,7 +262,8 @@ export function dreamDue(state,now=new Date(),tz=TZ){
   return {go:true,reason:'due',nightly:{...n,attempts:Number(n.attempts||0)+1,passes:Number(n.passes||0)+1,running_at:iso(now)}};
 }
 
-export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_MODEL,log=()=>{},due=false}){
+export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_MODEL,log=()=>{},due=false,profile='window'}){
+  const assistantProfile=resolveAssistantProfile(profile);
   const at=iso(now);
   if(due&&!dreamDue({},now).go)return {ok:true,more:false,users:[],skipped:'outside_night'};
   const owners=await sb.from('conversations').select('user_id').eq('app_scope','isabella').limit(100);
@@ -264,6 +271,8 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
   const users=[...new Set((owners.data||[]).map(r=>r.user_id).filter(Boolean))];
   const report=[];
   for(const userId of users){
+    const owner=await profileOwnerForUser(sb,userId,assistantProfile);
+    if(!owner){report.push({status:'owner_inactive'});continue}
     const started=Date.now();
     let state=await readDreamState(sb,userId);
     // Heartbeat path: one pass per call, tracked per night; the manual workflow runs regardless.
@@ -273,7 +282,7 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
     const settled=more=>night?{more,nightly:{...state.nightly,attempts:0,running_at:null,done:!more}}:{more};
     const since=state.last_message_at||iso(now.getTime()-FIRST_RUN_DAYS*864e5);
     try{
-      const t=await collectTranscript(sb,userId,since);
+      const t=await collectTranscript(sb,userId,since,{profile:assistantProfile,owner});
       const date=beforeToday(now);
       const events=await reviewedEvents(sb,userId,date);
       if(!t.messages.length&&(!events.length||state.reviewed_day===date)){
@@ -284,11 +293,11 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
       const memory=await currentMemory(sb,userId,now);
       const {transcript,quotes}=splitDreamEvidence(t.messages);
       const input={fecha_repasada:date,eventos_repasados:events,hoy:localDay(now,TZ),ultimo_repaso:String(since).slice(0,10),memoria_actual:memory,transcripcion_nueva:transcript};
-      const {value:raw,payload}=await callModel(input);
+      const {value:raw,payload}=await callModel(input,{profile:assistantProfile.id,owner});
       await saveTransient(sb,userId,raw,{date,now,quotes,transcript});
       const value=durableDream(raw);
       await recordUsage(sb,userId,payload,model);
-      const applied=await applyDream(sb,userId,value,now,{log,events,reviewDate:date,transcript});
+      const applied=await applyDream(sb,userId,value,now,{log,events,reviewDate:date,transcript,profile:assistantProfile,owner});
       const diario=clip(nonEmpty(value&&value.diario),1200);
       await sb.from('minds_agent_runs').insert({user_id:userId,feature:'isabella_dream',status:'success',route:{model,since,more:t.more},
         metadata:{diario,mensajes:t.messages.length,paginas:applied.paginas,hipotesis:applied.hipotesis,hilos:applied.hilos,
