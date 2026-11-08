@@ -72,8 +72,8 @@ test('Model history: app lines become "sistema", same count and size, Isabella s
 
 test('The dream never reads app lines as Isabella\'s words, marked or legacy',async()=>{
   const rows=[
-    {id:'a',role:'user',content:'¿Y tú nunca duermes?',created_at:'2026-11-03T21:06:00Z',metadata:{}},
-    {id:'b',role:'assistant',content:'Un poco, cuando tú duermes.',created_at:'2026-11-03T21:06:10Z',metadata:{}},
+    {id:'a',role:'user',content:'¿Y tú qué haces cuando no hablamos?',created_at:'2026-11-03T21:06:00Z',metadata:{}},
+    {id:'b',role:'assistant',content:'Pienso en lo que me cuentas.',created_at:'2026-11-03T21:06:10Z',metadata:{}},
     {id:'c',role:'assistant',content:'No se pudo verificar el resultado; no se confirmó ningún cambio.',created_at:'2026-11-03T21:07:00Z',metadata:{author:'system'}},
     {id:'d',role:'assistant',content:'Agregado.',created_at:'2026-11-03T21:08:00Z',metadata:{}}];
   let selected='';
@@ -81,7 +81,7 @@ test('The dream never reads app lines as Isabella\'s words, marked or legacy',as
     if(k==='select')return (cols)=>{selected+=cols+'|';return q};return ()=>q}});return q};
   const sb={from:t=>t==='conversations'?chain([{id:'c1'}]):t==='conversation_messages'?chain(rows):chain([])};
   const t=await collectTranscript(sb,'u','2026-11-01T00:00:00Z');
-  assert.deepEqual(t.messages.map(m=>m.autor+': '+m.texto),['Gari: ¿Y tú nunca duermes?','Isabella: Un poco, cuando tú duermes.']);
+  assert.deepEqual(t.messages.map(m=>m.autor+': '+m.texto),['Gari: ¿Y tú qué haces cuando no hablamos?','Isabella: Pienso en lo que me cuentas.']);
   assert.match(selected,/content,created_at,metadata/);
 });
 

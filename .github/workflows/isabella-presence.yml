@@ -1,0 +1,32 @@
+name: Isabella presence
+# Isabella may write to Gari first, at most once a day and only when it is worth it (Phase 1, step 8).
+# Two checks a day; the function stops before any model call when she already wrote today, Gari is in
+# the conversation, it is outside 10–20 h, or there is nothing to say. Logs carry counts only.
+# The Edge Function accepts only this workflow on main (GitHub OIDC token, audience minds-isabella-presence).
+on:
+  schedule:
+    - cron: '17 10 * * *'   # 11:17 (winter) / 12:17 (summer) in Berlin
+    - cron: '43 16 * * *'   # 17:43 (winter) / 18:43 (summer) in Berlin
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: isabella-presence
+  cancel-in-progress: false
+jobs:
+  presence:
+    if: github.repository == 'gari01234/minds' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Let Isabella decide whether to write
+        run: |
+          set -euo pipefail
+          token=$(curl -sS -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=minds-isabella-presence" | jq -r .value)
+          code=$(curl -sS -o result.json -w '%{http_code}' --max-time 180 -X POST \
+            "https://lodexwyyynlarkqgkyhy.supabase.co/functions/v1/isabella-presence" \
+            -H "Authorization: Bearer $token" -H 'content-type: application/json' -d '{}')
+          echo "status=$code"; jq -c '{ok,users,report:[.report[]?|{spoke,reason}]}' result.json || true
+          if [ "$code" = "404" ]; then echo "::warning::isabella-presence is not deployed yet"; exit 0; fi
+          [ "$code" = "200" ] || [ "$code" = "207" ]

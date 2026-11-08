@@ -24,7 +24,7 @@ test('failed registration cannot be mistaken for a created proposal in any langu
  ]) assert.equal(unregisteredReviewAttempt(tools,proposals,policy),expected,JSON.stringify(tools));
  assert.equal(unregisteredReviewAttempt(['update_task'],[],null),false);
  assert.equal(turnOutcomeReceipt({proposals:[]}).outcome,'answered');
- const start=server.indexOf('let reply=String(extractText(payload)');
+ const start=server.indexOf('const modelProse=String(extractText(payload)');
  assert.ok(start>0);
  const region=server.slice(start,server.indexOf('for(const intent of standingIntents||[])',start));
  assert.match(region,/unregisteredReviewAttempt\(usedTools,toolProposals,policyMode\)/);

@@ -61,7 +61,7 @@ test('Transcript: only owner, global scoped turns; app texts dropped; paged', as
   assert.equal(isTemplate('Empieza a las 10:00.'),true);
   assert.equal(isTemplate('Listo para hablar de eficiencia, como dijiste el domingo, me quedé pensando…'.repeat(10)),false);
   const db=fakeDb({conversations:[{id:'c1',user_id:U,app_scope:'isabella'}],conversation_messages:[
-    {id:'m1',user_id:U,conversation_id:'c1',role:'user',content:'Y tu, nunca duermes 🙈',created_at:'2026-11-03T21:06:00Z',provisional:false,exposure_scope_version:1,exposure_scope_kind:'global'},
+    {id:'m1',user_id:U,conversation_id:'c1',role:'user',content:'¿Y tú qué haces cuando no hablamos? 🙂',created_at:'2026-11-03T21:06:00Z',provisional:false,exposure_scope_version:1,exposure_scope_kind:'global'},
     {id:'m2',user_id:U,conversation_id:'c1',role:'assistant',content:'Listo. Ya quedó agregado.',created_at:'2026-11-03T21:07:00Z',provisional:false,exposure_scope_version:1,exposure_scope_kind:'global'},
     {id:'m3',user_id:U,conversation_id:'c1',role:'user',content:'Bernried privado',created_at:'2026-11-03T21:08:00Z',provisional:false,exposure_scope_version:1,exposure_scope_kind:'project'},
     {id:'m4',user_id:U,conversation_id:'c1',role:'user',content:'antiguo',created_at:'2026-11-03T21:09:00Z',provisional:false,exposure_scope_version:1,exposure_scope_kind:'global',_v0:true},
@@ -69,7 +69,7 @@ test('Transcript: only owner, global scoped turns; app texts dropped; paged', as
     minds_memory_forget_tombstones:[{user_id:U,source_kind:'conversation',source_id:'m5'}]});
   db.tables.conversation_messages[3].exposure_scope_version=0;
   const t=await collectTranscript(db,U,'2026-11-01T00:00:00Z');
-  assert.deepEqual(t.messages.map(m=>[m.autor,m.texto]),[['Gari','Y tu, nunca duermes 🙈']]);
+  assert.deepEqual(t.messages.map(m=>[m.autor,m.texto]),[['Gari','¿Y tú qué haces cuando no hablamos? 🙂']]);
   assert.equal(t.messages[0].cuando,'2026-11-03 22:06');
   const q=db.log.find(x=>x.table==='conversation_messages');
   for(const [op,col,val] of [['eq','user_id',U],['eq','exposure_scope_version',1],['eq','exposure_scope_kind','global'],['eq','provisional',false]])
@@ -85,12 +85,12 @@ test('Apply: pages versioned per entity, hypotheses deduplicated, threads limite
     isabella_return_queue:[{id:'q1',user_id:U,kind:'conversation_thread',status:'ready',title:'Viejo hilo',metadata:{expires_at:'2026-11-01T00:00:00Z'}}]});
   const value={diario:'x',correcciones:[],
     paginas:[{tipo:'gari',nombre:'Gari',resumen:'Arquitecto en Augsburg; valora el tiempo.',hechos:[{texto:'Dice que todo se resume en tiempo',fecha:'2026-11-02',fuente:'Gari, 02.11',estado:'vigente'}]},
-             {tipo:'persona',nombre:'Kirstin',resumen:'Pareja de Gari.',hechos:[]},{tipo:'nada',nombre:'x',resumen:'',hechos:[]}],
+             {tipo:'persona',nombre:'Ana',resumen:'Persona de prueba.',hechos:[]},{tipo:'nada',nombre:'x',resumen:'',hechos:[]}],
     hipotesis:[{tipo:'value',afirmacion:'valora la eficiencia como algo estético',cita:'…',fecha:'2026-11-02'},{tipo:'habit',afirmacion:'Planifica de noche',cita:'«ya es tarde»',fecha:'2026-11-03'}],
-    hilos:[{titulo:'Tiempo y eficiencia',por_que:'Quedó abierto el 02.11',cita:'Tiempo. Supongo que a eso se resume todo.',fecha_cita:'2026-11-02',dias_vigencia:30},
+    hilos:[{titulo:'Margen y ritmo',por_que:'Quedó abierto el 02.11',cita:'Al final todo va de tener margen.',fecha_cita:'2026-11-02',dias_vigencia:30},
            {titulo:'Otro',por_que:'y',cita:'z',fecha_cita:'2026-11-03',dias_vigencia:5},{titulo:'Tercero',por_que:'y',cita:'z',fecha_cita:'2026-11-03',dias_vigencia:5}]};
   const out=await applyDream(db,U,value,now);
-  assert.deepEqual(out.paginas,['Gari','Kirstin']);
+  assert.deepEqual(out.paginas,['Gari','Ana']);
   const gari=db.tables.isabella_entities[0];
   // A forgotten entity is never rebuilt.
   db.tables.isabella_entities.push({id:'e9',user_id:U,entity_type:'person',normalized_name:'olvidada',name:'Olvidada',metadata:{forgotten_at:'2026-11-01'}});
@@ -101,7 +101,7 @@ test('Apply: pages versioned per entity, hypotheses deduplicated, threads limite
   assert.equal(out.hipotesis,1,'the known claim is not repeated');
   const claim=db.tables.isabella_model_claims[1];assert.equal(claim.status,'hypothesis');assert.equal(claim.evidence[0].source,'isabella_dream');
   assert.equal(db.tables.isabella_return_queue[0].status,'dismissed','expired thread closed');
-  assert.deepEqual(out.hilos,['Tiempo y eficiencia','Otro'],'at most two new threads');
+  assert.deepEqual(out.hilos,['Margen y ritmo','Otro'],'at most two new threads');
   const t=db.tables.isabella_return_queue[1];
   assert.equal(t.kind,'conversation_thread');assert.equal(t.status,'ready');
   assert.equal(t.metadata.expires_at,new Date(now.getTime()+14*864e5).toISOString(),'vigencia capped at 14 days');
@@ -125,11 +125,11 @@ test('Chat turns see a small consolidated memory (global turns only) and the pan
   const {consolidatedMemoryView}=await import('../supabase/functions/_shared/isabella-dream.mjs');
   const v=consolidatedMemoryView([
     {entity_type:'gari',name:'Gari',metadata:{page:{resumen:'x'.repeat(900)}}},
-    {entity_type:'person',name:'Kirstin',metadata:{page:{resumen:'y'.repeat(500)}}},
+    {entity_type:'person',name:'Ana',metadata:{page:{resumen:'y'.repeat(500)}}},
     {entity_type:'organization',name:'TBA',metadata:{}}],
     [{id:'q1',title:'Tiempo',reason:'r',metadata:{quote:'Tiempo.',quote_date:'2026-11-02',expires_at:'2026-11-20T00:00:00Z'}},
      {id:'q2',title:'Viejo',reason:'r',metadata:{expires_at:'2026-11-01T00:00:00Z'}}],Date.parse('2026-11-08T08:00:00Z'));
-  assert.deepEqual(v.paginas.map(p=>[p.tipo,p.nombre,p.resumen.length]),[['gari','Gari',701],['persona','Kirstin',301]]);
+  assert.deepEqual(v.paginas.map(p=>[p.tipo,p.nombre,p.resumen.length]),[['gari','Gari',701],['persona','Ana',301]]);
   assert.deepEqual(v.hilos.map(h=>h.id),['q1'],'expired thread not offered');
   const chat=read('supabase/functions/isabella-chat/index.ts');
   assert.match(chat,/const consolidatedPending=!background&&!currentWorkThread&&exposureScope\.kind==="global"\?consolidatedMemory\(req\):Promise\.resolve\(null\);/);

@@ -369,7 +369,9 @@ test('Build 26 supports confirmed server-side Isabella routines',()=>{
   assert.ok(app.includes("p.kind==='routine'"));
   assert.ok(app.includes("rpc('minds_commit_reviewed_routine_v1'"));
   assert.ok(app.includes('async function routinesPanel'));
-  assert.ok(app.includes("await maybeProactiveNudge()"));
+  // Phase 1, step 8: proactive messages moved to the server (isabella-presence), once a day at most.
+  assert.ok(!app.includes("await maybeProactiveNudge()"));
+  assert.ok(read('supabase/functions/isabella-presence/index.ts').includes('runIsabellaPresence'));
   assert.ok(!app.includes("const briefed=await maybeDailyBrief()"));
 });
 
@@ -621,10 +623,10 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(shell.includes('MINDS · TRABAJO'));
   assert.ok(index.includes('app.css?v=70'));
   assert.ok(index.includes('shell.js?v=110'));
-  assert.ok(index.includes('app.js?v=139'));
+  assert.ok(index.includes('app.js?v=140'));
   assert.ok(index.includes('sync.js?v=pwa39'));
   assert.ok(index.includes('ai.js?v=57'));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v181'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v182'"));
 });
 
 test('Build 41 Ideas transition from proposals into production and durable artifacts',()=>{

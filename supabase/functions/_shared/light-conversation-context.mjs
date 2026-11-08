@@ -58,7 +58,8 @@ export function contextFootprintSignal(tier,footprint,sectionSizes={}){
  };
  const envelopes={
   calendar_fast:{instructions_chars:6000,context_chars:16000,input_chars:12000,tools_chars:20000,tools_count:20},
-  lean:{instructions_chars:16000,context_chars:50000,input_chars:25000,tools_chars:50000,tools_count:60}
+  lean:{instructions_chars:24000,context_chars:50000,input_chars:25000,tools_chars:50000,tools_count:60},
+  core:{instructions_chars:24000,context_chars:70000,input_chars:30000,tools_chars:50000,tools_count:60}
  };
  const budget=envelopes[tier]||null,over=[];
  if(budget)for(const [field,limit] of Object.entries(budget))

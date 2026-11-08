@@ -416,8 +416,8 @@ async function afterSync(){
     void maybePrewarmResearch();
     void maybeReactivateIdeas();
     void refreshOperatingModel(false);
-    const nudged=await maybeProactiveNudge();
-    if(!nudged)await maybeCuriosityQuestion();
+    // Phase 1, step 8: Isabella's own messages come from the server (isabella-presence), at most once
+    // a day for all devices. The browser no longer runs background "nudge" or profile-question turns.
   }finally{proactiveCycleBusy=false}
 }
 /* Dear: Thoughts stays authoritative in Architectures.
@@ -2412,8 +2412,13 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         sayEvent('No se pudo verificar el resultado; no se confirmó ningún cambio.',{metadata:{exposure_scope:exposure,turn_receipt_error:integrity?.reason||'validator_unavailable'}});
         return;
       }
+      // Phase 1, step 7: on a turn with changes, the server sends Isabella's own words only when they
+      // do not claim the change is done; they go above the app's line, never instead of it.
+      const isabellaProse=integrity.proposals.length&&typeof result?.isabella_reply==='string'&&result.isabella_reply.trim()&&
+        !window.MINDS_TURN_INTEGRITY.isSystemNotice?.(result.isabella_reply)?result.isabella_reply.trim().slice(0,1500):'';
       const directBatch=directCreationBatch(result,integrity);
       if(directBatch){
+        if(isabellaProse)say('assistant',isabellaProse,{metadata:{exposure_scope:exposure,commentary_for:'direct_creation'}});
         const committed=[],failed=[];
         for(const p of directBatch){
           try{committed.push(await applyDirectCalendarCreate(p))}
@@ -2445,12 +2450,15 @@ async function handle(text,attachments=[],replyTo=null,options={}){
             incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null,
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome};
           save();renderMessages();
-        }else say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+        }else{
+          if(isabellaProse&&receiptText)say('assistant',isabellaProse,{metadata:{exposure_scope:exposure,commentary_for:'review'}});
+          say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
           metadata:{...authorMeta,exposure_scope:exposure,incomplete_response:!!result?.incomplete,
             incomplete_reason:result?.incomplete_reason||null,
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
             ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
           sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+        }
       }
       // Only this explicitly opted-in microphone turn may be spoken. A browser
       // re-render, background delivery, proposal or ambiguous result stays silent.
@@ -4293,8 +4301,8 @@ function assistantPreferencesPanel(){
   const attention=canonicalAttentionPreferences(prefs.attention);
   const rules=[...(prefs.behaviorRules||[])];
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
-    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
-    <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
+    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Isabella puede escribirme primero (como mucho una vez al día, solo si vale la pena)</span></label>
+    <div class="small">Lo decide cada día a partir de lo que hablasteis y de tu agenda; si no hay nada que valga la pena, no escribe.</div>
     <div class="small section-label">Cuándo quieres que te avise</div>
     <div class="small">Puedo mantener cosas vivas y trabajar en segundo plano sin interrumpirte cada vez. Si me dices explícitamente “avísame cuando termines”, esa petición tiene prioridad sobre estas reglas.</div>
     <label>Cuando termino un trabajo en segundo plano<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
@@ -4329,7 +4337,7 @@ function assistantPreferencesPanel(){
       quietStart:$('#attentionQuietStart').value,
       quietEnd:$('#attentionQuietEnd').value
     });
-    state.assistantPreferences={...prefs,attention:nextAttention,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number($('#curiosityCadence').value||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};
+    state.assistantPreferences={...prefs,attention:nextAttention,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number(prefs.curiosityCadenceHours||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};
     save();closeModal();
   };
 }
