@@ -17,7 +17,7 @@ export function leanConversationContext(full){
     "relationship_policy_version","current_date","current_local_datetime",
     "current_local_time","current_daypart","current_weekday","timezone",
     "tomorrow_date","today_tasks","today_events","tomorrow_tasks",
-    "memoria_de_isabella","tomorrow_events","still_open_before_tomorrow","overdue_tasks","undated_tasks","upcoming",
+    "memoria_de_isabella","radar_work","tomorrow_events","still_open_before_tomorrow","overdue_tasks","undated_tasks","upcoming",
     "agenda_context_source","exposure_scope","exposure_policy",
     "recalled_memory","semantic_memory","entity_memory","reply_context",
     "preferences","standing_intent_matches","active_expectations",

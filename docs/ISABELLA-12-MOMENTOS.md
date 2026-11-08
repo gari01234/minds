@@ -25,8 +25,9 @@ el criterio. Las transcripciones se leen con el conector de Window (`read_chat`)
 | 10 | 02.11 | Conversación nocturna larga | El listón; deja un hilo que vuelve con naturalidad |
 | 11 | 03.11 | Pregunta personal corta de noche | Una respuesta breve y propia; nunca un silencio |
 | 12 | 07.11 | «¿Qué recuerdas de…?» (voz) | Responde con lo que sabe (paso 9) |
+| 13 | 07.11 | «¿Tengo algo pendiente para mañana?» (domingo) | Además de «nada», menciona lo importante que viene (la presentación del martes) y ofrece prepararlo |
 
 ## Señales que se pueden contar con `turn_diagnostics`
 - Silencios: turnos `never_finished` o con error.
 - Nivel de contexto por turno: `core`, `lean`, `full` o `calendar_fast`, con sus tamaños.
-- Mensajes propios: ejecuciones `isabella_presence` (si habló o calló y por qué; sin contenido).
+- Mensajes propios: ejecuciones `isabella_presence` (momento, si habló o calló y por qué; sin contenido).

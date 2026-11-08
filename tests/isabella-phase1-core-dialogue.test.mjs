@@ -10,7 +10,7 @@ import {ISABELLA_CORE,isabellaCoreInstructions,capabilityNotes,coreConversationC
 import {leanConversationContext} from '../supabase/functions/_shared/light-conversation-context.mjs';
 import {dialogueTurnInput,boundedScopedTurn,localStamp} from '../supabase/functions/_shared/turn-capability-contract.mjs';
 import {claimsCompletion,verifiedPendingProse} from '../supabase/functions/_shared/reply-verification.mjs';
-import {presenceGate,presenceMessage,runIsabellaPresence,PRESENCE_INSTRUCTIONS,PRESENCE_SCHEMA,trustedPresenceWorkflow,presenceKey} from '../supabase/functions/_shared/isabella-presence.mjs';
+import {presenceGate,presenceMoment,presenceMessage,runIsabellaPresence,PRESENCE_INSTRUCTIONS,PRESENCE_SCHEMA,trustedPresenceWorkflow,presenceKey} from '../supabase/functions/_shared/isabella-presence.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
 const chat=read('supabase/functions/isabella-chat/index.ts');
 const app=read('apps/isabella/app.js');
@@ -25,11 +25,16 @@ const ALL_TOOLS=[{type:'web_search'},...['request_clarification','create_task','
 // The full prompt this replaces, measured on 27.10–07.11 (turn_diagnostics): ~52k chars of instructions.
 const FULL_INSTRUCTIONS_CHARS=52000;
 
-test('Step 6: the core with every capability is under 40% of the full prompt',()=>{
+test('Step 6: light and standard turns stay well under the full prompt; deep turns get the detail back',()=>{
   const relationship='R'.repeat(6600); // relationship-policy.ts BASE+conversation, ~6.6k chars
-  const all=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills:[{slug:'s',name:'n',description:'d'.repeat(150)}]});
-  assert.ok(all.length<20000,String(all.length));
-  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.4);
+  const skills=[{slug:'s',name:'n',description:'d'.repeat(150)}];
+  const light=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,light:true});
+  const all=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'standard'}});
+  const deep=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'deep'}});
+  assert.ok(light.length<18000,String(light.length));
+  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.55,String(all.length));
+  assert.ok(deep.length<FULL_INSTRUCTIONS_CHARS*0.85,String(deep.length));
+  assert.ok(light.length<all.length&&all.length<deep.length);
   assert.ok(all.includes(relationship),'her character is the relationship contract, intact');
   // Notes appear only for capabilities the turn offers.
   const onlyMemory=isabellaCoreInstructions({tools:[fn('search_memory')]});
@@ -69,12 +74,12 @@ test('Step 6: core context keeps the agenda whole, trims what the night memory c
   const core=coreConversationContext(full);
   assert.equal(core.today_tasks.length,40);assert.equal(core.undated_tasks.length,30);assert.equal(core.upcoming.length,30);
   assert.deepEqual(core.still_open_before_tomorrow,[{id:'o'}]);
-  assert.equal(core.personal_model_claims.length,16);
+  assert.equal(core.personal_model_claims.length,32);
   assert.ok(!('evidence' in core.personal_model_claims[0]));
-  assert.equal(core.recent_activity.length,8);
-  assert.deepEqual(core.recent_activity[0].item,{title:'A16',date:'2026-11-09'});
-  assert.equal(core.proposal_feedback.length,6);
-  assert.equal(core.recalled_memory.length,10);
+  assert.equal(core.recent_activity.length,10);
+  assert.deepEqual(core.recent_activity[0].item,{title:'A14',date:'2026-11-09'});
+  assert.equal(core.proposal_feedback.length,8);
+  assert.equal(core.recalled_memory.length,14);
   assert.ok(core.memory_checkpoint,'the running summary of older conversation stays');
   const keys=Object.keys(core);
   assert.equal(keys.at(-1),'current_local_datetime','the per-minute field goes last (cache-friendly prefix)');
@@ -136,33 +141,56 @@ test('Step 7: pending changes — her words travel only when they do not claim i
   assert.match(app,/if\(isabellaProse\)say\('assistant',isabellaProse,\{metadata:\{exposure_scope:exposure,commentary_for:'direct_creation'\}\}\);/);
 });
 
-test('Step 8: the gate — once a day, waking hours, never while Gari is talking, off when he says so',()=>{
+test('Step 8: the gate — once a day, waking hours, never while Gari is talking, a small call budget',()=>{
   const noon=new Date('2026-11-08T11:00:00Z'); // 12:00 Berlin
   assert.deepEqual(presenceGate({now:noon}),{go:true,reason:'check'});
   assert.equal(presenceGate({now:noon,enabled:false}).reason,'turned_off');
   assert.equal(presenceGate({now:noon,sentToday:true}).reason,'already_wrote_today');
-  assert.equal(presenceGate({now:new Date('2026-11-08T05:30:00Z')}).reason,'outside_hours');
-  assert.equal(presenceGate({now:new Date('2026-11-08T21:30:00Z')}).reason,'outside_hours');
+  assert.equal(presenceGate({now:new Date('2026-11-08T07:30:00Z')}).reason,'outside_hours');
+  assert.equal(presenceGate({now:new Date('2026-11-08T20:10:00Z')}).reason,'outside_hours');
   assert.equal(presenceGate({now:noon,lastUserAt:'2026-11-08T10:40:00Z'}).reason,'conversation_active');
   assert.equal(presenceGate({now:noon,lastAnyAt:'2026-11-08T10:30:00Z'}).reason,'just_wrote');
   assert.equal(presenceGate({now:noon,hasMaterial:false}).reason,'nothing_to_say');
+  assert.equal(presenceGate({now:noon,state:{day:'2026-11-08',calls:3}}).reason,'call_budget');
+  assert.equal(presenceGate({now:noon,state:{day:'2026-11-08',calls:1,last_call_at:'2026-11-08T10:15:00Z'}}).reason,'waited_recently');
+  assert.equal(presenceGate({now:noon,state:{day:'2026-11-07',calls:3}}).go,true,'yesterday\'s budget does not count');
   assert.ok(trustedPresenceWorkflow({repository:'gari01234/minds',repository_id:'1387794687',ref:'refs/heads/main',
     workflow_ref:'gari01234/minds/.github/workflows/isabella-presence.yml@refs/heads/main',event_name:'schedule',run_id:'1'}));
   assert.ok(!trustedPresenceWorkflow({repository:'gari01234/minds',repository_id:'1387794687',ref:'refs/heads/main',
     workflow_ref:'gari01234/minds/.github/workflows/isabella-dream.yml@refs/heads/main',event_name:'schedule',run_id:'1'}));
 });
 
-test('Step 8: silence by default, no profile questions, a thread is cited only if it exists',()=>{
-  assert.match(PRESENCE_INSTRUCTIONS,/Por defecto callas \(speak=false\)/);
+test('Step 8 v2: she speaks at real moments, not at fixed hours',()=>{
+  const at=iso=>new Date(iso);
+  const meeting={title:'Termin Lighting Design',starts_at:'2026-11-09T11:00:00Z',ends_at:'2026-11-09T12:00:00Z'};
+  assert.equal(presenceMoment({now:at('2026-11-09T12:20:00Z'),events:[meeting]}).kind,'reunion_terminada');
+  assert.equal(presenceMoment({now:at('2026-11-09T12:20:00Z'),events:[meeting,{title:'Siguiente',starts_at:'2026-11-09T12:40:00Z',ends_at:'2026-11-09T13:00:00Z'}]}),null,'not right before the next one');
+  assert.equal(presenceMoment({now:at('2026-11-09T12:20:00Z'),events:[meeting],usedMoments:['reunion_terminada']}),null,'each kind once a day');
+  assert.equal(presenceMoment({now:at('2026-11-09T09:00:00Z'),seenAt:'2026-11-09T08:50:00Z',lastUserAt:'2026-11-08T20:00:00Z'}).kind,'app_abierta');
+  assert.equal(presenceMoment({now:at('2026-11-09T09:00:00Z'),seenAt:'2026-11-09T08:50:00Z',lastUserAt:'2026-11-09T08:40:00Z'}),null,'he is writing');
+  assert.equal(presenceMoment({now:at('2026-11-09T14:00:00Z'),lastUserAt:'2026-11-09T12:30:00Z',hasThread:true}).kind,'conversacion_terminada');
+  assert.equal(presenceMoment({now:at('2026-11-09T16:30:00Z'),tomorrowHasSomething:true}).kind,'vispera');
+  assert.equal(presenceMoment({now:at('2026-11-09T18:30:00Z'),todayHadEvents:true}).kind,'cierre_del_dia');
+  assert.equal(presenceMoment({now:at('2026-11-09T10:00:00Z')}),null,'no moment, no model call');
+  const wf=read('.github/workflows/isabella-presence.yml');
+  assert.match(wf,/cron: '7,37 7-19 \* \* \*'/);
+  assert.match(app,/preference_key:'presence_seen',value:\{at\}/);
+  assert.match(app,/void markPresenceSeen\(\);\n\s+document\.addEventListener\('visibilitychange'/);
+});
+
+test('Step 8: now, later or nothing; no profile questions; a thread is cited only if it exists',()=>{
+  assert.match(PRESENCE_INSTRUCTIONS,/"mas_tarde": hay algo, pero este no es el momento/);
+  assert.match(PRESENCE_INSTRUCTIONS,/algo de su trabajo que probablemente no ha visto/);
   assert.match(PRESENCE_INSTRUCTIONS,/No hagas preguntas para conocerle «en general»/);
   assert.match(PRESENCE_INSTRUCTIONS,/No inventes urgencia/);
-  assert.deepEqual(PRESENCE_SCHEMA.required,['speak','message','basis','thread_id','reason']);
+  assert.deepEqual(PRESENCE_SCHEMA.required,['decision','message','basis','thread_id','reason']);
   const material={hilos:[{id:'h1'}]};
-  assert.equal(presenceMessage({speak:false,message:'x'},material),null);
-  assert.equal(presenceMessage({speak:true,message:''},material),null);
-  assert.equal(presenceMessage({speak:true,message:'x'.repeat(700)},material),null);
-  assert.equal(presenceMessage({speak:true,message:'Me quedé pensando en lo del tiempo.',basis:'hilo',thread_id:'h1',reason:'r'},material).thread_id,'h1');
-  assert.equal(presenceMessage({speak:true,message:'Hola.',basis:'hilo',thread_id:'invented',reason:'r'},material).thread_id,null);
+  assert.equal(presenceMessage({decision:'nada',message:'x'},material),null);
+  assert.equal(presenceMessage({decision:'mas_tarde',message:'x'},material),null);
+  assert.equal(presenceMessage({decision:'ahora',message:''},material),null);
+  assert.equal(presenceMessage({decision:'ahora',message:'x'.repeat(700)},material),null);
+  assert.equal(presenceMessage({decision:'ahora',message:'Me quedé pensando en lo del margen.',basis:'hilo',thread_id:'h1',reason:'r'},material).thread_id,'h1');
+  assert.equal(presenceMessage({decision:'ahora',message:'Hola.',basis:'hilo',thread_id:'invented',reason:'r'},material).thread_id,null);
 });
 
 function fakeSb(tables){
@@ -189,16 +217,19 @@ test('Step 8: one pass delivers one scoped message, marks the thread, records co
     conversations:(st)=>st.filters.some(f=>f[0]==='select'&&f[1]==='user_id')?[{user_id:'u'}]:[{id:'c1'}],
     isabella_preferences:[{value:{curiosityEnabled:true}}],
     conversation_messages:(st)=>st.filters.some(f=>f[0]==='like')?[]:[
-      {role:'user',content:'Al final todo va de tener margen.',created_at:'2026-11-02T21:02:00Z',metadata:{}},
-      {role:'assistant',content:'Agregado.',created_at:'2026-11-02T21:03:00Z',metadata:{}}].reverse(),
+      {role:'user',content:'Al final todo va de tener margen.',created_at:'2026-11-08T09:00:00Z',metadata:{}},
+      {role:'assistant',content:'Agregado.',created_at:'2026-11-08T09:01:00Z',metadata:{}}].reverse(),
     isabella_return_queue:[{id:'h1',title:'El margen frente al ritmo',reason:'quedó abierto',metadata:{quote:'Tiempo…',expires_at:'2026-11-20T00:00:00Z'}}],
-    isabella_entities:[],isabella_tasks:[],isabella_events:[]
+    isabella_entities:[],isabella_tasks:[],isabella_events:[],isabella_projects:[],minds_work_threads:[],minds_work_memory:[]
   });
   let seen=null,pushed=0;
   const out=await runIsabellaPresence({sb,now:new Date('2026-11-08T11:00:00Z'),relationship:'REL',
-    callModel:async({instructions,input})=>{seen={instructions,input};return {value:{speak:true,message:'Me quedé con lo que dijiste del margen.',basis:'hilo',thread_id:'h1',reason:'apertura'},payload:{usage:{input_tokens:3000,output_tokens:60}}}},
+    callModel:async({instructions,input})=>{seen={instructions,input};return {value:{decision:'ahora',message:'Me quedé con lo que dijiste del margen.',basis:'hilo',thread_id:'h1',reason:'apertura'},payload:{usage:{input_tokens:3000,output_tokens:60}}}},
     push:async()=>{pushed++;return {sent:1}}});
-  assert.deepEqual(out.report,[{spoke:true,reason:'hilo',push_sent:1}]);
+  assert.deepEqual(out.report,[{spoke:true,reason:'hilo',moment:'conversacion_terminada',push_sent:1}]);
+  assert.equal(seen.input.momento.kind,'conversacion_terminada');
+  const state=ops.find(o=>o.table==='isabella_preferences'&&o.op==='upsert');
+  assert.equal(state.payload.preference_key,'isabella_presence');assert.equal(state.payload.value.calls,1);
   assert.match(seen.instructions,/REL$/);
   assert.deepEqual(seen.input.conversacion_reciente.length,1,'app notices are not part of what she remembers saying');
   const deliver=ops.find(o=>o.table==='conversation_messages'&&o.op==='upsert');
@@ -222,6 +253,6 @@ test('Step 8: no model call when the gate is closed; the browser no longer runs 
   assert.match(app,/Isabella puede escribirme primero \(como mucho una vez al día, solo si vale la pena\)/);
   const wf=read('.github/workflows/isabella-presence.yml');
   assert.match(wf,/audience=minds-isabella-presence/);
-  assert.match(wf,/jq -c '\{ok,users,report:\[\.report\[\]\?\|\{spoke,reason\}\]\}'/,'workflow logs counts and reasons only');
+  assert.match(wf,/jq -c '\{ok,users,report:\[\.report\[\]\?\|\{spoke,reason,moment\}\]\}'/,'workflow logs counts, reasons and moment kinds only');
   assert.match(read('supabase/config.toml'),/\[functions\.isabella-presence\]\nverify_jwt = false/);
 });
