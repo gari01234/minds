@@ -1320,6 +1320,61 @@ function confirmationText(items,now=new Date()){
   return 'Guardados '+list.length+' cambios.';
 }
 
+// Direct-creation undo is bound to its receipt, owner and 10-minute window.
+function directUndoAvailable(message){
+  const index=state.messages.indexOf(message);
+  if(index<0||message?.metadata?.direct_create_undo!==true||
+     message.metadata?.undo_state||message.role!=='assistant')return false;
+  const age=Date.now()-Date.parse(message.at||'');
+  const list=message.metadata?.action_receipts;
+  return Number.isFinite(age)&&age>=0&&age<10*60*1000&&
+    Array.isArray(list)&&list.length>0&&list.every(r=>
+      r&&['task','event'].includes(r.kind)&&
+      /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(r.receipt_id||'')))&&
+    !state.messages.slice(index+1).some(m=>m.role==='user');
+}
+let directUndoBusy=false;
+async function undoDirectCreation(messageId){
+  const msg=state.messages.find(m=>m.id===messageId);
+  if(directUndoBusy||!directUndoAvailable(msg))return;
+  const receipts=msg.metadata.action_receipts;
+  directUndoBusy=true;lastMessagesRenderKey=null;renderMessages();
+  let done=0;const errors=[];
+  try{
+    const sb=window.MINDS_SUPABASE;
+    if(!sb)throw new Error('MINDS no está disponible.');
+    const {data:{session},error:authError}=await sb.auth.getSession();
+    if(authError||!session?.user?.id)throw new Error('La sesión no está disponible.');
+    for(const receipt of receipts){
+      try{
+        const {data,error}=await sb.rpc('minds_undo_direct_calendar_create_v01',{p_receipt_id:receipt.receipt_id});
+        if(error)throw error;
+        if(!['undone','already_undone'].includes(data?.status)||
+          data.original_receipt_id!==receipt.receipt_id||
+          data.entity_kind!==receipt.kind||!data.receipt_id)
+          throw new Error('La reversión no tiene un comprobante válido.');
+        const table=receipt.kind==='task'?'isabella_tasks':'isabella_events';
+        const {data:row,error:readError}=await sb.from(table)
+          .select(receipt.kind==='task'?'id,archived_at':'id')
+          .eq('user_id',session.user.id)
+          .eq('client_key',receipt.entity_client_key).maybeSingle();
+        if(readError||(receipt.kind==='task'?!row?.archived_at:!!row))
+          throw new Error('La lectura canónica no confirma la reversión.');
+        done++;
+      }catch(e){errors.push(String(e?.message||e))}
+    }
+    try{await window.ISABELLA_SYNC_PULL_NOW?.()}catch{}
+    msg.metadata.undo_state=errors.length?'partial':'undone';
+    if(!errors.length)sayEvent('Deshecho.');
+    else sayEvent('No pude deshacer todos los elementos ('+done+' de '+receipts.length+
+      '). Comprueba el calendario antes de intentar otra acción.');
+  }catch(e){
+    msg.metadata.undo_state='unconfirmed';
+    sayEvent('No pude confirmar la reversión: '+String(e?.message||e));
+  }finally{
+    directUndoBusy=false;save();lastMessagesRenderKey=null;renderMessages();
+  }
+}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
