@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {runInNewContext} from "node:vm";
-import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch}
+import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch,directTitleInOwnerTurn,directPriorRoundsSafe,directToolsClean}
  from "../supabase/functions/_shared/direct-calendar-contract.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const server=read("supabase/functions/isabella-chat/index.ts");
@@ -29,6 +29,8 @@ test("only explicit create-only fully registered batches can execute",()=>{
  for(const [ps,ids,tools] of [
   [[{...proposal,action:"delete"}],[uuid],["delete_task"]],
   [[proposal],[uuid],["search_work","create_task"]],
+  [[proposal],[uuid],["web_search","create_task"]],
+  [[proposal],[uuid],["read_work_file","create_task"]],
   [[proposal],[uuid,uuid],["create_task"]],
   [[proposal],[],["create_task"]],
   [[{...proposal,kind:"routine"}],[uuid],["create_task"]],
@@ -38,7 +40,9 @@ test("server does not infer permission from shadow scores, memory or model prose
  assert.match(server,/exactOwnerExcerpt\(sourceText,quoted\)/);
  assert.match(server,/minds_calendar_execution_preferences/);
  assert.match(server,/pref\?\.data\?\.create_mode==="direct"/);
- assert.match(server,/!sourceTainted&&round===0/);
+ assert.match(server,/!directSourceTainted&&directPriorRoundsSafe\(round,priorRoundTools\)/);
+ assert.match(server,/directTitleInOwnerTurn\(sourceText,proposal\?\.title\)/);
+ assert.match(server,/direct_source_tainted:directSourceTainted/);
  assert.match(server,/direct_authorization_turn_id:verifiedContinuation\?\.source_turn_id\|\|clientMessageId/);
  assert.match(server,/direct_authorization:directAuthorization/);
  assert.match(server,/authorizedDirectBatch\(toolProposals,directAuthorizedIds,usedTools\)/);
