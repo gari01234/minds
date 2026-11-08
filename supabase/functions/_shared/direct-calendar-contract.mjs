@@ -19,8 +19,8 @@ export function safeDirectToolHistory(usedTools,roundStart=0){
     tools.slice(0,roundStart).every(t=>DIRECT_READ_TOOLS.has(t));
 }
 export function titleInCurrentOwnerMessage(title,message){
-  const normalize=x=>String(x||"").normalize("NFKD").replace(/[\\u0300-\\u036f]/g,"")
-    .toLocaleLowerCase().replace(/[^a-z0-9]+/g," ").trim().replace(/\\s+/g," ");
+  const normalize=x=>String(x||"").normalize("NFKD").replace(/[\u0300-\u036f]/g,"")
+    .toLocaleLowerCase().replace(/[^a-z0-9]+/g," ").trim().replace(/\s+/g," ");
   const name=normalize(title),owner=normalize(message);
   return name.length>=3&&owner.length>=name.length&&(" "+owner+" ").includes(" "+name+" ");
 }
