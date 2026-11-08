@@ -8,6 +8,7 @@ import {runIsabellaPresence,presenceCaller,PRESENCE_MODEL} from "../_shared/isab
 import {presencePusher} from "../_shared/presence-push.ts";
 import {dreamDue} from "../_shared/isabella-dream.mjs";
 import {relationshipPolicy} from "../_shared/relationship-policy.ts";
+import {resolveAssistantProfile,profileRelationshipPolicy,profileOwnerForUser} from "../_shared/assistant-profile.mjs";
 
 function json(data:unknown,status=200){return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}})}
 function localDateISO(tz:string,date=new Date()){
@@ -27,12 +28,12 @@ async function finishRun(sb:any,run:any,status:string,metadata:any,error?:string
 async function publishCandidate(sb:any,userId:string,c:any){
   return checked(await sb.rpc("minds_publish_heartbeat",{p_user:userId,p_candidate:c}),"heartbeat_publish");
 }
-async function resolveAbsent(sb:any,userId:string,candidates:any[]){
+async function resolveAbsent(sb:any,userId:string,candidates:any[],profile="window"){
   const active=checked(await sb.from("minds_heartbeat_events").select("id,fingerprint").eq("user_id",userId).in("status",["new","surfaced"]).in("event_type",["overdue_digest","upcoming_event","routine_failure","expectation_due"]),"heartbeat_active")||[];
   const keys=new Set(candidates.map(x=>x.fingerprint));
   for(const e of active)if(!keys.has(e.fingerprint)){
     checked(await sb.from("minds_heartbeat_events").update({status:"resolved"}).eq("id",e.id),"heartbeat_resolve");
-    checked(await sb.from("minds_surface_items").update({status:"dismissed",lifecycle_state:"resolved"}).eq("user_id",userId).contains("metadata",{heartbeat_event_id:e.id}),"heartbeat_surface_resolve");
+    if(profile==="window")checked(await sb.from("minds_surface_items").update({status:"dismissed",lifecycle_state:"resolved"}).eq("user_id",userId).contains("metadata",{heartbeat_event_id:e.id}),"heartbeat_surface_resolve");
     checked(await sb.from("minds_attention_events").update({status:"resolved",updated_at:new Date().toISOString()}).eq("user_id",userId).eq("source_type","heartbeat").eq("source_id",String(e.id)).in("status",["pending","delivered","suppressed"]),"heartbeat_attention_resolve");
   }
 }
@@ -156,6 +157,7 @@ Deno.serve(async(req:Request)=>{
   const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
   if(!url||!service)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+  const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
   const {data:secret}=await sb.from("isabella_runtime_secrets").select("value").eq("key","heartbeat_runner").maybeSingle();
   if(!secret?.value||String(body?.secret||"")!==String(secret.value))return json({error:"unauthorized"},401);
 
@@ -166,6 +168,9 @@ Deno.serve(async(req:Request)=>{
   const results:any[]=[];
 
   for(const userId of users){
+    if(assistantProfile.multi_user&&!await profileOwnerForUser(sb,userId,assistantProfile.id)){
+      results.push({status:"owner_inactive"});continue;
+    }
     const run=await startRun(sb,userId);
     try{
       const routineTz=userRows.find((x:any)=>x.user_id===userId)?.timezone||"Europe/Berlin";
@@ -224,12 +229,13 @@ Deno.serve(async(req:Request)=>{
       }
       let created=0;
       for(const c of candidates){const x=await publishCandidate(sb,userId,{...c,timezone:routineTz});if(x.created)created++}
-      await resolveAbsent(sb,userId,candidates);
+      await resolveAbsent(sb,userId,candidates,assistantProfile.id);
       const watchChecks=await runWatchChecks(sb,userId,routineTz);
       const contextMaintenance=await maintainConversationContext(sb,userId);
-      const situationalReview=await runSituationalReview(sb,userId,routineTz,now,(candidate:any)=>publishCandidate(sb,userId,candidate));
+      const situationalReview=assistantProfile.multi_user?{status:"profile_excluded"}:
+        await runSituationalReview(sb,userId,routineTz,now,(candidate:any)=>publishCandidate(sb,userId,candidate));
       // Projektakte: Fristen due within two days and entries awaiting confirmation (daytime only, never throws).
-      const akteAttention=await runAkteAttention(sb,userId,{now,tz:routineTz});
+      const akteAttention=assistantProfile.multi_user?{status:"deferred_to_project_akte"}:await runAkteAttention(sb,userId,{now,tz:routineTz});
       const heartbeatError=contextMaintenance.status==="error"||watchChecks.errors>0||situationalReview.status==="error";
       await finishRun(sb,run,heartbeatError?"error":"success",{
         timezone:routineTz,candidates:candidates.length,new_events:created,
@@ -246,8 +252,8 @@ Deno.serve(async(req:Request)=>{
   const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
   if(apiKey){
     const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
-    const presence=runIsabellaPresence({sb,model,callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
-      push:presencePusher(sb),log:(...a:unknown[])=>console.error(...a)})
+    const presence=runIsabellaPresence({sb,model,profile:assistantProfile.id,callModel:presenceCaller(apiKey,model),relationship:profileRelationshipPolicy(relationshipPolicy("proactive"),assistantProfile.id),
+      push:assistantProfile.multi_user?async()=>({sent:0}):presencePusher(sb),log:(...a:unknown[])=>console.error(...a)})
       .then((r:any)=>console.log("isabella_presence",JSON.stringify((r.report||[]).map((x:any)=>({spoke:x.spoke,reason:x.reason,moment:x.moment||null})))))
       .catch((e:unknown)=>console.error("isabella_presence_failed",e instanceof Error?e.message:String(e)));
     const runtime=(globalThis as any).EdgeRuntime;
