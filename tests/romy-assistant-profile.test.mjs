@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import vm from "node:vm";
 import {
   resolveAssistantProfile, profileFirstName, personaText,
-  profileInstructions, profileTools, OFFICE_LANGUAGE_RULE
+  profileInstructions, profileTools, profileOwnerForUser, OFFICE_LANGUAGE_RULE
 } from "../supabase/functions/_shared/assistant-profile.mjs";
 import { isabellaCoreInstructions } from "../supabase/functions/_shared/isabella-core.mjs";
 import { relationshipPolicy } from "../supabase/functions/_shared/relationship-policy.ts";
@@ -129,4 +129,46 @@ test("Office review notices are German while the Window summaries remain identic
   assert.match(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"proposal_created",proposals:[p]}),/^Propuesta: añadir/);
   assert.equal(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"action_applied",applied_count:1}),"Guardado.");
   assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=1/);
+});
+
+
+test("Office member identity is owner-scoped, active-only and independent per person", async () => {
+  const entries = new Map([
+    ["11111111-1111-4111-8111-111111111111", {display_name:"Alex Beispiel",is_active:true}],
+    ["22222222-2222-4222-8222-222222222222", {display_name:"Mara Muster",is_active:true}],
+    ["33333333-3333-4333-8333-333333333333", {display_name:"Inaktiv Muster",is_active:false}]
+  ]);
+  const sb = {from(table) {
+    assert.equal(table,"office_members");
+    return {select(columns) {
+      assert.equal(columns,"display_name,is_active");
+      return {eq(key,id) {
+        assert.equal(key,"user_id");
+        return {maybeSingle:async()=>({data:entries.get(id)||null,error:null})};
+      }};
+    }};
+  }};
+  const p=resolveAssistantProfile("office");
+  assert.equal(await profileOwnerForUser(sb,"11111111-1111-4111-8111-111111111111",p),"Alex");
+  assert.equal(await profileOwnerForUser(sb,"22222222-2222-4222-8222-222222222222",p),"Mara");
+  assert.equal(await profileOwnerForUser(sb,"33333333-3333-4333-8333-333333333333",p),null);
+  assert.equal(await profileOwnerForUser(sb,"44444444-4444-4444-8444-444444444444",p),null);
+  assert.equal(await profileOwnerForUser(null,"11111111-1111-4111-8111-111111111111",p),null);
+});
+
+test("Dreaming uses an identical Window prompt but a member-specific Office prompt", async () => {
+  const {dreamCaller,DREAM_INSTRUCTIONS}=await import("../supabase/functions/_shared/isabella-dream.mjs");
+  const recorded=[];
+  const fakeFetch=async(_url,opts)=>{
+    recorded.push(JSON.parse(opts.body));
+    return {ok:true,json:async()=>({status:"completed",output:[{content:[{type:"output_text",text:"{}"}]}]})};
+  };
+  const caller=dreamCaller("placeholder-test-only","mock",fakeFetch);
+  await caller({transcripcion_nueva:[]});
+  await caller({transcripcion_nueva:[]},{profile:"office",owner:"Alex Beispiel"});
+  assert.equal(recorded[0].instructions,DREAM_INSTRUCTIONS);
+  assert.match(recorded[1].instructions,/Romy/);
+  assert.match(recorded[1].instructions,/Alex/);
+  assert.ok(recorded[1].instructions.endsWith(OFFICE_LANGUAGE_RULE));
+  assert.doesNotMatch(recorded[1].instructions,/\\bGari\\b|\\bIsabella\\b/);
 });
