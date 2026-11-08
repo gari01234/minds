@@ -172,3 +172,13 @@ test("Dreaming uses an identical Window prompt but a member-specific Office prom
   assert.ok(recorded[1].instructions.endsWith(OFFICE_LANGUAGE_RULE));
   assert.doesNotMatch(recorded[1].instructions,/\\bGari\\b|\\bIsabella\\b/);
 });
+
+test("Office system notes name the verified owner, never the Window owner", async () => {
+  const {dialogueTurnInput}=await import("../supabase/functions/_shared/turn-capability-contract.mjs");
+  const messages=[{role:"assistant",content:"Gespeichert.",created_at:"2026-11-08T12:30:00Z",metadata:{author:"system"}}];
+  const w=dialogueTurnInput(messages,"Ja");
+  const o=dialogueTurnInput(messages,"Ja",{profile:"office",ownerName:"Alex"});
+  assert.match(w[0].content,/Aviso de la app, no lo escribió Gari ni tú/);
+  assert.match(o[0].content,/Hinweis der App, nicht von Alex oder dir verfasst/);
+  assert.doesNotMatch(o[0].content,/\\bGari\\b|\\bIsabella\\b/);
+});
