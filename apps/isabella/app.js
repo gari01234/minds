@@ -1598,7 +1598,7 @@ function proposalLabel(p){
   const actionName=action==='update'?'Modificar':action==='delete'?'Eliminar':action==='complete'?'Completar':action==='archive'?'Archivar':'Agregar';
   const bits=[actionName,p.kind==='event'?'evento':'tarea',p.title,p.date];
   if(p.time)bits.push(p.time);
-  if(p.duration_minutes)bits.push(p.duration_minutes+' min');
+  if(p.duration_minutes)bits.push(p.duration_defaulted===true?'1 h · editable':p.duration_minutes+' min');
   if(p.category)bits.push(p.category);
   if(p.project)bits.push(p.project);
   if(p.reminder_time)bits.push('recordatorio '+p.reminder_time);
@@ -1770,7 +1770,7 @@ function proposalEditor(p,onDone){
   const cats=state.categories.map(x=>`<option value="${esc(x.name)}" ${x.name===categoryName?'selected':''}>${esc(x.name)}</option>`).join('');
   const projects='<option value="">Sin proyecto</option>'+state.projects.map(x=>`<option value="${esc(x.name)}" ${x.name===projectName?'selected':''}>${esc(x.name)}</option>`).join('');
   const specific=p.kind==='event'
-    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>`
+    ?`<label>Hora<input id="proposalTime" type="time" value="${esc(time||'09:00')}"></label><label>Duración (min)${p.duration_defaulted===true?' · 1 h predeterminada (editable)':''}<input id="proposalDuration" type="number" min="5" step="5" value="${Number(duration||60)}"></label>`
     :`<label>Recordatorio<input id="proposalReminder" type="time" value="${esc(reminder||'')}"></label>`;
   modal('Revisar antes de confirmar',`<div class="form proposal-editor">
     <label>Nombre<input id="proposalTitle" value="${esc(title)}"></label>
@@ -1793,6 +1793,7 @@ function proposalEditor(p,onDone){
     if(q.kind==='event'){
       q.time=$('#proposalTime').value||time||null;
       q.duration_minutes=Math.max(5,Number($('#proposalDuration').value||duration||60));
+      if(p.duration_defaulted===true&&q.duration_minutes!==60)q.duration_defaulted=false;
     }else{
       q.reminder_time=$('#proposalReminder').value||null;
     }
