@@ -18,7 +18,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,dir
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
-import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
@@ -3304,7 +3304,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     background||fastAgenda?Promise.resolve([]):expectationContext(req),
     background||fastAgenda?Promise.resolve([]):commitmentMatches(req,effectiveMessage,route.project),
     !background&&!fastAgenda&&route.project?lightWork?Promise.resolve(deferredLightWorkContext(route.project)):searchWork(req,{project:route.project,query:effectiveMessage,current_thread_id:currentWorkThread?.id||null,_deferProjectModel:sourceFirstWorkPrefetch,_admitSourceRows:(rows:any[])=>sourceAdmissions.push(workSourceAdmission("routed_work",rows))}):Promise.resolve(null),
-    !background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
+    !assistantProfile.multi_user&&!background&&!fastAgenda&&route.sofia?consultSofia(req,{query:effectiveMessage},effectiveMessage):Promise.resolve(null),
     background||fastAgenda||currentWorkThread?Promise.resolve(null):maybeMemoryFlush(req,apiKey)
   ]);
   if(routedWork&&routedWork.status!=="ok"&&routedWork.status!=="not_preloaded")sourceAdmissions.push({stage:"routed_work",kind:"work_segment_admission",status:"unavailable",segment_count:0,sources:[]});
@@ -4205,6 +4205,13 @@ pregunta cuál.`;
     for(const call of calls){
       const args=safeArgs(call);
       usedTools.push(String(call.name||""));
+      // Defense in depth: excluded Office capabilities cannot execute even if
+      // a provider returned an unadvertised function call.
+      if(assistantProfile.multi_user&&!officeToolAllowed({type:"function",name:call.name})){
+        outputs.push({type:"function_call_output",call_id:call.call_id,
+          output:JSON.stringify({status:"capability_unavailable_for_profile"})});
+        continue;
+      }
       const mode=policyMode(String(call.name||""));
       const memoryGate=currentUserEvidenceGate(String(call.name||""),args,effectiveMessage,background,sourceTainted);
       if(!memoryGate.allowed){
