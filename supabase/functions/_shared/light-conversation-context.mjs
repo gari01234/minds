@@ -59,7 +59,8 @@ export function contextFootprintSignal(tier,footprint,sectionSizes={}){
  const envelopes={
   calendar_fast:{instructions_chars:6000,context_chars:16000,input_chars:12000,tools_chars:20000,tools_count:20},
   lean:{instructions_chars:24000,context_chars:50000,input_chars:25000,tools_chars:50000,tools_count:60},
-  core:{instructions_chars:24000,context_chars:70000,input_chars:30000,tools_chars:50000,tools_count:60}
+  core:{instructions_chars:24000,context_chars:70000,input_chars:30000,tools_chars:50000,tools_count:60},
+  work_light:{instructions_chars:50000,context_chars:60000,input_chars:30000,tools_chars:50000,tools_count:60}
  };
  const budget=envelopes[tier]||null,over=[];
  if(budget)for(const [field,limit] of Object.entries(budget))
@@ -81,4 +82,20 @@ export function contextFootprintSignal(tier,footprint,sectionSizes={}){
   routed_work_chars:Number(sections.routed_work_context?.chars||0),
   needs_work_prefetch_profile:tier==='full'&&Number(sections.routed_work_context?.chars||0)>120000
  };
+}
+
+// A light Work turn (08.11.2026): the lean context plus what Work needs to stay oriented (the route,
+// the current Thread and the note that the project was not preloaded). Only the central memory pages.
+export function lightWorkConversationContext(full){
+  const c=full&&typeof full==="object"?full:{};
+  const lean=leanConversationContext(c);
+  const memory=lean.memoria_de_isabella;
+  const central=new Set(["gari","relacion","isabella"]);
+  const out={...lean};
+  if(memory&&typeof memory==="object")out.memoria_de_isabella={...memory,
+    paginas:(Array.isArray(memory.paginas)?memory.paginas:[]).filter(p=>central.has(String(p?.tipo||""))).slice(0,3),
+    hilos:[],seguimientos_programados:[]};
+  for(const k of ["route","current_work_thread","routed_work_context","routed_sofia_context","cognitive_depth"])
+    if(Object.prototype.hasOwnProperty.call(c,k))out[k]=c[k];
+  return out;
 }

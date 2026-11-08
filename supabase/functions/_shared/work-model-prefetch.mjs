@@ -17,3 +17,15 @@ export function deferredSourceFirstProjectModel(){
     // no evidence or source is silently described as verified.
     recover_with:"search_work",source_originals_verified:false};
 }
+
+// 08.11.2026: a «¡Gracias!» routed to Work (Bernried) loaded the whole project, 274k characters of
+// context, and «mueve esta tarea» did it four rounds in a row. A light turn never preloads the project:
+// Isabella reads it with search_work when the answer needs it. Standard and deep turns are unchanged.
+export function lightWorkTurn({route={},background=false,fastAgenda=false,attachments=0,materialDeliverable=false}={}){
+  return route?.work===true&&route?.complexity==="light"&&!background&&!fastAgenda&&
+    Number(attachments)===0&&!materialDeliverable;
+}
+export function deferredLightWorkContext(project){
+  return {status:"not_preloaded",reason:"light_turn",project:typeof project==="string"?project:null,recover_with:"search_work",
+    note:"Turno ligero: el proyecto no se precargó. Si la respuesta necesita datos del proyecto, usa search_work."};
+}
