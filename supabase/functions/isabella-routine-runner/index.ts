@@ -7,6 +7,7 @@ import {localEventView} from "../_shared/local-agenda.mjs";
 import {isabellaRoutineInstructions} from "../_shared/isabella-core.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
+import {promptComponentSizes} from "../_shared/light-conversation-context.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -112,6 +113,7 @@ Deno.serve(async(req:Request)=>{
     const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
     let attentionEventIds:string[]=[];
     let phase="claimed";
+    let routineFootprint:any=null;
     try{
       if(!deliveryId)throw new Error("missing_delivery_id");
       if(!routine.metadata?.delivery_output){
@@ -202,6 +204,9 @@ Si la rutina pide clima, usa weatherLocation solo si está configurado en las pr
 Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de esta rutina.`;
 
       phase="generating";
+      const routineTools=[{type:"web_search",search_context_size:"low"}];
+      const routineInput=[{role:"user",content:[{type:"input_text",text:prompt}]}];
+      routineFootprint=promptComponentSizes({instructions:system,context:{},input:routineInput,tools:routineTools});
       const response=await fetch("https://api.openai.com/v1/responses",{
         method:"POST",
         headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
@@ -211,8 +216,8 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
           reasoning:{effort:"low"},
           max_output_tokens:1000,
           prompt_cache_options:{mode:"implicit",ttl:"30m"},
-          tools:[{type:"web_search",search_context_size:"low"}],
-          input:[{role:"user",content:[{type:"input_text",text:prompt}]}]
+          tools:routineTools,
+          input:routineInput
         })
       });
       const payload=await response.json();
@@ -247,7 +252,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       if(attentionEventIds.length){
         attentionConsumed=Number(checked(await sb.rpc("minds_consume_attention_briefing",{p_user:routine.user_id,p_event_ids:attentionEventIds,p_delivery_id:deliveryId}),"routine_attention_consume")||0);
       }
-      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,...delivered});
+      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,prompt_components:routineFootprint,attention_digest:attentionDigest,attention_consumed:attentionConsumed,...delivered});
       results.push({id:routine.id,status:"sent",delivery_id:deliveryId});
     }catch(e){
       const detail=e instanceof Error?e.message:(()=>{try{return JSON.stringify(e)}catch{return String(e)}})();
@@ -257,7 +262,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       for(const k of ['delivery_id','scheduled_at','delivery_output','delivery_sources','delivery_model','delivery_attempt'])delete metadata[k];
       const update=await sb.from("isabella_routines").update({last_error:detail,metadata,updated_at:new Date().toISOString()}).eq("id",routine.id);
       const outbox=deliveryId?await sb.from("minds_routine_deliveries").update({status:"error",error:detail,lease_until:null,retry_at:retryAt}).eq("id",deliveryId):null;
-      await finishRun(sb,agentRun,"error",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase,attempt:retries,retry_at:retryAt,record_error:update.error?.message||outbox?.error?.message||null},detail);
+      await finishRun(sb,agentRun,"error",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase,prompt_components:routineFootprint,attempt:retries,retry_at:retryAt,record_error:update.error?.message||outbox?.error?.message||null},detail);
       results.push({id:routine.id,status:"error",error:detail});
     }
   }
