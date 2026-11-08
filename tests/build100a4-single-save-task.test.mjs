@@ -122,10 +122,10 @@ test('The complete editor creates with one key and reads it back, so a retry nev
 });
 test('PWA pins both changed scripts and rotates one coherent cache',()=>{
  const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
- for(const pin of ['app.js?v=145','task-detail.js?v=5']){
+ for(const pin of ['app.js?v=146','task-detail.js?v=5']){
   assert.ok(html.includes(pin),'HTML '+pin);assert.ok(sw.includes(pin),'SW '+pin);
  }
- assert.match(sw,/isabella-shell-v190/);
+ assert.match(sw,/isabella-shell-v191/);
  assert.match(app,/void window\.MINDS_TASK_DETAIL\.open\(\{date,projectKey:draft\.projectKey\|\|null,/);
  assert.doesNotMatch(app,/MINDS_TASK_DETAIL\.createQuick\(/);
 });

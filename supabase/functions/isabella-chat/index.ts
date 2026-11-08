@@ -23,6 +23,7 @@ import {workRadar} from "../_shared/isabella-radar.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
+import {taskResponsibles} from "../_shared/task-responsibles.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
 import {currentWorkTextCoverage,summarizeWorkExtractionGaps} from "../_shared/work-source-coverage.mjs";
@@ -191,14 +192,15 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     const start=new Date(currentDate+"T00:00:00Z"),from=new Date(start.getTime()-24*60*60*1000).toISOString(),to=new Date(start.getTime()+8*24*60*60*1000).toISOString();
     const [taskQ,eventQ]=await Promise.all([
       sb.from("isabella_tasks")
-        .select("id,client_key,title,due_date,completed_at,archived_at,sort_order,reminder_time,project_id,category_id,notes,priority,start_date")
+        .select("id,client_key,title,due_date,completed_at,archived_at,sort_order,reminder_time,project_id,category_id,notes,priority,start_date,assignee,assignee_person_id")
         .is("completed_at",null).is("archived_at",null).limit(160),
       sb.from("isabella_events")
         .select("id,client_key,title,starts_at,ends_at,all_day,project_id,category_id,notes")
         .gte("starts_at",from).lt("starts_at",to).order("starts_at",{ascending:true}).limit(120)
     ]);
     if(taskQ.error||eventQ.error)return {status:"error",today_tasks:[],overdue_tasks:[],undated_tasks:[],today_events:[],upcoming:[]};
-    const taskView=(x:any)=>({id:x.client_key||x.id,title:x.title,date:x.due_date||null,reminder_time:x.reminder_time||null,sort_order:Number(x.sort_order||0),project_id:x.project_id||null,category_id:x.category_id||null,priority:x.priority||null,start_date:x.start_date||null,notes:x.notes||""});
+    const responsibles=await taskResponsibles(sb,taskQ.data||[]);
+    const taskView=(x:any)=>{const who=responsibles.get(String(x.id));return {id:x.client_key||x.id,title:x.title,date:x.due_date||null,reminder_time:x.reminder_time||null,sort_order:Number(x.sort_order||0),project_id:x.project_id||null,category_id:x.category_id||null,priority:x.priority||null,start_date:x.start_date||null,notes:x.notes||"",...(who?.length?{responsable:who}:{})}};
     const tasks=(taskQ.data||[]).map(taskView);
     const tomorrowDate=new Date(new Date(currentDate+"T00:00:00Z").getTime()+86400000).toISOString().slice(0,10);
     const tomorrowTasks=tasks.filter((x:any)=>x.date===tomorrowDate||(!!x.start_date&&!!x.date&&x.start_date<=tomorrowDate&&tomorrowDate<x.date))
@@ -229,7 +231,7 @@ async function canonicalAgendaContext(req:Request,currentDate:string,timeZone:st
     const todayEvents=events.filter((x:any)=>x.local_date===currentDate);
     const tomorrowEvents=events.filter((x:any)=>x.local_date===tomorrowDate);
     const upcoming=[
-      ...futureTasks.map((x:any)=>({kind:"task",id:x.id,date:x.date,title:x.title,reminder_time:x.reminder_time,project_id:x.project_id,category_id:x.category_id})),
+      ...futureTasks.map((x:any)=>({kind:"task",id:x.id,date:x.date,title:x.title,reminder_time:x.reminder_time,project_id:x.project_id,category_id:x.category_id,...(x.responsable?{responsable:x.responsable}:{})})),
       ...events.filter((x:any)=>x.local_date>currentDate).map((x:any)=>({
         kind:"event",id:x.id,date:x.local_date,starts_at:x.starts_at,ends_at:x.ends_at,title:x.title,all_day:x.all_day,
         local_start_time:x.local_start_time,local_end_time:x.local_end_time,display_time:x.display_time,timezone:x.timezone,
@@ -2573,21 +2575,23 @@ async function searchCalendar(req: Request, args: any) {
     const to=String(args?.date_to||"").trim();
     const query=normalizeText(args?.query||"");
     let eq=sb.from("isabella_events").select("client_key,title,starts_at,ends_at,all_day,notes").order("starts_at",{ascending:true}).limit(120);
-    let tq=sb.from("isabella_tasks").select("client_key,title,due_date,start_date,completed_at,archived_at,reminder_time,notes").order("due_date",{ascending:true}).limit(120);
+    let tq=sb.from("isabella_tasks").select("id,client_key,title,due_date,start_date,completed_at,archived_at,reminder_time,notes,assignee,assignee_person_id").order("due_date",{ascending:true}).limit(120);
     if(from){eq=eq.gte("starts_at",from+"T00:00:00");tq=tq.gte("due_date",from)}
     // A task overlaps the range when it is due in it or started before its end.
     if(to){eq=eq.lte("starts_at",to+"T23:59:59");tq=tq.or(`due_date.lte.${to},start_date.lte.${to}`)}
     // Still open from before the range: pending on the asked day too.
     const before=args?.include_open_before===true&&/^\d{4}-\d{2}-\d{2}$/.test(from)
-      ?sb.from("isabella_tasks").select("client_key,title,due_date,start_date,reminder_time,notes").is("completed_at",null).is("archived_at",null)
+      ?sb.from("isabella_tasks").select("id,client_key,title,due_date,start_date,reminder_time,notes,assignee,assignee_person_id").is("completed_at",null).is("archived_at",null)
         .lt("due_date",from).order("due_date",{ascending:true}).limit(40)
       :Promise.resolve({data:null});
     const [{data:events},{data:tasks},{data:openBefore}]=await Promise.all([eq,tq,before]);
     const has=(x:any)=>!query||normalizeText((x?.title||"")+" "+(x?.notes||"")).includes(query);
+    const responsibles=await taskResponsibles(sb,[...(tasks||[]),...(openBefore||[])]);
+    const who=(x:any)=>{const l=responsibles.get(String(x.id));return l?.length?{responsable:l}:{}};
     return {
-      ...(openBefore?{open_before:(openBefore||[]).filter(has).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,overdue:true}))}:{}),
+      ...(openBefore?{open_before:(openBefore||[]).filter(has).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,overdue:true,...who(x)}))}:{}),
       events:(events||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,starts_at:x.starts_at,ends_at:x.ends_at,all_day:x.all_day})),
-      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time}))
+      tasks:(tasks||[]).filter(has).slice(0,40).map((x:any)=>({id:x.client_key,title:x.title,date:x.due_date,start_date:x.start_date||null,completed:!!x.completed_at,archived:!!x.archived_at,reminder_time:x.reminder_time,...who(x)}))
     };
   }catch{return {events:[],tasks:[]}}
 }

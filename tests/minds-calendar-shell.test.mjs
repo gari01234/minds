@@ -119,7 +119,7 @@ test('Server agenda and briefing include multi-day tasks (needs function deploy)
   assert.match(chat,/const runsOn=\(x:any,day:string\)=>!!x\.start_date&&!!x\.date&&x\.start_date<=day&&day<x\.date;/);
   assert.match(chat,/in_progress:true,due_date:x\.date/);
   assert.match(chat,/tq\.or\(`due_date\.lte\.\$\{to\},start_date\.lte\.\$\{to\}`\)/);
-  assert.match(routine,/select\("title,due_date,start_date,completed_at/);
+  assert.match(routine,/select\("id,title,due_date,start_date,completed_at/);
   assert.match(routine,/in_progress_today:true/);
 });
 

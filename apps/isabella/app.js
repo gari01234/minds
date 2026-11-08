@@ -1212,8 +1212,20 @@ function clearAssistantStream(){
 }
 // App notices, receipts and confirmations: shown as system lines, never signed as Isabella, and
 // passed to her model as "sistema" (Phase 1, step 3). Role stays assistant so cards and sync work.
+// A receipt («La tarea queda para el miércoles.») belongs to the conversation Isabella reads: without a
+// scope it stayed on the phone and she kept saying a confirmed change was pending (08.11.2026). It takes
+// the scope of the latest scoped message, the turn it answers.
+function latestExposureScope(){
+  for(let i=(state.messages||[]).length-1;i>=0;i--){
+    const s=state.messages[i]?.metadata?.exposure_scope;
+    if(s&&s.version===1&&typeof s.key==='string'&&s.key&&s.key!=='legacy')return {...s};
+  }
+  return null;
+}
 function sayEvent(text,meta={}){
-  return say('assistant',text,{...meta,metadata:{...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{}),author:'system'}});
+  const metadata={...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{}),author:'system'};
+  if(!metadata.exposure_scope){const scope=latestExposureScope();if(scope)metadata.exposure_scope=scope}
+  return say('assistant',text,{...meta,metadata});
 }
 // Step 3a: Isabella's answer to a browser turn has a key derived from the request id. The server
 // writes it into the conversation too (supabase/functions/_shared/chat-delivery.mjs, same rule), so

@@ -86,7 +86,8 @@ test('The dream never reads app lines as Isabella\'s words, marked or legacy',as
 });
 
 test('App: receipts go through sayEvent, verified summaries are marked, events render muted',()=>{
-  assert.match(app,/function sayEvent\(text,meta=\{\}\)\{\n  return say\('assistant',text,\{\.\.\.meta,metadata:\{.*author:'system'\}\}\);/);
+  assert.match(app,/function sayEvent\(text,meta=\{\}\)\{\n  const metadata=\{\.\.\.\(meta\.metadata&&typeof meta\.metadata==='object'\?meta\.metadata:\{\}\),author:'system'\};/);
+  assert.match(app,/return say\('assistant',text,\{\.\.\.meta,metadata\}\);/);
   for(const legacy of ["say('assistant','Listo","say('assistant',`Listo","say('assistant',confirmationText(","say('assistant','No pude","say('assistant','De acuerdo"])
     assert.ok(!app.includes(legacy),legacy);
   assert.match(app,/const receiptText=window\.MINDS_TURN_INTEGRITY\.summary\(integrity\);/);
