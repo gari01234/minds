@@ -9,7 +9,7 @@ import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {taskResponsibles,responsibleField} from "../_shared/task-responsibles.mjs";
 import {promptComponentSizes} from "../_shared/light-conversation-context.mjs";
-import {resolveAssistantProfile,profileOwnerForUser,profileInstructions,personaText,profileRelationshipPolicy} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileOwnerForUser,profileInstructions,personaText,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -181,9 +181,12 @@ Deno.serve(async(req:Request)=>{
       }
 
       const localNow=new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
-      const originalSystem=isabellaRoutineInstructions({relationship:profileRelationshipPolicy(relationshipPolicy("proactive"),assistantProfile.id)})+
+      const originalSystem=isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")})+
         "\n\nRelationship policy: "+ISABELLA_RELATIONSHIP_POLICY_VERSION;
-      const system=profileInstructions(originalSystem,assistantProfile.id,assistantOwner);
+      const profiledOriginalSystem=assistantProfile.multi_user
+        ?originalSystem.replaceAll(relationshipPolicy("proactive"),OFFICE_RELATIONSHIP_POLICY)
+        :originalSystem;
+      const system=profileInstructions(profiledOriginalSystem,assistantProfile.id,assistantOwner);
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
