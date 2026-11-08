@@ -212,8 +212,11 @@ function readOnlyDailyAgendaIntent(message=''){
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
-  if(!session)throw new Error('Conecta la memoria de Isabella para activar la IA.');
-  const replyContext=options.replyTo?.text?`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
+  if(!session)throw new Error(officeChat?'Bitte melde dich im Office an.':'Conecta la memoria de Isabella para activar la IA.');
+  const officeChat=window.APP_PROFILE==='office';
+  const dialogueOwner=officeChat?(String(window.TBA_OFFICE_MEMBER?.display_name||'').trim().split(/\s+/)[0]||'Die Person'):'Gari';
+  const dialogueAssistant=officeChat?'Romy':'Isabella';
+  const replyContext=options.replyTo?.text?`\n${dialogueOwner} está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?dialogueAssistant:dialogueOwner}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
   if(!options.continuation&&!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
     const {data:calendarMode,error:modeError}=typeof sb.from==='function'
@@ -269,7 +272,7 @@ async function ask(message,state,options={}){
     // NEVER re-submit the model or replay any action/proposal.
     const transportFailure=error.name==='FunctionsFetchError'||error.name==='FunctionsRelayError';
     if(transportFailure&&options.durableRequestId&&typeof window.MINDS_CHAT_STREAM_RECOVERY==='function'){
-      options.onProgress?.({type:'status',phase:'recovering',label:'Isabella está terminando. Recuperando la respuesta sin repetir la consulta…'});
+      options.onProgress?.({type:'status',phase:'recovering',label:officeChat?'Romy arbeitet noch. Antwort wird wiederhergestellt, ohne die Anfrage zu wiederholen.':'Isabella está terminando. Recuperando la respuesta sin repetir la consulta…'});
       const recovered=await window.MINDS_CHAT_STREAM_RECOVERY(options.durableRequestId,{attempts:85,intervalMs:1400});
       if(recovered?.reply)return {...recovered,proposal:null,proposals:[],question:null,memory_candidates:[]};
     }
