@@ -59,6 +59,17 @@ export function personaText(text, { profile = "window", owner = null, assistant 
     .replace(/\bISABELLA\b/g, name.toLocaleUpperCase("de-DE"))
     .replace(/\bWindow\b/g, p.app_name);
 }
+// Read only the active member belonging to the authenticated/conversation owner.
+// Do not accept names from client payloads or infer them from other members.
+export async function profileOwnerForUser(sb, userId, profile = "window") {
+  const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
+  if (!p.multi_user) return p.owner_name;
+  if (!sb || !userId) return null;
+  const result = await sb.from("office_members").select("display_name,is_active")
+    .eq("user_id",userId).maybeSingle();
+  return result.error || result.data?.is_active !== true
+    ? null : profileFirstName(result.data.display_name);
+}
 /** @param {string} text @param {string} [profile] @param {string|null} [owner] */
 export function profileInstructions(text, profile = "window", owner = null) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
