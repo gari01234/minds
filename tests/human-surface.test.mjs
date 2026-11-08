@@ -1,3 +1,4 @@
+import * as ISABELLA_ROUTINE_MODULE from '../supabase/functions/_shared/isabella-core.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -96,7 +97,10 @@ test('Build 72 humanizes proactive durable-work messages and briefings',()=>{
   assert.ok(mission.includes('El progreso sigue guardado y no he hecho ningún cambio externo.'));
   assert.ok(!mission.includes('El progreso anterior sigue guardado en su Mission Workspace'));
   assert.ok(routine.includes('COSAS QUE DECIDISTE NO INTERRUMPIR ANTES:'));
-  assert.ok(routine.includes('Tampoco expongas términos internos de MINDS'));
+  // Routine uses the shared Isabella core; check the actual rendered rules, not a removed inline prompt.
+  assert.ok(routine.includes('isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")}'));
+  const {isabellaRoutineInstructions}=ISABELLA_ROUTINE_MODULE;
+  assert.match(isabellaRoutineInstructions(),/No menciones cron, scheduler, backend/);
   assert.ok(push.includes('quotedSubject(title,"Trabajo terminado:")'));
   assert.ok(push.includes('quotedSubject(title,"No pude terminar:")'));
 });
