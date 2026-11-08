@@ -295,3 +295,44 @@ GRANT EXECUTE ON FUNCTION public.minds_undo_direct_calendar_create_v01(uuid,uuid
   TO authenticated;
 COMMENT ON FUNCTION public.minds_undo_direct_calendar_create_v01(uuid,uuid) IS
   'Owner-only, one direct creation receipt, 10 minutes, unchanged row, transactional reversal and activity receipt; never general delete authority.';
+
+
+-- Atomic owner-reversible batch for a single chat-turn. A failure on any item
+-- rolls back all item reversals, preventing partial "Deshecho" for a batch.
+CREATE OR REPLACE FUNCTION public.minds_undo_direct_calendar_batch_v01(
+  p_items jsonb
+) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER
+SET search_path TO 'public','pg_temp'
+AS $function$
+DECLARE
+  v_user uuid:=auth.uid();
+  v_item jsonb;
+  v_result jsonb;
+  v_results jsonb:='[]'::jsonb;
+  v_count integer;
+BEGIN
+  IF v_user IS NULL OR p_items IS NULL OR jsonb_typeof(p_items)<>'array'
+  THEN RAISE EXCEPTION 'direct_batch_undo_invalid'; END IF;
+  v_count:=jsonb_array_length(p_items);
+  IF v_count<1 OR v_count>20 THEN RAISE EXCEPTION 'direct_undo_batch_limit'; END IF;
+  FOR v_item IN SELECT value FROM jsonb_array_elements(p_items) LOOP
+    IF jsonb_typeof(v_item)<>'object' OR
+       nullif(v_item->>'request_id','') IS NULL OR
+       nullif(v_item->>'receipt_id','') IS NULL
+    THEN RAISE EXCEPTION 'direct_undo_batch_bad_item'; END IF;
+    v_result:=public.minds_undo_direct_calendar_create_v01(
+      (v_item->>'request_id')::uuid,(v_item->>'receipt_id')::uuid);
+    IF v_result->>'status' IS DISTINCT FROM 'undone'
+    THEN RAISE EXCEPTION 'direct_undo_receipt_missing'; END IF;
+    v_results:=v_results||jsonb_build_array(v_result);
+  END LOOP;
+  RETURN jsonb_build_object('status','undone','count',v_count,'receipts',v_results);
+END;
+$function$;
+REVOKE ALL ON FUNCTION public.minds_undo_direct_calendar_batch_v01(jsonb)
+  FROM PUBLIC,anon;
+GRANT EXECUTE ON FUNCTION public.minds_undo_direct_calendar_batch_v01(jsonb)
+  TO authenticated;
+COMMENT ON FUNCTION public.minds_undo_direct_calendar_batch_v01(jsonb) IS
+  'Owner only; atomic reversal of the exact original direct-created receipts within 10 minutes. No general delete authorization.';
