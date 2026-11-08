@@ -2413,6 +2413,8 @@ async function syncDurableChatJobs(){
 let voiceTurnEpoch=0;
 async function handle(text,attachments=[],replyTo=null,options={}){
   const voiceTurn=++voiceTurnEpoch;
+  // A new owner message closes the previous ten-minute Undo option.
+  for(const m of state.messages)if(m.metadata?.direct_undo)m.metadata.direct_undo=null;
   window.ISABELLA_VOICE_OUTPUT?.stop();
   const copy=(attachments||[]).map(x=>({path:x.path,mime:x.mime,name:x.name}));
   clearAssistantStream();
@@ -2473,11 +2475,20 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         const report=failed.length
           ?(text?text+' ':'')+'No pude guardar '+naturalList(missing)+', así que '+(failed.length===1?'no lo doy por hecho':'no los doy por hechos')+'. Puedes revisarlo abajo.'
           :text;
-        sayEvent(report,{metadata:{exposure_scope:exposure,
+        const undoItems=committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
+          kind:x.kind,entity_client_key:x.entity_client_key}));
+        const directUndo=undoItems.length?{
+          status:'ready',expires_at:new Date(Date.now()+10*60*1000).toISOString(),items:undoItems
+        }:null;
+        const directMessage=sayEvent(report,{metadata:{exposure_scope:exposure,
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
-          action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
-            kind:x.kind,entity_client_key:x.entity_client_key})),
+          action_receipts:undoItems,direct_undo:directUndo,
           review_proposals:failed.map(x=>x.proposal)}});
+        if(directUndo)setTimeout(()=>{
+          if(directMessage.metadata?.direct_undo===directUndo&&directUndo.status==='ready'){
+            directMessage.metadata.direct_undo=null;save();renderMessages();
+          }
+        },10*60*1000);
         save();
         return;
       }
