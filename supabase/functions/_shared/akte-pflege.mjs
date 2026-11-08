@@ -231,7 +231,7 @@ export async function collectOfficeAkteSources(sb,projectId,since){
     if(remaining<500)break;
     if(file.metadata?.visibility==='private'||file.metadata?.scope==='personal')continue;
     const rows=await officeRows(sb.from('minds_work_source_segments')
-      .select('file_id,project_id,source_version,segment_no,content,metadata')
+      .select('file_id,project_id,source_version,segment_no,content,locator')
       .eq('project_id',projectId).eq('file_id',file.id)
       .order('segment_no',{ascending:true}).limit(80),'office_source_segments');
     if(!rows.length)continue;
@@ -243,7 +243,7 @@ export async function collectOfficeAkteSources(sb,projectId,since){
     remaining-=text.length;
     out.push({id:file.id,source_version:version,datei:file.name,art:file.source_kind,
       aktualisiert:String(file.updated_at||'').slice(0,10),text,
-      seiten:same.map(x=>x.metadata?.page||x.metadata?.page_start).filter(Boolean).slice(0,20)});
+      seiten:same.map(x=>x.locator?.page||x.locator?.page_start).filter(Boolean).slice(0,20)});
   }
   return out;
 }
