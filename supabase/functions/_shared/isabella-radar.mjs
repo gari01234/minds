@@ -52,7 +52,8 @@ export async function workRadar(sb,{now=new Date(),tz=TZ,userId=null,profile='wi
   if(!sb)return null;
   try{
     const today=localDay(now,tz),since=new Date(now.getTime()-RADAR_LIMITS.topicDays*864e5).toISOString();
-    const own=q=>userId&&profile!=='office'?q.eq('user_id',userId):q;
+    // Service-role runners must never broaden personal Work reads in Office.
+    const own=q=>userId?q.eq('user_id',userId):q;
     const [p,t,m,terminplan]=await Promise.all([
       own(sb.from('isabella_projects').select('id,name,archived')).limit(60),
       own(sb.from('minds_work_threads').select('id,title,summary,metadata,project_id,last_activity_at,updated_at')).eq('status','active')

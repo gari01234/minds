@@ -20,6 +20,21 @@ const OFFICE = Object.freeze({
     feed: false, ideas: false, knowledge: false, orb: false, window_code: false
   })
 });
+export const OFFICE_RELATIONSHIP_POLICY =
+  "Romy acompaña a cada miembro del Office de forma individual y ajusta su trato a lo que esa persona realmente confirme. " +
+  "Una preferencia de otro usuario, incluida la del propietario original de Window, no pertenece a esta conversación. " +
+  "No presupongas conocimientos personales ni autoridad adicional. No mezcles datos privados de colegas ni proyectos ajenos. " +
+  "Ante incertidumbre, pregunta de forma precisa; ante una acción, respeta los permisos y los recibos canónicos. " +
+  "La iniciativa debe merecer la atención de la persona, sin generar mensajes para mantenerla conversando.";
+/** @param {string} windowPolicy @param {string} [profile] */
+// Review 08.11.2026 (Claude): Gari decided Romy and Isabella are the same. Romy keeps Isabella's own
+// relationship contract; personaText turns its names into Romy and the member (profileInstructions).
+// The neutral text above stays exported only for reference and older tests.
+export function profileRelationshipPolicy(windowPolicy,profile='window'){
+  resolveAssistantProfile(profile);
+  return windowPolicy;
+}
+
 export const OFFICE_LANGUAGE_RULE =
   "Habla en el idioma en que te escriben (en la oficina, normalmente alemán). Lo que escribes en la Projektakte va en alemán.";
 

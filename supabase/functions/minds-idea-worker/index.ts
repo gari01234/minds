@@ -75,7 +75,7 @@ Deno.serve(async(req:Request)=>{
   if(req.method==="OPTIONS")return new Response("ok",{headers:cors});
   if(req.method!=="POST")return json({error:"method_not_allowed"},405);
   let body:any={};try{body=await req.json()}catch{return json({error:"invalid_json"},400)}
-  const apiKey=Deno.env.get("OPENAI_API_KEY");if(!apiKey)return json({error:"openai_not_configured"},503);
+  const apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"));if(!apiKey)return json({error:"openai_not_configured"},503);
   const workspace=body?.workspace||{},context=body?.context&&typeof body.context==="object"?body.context:{};
   const message=String(body?.message||"").trim();if(!message)return json({error:"message_required"},400);
   const history=Array.isArray(body?.history)?body.history.slice(-16):[];

@@ -6,6 +6,7 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 import {createRemoteJWKSet,jwtVerify} from "npm:jose@6.1.0";
 import {presencePusher} from "../_shared/presence-push.ts";
 import {relationshipPolicy} from "../_shared/relationship-policy.ts";
+import {resolveAssistantProfile,profileRelationshipPolicy} from "../_shared/assistant-profile.mjs";
 import {PRESENCE_AUDIENCE,PRESENCE_MODEL,trustedPresenceWorkflow,runIsabellaPresence,presenceCaller} from "../_shared/isabella-presence.mjs";
 
 const jwks=createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"));
@@ -18,13 +19,14 @@ Deno.serve(async(req:Request)=>{
     const {payload}=await jwtVerify(token,jwks,{issuer:"https://token.actions.githubusercontent.com",audience:PRESENCE_AUDIENCE,maxTokenAge:"10 minutes"});
     if(!trustedPresenceWorkflow(payload))throw new Error("workflow");
   }catch{return json({error:"unauthorized_workflow"},401)}
-  const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"",apiKey=Deno.env.get("OPENAI_API_KEY")||"";
+  const url=Deno.env.get("SUPABASE_URL")||"",service=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"",apiKey=(Deno.env.get("OPENAI_API_KEY")||Deno.env.get("TBA_OFFICE_OPENAI_API_KEY"))||"";
   if(!url||!service||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
   try{
-    const result=await runIsabellaPresence({sb,model,profile:Deno.env.get('ASSISTANT_PROFILE')||'window',callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
-      push:presencePusher(sb),log:(...a:unknown[])=>console.error(...a)});
+    const profile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
+    const result=await runIsabellaPresence({sb,model,profile:profile.id,callModel:presenceCaller(apiKey,model),relationship:profileRelationshipPolicy(relationshipPolicy("proactive"),profile.id),
+      push:profile.multi_user?async()=>({sent:0}):presencePusher(sb),log:(...a:unknown[])=>console.error(...a)});
     return json(result,result.ok?200:207);
   }catch(e){
     console.error("isabella_presence_failed",e instanceof Error?e.message:String(e));
