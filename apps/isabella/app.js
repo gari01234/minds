@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const $=s=>document.querySelector(s), $=s=>[...document.querySelectorAll(s)];
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const assistantUi=(key,span)=>window.APP_PROFILE==='office'&&window.ASSISTANT_I18N
   ?window.ASSISTANT_I18N.t(key):span;
 
