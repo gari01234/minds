@@ -43,7 +43,7 @@ export const FOLLOWUP_TOOLS=[
 ];
 export const FOLLOWUP_TOOL_NAMES=new Set(FOLLOWUP_TOOLS.map(t=>t.name));
 
-/** @param {any} sb user-scoped client (RLS) @param {{userId:string,args:any,tz?:string,now?:Date,turnId?:string|null}} o */
+/** @param {any} sb user-scoped client (RLS) @param {{userId:string,args:any,tz?:string,now?:Date,turnId?:string|null,ownerName?:string}} o */
 export async function scheduleFollowUp(sb,{userId,args,tz='Europe/Berlin',now=new Date(),turnId=null,ownerName='Gari'}){
   const about=clip(args&&args.about,FOLLOWUP_LIMITS.titleChars),why=clip(args&&args.why,FOLLOWUP_LIMITS.reasonChars);
   const day=String(args&&args.day||''),time=args&&args.time?String(args.time):'09:00';
