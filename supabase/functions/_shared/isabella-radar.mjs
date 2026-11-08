@@ -7,6 +7,7 @@
 // for Gari's confirmation and contradictions found by the nightly Akte-Pflege — never the threads'
 // messages. For details she still has to search (search_work, search_work_threads).
 import {clip,localDay,TZ,addDays} from './window-tools.mjs';
+import {readOfficeTerminplanMilestones} from './office-terminplan.mjs';
 
 export const RADAR_LIMITS={projects:4,topicsPerProject:4,topicDays:30,standChars:200,questions:2,fristenDays:21,fristen:4,proposedTasks:3,contradictions:2};
 const list=v=>Array.isArray(v)?v.filter(x=>typeof x==='string'&&x.trim()):[];
@@ -46,21 +47,29 @@ export function buildRadar({projects=[],threads=[],memos=[],today}){
 }
 
 /** Reads the radar with the caller's client (RLS keeps it to the owner). Never throws: no radar is fine.
- * @param {any} sb @param {{now?:Date,tz?:string,userId?:string|null}} [opts] */
-export async function workRadar(sb,{now=new Date(),tz=TZ,userId=null}={}){
+ * @param {any} sb @param {{now?:Date,tz?:string,userId?:string|null,profile?:string}} [opts] */
+export async function workRadar(sb,{now=new Date(),tz=TZ,userId=null,profile='window'}={}){
   if(!sb)return null;
   try{
     const today=localDay(now,tz),since=new Date(now.getTime()-RADAR_LIMITS.topicDays*864e5).toISOString();
-    const own=q=>userId?q.eq('user_id',userId):q;
-    const [p,t,m]=await Promise.all([
+    const own=q=>userId&&profile!=='office'?q.eq('user_id',userId):q;
+    const [p,t,m,terminplan]=await Promise.all([
       own(sb.from('isabella_projects').select('id,name,archived')).limit(60),
       own(sb.from('minds_work_threads').select('id,title,summary,metadata,project_id,last_activity_at,updated_at')).eq('status','active')
         .gte('updated_at',since).order('updated_at',{ascending:false}).limit(24),
       own(sb.from('minds_work_memory').select('id,memory_type,title,status,occurred_at,created_at,metadata,project_id'))
         .in('memory_type',['decision','deadline','commitment','open_question']).in('status',['proposed','confirmed'])
-        .order('updated_at',{ascending:false}).limit(80)
+        .order('updated_at',{ascending:false}).limit(80),
+      profile==='office'?readOfficeTerminplanMilestones(sb,{userId,from:today,to:addDays(today,RADAR_LIMITS.fristenDays),limit:8})
+        :Promise.resolve(null)
     ]);
     if(p.error||t.error||m.error)return null;
-    return buildRadar({projects:p.data||[],threads:t.data||[],memos:m.data||[],today});
+    const base=buildRadar({projects:p.data||[],threads:t.data||[],memos:m.data||[],today});
+    if(profile!=='office')return base;
+    // Office Terminplan milestones are an independent, owner/team-scoped read.
+    // An unavailable read must never be reported as no Fristen.
+    const fristen=terminplan?.milestones||[];
+    return {...(base||{fuente:'Projektakte und Terminplan',hoy:today,proyectos:[]}),
+      ...(fristen.length?{terminplan_fristen:fristen}:{}),terminplan_status:terminplan?.status||'unavailable'};
   }catch{return null}
 }
