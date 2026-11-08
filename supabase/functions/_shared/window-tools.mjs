@@ -28,6 +28,15 @@ function taskOut(t,names){
 }
 const TASK_COLS='id,client_key,title,due_date,start_date,completed_at,archived_at,notes,project_id,work_status,priority,assignee,work_bucket_id,updated_at';
 
+/** Numbers only: diagnostics must never reflect user/model content in phase timings. */
+export function phaseTimingView(value){
+  const source=value&&typeof value==='object'?value:{};
+  const ms=v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=86400000?Math.round(v):null;
+  return {route:ms(source.route),context:ms(source.context),
+    rounds:Array.isArray(source.rounds)?source.rounds.slice(0,12).map(ms).filter(v=>v!==null):[],
+    total:ms(source.total)};
+}
+
 export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.randomUUID(),tz=TZ}){
   if(!sb||!userId)throw new Error('window_tools_need_owner');
   const today=()=>localDay(now(),tz);
@@ -252,7 +261,7 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
   // finished, which is what a silence looks like from the server.
   const DIAG_FIELDS=['context_tier','provider_history_policy','scoped_recent_count','turn_outcome','rounds','tools',
     'browser_delivery_receipt_saved','execution_contract','prompt_components','semantic_temporal_rejected',
-    'semantic_repair_rounds','conversation_rotated','memory_checkpoint','checkpoint_error','work_consulted','sofia_consulted'];
+    'semantic_repair_rounds','conversation_rotated','memory_checkpoint','checkpoint_error','work_consulted','sofia_consulted','phase_ms'];
   async function turnDiagnostics({from,to,status,limit=60}={}){
     if(from!=null&&!isDay(from))throw new ToolError('from: AAAA-MM-DD.');
     if(to!=null&&!isDay(to))throw new ToolError('to: AAAA-MM-DD.');
@@ -272,7 +281,8 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
         background:r.feature==='isabella_background'||undefined,error:r.error?clip(r.error,300):undefined,
         route:{complexity:route.complexity||undefined,source:route.source||undefined,work:route.work||undefined,project:route.project||undefined,
           specialists:Array.isArray(route.specialists)&&route.specialists.length?route.specialists:undefined}};
-      for(const k of DIAG_FIELDS)if(m[k]!==undefined&&m[k]!==null)out[k]=m[k];
+      for(const k of DIAG_FIELDS)if(m[k]!==undefined&&m[k]!==null)
+         out[k]=k==='phase_ms'?phaseTimingView(m[k]):m[k];
       return out;
     }),note:'No message content. never_finished = started more than 10 minutes ago and never closed.'};
   }
