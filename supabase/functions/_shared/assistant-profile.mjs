@@ -45,6 +45,7 @@ export function profileFirstName(displayName) {
   return normalized ? normalized.split(/\s+/u)[0] : null;
 }
 /** @param {string} text @param {{profile?:string|ReturnType<typeof resolveAssistantProfile>,owner?:string|null,assistant?:string|null}} [options] */
+/** @param {string} text @param {{profile?:string|ReturnType<typeof resolveAssistantProfile>,owner?:string|null,assistant?:string|null}} [options] */
 export function personaText(text, { profile = "window", owner = null, assistant = null } = {}) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (p.id === "window") return text;
