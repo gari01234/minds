@@ -317,13 +317,29 @@ function init(){
   const reviewId=reviewRequestIdFromUrl();
   show(reviewId?'assistant':state.screen);
   if(reviewId)setTimeout(()=>void handleReviewDeepLink(),0);
+  void markPresenceSeen();
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){
+      void markPresenceSeen();
       void syncDurableChatJobs();
       void recoverReviewedTaskReceipts();
       if(state.screen==='calendar')window.ISABELLA_SYNC_PULL_NOW?.();
     }
   });
+}
+// Phase 1, step 8 v2: «Gari opened the app» is one of the real moments in which Isabella may write first
+// (isabella-presence). One small write, at most every 10 minutes, shared by all devices.
+async function markPresenceSeen(){
+  try{
+    const key='isabella-presence-seen-at',last=Number(localStorage.getItem(key)||0),now=Date.now();
+    if(now-last<10*60*1000)return;
+    const sb=window.MINDS_SUPABASE;if(!sb)return;
+    const {data:{session}}=await sb.auth.getSession();if(!session?.user?.id)return;
+    localStorage.setItem(key,String(now));
+    const at=new Date(now).toISOString();
+    await sb.from('isabella_preferences').upsert({user_id:session.user.id,preference_key:'presence_seen',value:{at},status:'confirmed',
+      confidence:1,evidence:[{source:'isabella_client',kind:'app_visible',at}],updated_at:at},{onConflict:'user_id,preference_key'});
+  }catch{}
 }
 let proactiveCycleBusy=false,proactiveNudgeBusy=false,curiosityBusy=false;
 function proactiveTerms(text){

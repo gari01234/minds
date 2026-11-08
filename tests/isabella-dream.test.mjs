@@ -137,7 +137,7 @@ test('Chat turns see a small consolidated memory (global turns only) and the pan
   assert.match(chat,/MEMORIA CONSOLIDADA:\n/);
   assert.match(chat,/Sácalas solo cuando haya una apertura natural/);
   const light=read('supabase/functions/_shared/light-conversation-context.mjs');
-  assert.match(light,/"memoria_de_isabella","tomorrow_events"/);
+  assert.match(light,/"memoria_de_isabella","radar_work","tomorrow_events"/);
   const {leanConversationContext}=await import('../supabase/functions/_shared/light-conversation-context.mjs');
   assert.deepEqual(leanConversationContext({memoria_de_isabella:v}).memoria_de_isabella,v);
   const app=read('apps/isabella/app.js');

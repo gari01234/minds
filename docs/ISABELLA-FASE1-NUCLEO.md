@@ -62,3 +62,39 @@ y antes: «Ten cuidado con el consumo de tokens».
 - Sin cambios: los turnos con ruta Work, que siguen siendo los más grandes (~500k caracteres por
   ronda, sobre todo por la precarga de Work). Es la siguiente oportunidad de ahorro, pero toca la
   calidad de Work y queda para una decisión aparte.
+
+## Revisión del 08.11 (tarde): capacidad, radar de Work e iniciativa
+Gari preguntó si el núcleo la hacía menos capaz y señaló que Isabella no es nada proactiva: no
+pregunta, no propone y no sabe nada de los Threads.
+- **Detalle de vuelta** (`_shared/isabella-core-details.mjs`): los párrafos originales del prompt
+  completo, copiados tal cual (salvo Work), vuelven en los turnos que los necesitan.
+  - Memoria y ajustes van en todo turno no ligero.
+  - Encargos largos, especialistas, material y web van cuando el router marca un turno profundo, un
+    entregable, especialistas, continuación o web.
+  - También vuelven aprender de correcciones repetidas (`propose_skill`) y las conexiones operativas.
+- **Contexto como antes:** 32 rasgos del modelo personal (compactos, sin evidencias) y 14 recuerdos.
+- **Radar de Work** (`_shared/isabella-radar.mjs`). El chat global estaba aislado de los Threads y de la
+  Projektakte por diseño. Ahora recibe un resumen de solo lectura:
+  - temas activos con su estado y preguntas abiertas (Themenblatt);
+  - fechas límite de las próximas tres semanas;
+  - entradas por confirmar, tareas propuestas y contradicciones de la Akte-Pflege.
+
+  Nunca incluye los mensajes de los Threads; para el detalle tiene que buscar. Ocupa unos 2–4k
+  caracteres por turno.
+- **Iniciativa en el núcleo.** Debe sacar lo importante que probablemente no ha visto, aunque pregunte
+  por otra cosa, y proponer ayuda concreta que puede cumplir. Si le preguntan por un día, mira también
+  lo que viene después. En momentos personales, se queda ahí.
+- **Mensaje propio por momentos reales.** La comprobación corre cada 30 minutos, pero el modelo solo se
+  llama en un momento real:
+  - acaba de terminar una reunión;
+  - Gari abrió la app sin escribir;
+  - hace un rato que terminó una conversación;
+  - la tarde antes de algo;
+  - el final del día.
+
+  El modelo decide ahora, más tarde o nada. Como mucho hay 3 llamadas pequeñas y 1 mensaje al día.
+  La app avisa al abrirse (`presence_seen`, como mucho cada 10 minutos).
+- **Tamaños:**
+  - turno ligero: ~16k caracteres de instrucciones;
+  - turno normal: ~27k;
+  - turno profundo: ~43k (antes, ~52k en todos).

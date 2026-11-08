@@ -32,7 +32,8 @@ const moments=[
     assert.ok(ISABELLA_CORE.includes('nunca para rellenar un perfil'));
   }],
   ['04 · «semana pesada, con la familia»','quedarse ahí, sin saltar a lo operativo',()=>{
-    assert.ok(ISABELLA_CORE.includes('Lo operativo va después, y solo si hace falta'));
+    assert.ok(ISABELLA_CORE.includes('Lo operativo va después.'));
+    assert.ok(ISABELLA_CORE.includes('En un momento personal (cansancio, familia, una conversación tranquila de noche) quédate ahí'));
     assert.match(policy,/Puede haber conversaciones personales sin una tarea que resolver/);
   }],
   ['05 · «ya lo agregué» sin que estuviera','nunca un «hecho» sin recibo',()=>{
