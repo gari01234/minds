@@ -216,7 +216,7 @@ async function ask(message,state,options={}){
   const officeChat=window.APP_PROFILE==='office';
   const dialogueOwner=officeChat?(String(window.TBA_OFFICE_MEMBER?.display_name||'').trim().split(/\s+/)[0]||'Die Person'):'Gari';
   const dialogueAssistant=officeChat?'Romy':'Isabella';
-  const replyContext=options.replyTo?.text?`\n${dialogueOwner} está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?dialogueAssistant:dialogueOwner}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:'';
+  const replyContext=options.replyTo?.text?(officeChat?`\n${dialogueOwner} está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?dialogueAssistant:dialogueOwner}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`):'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
   if(!options.continuation&&!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
     const {data:calendarMode,error:modeError}=typeof sb.from==='function'
