@@ -1320,6 +1320,14 @@ function confirmationText(items,now=new Date()){
   return 'Guardados '+list.length+' cambios.';
 }
 
+function eligibleDirectUndo(message,index,now=Date.now()){
+  const undo=message?.metadata?.undo_direct;
+  return !!(undo&&undo.state==="available"&&Number.isFinite(Date.parse(undo.expires_at))&&
+    now<Date.parse(undo.expires_at)&&Array.isArray(undo.items)&&undo.items.length&&
+    undo.items.every(x=>/^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(x.request_id||""))&&
+      /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(String(x.receipt_id||"")))&&
+    !state.messages.slice(index+1).some(m=>m.role==="user"));
+}
 function renderMessages(forceBottom=false){
   const box=$('#messages');
   state.messages=normalizeMessages(state.messages);
@@ -1330,19 +1338,49 @@ function renderMessages(forceBottom=false){
     return;
   }
   const snapshot=captureAssistantScroll();
-  box.innerHTML=state.messages.map(m=>{
+  box.innerHTML=state.messages.map((m,messageIndex)=>{
     const reply=m.replyTo?.id?`<div class="message-reply-reference"><strong>${esc(replyAuthor(m.replyTo))}</strong><span>${esc(replySnippet(m.replyTo.text))}</span></div>`:'';
     const artifactSurface=artifactSurfaceGroups(m.artifacts);
     const displayText=resolvedReviewText(m)??cleanGeneratedDeliverableText(m.text,m.artifacts);
     const previews=artifactSurface.previews.length?`<div class="message-artifact-previews">${artifactSurface.previews.slice(0,2).map(a=>artifactPreviewMarkup(a,true)).join('')}</div>`:'';
     const deliverables=artifactSurface.deliverables.length?`<div class="message-artifacts">${artifactSurface.deliverables.slice(0,8).map(a=>artifactMarkup(a,true)).join('')}</div>`:'';
     const event=isEventMessage(m);
-    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
+    const undoAvailable=eligibleDirectUndo(m,messageIndex);
+    return `<div class="message ${m.role}${event?' is-event':''}" data-message-id="${esc(m.id||'')}">${reply}${Array.isArray(m.attachments)&&m.attachments.length?`<div class="message-attachments">${m.attachments.map(a=>{const path=String(a.path||''),mime=String(a.mime||''),name=String(a.name||'Archivo');if(mime.startsWith('image/'))return `<img loading="lazy" data-chat-image-path="${esc(path)}" alt="${esc(name)}">`;const ext=(name.split('.').pop()||'FILE').toUpperCase();return `<a class="message-file" data-chat-file-path="${esc(path)}" data-chat-file-name="${esc(name)}" target="_blank" rel="noopener"><span>${esc(ext)}</span><strong>${esc(name)}</strong></a>`}).join('')}</div>`:''}${displayText?`<span class="message-text">${formatMessageText(displayText)}</span>`:''}${undoAvailable?`<div class="message-review-action"><button type="button" class="secondary" data-direct-undo="${esc(m.id||'')}">Deshacer</button></div>`:''}${m.role==='assistant'&&m.metadata?.incomplete_response?`<div class="message-incomplete" role="status">Respuesta interrumpida. El texto recibido es parcial.<button type="button" data-continue-incomplete="${esc(m.id||'')}">Continuar respuesta</button></div>`:''}${previews}${deliverables}${m.role==='assistant'&&Array.isArray(m.metadata?.review_proposals)&&m.metadata.review_proposals.length&&
       !m.metadata?.review_state?`<div class="message-review-action"><button type="button" class="secondary" data-review-message="${esc(m.id||'')}">Revisar propuesta pendiente</button></div>`:''}${m.role==='assistant'&&!event&&m.reaction?`<button type="button" class="message-reaction-badge" data-message-react="${esc(m.id||'')}" aria-label="Cambiar reacción">${typographicReaction(m.reaction,true)}</button>`:''}${m.role==='assistant'&&!event?`<div class="message-actions"><button class="message-react" data-message-react="${esc(m.id||'')}" aria-label="Reaccionar">＋</button><button class="message-reply" data-message-reply="${esc(m.id||'')}" aria-label="Responder a este mensaje">↩︎</button></div>`:''}${Array.isArray(m.sources)&&m.sources.length?`<div class="message-sources">${m.sources.map(s=>`<a href="${/^https?:\/\//i.test(String(s.url||''))?esc(s.url):'#'}" target="_blank" rel="noopener">${esc(s.title||'Fuente')}</a>`).join('')}</div>`:''}${m.role==='assistant'&&Array.isArray(m.quickReplies)&&m.quickReplies.length?`<div class="message-quick-replies">${m.quickReplies.map((q,i)=>`<button data-quick-message="${esc(m.id||'')}" data-quick-index="${i}">${esc(q.label)}</button>`).join('')}</div>`:''}</div>`;
   }).join('');
   lastMessagesRenderKey=nextRenderKey;
   void hydrateChatImages();void hydrateArtifactFiles();
   try{bindMessageReactions()}catch(err){console.warn('reaction binding failed',err)}
+  document.querySelectorAll('[data-direct-undo]').forEach(b=>b.onclick=async()=>{
+    const message=state.messages.find(m=>m.id===b.dataset.directUndo);
+    const index=state.messages.indexOf(message);
+    if(index<0||!eligibleDirectUndo(message,index))return;
+    const undo=message.metadata.undo_direct;
+    const sb=window.MINDS_SUPABASE;
+    if(!sb){sayEvent('No pude deshacer: no tengo conexión con MINDS.');return}
+    b.disabled=true;undo.state="processing";save();
+    const succeeded=[],failed=[];
+    for(const item of undo.items){
+      try{
+        const {data,error}=await sb.rpc('minds_undo_direct_calendar_create_v01',{
+          p_request_id:item.request_id,p_receipt_id:item.receipt_id
+        });
+        if(error||!["undone","already_undone"].includes(String(data?.status||"")))
+          throw Error(error?.message||'No hubo comprobante de reversión.');
+        succeeded.push(item);
+      }catch(e){failed.push({item,reason:String(e?.message||e)})}
+    }
+    undo.state=failed.length?"failed":"undone";
+    undo.items=failed.map(x=>x.item);
+    undo.undone_at=failed.length?null:new Date().toISOString();
+    save();lastMessagesRenderKey='';renderMessages();
+    if(succeeded.length)try{await window.ISABELLA_SYNC_PULL_NOW?.()}catch{}
+    if(!failed.length)sayEvent('Deshecho.',{metadata:{undo_of:message.id,undo_count:succeeded.length}});
+    else sayEvent(succeeded.length
+      ?'Se revirtieron algunos elementos, pero no todos. Comprueba los restantes antes de volver a intentarlo.'
+      :'No pude deshacer esta creación. Puede haber cambiado o haber terminado el plazo. Comprueba el elemento en la agenda.');
+  });
   document.querySelectorAll('[data-review-message]').forEach(b=>b.onclick=()=>{
     const m=state.messages.find(x=>x.id===b.dataset.reviewMessage);
     const items=Array.isArray(m?.metadata?.review_proposals)?m.metadata.review_proposals:[];
@@ -2201,7 +2239,7 @@ async function applyDirectCalendarCreate(p){
     // Pull is presentation only. Verification above is the success criterion.
     try{await window.ISABELLA_SYNC_PULL_NOW()}catch(e){console.warn('direct create sync pending',e)}
   }
-  return {receipt_id:receipt.receipt_id,request_id:p.request_id,
+  return {receipt_id:receipt.receipt_id,request_id:p.request_id,entity_id:row.id,
     kind:p.kind,title:row.title,action:'create',
     date:p.kind==='task'?(row.due_date||null):new Date(row.starts_at).toLocaleDateString('sv-SE'),
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
@@ -2462,12 +2500,19 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         const report=failed.length
           ?(text?text+' ':'')+'No pude guardar '+naturalList(missing)+', así que '+(failed.length===1?'no lo doy por hecho':'no los doy por hechos')+'. Puedes revisarlo abajo.'
           :text;
+        const directUndo=committed.length?{
+          state:"available",expires_at:new Date(Date.now()+10*60000).toISOString(),
+          items:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
+            kind:x.kind,entity_id:x.entity_id,entity_client_key:x.entity_client_key}))
+        }:null;
         sayEvent(report,{metadata:{exposure_scope:exposure,
+          ...(directUndo?{undo_direct:directUndo}:{}),
           turn_outcome:failed.length?'partial_or_unverified':'action_applied',
           action_receipts:committed.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id,
             kind:x.kind,entity_client_key:x.entity_client_key})),
           review_proposals:failed.map(x=>x.proposal)}});
         save();
+        if(directUndo)setTimeout(()=>{lastMessagesRenderKey='';renderMessages()},10*60000+500);
         return;
       }
       const receiptText=window.MINDS_TURN_INTEGRITY.summary(integrity);
