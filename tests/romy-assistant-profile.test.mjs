@@ -109,7 +109,8 @@ test("Chat does not resolve Office identity in Window and never accepts a client
   assert.match(source,/assistantProfile.multi_user/);
   assert.match(source,/office_members/);
   assert.match(source,/\.eq\("user_id",authenticated\.id\)/);
-  assert.match(source,/profileInstructions\(modelInstructions,assistantProfile\.id,assistantOwner\)/);
+  assert.match(source,/modelInstructions\.replaceAll\(relationshipPolicy\("conversation"\),OFFICE_RELATIONSHIP_POLICY\)/);
+  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner\)/);
   assert.doesNotMatch(source,/body\?\.owner_name|body\?\.assistant_profile/);
   assert.match(source,/instructions:transientInstructions\(providerInstructions,/);
   assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner\)\)/);
