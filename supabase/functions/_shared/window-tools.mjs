@@ -251,7 +251,7 @@ export function createWindowTools({sb,userId,now=()=>new Date(),uuid=()=>crypto.
   // tier, history window, outcome, tools, errors. A turn still "running" long after it started never
   // finished, which is what a silence looks like from the server.
   const DIAG_FIELDS=['context_tier','provider_history_policy','scoped_recent_count','turn_outcome','rounds','tools',
-    'browser_delivery_receipt_saved','execution_contract','prompt_components','semantic_temporal_rejected',
+    'browser_delivery_receipt_saved','execution_contract','prompt_components','phase_ms','semantic_temporal_rejected',
     'semantic_repair_rounds','conversation_rotated','memory_checkpoint','checkpoint_error','work_consulted','sofia_consulted'];
   async function turnDiagnostics({from,to,status,limit=60}={}){
     if(from!=null&&!isDay(from))throw new ToolError('from: AAAA-MM-DD.');
