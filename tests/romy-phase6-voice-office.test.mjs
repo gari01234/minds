@@ -48,7 +48,15 @@ test('New Office conversation is titled Romy, without changing Window conversati
   const inserted=[];
   const sb={from(table){
     assert.equal(table,'conversations');
-    return {select(cols){assert.equal(cols,'id');return {eq(){return this},order(){return this},limit(){return this},maybeSingle:async()=>({data:null,error:null})}}},insert(row){inserted.push(row);return {select(){return {single:async()=>({data:{id:'new-id'},error:null})}}}}};
+    return {
+      select(cols){assert.equal(cols,'id');return {
+        eq(){return this},order(){return this},limit(){return this},
+        async maybeSingle(){return {data:null,error:null}}
+      }},
+      insert(row){inserted.push(row);return {
+        select(){return {async single(){return {data:{id:'new-id'},error:null}}}}
+      }}
+    };
   }};
   await liveConversation(sb,A,null,'window');
   await liveConversation(sb,B,null,'office');
