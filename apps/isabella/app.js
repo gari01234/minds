@@ -2218,6 +2218,66 @@ async function applyDirectCalendarCreate(p){
     when:p.kind==='task'?(row.due_date||'sin fecha'):new Date(row.starts_at).toLocaleString('es-ES'),
     entity_client_key:receipt.entity_client_key,entity_id:receipt.entity_id};
 }
+// This is a narrow reversal of an owner-quoted create, not a general delete.
+async function undoDirectCalendarMessage(messageId){
+  const message=state.messages.find(m=>m.id===messageId),idx=state.messages.indexOf(message);
+  if(idx<0||!directUndoEligible(message,idx))return;
+  const undo=message.metadata.direct_undo;
+  const requests=undo.items.map(x=>({request_id:x.request_id,receipt_id:x.receipt_id}));
+  if(!requests.length||requests.some(x=>!x.request_id||!x.receipt_id))return;
+  undo.status='processing';save();renderMessages();
+  const sb=window.MINDS_SUPABASE;
+  try{
+    if(!sb)throw new Error('MINDS no está conectado.');
+    const {data:sessionData,error:authError}=await sb.auth.getSession();
+    const owner=sessionData?.session?.user?.id;
+    if(authError||!owner)throw new Error('Tu sesión no está autenticada.');
+    // One atomic server transaction: either the entire original batch reverses
+    // or none does. Never retry on an ambiguous network error.
+    const {data:result,error:undoError}=await sb.rpc('minds_undo_direct_calendar_batch_v01',{p_items:requests});
+    if(undoError||result?.status!=='undone'||result?.count!==requests.length||
+       !Array.isArray(result.receipts)||result.receipts.length!==requests.length)
+      throw new Error(undoError?.message||'No tengo un comprobante completo de Deshacer.');
+    for(let i=0;i<undo.items.length;i++){
+      const original=undo.items[i],receipt=result.receipts[i];
+      if(receipt?.status!=='undone'||!receipt.undo_receipt_id||
+         receipt.request_id!==original.request_id||
+         receipt.original_receipt_id!==original.receipt_id||
+         receipt.entity_client_key!==original.entity_client_key||
+         receipt.entity_kind!==original.kind)
+        throw new Error('El comprobante no coincide con la creación original.');
+    }
+    // A write receipt is necessary but not sufficient. Verify canonical state
+    // for each item before showing "Deshecho".
+    for(const original of undo.items){
+      const table=original.kind==='task'?'isabella_tasks':'isabella_events';
+      const {data:row,error:readError}=await sb.from(table)
+        .select(original.kind==='task'?'client_key,archived_at':'client_key')
+        .eq('user_id',owner).eq('client_key',original.entity_client_key).maybeSingle();
+      if(readError||(original.kind==='task'?!row?.archived_at:!!row))
+        throw new Error('No pude comprobar la reversión en la fuente de verdad.');
+    }
+    for(const original of undo.items){
+      if(original.kind==='task'){
+        const task=state.tasks.find(t=>t.id===original.entity_client_key||t.clientKey===original.entity_client_key);
+        if(task)task.archivedAt=new Date().toISOString();
+      }else{
+        state.events=state.events.filter(e=>e.id!==original.entity_client_key&&e.clientKey!==original.entity_client_key);
+      }
+    }
+    undo.status='undone';message.metadata.direct_undo=null;
+    save();renderCalendar();renderMessages();
+    if(typeof window.ISABELLA_SYNC_PULL_NOW==='function'){
+      try{await window.ISABELLA_SYNC_PULL_NOW()}catch{}
+    }
+    sayEvent('Deshecho.');
+  }catch(e){
+    // The transaction may have committed before the network was lost.
+    // Disable replay; direct deletions require a new reviewed operation.
+    message.metadata.direct_undo=null;save();renderMessages();
+    sayEvent('No pude confirmar Deshacer. Comprueba tus tareas y calendario antes de volver a intentarlo.');
+  }
+}
 function directCreationBatch(result,integrity){
   const direct=result?.direct_authorization;
   if(!direct)return null;
