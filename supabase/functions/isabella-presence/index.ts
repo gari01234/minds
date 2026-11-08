@@ -6,6 +6,7 @@ import {createClient} from "npm:@supabase/supabase-js@2";
 import {createRemoteJWKSet,jwtVerify} from "npm:jose@6.1.0";
 import {presencePusher} from "../_shared/presence-push.ts";
 import {relationshipPolicy} from "../_shared/relationship-policy.ts";
+import {resolveAssistantProfile,profileRelationshipPolicy} from "../_shared/assistant-profile.mjs";
 import {PRESENCE_AUDIENCE,PRESENCE_MODEL,trustedPresenceWorkflow,runIsabellaPresence,presenceCaller} from "../_shared/isabella-presence.mjs";
 
 const jwks=createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"));
@@ -23,8 +24,9 @@ Deno.serve(async(req:Request)=>{
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
   const model=Deno.env.get("OPENAI_PRESENCE_MODEL")||Deno.env.get("OPENAI_MODEL")||PRESENCE_MODEL;
   try{
-    const result=await runIsabellaPresence({sb,model,profile:Deno.env.get('ASSISTANT_PROFILE')||'window',callModel:presenceCaller(apiKey,model),relationship:relationshipPolicy("proactive"),
-      push:presencePusher(sb),log:(...a:unknown[])=>console.error(...a)});
+    const profile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
+    const result=await runIsabellaPresence({sb,model,profile:profile.id,callModel:presenceCaller(apiKey,model),relationship:profileRelationshipPolicy(relationshipPolicy("proactive"),profile.id),
+      push:profile.multi_user?async()=>({sent:0}):presencePusher(sb),log:(...a:unknown[])=>console.error(...a)});
     return json(result,result.ok?200:207);
   }catch(e){
     console.error("isabella_presence_failed",e instanceof Error?e.message:String(e));
