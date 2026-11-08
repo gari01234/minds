@@ -3982,6 +3982,7 @@ pregunta cuál.`;
   const contextTier=fastAgenda?"calendar_fast":leanSurface?"lean":coreSurface?"core":workCoreSurface?"work_core":"full";
   const resolvedContext=JSON.parse(dynamicContext);
   const centralWorkMemory=workCoreSurface?await consolidatedMemory(req,true):null;
+  if(workCoreSurface)phaseMs.context=Math.max(0,Date.now()-contextStarted);
   const workCoreContext=workCoreSurface
     ?{...resolvedContext,memoria_de_isabella:centralWorkMemory}:resolvedContext;
   const modelContext=leanSurface?leanConversationContext(resolvedContext):coreSurface?coreConversationContext(resolvedContext):workCoreContext;
@@ -4074,7 +4075,7 @@ pregunta cuál.`;
     }
 
     if(!response.ok){
-      await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
+      await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic,phase_ms:phaseSnapshot()},payload?.error?.message||"OpenAI request failed");
       return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
         message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
@@ -4540,6 +4541,6 @@ pregunta cuál.`;
   }
   return json(responsePayload);
 
-  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{},detail);return json({error:"chat_failed",message:detail},500)}
+  }catch(e){const detail=e instanceof Error?e.message:String(e);await finishAgentRun(req,activeRun,"error",{phase_ms:phaseSnapshot()},detail);return json({error:"chat_failed",message:detail},500)}
   finally{await closeConversation(supabaseClient(req),activeConversation)}
 });
