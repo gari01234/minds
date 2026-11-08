@@ -1199,6 +1199,23 @@ function clearAssistantStream(){
 function sayEvent(text,meta={}){
   return say('assistant',text,{...meta,metadata:{...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{}),author:'system'}});
 }
+// Step 3a: Isabella's answer to a browser turn has a key derived from the request id. The server
+// writes it into the conversation too (supabase/functions/_shared/chat-delivery.mjs, same rule), so
+// the app's copy updates that row instead of adding another, and a closed app is no longer a silence.
+function assistantKeyFor(requestId){
+  const id=String(requestId||'').toLowerCase();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id))return null;
+  return id.slice(0,14)+(id[14]==='5'?'3':'5')+id.slice(15);
+}
+function sayKeyed(id,role,text,meta={}){
+  const existing=id&&state.messages.find(m=>m.id===id);
+  if(!existing)return say(role,text,id?{...meta,id}:meta);
+  existing.text=text;
+  existing.metadata={...(existing.metadata||{}),...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{})};
+  if(Array.isArray(meta.sources))existing.sources=meta.sources;
+  save();renderMessages();
+  return existing;
+}
 function say(role,text,meta={}){
   const message={
     id:meta.id||uid(),role,text,at:meta.at||new Date().toISOString(),reaction:null,
@@ -2280,7 +2297,7 @@ async function reconcileReadOnlyBrowserReceipts(){
   const pending=state.messages.filter(m=>m.role==='user'&&m.metadata?.durable_request_id
     &&m.metadata?.durable_status!=='completed'
     &&Number.isFinite(Date.parse(m.at||''))
-    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<30*60000).slice(-3);
+    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<24*60*60000).slice(-3);
   if(!pending.length)return;
   browserReceiptSyncBusy=true;
   try{
@@ -2296,7 +2313,7 @@ async function reconcileReadOnlyBrowserReceipts(){
         assistant.metadata={...assistant.metadata,author:null,durable_status:result.incomplete?'incomplete':'completed',
           incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true};
       }else{
-        say('assistant',result.reply,{metadata:{durable_request_id:requestId,
+        sayKeyed(assistantKeyFor(requestId),'assistant',result.reply,{metadata:{durable_request_id:requestId,
           durable_status:result.incomplete?'incomplete':'completed',
           incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true}});
       }
@@ -2452,7 +2469,7 @@ async function handle(text,attachments=[],replyTo=null,options={}){
           save();renderMessages();
         }else{
           if(isabellaProse&&receiptText)say('assistant',isabellaProse,{metadata:{exposure_scope:exposure,commentary_for:'review'}});
-          say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+          sayKeyed(receiptText?null:assistantKeyFor(durableRequestId),'assistant',verifiedReply||'No hubo una respuesta de texto.',{
           metadata:{...authorMeta,exposure_scope:exposure,incomplete_response:!!result?.incomplete,
             incomplete_reason:result?.incomplete_reason||null,
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
@@ -2476,9 +2493,9 @@ async function handle(text,attachments=[],replyTo=null,options={}){
     }else sayEvent(localFallback(text));
   }catch(e){
     clearAssistantStream();
-    sayEvent(e?.message||localFallback(text),{metadata:durableRequestId?{
+    sayKeyed(assistantKeyFor(durableRequestId),'assistant',e?.message||localFallback(text),{metadata:{author:'system',...(durableRequestId?{
       durable_request_id:durableRequestId,durable_status:'unconfirmed'
-    }:{}});
+    }:{})}});
     void syncDurableChatJobs();
   }
   finally{clearAssistantStream();setChatActivity('');orb();setWorking($('#sendButton'),false)}

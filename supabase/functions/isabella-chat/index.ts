@@ -16,6 +16,7 @@ import {exactOwnerExcerpt,exactFieldExcerpt,authorizedDirectBatch} from "../_sha
 import {leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
+import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {MAX_COMPOSED_SKILLS,SKILL_RUNTIME_VERSION,composeSkillTrace,normalizeSkillRecord,normalizeSkillSlug,normalizeSkillTrace,skillLoadEnvelope,skillPromptSummary,type SkillManifestV1} from "../_shared/skill-registry.ts";
 import {PERSISTENT_WORK_VERSION,boundedPersistentCheckpoints} from "../_shared/persistent-work.ts";
@@ -290,7 +291,7 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
   if(existing.error)throw existing.error;
   if(existing.data){
     if(!sameBrowserOwnerTurn(existing.data,canonical))throw new Error("browser_turn_id_conflict");
-    return {conversationId,created:false};
+    return {conversationId,created:false,userId:user.id};
   }
   const insert=await sb.from("conversation_messages").insert(canonical);
   if(insert.error){
@@ -298,13 +299,13 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
     const raced=await getExisting();
     if(raced.error||!sameBrowserOwnerTurn(raced.data,canonical))
       throw new Error("browser_turn_id_conflict");
-    return {conversationId,created:false};
+    return {conversationId,created:false,userId:user.id};
   }
   const updated=await sb.from("conversations")
     .update({updated_at:new Date().toISOString()})
     .eq("id",conversationId).eq("user_id",user.id).eq("app_scope","isabella");
   if(updated.error)throw updated.error;
-  return {conversationId,created:true};
+  return {conversationId,created:true,userId:user.id};
 }
 
 async function recordBrowserClarification(req:Request,sourceTurnId:string,question:string,capability:string){
@@ -3027,6 +3028,20 @@ async function saveBrowserChatStreamReceipt(req:Request,requestId:string,reply:s
   }catch{return false}
 }
 
+// Step 3a: the server writes Isabella's answer (or an honest notice) into the conversation, under the
+// key the app derives from the same request id, so a closed app never turns an answer into a silence.
+async function persistServerAssistantTurn(req:Request,row:any){
+  if(!row)return false;
+  const sb=supabaseClient(req);
+  if(!sb)return false;
+  try{
+    const {error}=await sb.from("conversation_messages").upsert(row,{onConflict:"user_id,conversation_id,client_key",ignoreDuplicates:true});
+    if(error)return false;
+    await sb.from("conversations").update({updated_at:new Date().toISOString()}).eq("id",row.conversation_id).eq("user_id",row.user_id);
+    return true;
+  }catch{return false}
+}
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return json({ error: "method_not_allowed" }, 405);
@@ -3120,11 +3135,19 @@ Deno.serve(async (req: Request) => {
     route.source=String(route.source||"router")+"+work_thread";
   }
   const exposureScope=await exposureScopeForTurn(req,route,currentWorkThread);
+  let browserTurn:any=null;
+  // A failed turn leaves a notice in the conversation instead of a silence (step 3a).
+  const failTurn=async(kind:string)=>{
+    const notice=failureNotice(kind);
+    if(browserTurn)await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
+      requestId:clientMessageId,content:notice,scope:exposureScope,author:"system",outcome:"failed"}));
+    return notice;
+  };
   if(surface==="chat_browser"&&!background&&!currentWorkThread){
     if(!browserTurnId(clientMessageId))
       return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
     try{
-      await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
+      browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
     }catch(e){
       return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
     }
@@ -4021,12 +4044,13 @@ pregunta cuál.`;
         browser_delivery_receipt_saved:browserReceiptSaved,
         final_synthesis_output_cap:budget.maxOutput},"openai_incomplete:"+reason);
       if(partial)return json({reply:partial,incomplete:true,incomplete_reason:reason,sources:webSources,artifacts:[],proposal:null,proposals:[],question:null});
-      return json({error:"incomplete_response",message:"La respuesta se interrumpió antes de completarse.",incomplete:true},502);
+      return json({error:"incomplete_response",message:await failTurn("incomplete"),incomplete:true},502);
     }
 
     if(!response.ok){
       await finishAgentRun(req,run,"error",{rounds:roundsUsed,tools:usedTools,initial_semantic:initialSemantic},payload?.error?.message||"OpenAI request failed");
-      return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed"},502);
+      return json({error:"openai_error",status:response.status,detail:payload?.error?.message||"OpenAI request failed",
+        message:await failTurn(isOutOfCredit(response.status,payload)?"credit":"error")},502);
     }
     if((payload.output||[]).some((x:any)=>x.type==="web_search_call"))sourceTainted=true;
     webSources=[...webSources,...extractSources(payload)]
@@ -4413,6 +4437,19 @@ pregunta cuál.`;
     input=nextToolInput(input,payload.output,outputs,!!conversationInfo.id&&!fastAgenda);
   }
 
+  // Step 3a: a completed turn without any text (30.10) gets one plain retry before it can become a silence.
+  if(!String(extractText(payload)||"").trim()&&!toolProposals.length&&!background&&!(!fastAgenda&&!boundedGlobalChat&&conversationInfo.id)){
+    try{
+      const retry=await fetch("https://api.openai.com/v1/responses",{method:"POST",
+        headers:{"Authorization":`Bearer ${apiKey}`,"Content-Type":"application/json"},
+        body:JSON.stringify({model,instructions:transientInstructions(modelInstructions,fastAgenda?fastCalendarContext:modelContext),
+          reasoning:{effort:"low"},max_output_tokens:Math.max(budget.maxOutput,2400),prompt_cache_options:{mode:"implicit",ttl:"30m"},
+          ...(tools.length?{tools,tool_choice:"none"}:{}),input})});
+      const again=await retry.json();
+      await recordUsage(req,"isabella_chat",model,again?.usage,{route,empty_reply_retry:true,context_tier:contextTier,agent_run_id:run?.id||null});
+      if(retry.ok&&String(extractText(again)||"").trim())payload=again;
+    }catch{/* the empty-response path below stays honest */}
+  }
   const modelProse=String(extractText(payload)||"").trim();
   let reply=modelProse ||
     (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
@@ -4440,7 +4477,7 @@ pregunta cuál.`;
       :"No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
   for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
-  if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:"No pude completar la respuesta. Inténtalo de nuevo."},502)}
+  if(!reply){await finishAgentRun(req,run,"error",{rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
       request_id:clientMessageId,
@@ -4452,7 +4489,11 @@ pregunta cuál.`;
   if(currentWorkThread)await touchWorkThread(req,currentWorkThread.id);
   const browserReceiptSaved=recoverableInformationalTurn(surface,background,usedTools,toolProposals,capabilityRuns,artifactResults)
     ?await saveBrowserChatStreamReceipt(req,clientMessageId,reply,true,null):false;
-  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
+  // Step 3a: an answered turn is in the conversation even if the app closed before it arrived.
+  const serverPersisted=browserReceiptSaved&&browserTurn
+    ?await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
+      requestId:clientMessageId,content:reply,scope:exposureScope,sources:webSources,model})):false;
+  await finishAgentRun(req,run,"success",{browser_delivery_receipt_saved:browserReceiptSaved,server_persisted:serverPersisted,rounds:roundsUsed,tools:[...new Set(usedTools)],initial_semantic:initialSemantic,fast_path:fastAgenda,conversation_rotated:!!conversationInfo.rotated,conversation_message_count:conversationInfo.messageCount||null,memory_checkpoint:memoryCheckpoint?.status,checkpoint_error:memoryCheckpoint?.detail||null,context_policy:"scoped_exposure_v1",memory_provenance_policy:"current_user_evidence_v1",exposure_scope:exposureScope,standing_intents:(standingIntents||[]).length,project:route.project||null,work_thread_id:currentWorkThread?.id||null,sofia_consulted:routedSofia?.status==="ok"||usedTools.includes("consult_sofia"),work_consulted:routedWork?.status==="ok"||usedTools.includes("search_work")||usedTools.includes("search_work_threads")||usedTools.includes("find_work_occurrences")||usedTools.includes("browse_work_sources"),execution_contract:turnContract.lane,provider_history_policy:boundedGlobalChat?"bounded_scoped":"non_browser_or_work_thread",scoped_recent_count:recent.length,scoped_window_ready:scopedWindowReady,continuation_verified:!!verifiedContinuation,semantic_temporal_verified:verifiedTemporalClaims,semantic_temporal_rejected:temporalGroundingIssues.length,semantic_repair_rounds:semanticRepairRounds,context_tier:contextTier,prompt_components:footprint,source_admission:sourceAdmissions,work_occurrence_coverage:summarizeWorkOccurrenceCoverage(occurrenceCoverageEvents),semantic_temporal_reasons:[...new Set(temporalGroundingIssues)].slice(0,6),turn_outcome:outcomeReceipt.outcome,commitment_workspace_used:usedTools.some(x=>["open_commitment_workspace","read_commitment_workspace","write_commitment_workspace"].includes(x)),durable_mission_used:usedTools.some(x=>["start_mission_run","read_mission_run","control_mission_run"].includes(x)),capability_runs:capabilityRuns,skill_runtime:SKILL_RUNTIME_VERSION,skills:normalizeSkillTrace(loadedSkillTrace),specialists:specialistDelegations.map((x:any)=>({specialist:x.specialist,status:x.status,run_id:x.run_id||null,orchestration_id:x.orchestration_id||null})),specialist_orchestrations:specialistOrchestrations});
   const responsePayload:any={
     reply,
     outcome:outcomeReceipt,

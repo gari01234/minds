@@ -624,8 +624,8 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(index.includes('app.css?v=70'));
   assert.ok(index.includes('shell.js?v=110'));
   assert.ok(index.includes('app.js?v=140'));
-  assert.ok(index.includes('sync.js?v=pwa39'));
-  assert.ok(index.includes('ai.js?v=57'));
+  assert.ok(index.includes('sync.js?v=pwa40'));
+  assert.ok(index.includes('ai.js?v=58'));
   assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v182'"));
 });
 
@@ -1373,7 +1373,7 @@ test('Build 68 returns durable outcomes to Isabella through realtime without mak
   const app=read('apps/isabella/app.js');
   const realtime=read('supabase/migrations/20261001065451_mission_realtime_delivery_v01.sql');
   assert.ok(sync.includes("sb.channel('isabella-mission-'"));
-  assert.ok(sync.includes("['mission_runtime','attention_runtime'].includes"));
+  assert.ok(sync.includes("['mission_runtime','attention_runtime','isabella_presence','isabella_chat_server'].includes"));
   assert.ok(sync.includes('syncNow({pullOnly:true})'));
   assert.ok(realtime.includes('alter publication supabase_realtime add table public.conversation_messages'));
   assert.ok(app.includes('Mission Run'));

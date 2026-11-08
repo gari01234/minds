@@ -102,7 +102,7 @@
     /^isabella no pudo terminar esta respuesta/i,/^la respuesta quedó interrumpida/i,
     // System wording (step 3 onward).
     /^propuesta: /i,/^\d+ cambios preparados/i,/^guardados?( \d+ cambios)?\.?$/i,/^sin cambios\.?$/i,
-    /^(agregado|actualizado|eliminado|archivada|marcada como completada)\.$/i,/^no se pudo (comprobar|verificar)/i,
+    /^(agregado|actualizado|eliminado|archivada|marcada como completada)\.$/i,/^no se pudo (comprobar|verificar|responder)/i,
     /^falta la hora del evento/i,/^no quedó claro qué elemento/i,/^«[^»]{1,200}» (está en tus tareas|está en tu calendario|queda para)/i,
     /^\d+ (tareas|eventos|elementos) añadid[oa]s/i,/^actualizad[oa]: «/i
   ];

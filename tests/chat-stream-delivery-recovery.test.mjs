@@ -65,7 +65,7 @@ test('Browser stream uses an opaque authenticated receipt ID and only falls back
   assert.ok(!client.includes('await askDirectStream(message,state,options,replyContext);await askDirectStream'));
   assert.doesNotThrow(()=>new Script(client,{filename:'ai.js'}));
   assert.doesNotThrow(()=>new Script(recovery,{filename:'chat-stream-recovery.js'}));
-  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=57'));
+  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=58'));
   assert.ok(sw.includes("'./chat-stream-recovery.js?v=1'"));
   assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v182'"));
 });

@@ -132,7 +132,7 @@ test('Step 7: pending changes — her words travel only when they do not claim i
   assert.match(chat,/isabella_reply:isabellaReply,/);
   assert.match(chat,/"Todavía no está aplicado: Gari lo confirma en la tarjeta\. No digas que está hecho\."/);
   // The app line stays the authority: her words go first, the system line with the card right after.
-  assert.match(app,/if\(isabellaProse&&receiptText\)say\('assistant',isabellaProse,\{metadata:\{exposure_scope:exposure,commentary_for:'review'\}\}\);\n\s+say\('assistant',verifiedReply/);
+  assert.match(app,/if\(isabellaProse&&receiptText\)say\('assistant',isabellaProse,\{metadata:\{exposure_scope:exposure,commentary_for:'review'\}\}\);\n\s+sayKeyed\(receiptText\?null:assistantKeyFor\(durableRequestId\),'assistant',verifiedReply/);
   assert.match(app,/if\(isabellaProse\)say\('assistant',isabellaProse,\{metadata:\{exposure_scope:exposure,commentary_for:'direct_creation'\}\}\);/);
 });
 

@@ -16,6 +16,8 @@ async function functionErrorMessage(error){
   try{const res=error?.context;if(res&&typeof res.clone==='function')body=await res.clone().json()}catch{}
   if(!body||typeof body!=='object')return '';
   const status=Number(body.status||0),detail=String(body.detail||body.message||'');
+  // Step 3a: the server's notice is also what stays in the conversation; show the same words.
+  if(body.error==='openai_error'&&body.message)return String(body.message);
   if(body.error==='openai_error'&&status===429&&/credit|quota|billing/i.test(detail))
     return 'No puedo responder ahora: la cuenta de OpenAI que uso se quedó sin créditos. En cuanto se recargue el saldo (platform.openai.com → Billing), vuelve a enviarme el mensaje.';
   if(body.error==='openai_error'&&status===429)return 'OpenAI está limitando las solicitudes en este momento. Inténtalo de nuevo en un minuto.';

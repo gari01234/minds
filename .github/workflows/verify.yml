@@ -135,7 +135,8 @@ jobs:
 
   browser-daily-workspace:
     name: Desktop browser layout (Chromium)
-    runs-on: ubuntu-latest
+    # Playwright 1.56 has no Chromium build for the ubuntu-latest image of 08.11.2026 (Ubuntu 26.04).
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

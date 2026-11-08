@@ -88,5 +88,5 @@ test('PWA serves one task detail with matching versions',()=>{
     assert.ok(sw.includes(asset),'SW '+asset);
   }
   assert.match(sw,/isabella-shell-v182/);
-  assert.ok(html.indexOf('task-detail.js?v=5')>html.indexOf('sync.js?v=pwa39'));
+  assert.ok(html.indexOf('task-detail.js?v=5')>html.indexOf('sync.js?v=pwa40'));
 });
