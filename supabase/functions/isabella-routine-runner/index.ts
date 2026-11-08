@@ -9,6 +9,7 @@ import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {taskResponsibles,responsibleField} from "../_shared/task-responsibles.mjs";
 import {promptComponentSizes} from "../_shared/light-conversation-context.mjs";
+import {resolveAssistantProfile,profileOwnerForUser,profileInstructions,personaText} from "../_shared/assistant-profile.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -100,6 +101,7 @@ Deno.serve(async(req:Request)=>{
   const apiKey=Deno.env.get("OPENAI_API_KEY")||"";
   if(!url||!service||!apiKey)return json({error:"server_not_configured"},503);
   const sb=createClient(url,service,{auth:{persistSession:false,autoRefreshToken:false}});
+  const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
 
   const {data:secretRow,error:secretErr}=await sb.from("isabella_runtime_secrets").select("value").eq("key","routine_runner").maybeSingle();
   if(secretErr||!secretRow?.value||String(body?.secret||"")!==String(secretRow.value))return json({error:"unauthorized"},401);
@@ -109,6 +111,8 @@ Deno.serve(async(req:Request)=>{
   const results:any[]=[];
 
   for(const routine of routines||[]){
+    // Office identity is always resolved against the owner of the claimed routine.
+    const assistantOwner=await profileOwnerForUser(sb,routine.user_id,assistantProfile);
     const agentRun=await startRun(sb,routine.user_id,routine);
     const deliveryId=routine.metadata?.delivery_id;
     const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
@@ -116,6 +120,7 @@ Deno.serve(async(req:Request)=>{
     let phase="claimed";
     let routineFootprint:any=null;
     try{
+      if(!assistantOwner)throw new Error("office_member_inactive");
       if(!deliveryId)throw new Error("missing_delivery_id");
       if(!routine.metadata?.delivery_output){
       phase="context";
@@ -175,9 +180,10 @@ Deno.serve(async(req:Request)=>{
         recent=(checked(msgsQ,"routine_messages")||[]).reverse();
       }
 
-      const localNow=new Intl.DateTimeFormat("es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
-      const system=isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")})+
+      const localNow=new Intl.DateTimeFormat(assistantProfile.multi_user?"de-DE":"es-ES",{timeZone:tz,dateStyle:"full",timeStyle:"short"}).format(now);
+      const originalSystem=isabellaRoutineInstructions({relationship:relationshipPolicy("proactive")})+
         "\n\nRelationship policy: "+ISABELLA_RELATIONSHIP_POLICY_VERSION;
+      const system=profileInstructions(originalSystem,assistantProfile,assistantOwner);
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
@@ -219,7 +225,8 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
 
       phase="generating";
       const routineTools=[{type:"web_search",search_context_size:"low"}];
-      const routineInput=[{role:"user",content:[{type:"input_text",text:prompt}]}];
+      const routinePrompt=assistantProfile.multi_user?personaText(prompt,{profile:assistantProfile,owner:assistantOwner}):prompt;
+      const routineInput=[{role:"user",content:[{type:"input_text",text:routinePrompt}]}];
       routineFootprint=promptComponentSizes({instructions:system,context:{},input:routineInput,tools:routineTools});
       const response=await fetch("https://api.openai.com/v1/responses",{
         method:"POST",
