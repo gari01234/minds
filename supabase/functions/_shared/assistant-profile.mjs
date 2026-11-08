@@ -59,6 +59,7 @@ export function personaText(text, { profile = "window", owner = null, assistant 
     .replace(/\bISABELLA\b/g, name.toLocaleUpperCase("de-DE"))
     .replace(/\bWindow\b/g, p.app_name);
 }
+/** @param {string} text @param {string} [profile] @param {string|null} [owner] */
 export function profileInstructions(text, profile = "window", owner = null) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (p.id === "window") return text; // Strict byte-for-byte no-op.
@@ -77,6 +78,7 @@ function withProfiledDescriptions(value, profile, owner) {
       ? personaText(field, { profile, owner })
       : withProfiledDescriptions(field, profile, owner)]));
 }
+/** @param {any[]} tools @param {string} [profile] @param {string|null} [owner] */
 export function profileTools(tools, profile = "window", owner = null) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (p.id === "window") return tools; // Preserve array identity and all descriptions.
