@@ -152,7 +152,7 @@ export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],revie
   if(!person)throw new TypeError('office_owner_name_required');
   const at=iso(now),out={paginas:[],hipotesis:0,hilos:[],correcciones:0};
   for(const p of (value&&value.paginas||[]).slice(0,LIMITS.pages)){
-    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?person:p&&p.tipo==='relacion'?person+' e '+(profile==='office'?'Romy':'Isabella'):p&&p.tipo==='isabella'?(profile==='office'?'Romy':'Isabella'):'');
+    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?person:p&&p.tipo==='relacion'?person+' e '+(typeof profile==='string'?resolveAssistantProfile(profile):profile).assistant_name:p&&p.tipo==='isabella'?(typeof profile==='string'?resolveAssistantProfile(profile):profile).assistant_name:'');
     if(!type||!name)continue;
     const hechos=(Array.isArray(p.hechos)?p.hechos:[]).filter(h=>nonEmpty(h&&h.texto)).slice(0,LIMITS.factsPerPage)
       .map(h=>({texto:clip(nonEmpty(h.texto),400),fecha:day(h.fecha),fuente:clip(nonEmpty(h.fuente),160),estado:h.estado||'vigente'}));
