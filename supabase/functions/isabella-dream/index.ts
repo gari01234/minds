@@ -37,7 +37,7 @@ Deno.serve(async(req:Request)=>{
   // A larger model suits the offline pass (it is not latency-bound); configurable without a deploy.
   const model=Deno.env.get("OPENAI_DREAM_MODEL")||Deno.env.get("OPENAI_DEEP_MODEL")||DREAM_MODEL;
   try{
-    const result=await runIsabellaDream({sb,model,due,callModel:dreamCaller(apiKey,model),log:(...a:unknown[])=>console.error(...a)});
+    const result=await runIsabellaDream({sb,model,due,profile:Deno.env.get('ASSISTANT_PROFILE')||'window',callModel:dreamCaller(apiKey,model),log:(...a:unknown[])=>console.error(...a)});
     return json(result,result.ok?200:207);
   }catch(e){
     console.error("isabella_dream_run_failed",e instanceof Error?e.message:String(e));
