@@ -13,7 +13,7 @@ export function exactFieldExcerpt(source,excerpt){
 // The normalized title must already be present in the owner's literal message.
 // Neither a Work prefetch nor a model-generated suggestion can supply new title words.
 const plain=v=>String(v||"").normalize("NFKC").toLocaleLowerCase("es")
-  .replace(/[\\p{P}\\p{S}]+/gu," ").replace(/\\s+/g," ").trim();
+  .replace(/[\p{P}\p{S}]+/gu," ").replace(/\s+/g," ").trim();
 export function exactOwnerTitle(source,title){
   const normalized=plain(title);
   return normalized.length>=3&&plain(source).includes(normalized);
@@ -32,7 +32,7 @@ export function directToolHistorySafe(usedTools,roundStartedAt=0){
 // the owner. An explicit non-60 model duration without a quote is NOT direct.
 export function withDefaultEventDuration(proposal){
   if(proposal?.kind!=="event"||proposal?.action!=="create"||
-     typeof proposal?.time!=="string"||!/^([01]\\d|2[0-3]):[0-5]\\d$/.test(proposal.time)||
+     typeof proposal?.time!=="string"||!/^([01]\d|2[0-3]):[0-5]\d$/.test(proposal.time)||
      (proposal.duration_minutes!=null&&proposal.duration_minutes!==""))return proposal;
   return {...proposal,duration_minutes:60,duration_defaulted:true};
 }
