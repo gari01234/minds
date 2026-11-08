@@ -70,7 +70,7 @@ test("telemetry is numeric-only, with separate instruction/context/input/tool fo
  assert.equal(out.tools_count,1);
  assert.ok(!JSON.stringify(out).includes("private evidence"));
  assert.match(source,/prompt_components:footprint/);
- assert.match(source,/const contextTier=fastAgenda\?"calendar_fast":leanSurface\?"lean":coreSurface\?"core":"full";/);
+ assert.match(source,/const contextTier=fastAgenda\?"calendar_fast":leanSurface\?"lean":workCoreSurface\?"work_core":coreSurface\?"core":"full";/);
  assert.match(source,/context_tier:contextTier/);
 });
 test("governed tools and direct calendar receipts remain unchanged by the lean tier",()=>{
