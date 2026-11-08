@@ -15,7 +15,8 @@ export const SYSTEM_NOTICE_PATTERNS=[
   /^\d+ (tareas|eventos|elementos) añadid[oa]s/i,/^actualizad[oa]: «/i,
   // Office system lines; do not present them as Romy's own prose.
   /^hinweis der app:/i,/^bestätigt: /i,/^verworfen: /i,
-  /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i
+  /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i,/^gespeichert\.?$/i,/^\d+ änderungen gespeichert/i,
+  /^die speicherung konnte nicht bestätigt werden/i
 ];
 export function isSystemNotice(text){
   const t=String(text||'').trim();

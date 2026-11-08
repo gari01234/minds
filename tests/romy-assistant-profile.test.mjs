@@ -115,3 +115,18 @@ test("Chat does not resolve Office identity in Window and never accepts a client
   assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner\)\)/);
   assert.ok(relationshipPolicy("conversation").length>0);
 });
+
+test("Office review notices are German while the Window summaries remain identical", () => {
+  const p={kind:"task",action:"create",title:"Prüfaufgabe",date:"2026-11-09",request_id:"r"};
+  const rootOffice={APP_PROFILE:"office"};
+  vm.runInNewContext(read("apps/isabella/turn-integrity.js"),{window:rootOffice,globalThis:rootOffice,Date,Intl});
+  const review=rootOffice.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"proposal_created",proposals:[p]});
+  assert.match(review,/^Vorschlag: Aufgabe/);
+  assert.match(review,/Bestätigung ausstehend/);
+  assert.equal(rootOffice.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"action_applied",applied_count:1}),"Gespeichert.");
+  const rootWindow={APP_PROFILE:"window"};
+  vm.runInNewContext(read("apps/isabella/turn-integrity.js"),{window:rootWindow,globalThis:rootWindow,Date,Intl});
+  assert.match(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"proposal_created",proposals:[p]}),/^Propuesta: añadir/);
+  assert.equal(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"action_applied",applied_count:1}),"Guardado.");
+  assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=1/);
+});

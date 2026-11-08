@@ -76,8 +76,30 @@
     const weekday=target.toLocaleDateString('es-ES',{weekday:'long'});
     return diff>1&&diff<7?'el '+weekday:'el '+weekday+' '+parts[2]+' de '+target.toLocaleDateString('es-ES',{month:'long'});
   }
+  // Office chat labels are German; Window's summary below is byte-identical to the previous implementation.
+  function naturalDayOffice(day,now=new Date()){
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(String(day||'')))return '';
+    const [y,m,d]=String(day).split('-').map(Number),target=new Date(y,m-1,d);
+    const base=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+    const diff=Math.round((target-base)/864e5);
+    if(diff===0)return 'heute';if(diff===1)return 'morgen';if(diff===-1)return 'gestern';
+    return 'am '+target.toLocaleDateString('de-DE',{weekday:'long',day:'numeric',month:'long',...(y===now.getFullYear()?{}:{year:'numeric'})});
+  }
+  function officeSummary(check){
+    if(!check?.ok)return 'Die Speicherung konnte nicht bestätigt werden; es gilt keine Änderung als erledigt.';
+    if(check.outcome==='action_applied')return check.applied_count===1?'Gespeichert.':check.applied_count+' Änderungen gespeichert.';
+    if(!check.proposals?.length)return null;
+    const p=check.proposals[0],n=check.proposals.length;
+    if(n!==1)return n+' Änderungen vorbereitet · Bestätigung ausstehend.';
+    const title=String(p.target_title||p.title||'').trim().slice(0,180);
+    const when=naturalDayOffice(p.date),action=String(p.action||'create');
+    if(p.kind==='task'&&action==='create')return 'Vorschlag: Aufgabe «'+(title||'neue Aufgabe')+'»'+(when?' für '+when:'')+' hinzufügen · Bestätigung ausstehend.';
+    if(p.kind==='event'&&action==='create')return 'Vorschlag: Termin «'+(title||'neuer Termin')+'»'+(when?' für '+when:'')+' eintragen · Bestätigung ausstehend.';
+    return 'Vorschlag: '+(title?'«'+title+'»':'Eintrag')+' ändern'+(when?' für '+when:'')+' · Bestätigung ausstehend.';
+  }
   // System voice, not Isabella's (Phase 1, step 3): the app reports what is pending or saved.
   function summary(check){
+    if(root.APP_PROFILE==='office')return officeSummary(check);
     if(!check?.ok)return 'No se pudo comprobar que esto se guardara; no se da por hecho.';
     if(check.outcome==='action_applied')
       return check.applied_count===1?'Guardado.':'Guardados '+check.applied_count+' cambios.';
@@ -107,7 +129,8 @@
     /^\d+ (tareas|eventos|elementos) añadid[oa]s/i,/^actualizad[oa]: «/i,
   // Office system lines; do not present them as Romy's own prose.
   /^hinweis der app:/i,/^bestätigt: /i,/^verworfen: /i,
-  /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i
+  /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i,/^gespeichert\.?$/i,/^\d+ änderungen gespeichert/i,
+  /^die speicherung konnte nicht bestätigt werden/i
   ];
   function isSystemNotice(text){
     const t=String(text||'').trim();
