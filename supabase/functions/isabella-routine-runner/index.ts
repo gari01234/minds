@@ -220,6 +220,11 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       }
       phase="delivery";
       const delivered=checked(await sb.rpc("minds_deliver_routine",{p_delivery_id:deliveryId}),"routine_delivery");
+      // Isabella wrote this in the main conversation: give it the global scope so she sees it in her
+      // recent history when Gari answers it (Phase 1, step 5). Best effort, never blocks delivery.
+      if(delivered?.message_id&&!delivered?.duplicate)await sb.from("conversation_messages")
+        .update({exposure_scope_version:1,exposure_scope_kind:"global"})
+        .eq("id",delivered.message_id).eq("user_id",routine.user_id).eq("exposure_scope_version",0).then(()=>{},()=>{});
       let attentionConsumed=0;
       if(attentionEventIds.length){
         attentionConsumed=Number(checked(await sb.rpc("minds_consume_attention_briefing",{p_user:routine.user_id,p_event_ids:attentionEventIds,p_delivery_id:deliveryId}),"routine_attention_consume")||0);

@@ -416,8 +416,8 @@ async function afterSync(){
     void maybePrewarmResearch();
     void maybeReactivateIdeas();
     void refreshOperatingModel(false);
-    const nudged=await maybeProactiveNudge();
-    if(!nudged)await maybeCuriosityQuestion();
+    // Phase 1, step 8: Isabella's own messages come from the server (isabella-presence), at most once
+    // a day for all devices. The browser no longer runs background "nudge" or profile-question turns.
   }finally{proactiveCycleBusy=false}
 }
 /* Dear: Thoughts stays authoritative in Architectures.
@@ -1198,6 +1198,23 @@ function clearAssistantStream(){
 // passed to her model as "sistema" (Phase 1, step 3). Role stays assistant so cards and sync work.
 function sayEvent(text,meta={}){
   return say('assistant',text,{...meta,metadata:{...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{}),author:'system'}});
+}
+// Step 3a: Isabella's answer to a browser turn has a key derived from the request id. The server
+// writes it into the conversation too (supabase/functions/_shared/chat-delivery.mjs, same rule), so
+// the app's copy updates that row instead of adding another, and a closed app is no longer a silence.
+function assistantKeyFor(requestId){
+  const id=String(requestId||'').toLowerCase();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(id))return null;
+  return id.slice(0,14)+(id[14]==='5'?'3':'5')+id.slice(15);
+}
+function sayKeyed(id,role,text,meta={}){
+  const existing=id&&state.messages.find(m=>m.id===id);
+  if(!existing)return say(role,text,id?{...meta,id}:meta);
+  existing.text=text;
+  existing.metadata={...(existing.metadata||{}),...(meta.metadata&&typeof meta.metadata==='object'?meta.metadata:{})};
+  if(Array.isArray(meta.sources))existing.sources=meta.sources;
+  save();renderMessages();
+  return existing;
 }
 function say(role,text,meta={}){
   const message={
@@ -2280,7 +2297,7 @@ async function reconcileReadOnlyBrowserReceipts(){
   const pending=state.messages.filter(m=>m.role==='user'&&m.metadata?.durable_request_id
     &&m.metadata?.durable_status!=='completed'
     &&Number.isFinite(Date.parse(m.at||''))
-    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<30*60000).slice(-3);
+    &&now-Date.parse(m.at)>15000&&now-Date.parse(m.at)<24*60*60000).slice(-3);
   if(!pending.length)return;
   browserReceiptSyncBusy=true;
   try{
@@ -2296,7 +2313,7 @@ async function reconcileReadOnlyBrowserReceipts(){
         assistant.metadata={...assistant.metadata,author:null,durable_status:result.incomplete?'incomplete':'completed',
           incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true};
       }else{
-        say('assistant',result.reply,{metadata:{durable_request_id:requestId,
+        sayKeyed(assistantKeyFor(requestId),'assistant',result.reply,{metadata:{durable_request_id:requestId,
           durable_status:result.incomplete?'incomplete':'completed',
           incomplete_response:!!result.incomplete,incomplete_reason:result.incomplete_reason||null,delivery_recovered:true}});
       }
@@ -2412,8 +2429,13 @@ async function handle(text,attachments=[],replyTo=null,options={}){
         sayEvent('No se pudo verificar el resultado; no se confirmó ningún cambio.',{metadata:{exposure_scope:exposure,turn_receipt_error:integrity?.reason||'validator_unavailable'}});
         return;
       }
+      // Phase 1, step 7: on a turn with changes, the server sends Isabella's own words only when they
+      // do not claim the change is done; they go above the app's line, never instead of it.
+      const isabellaProse=integrity.proposals.length&&typeof result?.isabella_reply==='string'&&result.isabella_reply.trim()&&
+        !window.MINDS_TURN_INTEGRITY.isSystemNotice?.(result.isabella_reply)?result.isabella_reply.trim().slice(0,1500):'';
       const directBatch=directCreationBatch(result,integrity);
       if(directBatch){
+        if(isabellaProse)say('assistant',isabellaProse,{metadata:{exposure_scope:exposure,commentary_for:'direct_creation'}});
         const committed=[],failed=[];
         for(const p of directBatch){
           try{committed.push(await applyDirectCalendarCreate(p))}
@@ -2445,12 +2467,15 @@ async function handle(text,attachments=[],replyTo=null,options={}){
             incomplete_response:!!result?.incomplete,incomplete_reason:result?.incomplete_reason||null,
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome};
           save();renderMessages();
-        }else say('assistant',verifiedReply||'No hubo una respuesta de texto.',{
+        }else{
+          if(isabellaProse&&receiptText)say('assistant',isabellaProse,{metadata:{exposure_scope:exposure,commentary_for:'review'}});
+          sayKeyed(receiptText?null:assistantKeyFor(durableRequestId),'assistant',verifiedReply||'No hubo una respuesta de texto.',{
           metadata:{...authorMeta,exposure_scope:exposure,incomplete_response:!!result?.incomplete,
             incomplete_reason:result?.incomplete_reason||null,
             review_proposals:integrity.proposals,turn_outcome:integrity.outcome,
             ...(result?.pending_clarification?{pending_clarification:result.pending_clarification}:{})},
           sources:result.sources||[],quickReplies:result.quick_replies||[],artifacts:result.artifacts||[]});
+        }
       }
       // Only this explicitly opted-in microphone turn may be spoken. A browser
       // re-render, background delivery, proposal or ambiguous result stays silent.
@@ -2468,9 +2493,9 @@ async function handle(text,attachments=[],replyTo=null,options={}){
     }else sayEvent(localFallback(text));
   }catch(e){
     clearAssistantStream();
-    sayEvent(e?.message||localFallback(text),{metadata:durableRequestId?{
+    sayKeyed(assistantKeyFor(durableRequestId),'assistant',e?.message||localFallback(text),{metadata:{author:'system',...(durableRequestId?{
       durable_request_id:durableRequestId,durable_status:'unconfirmed'
-    }:{}});
+    }:{})}});
     void syncDurableChatJobs();
   }
   finally{clearAssistantStream();setChatActivity('');orb();setWorking($('#sendButton'),false)}
@@ -4293,8 +4318,8 @@ function assistantPreferencesPanel(){
   const attention=canonicalAttentionPreferences(prefs.attention);
   const rules=[...(prefs.behaviorRules||[])];
   modal('Proactividad de Isabella',`<div class="form assistant-preferences">
-    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Hacerme preguntas ocasionales para conocerme mejor</span></label>
-    <label>Frecuencia máxima<select id="curiosityCadence"><option value="24" ${Number(prefs.curiosityCadenceHours)<=24?'selected':''}>Aproximadamente una al día</option><option value="30" ${Number(prefs.curiosityCadenceHours)>24&&Number(prefs.curiosityCadenceHours)<48?'selected':''}>Cada 1–2 días</option><option value="72" ${Number(prefs.curiosityCadenceHours)>=48?'selected':''}>Unas dos por semana</option></select></label>
+    <label class="settings-check"><input id="curiosityEnabled" type="checkbox" ${prefs.curiosityEnabled!==false?'checked':''}><span>Isabella puede escribirme primero (como mucho una vez al día, solo si vale la pena)</span></label>
+    <div class="small">Lo decide cada día a partir de lo que hablasteis y de tu agenda; si no hay nada que valga la pena, no escribe.</div>
     <div class="small section-label">Cuándo quieres que te avise</div>
     <div class="small">Puedo mantener cosas vivas y trabajar en segundo plano sin interrumpirte cada vez. Si me dices explícitamente “avísame cuando termines”, esa petición tiene prioridad sobre estas reglas.</div>
     <label>Cuando termino un trabajo en segundo plano<select id="attentionMissionCompleted">${attentionRouteOptions(attention.missionCompleted)}</select></label>
@@ -4329,7 +4354,7 @@ function assistantPreferencesPanel(){
       quietStart:$('#attentionQuietStart').value,
       quietEnd:$('#attentionQuietEnd').value
     });
-    state.assistantPreferences={...prefs,attention:nextAttention,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number($('#curiosityCadence').value||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};
+    state.assistantPreferences={...prefs,attention:nextAttention,curiosityEnabled:$('#curiosityEnabled').checked,curiosityCadenceHours:Number(prefs.curiosityCadenceHours||30),behaviorRules:state.assistantPreferences?.behaviorRules||rules};
     save();closeModal();
   };
 }

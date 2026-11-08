@@ -29,7 +29,9 @@ function startRealtime(){
   realtimeChannel=sb.channel('isabella-mission-'+user.id)
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'conversation_messages',filter:'user_id=eq.'+user.id},payload=>{
       const row=payload?.new||{},source=String(row?.metadata?.source||'');
-      const runtimeAssistant=row.role==='assistant'&&['mission_runtime','attention_runtime'].includes(source);
+      // isabella_presence: her own daily message; isabella_chat_server: an answer written by the server
+      // because the app that asked was closed (Phase 1, steps 8 and 3a).
+      const runtimeAssistant=row.role==='assistant'&&['mission_runtime','attention_runtime','isabella_presence','isabella_chat_server'].includes(source);
       const sharedSurface=source==='presence';
       if(!runtimeAssistant&&!sharedSurface)return;
       clearTimeout(realtimeTimer);
