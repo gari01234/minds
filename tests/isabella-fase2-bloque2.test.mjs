@@ -45,7 +45,7 @@ test('60-minute fallback is server-generated only, with visible editable mark',(
 test('SQL independently verifies receipt, global owner quote, title, default and no retrieved authority',()=>{
   for(const text of ['CREATE OR REPLACE FUNCTION public.minds_commit_direct_calendar_create_v01',
     "v_decision.context->>'direct_owner_source_tainted'",
-    'direct_title_not_in_owner_turn','m.provenance_class=\\'owner\\'',
+    'direct_title_not_in_owner_turn','m.provenance_class=\'owner\'',
     "m.exposure_scope_version=1","m.client_key=v_owner_turn::text",
     'event_default_duration_invalid',"v_event_duration_quote IS NOT NULL",
     "v_decision.context->>'direct_duration_defaulted'","v_duration<1 OR v_duration>720"])
@@ -56,7 +56,7 @@ test('SQL independently verifies receipt, global owner quote, title, default and
 test('Undo is an authenticated atomic receipt-bound exception, not a general delete or archive',()=>{
   for(const phrase of [
     'minds_undo_direct_calendar_create_v01','minds_undo_direct_calendar_batch_v01',
-    'auth.uid()','v_receipt.created_at+interval \\'10 minutes\\'',
+    'auth.uid()','v_receipt.created_at+interval \'10 minutes\'',
     "v_decision.context->>'direct_calendar_authority'","original_task_changed_undo_requires_review",
     'original_event_changed_undo_requires_review','minds_calendar_action_receipts',
     'isabella_activity_log','isabella_deleted_items',
