@@ -1524,14 +1524,14 @@ async function consolidatedMemory(req: Request) {
 }
 
 // Point 4f: Isabella's own follow-ups, written with the owner's client (RLS) into isabella_return_queue.
-async function followUpTool(req: Request, name: string, args: any, tz: string, turnId: string|null) {
+async function followUpTool(req: Request, name: string, args: any, tz: string, turnId: string|null,ownerName:string="Gari") {
   try {
     const sb = supabaseClient(req);
     if (!sb) return { status: "error" };
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return { status: "unauthorized" };
     return name === "schedule_follow_up"
-      ? await scheduleFollowUp(sb, { userId: user.id, args, tz, turnId })
+      ? await scheduleFollowUp(sb, { userId: user.id, args, tz, turnId, ownerName })
       : await cancelFollowUp(sb, { userId: user.id, args });
   } catch {
     return { status: "error" };
@@ -4554,7 +4554,7 @@ pregunta cuál.`;
             :{status:"watch_unavailable",monitoring:false,requested_condition:String(args?.requested_condition||""),channels,reason:"no_verified_autonomous_channel"};
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="schedule_follow_up"||call.name==="cancel_follow_up"){
-        const result=await followUpTool(req,call.name,args,context.timezone||"Europe/Berlin",run?.id||null);
+        const result=await followUpTool(req,call.name,args,context.timezone||"Europe/Berlin",run?.id||null,assistantOwner||"Gari");
         outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify(result)});
       }else if(call.name==="remember_relation"){
         const provenance={user_excerpt:memoryGate.user_excerpt,message_fingerprint:currentUserMessageFingerprint,scope_key:exposureScope.key,run_id:run?.id||null,conversation_id:conversationInfo?.dbId||null};
