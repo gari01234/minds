@@ -113,6 +113,7 @@ Deno.serve(async(req:Request)=>{
     const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
     let attentionEventIds:string[]=[];
     let phase="claimed";
+    let promptFootprint:any=null;
     try{
       if(!deliveryId)throw new Error("missing_delivery_id");
       if(!routine.metadata?.delivery_output){
@@ -200,7 +201,7 @@ Si la rutina pide clima, usa weatherLocation solo si está configurado en las pr
 
 Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de esta rutina.`;
 
-      const footprint=promptComponentSizes({
+      promptFootprint=promptComponentSizes({
         instructions:system,
         context:{memoria_de_isabella:memoriaDeIsabella,radar_work:radarWork,
           agenda:{events,tasks,overdue},memories,modelClaims},
@@ -252,7 +253,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
       if(attentionEventIds.length){
         attentionConsumed=Number(checked(await sb.rpc("minds_consume_attention_briefing",{p_user:routine.user_id,p_event_ids:attentionEventIds,p_delivery_id:deliveryId}),"routine_attention_consume")||0);
       }
-      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,prompt_components:footprint,...delivered});
+      await finishRun(sb,agentRun,"success",{routine_id:routine.id,delivery_id:deliveryId,title:routine.title,phase:"delivered",attempt:routine.metadata?.delivery_attempt,attention_digest:attentionDigest,attention_consumed:attentionConsumed,prompt_components:promptFootprint,...delivered});
       results.push({id:routine.id,status:"sent",delivery_id:deliveryId});
     }catch(e){
       const detail=e instanceof Error?e.message:(()=>{try{return JSON.stringify(e)}catch{return String(e)}})();
