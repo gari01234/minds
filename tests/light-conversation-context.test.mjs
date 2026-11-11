@@ -5,7 +5,7 @@ import {
  leanConversationEligible,leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,
  promptComponentSizes
 } from "../supabase/functions/_shared/light-conversation-context.mjs";
-const source=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
+const source=(readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8")+readFileSync(new URL("../supabase/functions/_shared/isabella-tools.mjs",import.meta.url),"utf8"));
 const base={complexity:"light",depth:"light",background:false,fastAgenda:false,work:false,
  sofia:false,workThread:false,attachments:0,scheduleAssessment:false,weather:false};
 test("typed routing never uses sentence-specific regex to select lean context",()=>{
@@ -75,7 +75,7 @@ test("telemetry is numeric-only, with separate instruction/context/input/tool fo
 });
 test("governed tools and direct calendar receipts remain unchanged by the lean tier",()=>{
  assert.match(source,/const tools=\(background\?/);
- assert.match(source,/\.\.\.calendarTools/);
+ assert.match(source,/\.\.\.CALENDAR_TOOLS/);
  assert.match(source,/recordShadowDecision\(req/);
  assert.match(source,/authorizedDirectBatch\(toolProposals/);
  assert.match(source,/request_clarification/);

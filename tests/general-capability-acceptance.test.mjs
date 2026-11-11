@@ -5,7 +5,7 @@ import {readFileSync} from 'node:fs';
 const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 const suite=JSON.parse(read('tests/fixtures/general-capability-acceptance-v01.json'));
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 const runtime=read('supabase/functions/isabella-capability-runtime/index.ts');
 const shared=read('supabase/functions/_shared/capability-runtime.ts');
 const runner=read('supabase/functions/isabella-capability-runner/index.ts');

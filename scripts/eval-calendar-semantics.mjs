@@ -4,17 +4,14 @@
  * Schema sanity: node scripts/eval-calendar-semantics.mjs --dry-run
  */
 import {readFileSync,writeFileSync} from "node:fs";
-import vm from "node:vm";
 import {performance} from "node:perf_hooks";
 import {verifyCalendarSemanticProposal,validatedCalendarClock}
   from "../supabase/functions/_shared/calendar-semantic-boundary.mjs";
 const source=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
 const instructions=source.match(/const fastCalendarInstructions=\x60([\s\S]*?)\x60;/)?.[1];
-const start=source.indexOf("const calendarTools = [");
-const end=source.indexOf("\n];",start);
-if(!instructions||start<0||end<start)throw Error("production_contract_not_found");
-const literal=source.slice(start+"const calendarTools = ".length,end+2);
-const fromProduction=vm.runInNewContext("("+literal+")",Object.create(null),{timeout:1000});
+if(!instructions)throw Error("production_contract_not_found");
+// The tool definitions are shared with the engine (isabella-tools.mjs), no text slicing.
+const {CALENDAR_TOOLS:fromProduction}=await import("../supabase/functions/_shared/isabella-tools.mjs");
 const names=["create_task","create_event","update_task","update_event"];
 const tools=names.map(n=>fromProduction.find(t=>t.name===n));
 if(tools.some(t=>!t||t.type!=="function"))throw Error("invalid_live_calendar_schema");

@@ -21,7 +21,7 @@ test('Build 78 adds Threads as a fourth Work surface',()=>{
 });
 
 test('Build 78 keeps one Isabella while giving each Work Thread its own conversation',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const ai=read('apps/isabella/ai.js');
   assert.ok(chat.includes('current_work_thread:currentWorkThread?'));
   assert.ok(chat.includes('mergeRecentConversations(recentDb, [], effectiveMessage)'));
@@ -36,7 +36,7 @@ test('Build 78 keeps one Isabella while giving each Work Thread its own conversa
 });
 
 test('Build 78 makes sibling Threads searchable without promoting them to project truth',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('async function searchWorkThreads'));
   assert.ok(chat.includes('name:"search_work_threads"'));
   assert.ok(chat.includes('work_thread_conversation'));
@@ -60,7 +60,7 @@ test('Build 78 schema keeps Threads project-scoped and RLS protected',()=>{
 
 test('Build 78.1 makes Thread lifecycle user-editable without deleting history',()=>{
   const work=read('apps/isabella/work.js');
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const sql=migrations();
   assert.ok(work.includes("minds_rename_work_thread"));
   assert.ok(work.includes("minds_set_work_thread_status"));

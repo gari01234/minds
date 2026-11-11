@@ -4,7 +4,7 @@ import {spawnSync} from "node:child_process";
 import {readFileSync} from "node:fs";
 import {fileURLToPath} from "node:url";
 const file=fileURLToPath(new URL("../scripts/eval-calendar-semantics.mjs",import.meta.url));
-const server=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
+const server=(readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8")+readFileSync(new URL("../supabase/functions/_shared/isabella-tools.mjs",import.meta.url),"utf8"));
 test("read-only real model evaluator consumes production schema without network in dry-run",()=>{
  const run=spawnSync(process.execPath,[file,"--dry-run"],{
    encoding:"utf8",timeout:20000,env:{...process.env,OPENAI_API_KEY:""}
@@ -24,6 +24,6 @@ test("evaluator cannot mutate real MINDS or retrieve runtime keys",()=>{
  assert.match(s,/OPENAI_API_KEY/);
  assert.match(s,/verifyCalendarSemanticProposal/);
  assert.match(s,/validatedCalendarClock/);
- assert.match(s,/const literal=source\.slice/);
+ assert.match(s,/isabella-tools\.mjs/);
  assert.match(server,/const fastCalendarInstructions=/);
 });

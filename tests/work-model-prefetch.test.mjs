@@ -29,7 +29,7 @@ test("deferred marker is explicit and cannot claim originals inspected",()=>{
  assert.equal(JSON.stringify(m).includes("project claim"),false);
 });
 test("only automatic Work prefetch skips expensive governed Project Model RPC",()=>{
- const edge=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
+ const edge=(readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8")+readFileSync(new URL("../supabase/functions/_shared/isabella-tools.mjs",import.meta.url),"utf8"));
  assert.match(edge,/sourceFirstWorkPrefetchEligible\(\{route,message:effectiveMessage/);
  assert.match(edge,/args\?\._deferProjectModel\?Promise.resolve\(\{data:null,error:null\}\):sb\.rpc\("minds_project_model_snapshot"/);
  assert.match(edge,/_deferProjectModel:sourceFirstWorkPrefetch,_admitSourceRows:/);

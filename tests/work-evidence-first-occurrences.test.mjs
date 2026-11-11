@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 import {collectEvidence,enumerateCorpus,gradeEvidence} from "../scripts/agent-runtime-parity-core.mjs";
 const migration=readFileSync(new URL("../supabase/migrations/20261017192500_minds_work_source_occurrence_inventory_v01.sql",import.meta.url),"utf8");
-const edge=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
+const edge=(readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8")+readFileSync(new URL("../supabase/functions/_shared/isabella-tools.mjs",import.meta.url),"utf8"));
 const obs=readFileSync(new URL("../supabase/functions/_shared/cognitive-coverage-observability.mjs",import.meta.url),"utf8");
 const corpus=JSON.parse(readFileSync(new URL("./fixtures/agent-runtime-parity-synthetic-v01.json",import.meta.url),"utf8"));
 

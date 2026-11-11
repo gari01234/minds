@@ -262,7 +262,7 @@ test('Chat and artifact images are lazy-hydrated to avoid repeated private Stora
 test('Build 83 chat accepts and preserves real document attachments',()=>{
   const shell=read('apps/isabella/shell.js');
   const app=read('apps/isabella/app.js');
-  const server=read('supabase/functions/isabella-chat/index.ts');
+  const server=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(shell.includes('accept="image/*,.pdf,.txt,.md,.csv,.json,.doc,.docx,.ppt,.pptx,.xls,.xlsx,.eml"'));
   assert.ok(app.includes('CHAT_UPLOAD_MAX_BYTES=12*1024*1024'));
   assert.ok(app.includes('CHAT_UPLOAD_MAX_TOTAL_BYTES=24*1024*1024'));
@@ -314,7 +314,7 @@ test('Build 24 news detail can render immediate context and optional verified me
 });
 
 test('Isabella keeps its conversational voice in the shared relationship policy',()=>{
-  const server=read('supabase/functions/isabella-chat/index.ts');
+  const server=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const policy=read('supabase/functions/_shared/relationship-policy.ts');
   assert.ok(server.includes('relationshipPolicy("conversation")'));
   assert.ok(policy.includes('humor propio'));
@@ -1005,7 +1005,7 @@ test('Build 60 persists explicit task and event mutations without stale bulk ove
 });
 
 test('Build 60 resolves Shadow Agency observations from reviewed proposals',()=>{
-  const sync=read('apps/isabella/sync.js'),app=read('apps/isabella/app.js'),chat=read('supabase/functions/isabella-chat/index.ts');
+  const sync=read('apps/isabella/sync.js'),app=read('apps/isabella/app.js'),chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(sync.includes("minds_resolve_shadow_decision"));
   assert.ok(chat.includes("minds_admit_shadow_decision"));
   assert.ok(chat.includes("request_id:proposal.request_id||crypto.randomUUID()"));
@@ -1015,7 +1015,7 @@ test('Build 60 resolves Shadow Agency observations from reviewed proposals',()=>
 
 
 test('Build 61 adds a bounded invisible specialist runtime without visible agent switching',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const app=read('apps/isabella/app.js');
   const shell=read('apps/isabella/shell.js');
   const start=chat.indexOf('async function delegateSpecialist');
@@ -1057,7 +1057,7 @@ test('Build 62 prevents an older pull from visually reverting a newer local task
 });
 
 test('Build 62 orchestrates bounded specialists with explicit evidence routing',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('async function orchestrateSpecialists'));
   assert.ok(chat.includes('name:"orchestrate_specialists"'));
   assert.ok(chat.includes('specialist_plan_hint:specialistPlanHint(effectiveMessage,route)'));
@@ -1123,7 +1123,7 @@ test('Build 63 serializes proactive curiosity and refuses resolved legacy Feed q
 });
 
 test('Build 63 makes server-local time authoritative over historical greetings',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('function localTemporalContext'));
   assert.ok(chat.includes('COHERENCIA TEMPORAL:'));
   assert.ok(chat.includes('current_local_datetime:temporal.current_local_datetime'));
@@ -1146,14 +1146,14 @@ test('Build 64 bounded OpenAI working context survives Build 85 as scope-local r
 });
 
 test('interactive requests have a reasoning budget without lexical scoring',()=>{
- const chat=read('supabase/functions/isabella-chat/index.ts');
+ const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
  const fn=chat.slice(chat.indexOf('function cognitiveBudget'),chat.indexOf('const ACTION_POLICY'));
  assert.ok(fn.includes('reasoning:"medium"'));assert.ok(fn.includes('rounds:5'));
  assert.ok(!fn.includes('.test('));assert.ok(chat.includes('const fastAgenda=false'));
 });
 
 test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('function simpleAgendaMutation'));
   const simple=isSimpleAgendaMutation;
   assert.equal(simple('Agrega para mañana una tarea: comprar una calculadora'),true);
@@ -1173,7 +1173,7 @@ test('Build 64 routes simple agenda mutations through a narrow fast path',()=>{
 });
 
 test('Build 64 exposes latency-path observability for real production measurement',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('fast_path:fastAgenda'));
   assert.ok(chat.includes('conversation_rotated:!!conversationInfo.rotated'));
   assert.ok(chat.includes('conversation_message_count:conversationInfo.messageCount||null'));
@@ -1239,7 +1239,7 @@ test('Build 65 config keeps the streaming function JWT-protected',()=>{
 
 
 test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('function directTextStreamEligible'));
   assert.ok(chat.includes('wantsStream=body?.stream===true'));
   assert.ok(chat.includes('response.output_text.delta'));
@@ -1251,7 +1251,7 @@ test('Build 66 streams ordinary tool-free Isabella responses with Responses SSE'
 });
 
 test('Build 66 refuses streaming when tools or deep context may be required',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const fn=chat.slice(chat.indexOf('function directTextStreamEligible'),chat.indexOf('function parseOpenAISse'));
   assert.ok(fn.includes('return false;'));assert.ok(!fn.includes('.test('));
   assert.ok(chat.includes('return json({fallback:true,reason:"tool_or_context_path"},409)'));
@@ -1273,7 +1273,7 @@ test('Build 66 client tries text streaming before buffered Isabella and preserve
 });
 
 test('Build 66 retains streamed preview while Build 90.5 marks incomplete final results',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const app=read('apps/isabella/app.js');
   assert.ok(app.includes("el.className='message assistant message-streaming'"));
   assert.ok(app.includes('clearAssistantStream();'));
@@ -1298,7 +1298,7 @@ test('Build 67 adds user-isolated Commitment workspaces with controlled mutation
 });
 
 test('Build 67 gives Isabella operational workspace tools without promoting scratchpad state to truth',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('async function commitmentWorkspaceContext'));
   assert.ok(chat.includes('name:"open_commitment_workspace"'));
   assert.ok(chat.includes('name:"read_commitment_workspace"'));
@@ -1311,7 +1311,7 @@ test('Build 67 gives Isabella operational workspace tools without promoting scra
 });
 
 test('Build 67 keeps mission work out of direct text streaming and visible inside Continuity',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const app=read('apps/isabella/app.js');
   assert.ok(chat.includes('const fastAgenda=false'));
   assert.ok(app.includes('data-mission-workspace'));
@@ -1356,7 +1356,7 @@ test('Build 68 mission runner advances one checkpoint at a time and cannot mutat
 });
 
 test('Build 68 lets Isabella start and control durable Missions only around approved workspaces',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(chat.includes('async function missionRunContext'));
   assert.ok(chat.includes('name:"start_mission_run"'));
   assert.ok(chat.includes('name:"read_mission_run"'));
@@ -1416,7 +1416,7 @@ test('Build 69 routes proactive events through an explainable four-channel atten
 });
 
 test('Build 69 gives explicit notification requests priority without making every Mission an interruption',()=>{
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   const runner=read('supabase/functions/isabella-mission-runner/index.ts');
   assert.ok(chat.includes('minds_start_mission_run_with_attention'));
   assert.ok(chat.includes('ATTENTION ECONOMY:'));

@@ -7,7 +7,7 @@ import {
   validContinuationToken,CLARIFICATION_WINDOW_MS
 } from "../supabase/functions/_shared/browser-continuation.mjs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
-const server=read("supabase/functions/isabella-chat/index.ts");
+const server=(read("supabase/functions/isabella-chat/index.ts")+read("supabase/functions/_shared/isabella-tools.mjs"));
 const app=read("apps/isabella/app.js");
 const ai=read("apps/isabella/ai.js");
 const sync=read("apps/isabella/sync.js");
@@ -98,6 +98,7 @@ test("turn-integrity UI rejects missing or inconsistent clarification claims",()
 test("pending clarification tool is unavailable in Presence and Work Thread authorities",()=>{
  assert.match(server,/const clarificationTools=surface==="chat_browser"&&!currentWorkThread/);
  assert.match(server,/fastAgenda\?\[\.\.\.clarificationTools/);
- assert.match(server,/\.\.\.clarificationTools,\n    \{type:"web_search"/);
+ assert.match(server,/\.\.\.clarificationTools,\n    \.\.\.CONVERSATION_TOOLS/);
+ assert.match(server,/export const CONVERSATION_TOOLS = \[\n  \{type:"web_search"/);
  assert.doesNotMatch(server,/fastAgenda\?\[clarificationTool,/);
 });

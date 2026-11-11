@@ -6,7 +6,7 @@ import {readFileSync} from 'node:fs';
 import {leanConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS} from '../supabase/functions/_shared/light-conversation-context.mjs';
 import {createWindowTools} from '../supabase/functions/_shared/window-tools.mjs';
 const read=p=>readFileSync(new URL('../'+p,import.meta.url),'utf8');
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 
 test('Server agenda: still_open_before_tomorrow (overdue or due today, open) reaches every route', ()=>{
   assert.match(chat,/const openBeforeTomorrow=tasks\.filter\(\(x:any\)=>x\.date&&x\.date<tomorrowDate\)/);
