@@ -560,7 +560,7 @@ const calendarTools = [
     strict: false,
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
-       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request (or, when the date is only in a file or image attached to THIS turn, the literal excerpt from that attachment with mode:absolute and the date resolved against the attachment's own date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
       direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
@@ -575,7 +575,7 @@ const calendarTools = [
     parameters: { type:"object", properties:{
       target_id:{type:"string"}, target_title:{type:"string"}, target_date:{type:"string"}, target_time:{type:"string"},
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
-       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request (or, when the date is only in a file or image attached to THIS turn, the literal excerpt from that attachment with mode:absolute and the date resolved against the attachment's own date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"}
     }}
   },
@@ -593,7 +593,7 @@ const calendarTools = [
     strict: false,
     parameters: { type:"object", properties:{
       title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."},
-       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request (or, when the date is only in a file or image attached to THIS turn, the literal excerpt from that attachment with mode:absolute and the date resolved against the attachment's own date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
+       temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
       direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
     }, required:["title"] }
   },
@@ -604,7 +604,7 @@ const calendarTools = [
     strict: false,
     parameters: { type:"object", properties:{
       target_id:{type:"string"},target_title:{type:"string"},target_date:{type:"string"},
-      title:{type:"string"},date:{type:"string"},temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, a LITERAL excerpt from the original user request (or, when the date is only in a file or image attached to THIS turn, the literal excerpt from that attachment with mode:absolute and the date resolved against the attachment's own date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server verifies origin, weekday and relative date arithmetic. Do not invent a weekday; if unsure request_clarification.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},clear_date:{type:"boolean"},reminder_time:{type:"string"},category:{type:"string"},project:{type:"string"},recurrence:{type:"string"},notes:{type:"string"}
+      title:{type:"string"},date:{type:"string"},temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},clear_date:{type:"boolean"},reminder_time:{type:"string"},category:{type:"string"},project:{type:"string"},recurrence:{type:"string"},notes:{type:"string"}
     }}
   },
   {
@@ -4278,13 +4278,13 @@ pregunta cuál.`;
       const temporalSources=verifiedContinuation
         ?[verifiedContinuation.source_message,effectiveMessage]:[effectiveMessage];
       const calendarGrounding=verifyCalendarSemanticProposal(rawProposal,args?.temporal_grounding,
-        temporalSources,temporal.current_date,{attachmentEvidence:attachmentInputs.length>0});
+        temporalSources,temporal.current_date);
       if(calendarGrounding.kind==="needs_clarification"){
         temporalGroundingIssues.push(String(calendarGrounding.reason));
         outputs.push({type:"function_call_output",call_id:call.call_id,
           output:JSON.stringify({status:"calendar_semantic_grounding_required",
             reason:calendarGrounding.reason,
-            guidance:"Reconsider the date meaning from the owner's exact utterance; supply a source-backed temporal_grounding claim or request_clarification. No proposal or write was registered.",
+            guidance:"Fix the stated inconsistency (weekday, offset or date format) and propose again in this turn; ask the owner only if the date is genuinely ambiguous. No proposal or write was registered yet.",
             server_local_date:temporal.current_date})});
         continue;
       }
@@ -4325,6 +4325,8 @@ pregunta cuál.`;
             (proposal.duration_defaulted===true&&proposal.duration_minutes===60&&!String(args?.direct_event_duration_excerpt||"").trim())||
             ownerTexts.some(t=>exactFieldExcerpt(t,args?.direct_event_duration_excerpt));
           if(surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread&&!background&&!attachments.length&&
+             // No review card here: the date must be quoted from the owner's own words.
+             (calendarGrounding.kind!=="verified"||calendarGrounding.ownerEvidence===true||calendarGrounding.basis==="undated_or_unchanged")&&
              directHistorySafe&&["create_task","create_event"].includes(String(call.name))&&
              ownerTexts.some(t=>exactOwnerExcerpt(t,quoted))&&ownerTexts.some(t=>exactOwnerTitle(t,proposal.title))&&
              explicitTime&&explicitDuration&&
@@ -4650,7 +4652,8 @@ pregunta cuál.`;
   }else if(reviewAttemptWithoutReceipt){
     // The attempted write was never admitted as a reviewable proposal.
     // Do not imply a new card or a successful DB mutation.
-    reply="No pude registrar una propuesta nueva y verificable para esta operación. No hay ningún cambio confirmado a partir de esta solicitud. Revisa los datos o aclara la operación para volver a intentarlo.";
+    // Her own explanation (she saw why it failed) unless it claims the change is done.
+    reply=verifiedPendingProse(modelProse)||"No pude registrar una propuesta nueva y verificable para esta operación. No hay ningún cambio confirmado a partir de esta solicitud. Revisa los datos o aclara la operación para volver a intentarlo.";
   }else if(fastAgenda&&!toolProposals.length){
     // The model may re-interpret a rejected semantic claim; no action is
     // registered until the claim passes validation. Do not fabricate approval.

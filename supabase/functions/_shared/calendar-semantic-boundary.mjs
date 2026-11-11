@@ -4,7 +4,7 @@
  * consistency. It must not reinterpret the user's utterance with lexical
  * date/intent rules or silently invent/replace the semantic meaning.
  */
-/** @typedef {{kind:"verified"|"unchanged",proposal:any,basis?:string,evidence?:any} | {kind:"needs_clarification",reason:string,detail?:string|null}} CalendarSemanticResult */
+/** @typedef {{kind:"verified"|"unchanged",proposal:any,basis?:string,evidence?:any,ownerEvidence?:boolean} | {kind:"needs_clarification",reason:string,detail?:string|null}} CalendarSemanticResult */
 /** @typedef {{kind:"valid"|"unchanged"} | {kind:"needs_clarification",reason:string,detail?:string|null}} CalendarClockResult */
 const isoDay=s=>{
   if(typeof s!=="string"||!/^\d{4}-\d{2}-\d{2}$/.test(s))return false;
@@ -23,32 +23,29 @@ const evidenceSpan=(sources,quote)=>{
 const failure=(reason,detail)=>({kind:"needs_clarification",reason,detail:detail||null});
 const weekday=day=>new Date(day+"T12:00:00Z").getUTCDay();
 /** @returns {CalendarSemanticResult} */
-// options.attachmentEvidence (11.11.2026): the owner attached a file or image in this turn and the
-// date may live only there («add this Termin» + photo of an e-mail). The server cannot read the quote
-// inside an image, so the excerpt is not verified; arithmetic and weekday still are, the basis says
-// so, and the caller never grants direct creation to a turn with attachments: the owner reviews it.
-export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,localDate,options={}){
+// 11.11.2026 (decision of Gari): the model interprets; hard checks stay only where something runs
+// without the owner seeing it. A proposal always goes to the owner's review card, so the date no
+// longer needs a literal quote from the owner's words: it may come from an attached photo, an earlier
+// turn or plain inference. What the server can check, it still checks (valid day, weekday, relative
+// arithmetic). `ownerEvidence` says whether the quote really sits in the owner's turn; only then may
+// the caller grant direct creation without review.
+export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,localDate){
   if(!proposal||!["task","event"].includes(proposal.kind)||
      !["create","update"].includes(proposal.action))
     return {kind:"unchanged",proposal};
   if(proposal.clear_date||proposal.date==null||proposal.date===""){
     if(proposal.kind==="event"&&proposal.action==="create")
       return failure("event_date_required");
-    return {kind:"verified",proposal,basis:"undated_or_unchanged"};
+    return {kind:"verified",proposal,basis:"undated_or_unchanged",ownerEvidence:false};
   }
   if(!isoDay(localDate))return failure("server_local_date_unavailable");
   if(!isoDay(proposal.date))return failure("invalid_proposed_date");
-  if(!grounding||typeof grounding!=="object"||
-     !["absolute","relative"].includes(grounding.mode))
-    return failure("missing_semantic_date_grounding");
-  const inOwnerTurn=evidenceSpan(sourceMessage,grounding.source_excerpt);
-  const fromAttachment=!inOwnerTurn&&options?.attachmentEvidence===true&&
-    String(grounding.source_excerpt||"").trim().length>=2&&String(grounding.source_excerpt||"").trim().length<=240;
-  if(!inOwnerTurn&&!fromAttachment)
-    return failure("date_evidence_not_in_owner_turn");
+  const g=grounding&&typeof grounding==="object"&&["absolute","relative"].includes(grounding.mode)?grounding:null;
+  if(!g)return {kind:"verified",proposal,basis:"interpreted",ownerEvidence:false,evidence:null};
+  const ownerEvidence=evidenceSpan(sourceMessage,g.source_excerpt);
   let date=proposal.date;
-  if(grounding.mode==="relative"){
-    const delta=grounding.offset_days;
+  if(g.mode==="relative"){
+    const delta=g.offset_days;
     if(!Number.isInteger(delta)||delta< -366||delta>366)
       return failure("invalid_relative_offset");
     const dateTime=Date.parse(localDate+"T12:00:00Z")+delta*86400000;
@@ -58,19 +55,18 @@ export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,
     // belongs to the server, not the model. Never trust its supplied ISO date.
     date=derived;
   }
-  if(grounding.mode==="absolute"&&grounding.offset_days!=null)
+  if(g.mode==="absolute"&&g.offset_days!=null)
     return failure("absolute_and_relative_basis_conflict");
-  if(grounding.weekday!=null){
-    if(!Number.isInteger(grounding.weekday)||grounding.weekday<0||grounding.weekday>6)
+  if(g.weekday!=null){
+    if(!Number.isInteger(g.weekday)||g.weekday<0||g.weekday>6)
       return failure("invalid_weekday");
-    if(weekday(date)!==grounding.weekday)
+    if(weekday(date)!==g.weekday)
       return failure("claimed_weekday_disagrees_with_calendar");
   }
-  return {kind:"verified",proposal:{...proposal,date},basis:fromAttachment?grounding.mode+"_from_attachment":grounding.mode,
-    evidence:{source_excerpt:String(grounding.source_excerpt).trim(),
-      ...(fromAttachment?{from_attachment:true}:{}),
-      weekday:grounding.weekday??null,
-      ...(grounding.mode==="relative"?{offset_days:grounding.offset_days}:{})}};
+  return {kind:"verified",proposal:{...proposal,date},basis:ownerEvidence?g.mode:g.mode+"_interpreted",ownerEvidence,
+    evidence:{source_excerpt:String(g.source_excerpt||"").trim().slice(0,240),
+      weekday:g.weekday??null,
+      ...(g.mode==="relative"?{offset_days:g.offset_days}:{})}};
 }
 /** @returns {CalendarClockResult} */
 export function validatedCalendarClock(proposal){

@@ -43,12 +43,14 @@ test("model correction of wrong date remains deterministic once semantically gro
  assert.equal(v.kind,"verified");
  assert.equal(v.proposal.date,"2026-10-13");
 });
-test("no implicit date correction is accepted without its original-owner source",()=>{
+test("a date without the owner's own quote goes to review, never to direct creation (11.11.2026)",()=>{
  const p={kind:"task",action:"update",date:"2026-10-13"};
  const v=verifyCalendarSemanticProposal(p,{mode:"relative",source_excerpt:"mañana",offset_days:1},
   "Por favor corrígelo","2026-10-12");
- assert.equal(v.kind,"needs_clarification");
- assert.equal(v.reason,"date_evidence_not_in_owner_turn");
+ assert.equal(v.kind,"verified");
+ assert.equal(v.ownerEvidence,false);
+ assert.equal(v.basis,"relative_interpreted");
+ assert.match(chat,/calendarGrounding\.ownerEvidence===true/);
 });
 test("text streaming cannot bypass the normal tool-capable contract",()=>{
  assert.match(chat,/turnContract.lane==="tool_capable"&&\(body\?\.durable===true\|\|body\?\.stream===true\)/);
