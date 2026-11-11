@@ -1,3 +1,4 @@
+import {failureLine} from "./assistant-voice.mjs";
 /* Phase 1, step 3a: no message from Gari without an answer in the conversation.
  *
  * turn_diagnostics (27.10–07.11) explained the silences:
@@ -19,11 +20,8 @@ export function assistantKeyFor(requestId){
 }
 
 /** What Gari reads when a turn fails, in the app's voice (it is not Isabella speaking). */
-export function failureNotice(kind){
-  if(kind==="credit")return "No se pudo responder: la cuenta de OpenAI que usa Isabella se quedó sin crédito. Cuando la recargues, vuelve a enviar el mensaje.";
-  if(kind==="empty")return "No se pudo responder a este mensaje: la respuesta llegó vacía. Vuelve a enviarlo.";
-  if(kind==="incomplete")return "No se pudo responder a este mensaje: la respuesta se interrumpió. Vuelve a enviarlo.";
-  return "No se pudo responder a este mensaje por un error del servicio. Vuelve a enviarlo.";
+export function failureNotice(kind,profile="window"){
+  return failureLine(kind,profile);
 }
 
 export function isOutOfCredit(status,payload){

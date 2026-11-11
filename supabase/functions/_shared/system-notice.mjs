@@ -6,7 +6,7 @@ export const SYSTEM_NOTICE_PATTERNS=[
   // Legacy wording (before step 3) — still in the history, still recognised.
   /^listo[.,]/i,/^empieza a las/i,/^próximo:/i,/^hola\. soy isabella\.?$/i,/^¿(añado|pongo) «/i,/^te preparé \d+ cambios/i,
   /^tengo listo el cambio/i,/^no pude (comprobar|guardar|verificar|identificar|registrar)/i,/^isabella sigue trabajando/i,
-  /^de acuerdo, no hice ningún cambio/i,/^creación autorizada/i,/^no hubo una respuesta de texto/i,/^he preparado la /i,
+  /^de acuerdo, no hice ningún cambio/i,/^creación autorizada/i,/^no hubo una respuesta de texto/i,/^he preparado (la |el cambio)/i,
   /^isabella no pudo terminar esta respuesta/i,/^la respuesta quedó interrumpida/i,
   // System wording (step 3 onward).
   /^propuesta: /i,/^\d+ cambios preparados/i,/^guardados?( \d+ cambios)?\.?$/i,/^sin cambios\.?$/i,
@@ -16,7 +16,9 @@ export const SYSTEM_NOTICE_PATTERNS=[
   // Office system lines; do not present them as Romy's own prose.
   /^hinweis der app:/i,/^bestätigt: /i,/^verworfen: /i,
   /^keine antwort möglich:/i,/^vorschlag: /i,/^\d+ änderungen vorbereitet/i,/^gespeichert\.?$/i,/^\d+ änderungen gespeichert/i,
-  /^die speicherung konnte nicht bestätigt werden/i
+  /^die speicherung konnte nicht bestätigt werden/i,
+  // Lines the engine writes in German for the office (assistant-voice.mjs).
+  /^die änderung ist vorbereitet/i,/^anlage freigegeben/i,/^für diese anfrage konnte kein/i,/^ein vorschlag wartet/i
 ];
 export function isSystemNotice(text){
   const t=String(text||'').trim();

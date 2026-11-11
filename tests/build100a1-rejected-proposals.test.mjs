@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {appVoice} from '../supabase/functions/_shared/assistant-voice.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -29,7 +30,8 @@ test('failed registration cannot be mistaken for a created proposal in any langu
  const region=server.slice(start,server.indexOf('for(const intent of standingIntents||[])',start));
  assert.match(region,/unregisteredReviewAttempt\(usedTools,toolProposals,policyMode\)/);
  assert.match(region,/else if\(reviewAttemptWithoutReceipt\)/);
- assert.match(region,/No pude registrar una propuesta nueva y verificable/);
+ assert.match(region,/voice\.unregistered/);
+ assert.match(appVoice('window').unregistered,new RegExp('^'+safe));
  assert.ok(region.indexOf('else if(reviewAttemptWithoutReceipt)')<region.indexOf('else if(fastAgenda&&!toolProposals.length)'));
  assert.doesNotMatch(region,/corrígelo|Besprechungsnotiz|corrige la tarea/);
 });

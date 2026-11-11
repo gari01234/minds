@@ -23,6 +23,7 @@ import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {readOfficeTerminplanMilestones} from "../_shared/office-terminplan.mjs";
 import {canonicalAssistantRow,failureNotice,isOutOfCredit} from "../_shared/chat-delivery.mjs";
+import {appVoice} from "../_shared/assistant-voice.mjs";
 import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {FOLLOWUP_TOOLS,scheduleFollowUp,cancelFollowUp} from "../_shared/isabella-followups.mjs";
 import {CALENDAR_TOOLS,CLARIFICATION_TOOL,CONVERSATION_TOOLS} from "../_shared/isabella-tools.mjs";
@@ -2804,6 +2805,8 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   if (!message && !attachments.length) return json({ error: "message_required" }, 400);
   const effectiveMessage = message || "Te envío este archivo para que lo tengas en cuenta y continúes la conversación.";
   const assistantProfile=resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window");
+  // Fixed lines of the app, in the language of the profile (assistant-voice.mjs).
+  const voice=appVoice(assistantProfile);
   let assistantOwner: string | null=assistantProfile.owner_name;
   let assistantUserId: string | null=null;
   if(assistantProfile.multi_user){
@@ -2844,7 +2847,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     const attentionId=String(context.reply_context?.attention_id||"").trim();
     const requestRevision=Number(context.reply_context?.request_revision||0);
     if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(attentionId)||!Number.isInteger(requestRevision)||requestRevision<1){
-      return json({error:"stale_decision",reason:"invalid_binding",message:"La solicitud ya no coincide con una decisión vigente."},409);
+      return json({error:"stale_decision",reason:"invalid_binding",message:voice.stale_binding},409);
     }
     const binding=await supabaseClient(req)?.rpc("minds_validate_presence_reply_v01",{
       p_attention_id:attentionId,p_request_revision:requestRevision
@@ -2855,7 +2858,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
         error:"stale_decision",
         reason:binding?.data?.reason||"request_not_live",
         current_revision:binding?.data?.current_revision||null,
-        message:"La decisión cambió o ya no necesita respuesta."
+        message:voice.stale_decision
       },409);
     }
     context.reply_context=binding.data.reply_context;
@@ -2865,7 +2868,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   if(surface==="chat_browser"&&!background&&body?.continuation){
     try{verifiedContinuation=await resolveBrowserContinuation(req,body.continuation,clientMessageId);}
     catch(e){return json({error:"unverified_continuation",
-      message:"No pude verificar a qué solicitud estás respondiendo. No he preparado ni cambiado ninguna tarea."},409);}
+      message:voice.unverified_continuation},409);}
   }
   // Cheap transport negotiation: avoid routing or persisting a turn twice.
   if(body?.stream===true||body?.durable===true)return json({fallback:true,reason:"requires_original_tool_or_action_path"},409);
@@ -2914,14 +2917,14 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   let browserTurn:any=null;
   // A failed turn leaves a notice in the conversation instead of a silence (step 3a).
   const failTurn=async(kind:string)=>{
-    const notice=failureNotice(kind);
+    const notice=failureNotice(kind,assistantProfile.id);
     if(browserTurn)await persistServerAssistantTurn(req,canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,
       requestId:clientMessageId,content:notice,scope:exposureScope,author:"system",outcome:"failed"}));
     return notice;
   };
   if(surface==="chat_browser"&&!background&&!currentWorkThread){
     if(!browserTurnId(clientMessageId))
-      return json({error:"browser_turn_id_required",message:"No pude registrar una identidad verificable para este mensaje."},400);
+      return json({error:"browser_turn_id_required",message:voice.turn_identity},400);
     try{
       if(voiceDelegation){
         const sb=supabaseClient(req),owner=sb?(await sb.auth.getUser()).data.user:null;
@@ -2929,7 +2932,7 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
         browserTurn={userId:owner.id,conversationId:await liveConversation(sb,owner.id,body.voice_conversation_id)};
       }else browserTurn=await persistCanonicalBrowserOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope);
     }catch(e){
-      return json({error:"browser_turn_persistence_failed",message:"No pude registrar este turno en MINDS.",detail:String(e)},409);
+      return json({error:"browser_turn_persistence_failed",message:voice.turn_persist,detail:String(e)},409);
     }
   }
   const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
@@ -3352,7 +3355,7 @@ pregunta cuál.`;
           .eq("user_id",user.id).eq("request_id",clientMessageId).maybeSingle();
         if(same)return json({durable:true,job_id:same.id,request_id:clientMessageId,status:same.status},202);
         await finishAgentRun(req,run,"skipped",{phase_ms:phaseSnapshot(),reason:"another_chat_turn_in_progress"});
-        return json({error:"another_chat_turn_in_progress",message:"Isabella está terminando la respuesta anterior. Espera a que termine antes de enviar otra."},423);
+        return json({error:"another_chat_turn_in_progress",message:voice.busy},423);
       }
       await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),},insertError.message);
       return json({error:"durable_job_create_failed",detail:insertError.message},500);
@@ -3472,7 +3475,7 @@ pregunta cuál.`;
           if(!streamCompleted)send("status",{phase:"incomplete",label:"La respuesta se interrumpió. Conservaré el texto recibido."});
           if(streamCompleted)for(const intent of standingIntents||[]){
             if(!normalizeText(finalText).includes(normalizeText(intent.reminder_text))){
-              const suffix="\n\nMe pediste que te recordara: "+intent.reminder_text;
+              const suffix="\n\n"+voice.reminder_prefix+intent.reminder_text;
               finalText+=suffix;send("text_delta",{delta:suffix});
             }
           }
@@ -3672,13 +3675,13 @@ pregunta cuál.`;
       // Never execute mutations partially alongside a clarification.
       if(calls.length!==1||!browserTurnId(clientMessageId)||surface!=="chat_browser")
         return json({error:"clarification_conflict",
-          message:"No pude verificar la aclaración; no he creado ningún cambio."},409);
+          message:voice.clarification_conflict},409);
       const args=safeArgs(calls[0]);
       const question=String(args?.question||"").trim();
       const capability=String(args?.capability||"");
       if(!question||!["calendar","work","general"].includes(capability))
         return json({error:"clarification_invalid",
-          message:"No pude formular una aclaración verificable."},409);
+          message:voice.clarification_invalid},409);
       const pending=await recordBrowserClarification(req,clientMessageId,question,capability);
       await finishAgentRun(req,run,"success",{phase_ms:phaseSnapshot(),
         rounds:roundsUsed,tools:["request_clarification"],fast_path:fastAgenda,
@@ -4092,7 +4095,7 @@ pregunta cuál.`;
   }
   const modelProse=String(extractText(payload)||"").trim();
   let reply=modelProse ||
-    (toolProposals.length?"He preparado el cambio para que lo revises antes de aplicarlo.":"");
+    (toolProposals.length?voice.prepared:"");
   // Phase 1, step 7: the system line below stays the authority on what is pending; Isabella's own
   // words travel next to it when they do not claim the change is already done.
   const isabellaReply=toolProposals.length&&(isabellaCoreEligible||workCoreEligible)?verifiedPendingProse(modelProse):null;
@@ -4102,12 +4105,12 @@ pregunta cuál.`;
   const reviewAttemptWithoutReceipt=unregisteredReviewAttempt(usedTools,toolProposals,policyMode);
   const directAuthorization=providerWebSeen||voiceDelegation?null:authorizedDirectBatch(toolProposals,directAuthorizedIds,usedTools);
   if(toolProposals.length===1){
-    reply=directAuthorization?"Creación autorizada, pendiente de comprobante.":calendarProposalReply(toolProposals[0])||reply;
+    reply=directAuthorization?voice.direct_pending:calendarProposalReply(toolProposals[0],assistantProfile.id)||reply;
   }else if(reviewAttemptWithoutReceipt){
     // The attempted write was never admitted as a reviewable proposal.
     // Do not imply a new card or a successful DB mutation.
     // Her own explanation (she saw why it failed) unless it claims the change is done.
-    reply=verifiedPendingProse(modelProse)||"No pude registrar una propuesta nueva y verificable para esta operación. No hay ningún cambio confirmado a partir de esta solicitud. Revisa los datos o aclara la operación para volver a intentarlo.";
+    reply=verifiedPendingProse(modelProse)||voice.unregistered;
   }else if(fastAgenda&&!toolProposals.length){
     // The model may re-interpret a rejected semantic claim; no action is
     // registered until the claim passes validation. Do not fabricate approval.
@@ -4117,7 +4120,7 @@ pregunta cuál.`;
         "). No he realizado cambios. ¿Puedes aclarar la fecha u hora?"
       :"No he registrado ninguna propuesta de calendario verificable. No se ha realizado ningún cambio.";
   }
-  for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\nMe pediste que te recordara: "+intent.reminder_text;
+  for(const intent of standingIntents||[])if(!normalizeText(reply).includes(normalizeText(intent.reminder_text)))reply+="\n\n"+voice.reminder_prefix+intent.reminder_text;
   if(!reply){await finishAgentRun(req,run,"error",{phase_ms:phaseSnapshot(),rounds:roundsUsed},"empty_response");return json({error:"empty_response",message:await failTurn("empty")},502)}
   if(persistPresence&&conversationInfo?.dbId){
     await persistPresenceTurn(req,conversationInfo.dbId,"presence:"+clientMessageId+":assistant","assistant",reply,{
@@ -4171,9 +4174,9 @@ pregunta cuál.`;
   }
   if(voiceDelegation&&browserTurn&&toolProposals.length){
     const card=canonicalAssistantRow({userId:browserTurn.userId,conversationId:browserTurn.conversationId,requestId:clientMessageId,
-      content:"Hay una propuesta pendiente de confirmar.",scope:exposureScope,author:"system",outcome:"proposal_created"});
+      content:voice.voice_card,scope:exposureScope,author:"system",outcome:"proposal_created"});
     if(!card||!await persistServerAssistantTurn(req,{...card,metadata:{...card.metadata,durable_status:"completed",review_proposals:toolProposals}}))
-      return json({error:"voice_review_delivery_failed",message:"No pude confirmar que la tarjeta llegara al chat."},503);
+      return json({error:"voice_review_delivery_failed",message:voice.voice_review_failed},503);
   }
   return json(responsePayload);
 
