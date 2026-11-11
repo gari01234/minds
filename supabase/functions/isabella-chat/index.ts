@@ -4689,8 +4689,9 @@ pregunta cuál.`;
       author:assistantProfile.assistant_name.toLocaleLowerCase('de-DE'),
       outcome:toolProposals.length?'proposal_created':outcomeReceipt.outcome
     });
+    // Her own words travel with the card (Office rebuilds the chat from this row).
     if(!card||!await persistServerAssistantTurn(req,{...card,
-      metadata:{...card.metadata,review_proposals:toolProposals}}))
+      metadata:{...card.metadata,review_proposals:toolProposals,...(isabellaReply?{assistant_prose:isabellaReply}:{})}}))
       return json({error:"office_assistant_delivery_unverified",
         message:"Die Antwort konnte nicht als überprüfter Chat-Eintrag gespeichert werden."},503);
   }

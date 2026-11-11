@@ -31,9 +31,9 @@ test('Step 6: light and standard turns stay well under the full prompt; deep tur
   const light=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,light:true});
   const all=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'standard'}});
   const deep=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'deep'}});
-  assert.ok(light.length<18000,String(light.length));
-  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.55,String(all.length));
-  assert.ok(deep.length<FULL_INSTRUCTIONS_CHARS*0.85,String(deep.length));
+  assert.ok(light.length<19000,String(light.length)); // +0.9k on 11.11.2026: how she reads attachments
+  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.58,String(all.length));
+  assert.ok(deep.length<FULL_INSTRUCTIONS_CHARS*0.88,String(deep.length));
   assert.ok(light.length<all.length&&all.length<deep.length);
   assert.ok(all.includes(relationship),'her character is the relationship contract, intact');
   // Notes appear only for capabilities the turn offers.
@@ -260,4 +260,12 @@ test('Step 8: no model call when the gate is closed; the browser no longer runs 
   assert.match(wf,/audience=minds-isabella-presence/);
   assert.match(wf,/jq -c '\{ok,users,report:\[\.report\[\]\?\|\{spoke,reason,moment\}\]\}'/,'workflow logs counts, reasons and moment kinds only');
   assert.match(read('supabase/config.toml'),/\[functions\.isabella-presence\]\nverify_jwt = false/);
+});
+
+test('11.11.2026: she reads attachments like a person and proposes instead of asking',()=>{
+  const core=isabellaCoreInstructions({tools:ALL_TOOLS,light:true});
+  assert.match(core,/LO QUE GARI TE ENSEÑA/);
+  assert.match(core,/No pidas que te repita o te escriba lo que ya tienes delante\./);
+  assert.match(core,/Propón lo que entendiste aunque el día o la hora vengan de un adjunto/);
+  assert.doesNotMatch(core,/cita literal del turno, offset_days/);
 });
