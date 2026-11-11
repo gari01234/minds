@@ -23,7 +23,11 @@ const evidenceSpan=(sources,quote)=>{
 const failure=(reason,detail)=>({kind:"needs_clarification",reason,detail:detail||null});
 const weekday=day=>new Date(day+"T12:00:00Z").getUTCDay();
 /** @returns {CalendarSemanticResult} */
-export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,localDate){
+// options.attachmentEvidence (11.11.2026): the owner attached a file or image in this turn and the
+// date may live only there («add this Termin» + photo of an e-mail). The server cannot read the quote
+// inside an image, so the excerpt is not verified; arithmetic and weekday still are, the basis says
+// so, and the caller never grants direct creation to a turn with attachments: the owner reviews it.
+export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,localDate,options={}){
   if(!proposal||!["task","event"].includes(proposal.kind)||
      !["create","update"].includes(proposal.action))
     return {kind:"unchanged",proposal};
@@ -37,7 +41,10 @@ export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,
   if(!grounding||typeof grounding!=="object"||
      !["absolute","relative"].includes(grounding.mode))
     return failure("missing_semantic_date_grounding");
-  if(!evidenceSpan(sourceMessage,grounding.source_excerpt))
+  const inOwnerTurn=evidenceSpan(sourceMessage,grounding.source_excerpt);
+  const fromAttachment=!inOwnerTurn&&options?.attachmentEvidence===true&&
+    String(grounding.source_excerpt||"").trim().length>=2&&String(grounding.source_excerpt||"").trim().length<=240;
+  if(!inOwnerTurn&&!fromAttachment)
     return failure("date_evidence_not_in_owner_turn");
   let date=proposal.date;
   if(grounding.mode==="relative"){
@@ -59,8 +66,9 @@ export function verifyCalendarSemanticProposal(proposal,grounding,sourceMessage,
     if(weekday(date)!==grounding.weekday)
       return failure("claimed_weekday_disagrees_with_calendar");
   }
-  return {kind:"verified",proposal:{...proposal,date},basis:grounding.mode,
+  return {kind:"verified",proposal:{...proposal,date},basis:fromAttachment?grounding.mode+"_from_attachment":grounding.mode,
     evidence:{source_excerpt:String(grounding.source_excerpt).trim(),
+      ...(fromAttachment?{from_attachment:true}:{}),
       weekday:grounding.weekday??null,
       ...(grounding.mode==="relative"?{offset_days:grounding.offset_days}:{})}};
 }

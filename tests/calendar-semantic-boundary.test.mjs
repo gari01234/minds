@@ -108,3 +108,17 @@ test("a verified follow-up can correct the date without borrowing unrelated cont
  assert.equal(forged.kind,"needs_clarification");
  assert.match(server,/const temporalSources=verifiedContinuation/);
 });
+
+test("a date that lives only in an attached image is accepted for review, never without an attachment",()=>{
+  const p={kind:"event",action:"create",title:"Termin",date:"2026-11-11",time:"14:00",duration_minutes:60};
+  const g={mode:"absolute",source_excerpt:"morgen um 14:00 Uhr"};
+  const owner="Agrega porfa este Termin a mi calendario. Proyecto Bernried";
+  assert.equal(verifyCalendarSemanticProposal(p,g,owner,"2026-11-11").reason,"date_evidence_not_in_owner_turn");
+  const v=verifyCalendarSemanticProposal(p,g,owner,"2026-11-11",{attachmentEvidence:true});
+  assert.equal(v.kind,"verified");assert.equal(v.basis,"absolute_from_attachment");
+  assert.equal(v.evidence.from_attachment,true);assert.equal(v.proposal.date,"2026-11-11");
+  // Weekday and arithmetic checks still hold; an owner quote keeps its normal basis.
+  assert.equal(verifyCalendarSemanticProposal(p,{...g,weekday:1},owner,"2026-11-11",{attachmentEvidence:true}).reason,"claimed_weekday_disagrees_with_calendar");
+  assert.equal(verifyCalendarSemanticProposal(p,{mode:"absolute",source_excerpt:"este Termin"},owner,"2026-11-11",{attachmentEvidence:true}).basis,"absolute");
+  assert.equal(verifyCalendarSemanticProposal(p,{mode:"absolute",source_excerpt:""},owner,"2026-11-11",{attachmentEvidence:true}).reason,"date_evidence_not_in_owner_turn");
+});
