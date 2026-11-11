@@ -49,9 +49,10 @@ test('90.8: Chat loads reconciled answers, not only a streaming callback',()=>{
   assert.ok(app.includes('durable_status:status'));
   assert.ok(app.includes("state.messages.find(m=>m.role==='assistant'&&m.metadata?.durable_request_id===key)"));
   assert.ok(app.includes("Isabella sigue trabajando…"));
-  assert.ok(ai.includes('askDurableChat(message,state,options,replyContext)'));
-  assert.ok(ai.includes('if(response.status===409)return null'));
-  assert.ok(ai.includes('background:false,attachments:[],stream:false,durable:true'));
+  // 11.11.2026: the text-only durable probe is gone; the turn itself is recovered by its receipt.
+  assert.ok(!ai.includes('askDurableChat('));
+  assert.ok(!ai.includes('durable:true'));
+  assert.ok(ai.includes("from('minds_chat_stream_delivery_receipts')"));
   assert.ok(!ai.includes('if(response.status===409)continue'));
   assert.doesNotThrow(()=>new Script(app,{filename:'app.js'}));
   assert.doesNotThrow(()=>new Script(ai,{filename:'ai.js'}));
@@ -73,10 +74,10 @@ test('90.8: Push diagnostic is explicitly requested, owner-scoped and rate-limit
 test('90.8: asset update is PWA-cache coherent',()=>{
   const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
   assert.ok(html.includes('app.js?v=146'));
-  assert.ok(html.includes('ai.js?v=59'));
+  assert.ok(html.includes('ai.js?v=60'));
   assert.ok(sw.includes('isabella-shell-v191'));
   assert.ok(sw.includes('app.js?v=146'));
-  assert.ok(sw.includes('ai.js?v=59'));
+  assert.ok(sw.includes('ai.js?v=60'));
 });
 
 test('90.8.1: fast observation cannot repeat or replace the background provider request',()=>{

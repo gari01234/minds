@@ -34,12 +34,8 @@ test('90.8.3: remote stale echo never removes locally established durable link',
 });
 
 test('90.8.3: read-only daily agenda can use durable lane but mutations cannot',()=>{
-  const code=ai.slice(ai.indexOf('function readOnlyDailyAgendaIntent('),ai.indexOf('async function ask(message,state,options={})'));
-  const eligible=new Function(code+'\nreturn readOnlyDailyAgendaIntent;')();
-  assert.equal(eligible('Dame una lista de lo que tengo para mañana, medio organizada porfa'),true);
-  assert.equal(eligible('Revísalo bien, mañana lunes tengo muchas tareas'),true);
-  assert.equal(eligible('Mueve mi cita de mañana al viernes'),false);
-  assert.equal(eligible('Agrega una tarea mañana'),false);
+  // 11.11.2026: the app no longer classifies a message by its words; every turn has the tools.
+  assert.ok(!ai.includes('function readOnlyDailyAgendaIntent('));
   assert.match(server,/tomorrow_tasks:tomorrowTasks\.slice\(0,80\)/);
   assert.match(server,/tomorrow_events:tomorrowEvents\.slice\(0,50\)/);
   assert.match(server,/readOnlyDailyAgendaIntent\(effectiveMessage\)&&canonicalAgenda\.status!=="ok"/);
@@ -57,7 +53,7 @@ test('90.8.3: menu reports current release and PWA pins all changed assets',()=>
   const sw=read('apps/isabella/sw.js');
   const shell=read('apps/isabella/shell.js');
   assert.match(shell,/id="currentBuildInfo"/);
-  for(const asset of ['app.js?v=146','ai.js?v=59','shell.js?v=110','sync.js?v=pwa40']){
+  for(const asset of ['app.js?v=146','ai.js?v=60','shell.js?v=110','sync.js?v=pwa40']){
     assert.ok(html.includes(asset));assert.ok(sw.includes(asset));
   }
   assert.ok(sw.includes('isabella-shell-v191'));

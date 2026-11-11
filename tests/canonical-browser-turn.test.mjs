@@ -66,7 +66,7 @@ test("browser stores server-scoped owner turn BEFORE model recall or provider-hi
 test("client uses one stable ID and never promotes an unknown scope to global",()=>{
   assert.match(app,/id:meta\.id\|\|uid\(\)/);
   assert.match(app,/id:durableRequestId\|\|undefined,attachments:copy,replyTo/);
-  assert.match(client,/fastRequestId:options\.durableRequestId\|\|options\.fastRequestId/);
+  assert.match(client,/client_message_id:options\.durableRequestId\|\|null/);
   assert.match(app,/const exposure=result\?\.exposure_scope\?\.version===1/);
   assert.doesNotMatch(app,/basis:'client_fallback'/);
   assert.match(read("apps/isabella/sync.js"),/const approved=\(messages\|\|\[\]\)\.filter\(scopedTurnReady\)/);
@@ -78,5 +78,6 @@ test("fast action results carry authenticated server provenance, not client fall
   assert.match(fast,/\.from\("isabella_projects"\)/);
   assert.match(fast,/if\(matches\.length!==1\)throw new Error\("fast_project_scope_ambiguous"\)/);
   assert.equal((fast.match(/streamed_reply:true,exposure_scope:exposureScope/g)||[]).length,3);
-  assert.match(client,/fastRequestId:options\.durableRequestId\|\|options\.fastRequestId/);
+  // The app stopped calling this function on 11.11.2026; it stays deployed for older open tabs.
+  assert.doesNotMatch(client,/isabella-fast-stream/);
 });

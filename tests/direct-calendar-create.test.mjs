@@ -59,8 +59,8 @@ test("server does not infer permission from shadow scores, memory or model prose
  assert.match(server,/direct_user_excerpt/);
 });
 test("direct tool lane retains reviewed behavior when permission is off",()=>{
- assert.match(client,/if\(calendarMode\?\.create_mode!=='direct'\)try/);
- assert.match(client,/askFastStream\(message,state/);
+ // 11.11.2026: the app does not pick a path from the preference or the wording; the server decides.
+ assert.doesNotMatch(client,/create_mode|askFastStream/);
  assert.match(server,/create_event:"confirm"/);
  assert.match(server,/update_task:"confirm"/);
  assert.match(server,/delete_event:"confirm"/);

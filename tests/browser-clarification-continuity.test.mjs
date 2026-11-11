@@ -76,7 +76,8 @@ test("actual browser UI carries canonical receipt, never an arbitrary cross-scop
  assert.match(app,/const candidate=pending\?\.version===1/);
  assert.match(app,/continuation:candidate/);
  assert.match(ai,/continuation:options\.continuation\|\|null/);
- assert.match(ai,/if\(!options\.continuation&&!options\.workThread/);
+ // 11.11.2026: there is no separate fast path any more; a continuation always reaches Isabella herself.
+ assert.doesNotMatch(ai,/isabella-fast-stream|fastCreateCandidate/);
  assert.doesNotMatch(ai.slice(ai.indexOf("async function ask(message,state"),ai.indexOf("async function brief(state")),/recent_local_conversation:.+slice\(-10000\)/);
 });
 test("client echo cannot overwrite a server owner turn's pending receipt",()=>{

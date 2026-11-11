@@ -50,8 +50,10 @@ test('Build 85.1 project scope is explicit and Work Threads remain exact isolate
 });
 
 test('Build 85.1 project task mutations do not bypass scoped Isabella via the fast path',()=>{
-  assert.ok(ai.includes('function messageMentionsKnownProject'));
-  assert.ok(ai.includes('!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)'));
+  // 11.11.2026: the app has no fast path at all, so nothing can bypass scoped Isabella.
+  assert.ok(!ai.includes('isabella-fast-stream'));
+  assert.ok(!ai.includes('fastCreateCandidate'));
+  assert.ok(ai.includes("sb.functions.invoke('isabella-chat'"));
 });
 
 

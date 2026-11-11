@@ -625,7 +625,7 @@ test('Build 41 exposes the new situational/productive architecture and fresh PWA
   assert.ok(index.includes('shell.js?v=110'));
   assert.ok(index.includes('app.js?v=146'));
   assert.ok(index.includes('sync.js?v=pwa40'));
-  assert.ok(index.includes('ai.js?v=59'));
+  assert.ok(index.includes('ai.js?v=60'));
   assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v191'"));
 });
 
@@ -1182,37 +1182,14 @@ test('Build 64 exposes latency-path observability for real production measuremen
 });
 
 
-test('Build 65 uses a strict one-round create gate before full Isabella',()=>{
+test('11.11.2026: the app has no word lists that decide where a message goes',()=>{
   const ai=read('apps/isabella/ai.js');
-  const start=ai.indexOf('function fastCreateCandidate');
-  const end=ai.indexOf('function parseFastSse',start);
-  assert.ok(start>0&&end>start);
-  const source=ai.slice(start,end);
-  const make=new Function(source+';return fastCreateCandidate;'),fast=make();
-  assert.equal(fast('Agrega para mañana comprar una calculadora'),true);
-  assert.equal(fast('Agrega para el lunes, proyecto Bernried, imprimir planos Wagner'),true);
-  assert.equal(fast('Pon lo de Wagner para el lunes'),false);
-  assert.equal(fast('Agrega la tarea si no choca con el Kick-off'),false);
-  assert.equal(fast('Mueve la tarea de Wagner al lunes'),false);
-  assert.ok(ai.includes("/functions/v1/isabella-fast-stream"));
-  assert.ok(ai.includes("Never fall through"));
-});
-
-test('Build 70 fast transport uses SSE and delegates authorized writes to the guarded database RPC',()=>{
-  const fast=read('supabase/functions/isabella-fast-stream/index.ts');
-  assert.ok(fast.includes('"Content-Type":"text/event-stream; charset=utf-8"'));
-  assert.ok(fast.includes('stream:true'));
-  assert.ok(fast.includes('response.function_call_arguments.delta'));
-  assert.ok(fast.includes('response.output_item.done'));
-  assert.ok(fast.includes('parallel_tool_calls:false'));
-  assert.ok(fast.includes('tool_choice:"required"'));
-  assert.ok(fast.includes('minds_admit_shadow_decision'));
-  assert.ok(fast.includes('pending_user_confirmation')===false);
-  assert.ok(!fast.includes('from("isabella_tasks").insert'));
-  assert.ok(!fast.includes("from('isabella_tasks').insert"));
-  assert.ok(!fast.includes('from("isabella_events").insert'));
-  assert.ok(!fast.includes("from('isabella_events').insert"));
-  assert.ok(fast.includes('name:"escalate_to_full_isabella"'));
+  for(const gone of ['function fastCreateCandidate','function needsCalendarAssessment','function readOnlyDailyAgendaIntent',
+    'function messageMentionsKnownProject','async function askFastStream','async function askDurableChat','async function askDirectStream',
+    '/functions/v1/isabella-fast-stream'])assert.ok(!ai.includes(gone),gone);
+  // No verb list survives in the chat client.
+  assert.doesNotMatch(ai,/agrega\|agregar\|añade/);
+  assert.ok(ai.includes("sb.functions.invoke('isabella-chat'"));
 });
 
 test('Build 65 streams useful acknowledgement without persisting partial chat text',()=>{
@@ -1221,8 +1198,7 @@ test('Build 65 streams useful acknowledgement without persisting partial chat te
   const app=read('apps/isabella/app.js');
   assert.ok(fast.includes('send("text_delta",{delta:"Entendido. "})'));
   assert.ok(fast.includes('streamed_reply:true'));
-  assert.ok(ai.includes("event?.type==='text_delta'"));
-  assert.ok(ai.includes('options.onTextDelta?.'));
+  assert.ok(ai.includes('onDelta:options.onTextDelta'));
   assert.ok(app.includes('function streamAssistantDelta'));
   assert.ok(app.includes("el.className='message assistant message-streaming'"));
   assert.ok(app.includes('clearAssistantStream();'));
@@ -1260,14 +1236,13 @@ test('Build 66 refuses streaming when tools or deep context may be required',()=
   assert.ok(chat.includes('name:"read_work_file"'));
 });
 
-test('Build 66 client tries text streaming before buffered Isabella and preserves fallback',()=>{
+test('11.11.2026: the client streams only the governed final round and keeps the buffered fallback',()=>{
   const ai=read('apps/isabella/ai.js');
-  assert.ok(ai.includes('async function askDirectStream'));
+  assert.ok(!ai.includes('async function askDirectStream'));
+  assert.ok(!ai.includes('stream:true'));
   assert.ok(ai.includes("Accept:'text/event-stream'"));
-  assert.ok(ai.includes('stream:true'));
-  assert.ok(ai.includes('if(response.status===409)'));
-  assert.ok(ai.includes("event?.type==='text_delta'"));
-  const stream=ai.indexOf('askDirectStream(message,state');
+  assert.ok(ai.includes("stream_mode:'final_round'"));
+  const stream=ai.indexOf("stream_mode:'final_round'");
   const buffered=ai.indexOf("sb.functions.invoke('isabella-chat'",stream);
   assert.ok(stream>0&&buffered>stream);
 });

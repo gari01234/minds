@@ -56,34 +56,20 @@ test('Build 70 recorder and permission errors fail closed without a fallback or 
     if(opts.recordError)assert.equal(f.calls.length,1);
   }
 });
-test('Build 83 a lost fast response retries once idempotently and never falls through to full Isabella',async()=>{
-  let requests=0,pulls=0,invokes=0,ids=[];
+test('11.11.2026: a creation phrased with a verb reaches Isabella herself, once, not a separate fast path',async()=>{
+  let fastRequests=0,invokes=0,bodies=[];
   const c=vm.createContext({console,Date,Intl,TextDecoder,URL,crypto:webcrypto,navigator:{language:'es'},window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'},
-    MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},functions:{invoke:()=>{invokes++;throw Error('Must not retry through full Isabella')}}},
-    ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},fetch:async(_url,opts)=>{requests++;ids.push(JSON.parse(opts.body).client_request_id);throw Error('lost response')}});
+    MINDS_SUPABASE:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})},
+      from:()=>{throw Error('The app must not read a preference to choose a path')},
+      functions:{invoke:async(name,{body})=>{invokes++;bodies.push({name,body});return {data:{reply:'ok',proposal:null,proposals:[]},error:null}}}}},
+    fetch:async()=>{fastRequests++;throw Error('No separate transport')}});
   vm.runInContext(read('apps/isabella/ai.js'),c);
-  await assert.rejects(c.window.ISABELLA_AI.ask('Agrega Comprar papel en Casa',{categories:[],projects:[],tasks:[],events:[],messages:[]}),/Perdí la conexión/);
-  assert.equal(requests,2);assert.equal(new Set(ids).size,1);assert.equal(invokes,0);assert.equal(pulls,1);
-});
-test('Build 83 incomplete SSE retries once, while a verified gate refusal can still fall back',async()=>{
-  const source=read('apps/isabella/ai.js');
-  {
-    let requests=0,pulls=0;
-    const c=vm.createContext({Response,TextDecoder,crypto:webcrypto,sb:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},
-      window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'},ISABELLA_SYNC_PULL_NOW:async()=>{pulls++}},compact:()=>({}),
-      fetch:async()=>{requests++;return new Response('event: status\ndata: {"type":"status"}\n\n')}});
-    vm.runInContext(source.slice(source.indexOf('function parseFastSse'),source.indexOf('async function askDirectStream')),c);
-    await assert.rejects(c.askFastStream('x',{}),/Perdí la conexión/);
-    assert.equal(requests,2);assert.equal(pulls,1);
-  }
-  {
-    let requests=0;
-    const c=vm.createContext({Response,TextDecoder,crypto:webcrypto,sb:{auth:{getSession:async()=>({data:{session:{access_token:'test'}}})}},
-      window:{MINDS_SUPABASE_CONFIG:{url:'https://test.invalid',publishableKey:'public'}},compact:()=>({}),
-      fetch:async()=>{requests++;return new Response('',{status:409})}});
-    vm.runInContext(source.slice(source.indexOf('function parseFastSse'),source.indexOf('async function askDirectStream')),c);
-    assert.equal(await c.askFastStream('x',{}),null);assert.equal(requests,1);
-  }
+  const result=await c.window.ISABELLA_AI.ask('Agrega Comprar papel en Casa',{categories:[],projects:[],tasks:[],events:[],messages:[]});
+  assert.equal(result.reply,'ok');
+  assert.equal(fastRequests,0);assert.equal(invokes,1);
+  assert.equal(bodies[0].name,'isabella-chat');
+  assert.equal(bodies[0].body.message,'Agrega Comprar papel en Casa');
+  assert.equal(bodies[0].body.surface,'chat_browser');
 });
 
 test('Build 83 fast server reuses the client request id for idempotent retries',async()=>{

@@ -10,7 +10,8 @@ const app=file('apps/isabella/app.js');
 test('90.5: weekly schedule assessment cannot use tool-free direct stream',()=>{
   // A conversational question about the next week needs the canonical search_calendar tool.
   // A compact agenda snapshot is not a substitute for a dated search.
-  assert.match(ai,/needsCalendarAssessment|calendarAssessmentIntent/,'Client must gate schedule assessments');
+  // 11.11.2026: the app never asks for the tool-free stream, so there is nothing to gate by wording.
+  assert.doesNotMatch(ai,/stream:true/,'Client must not request the tool-free direct stream');
   assert.match(edge,/calendarAssessmentIntent|scheduleAssessment/,'Server must reject direct stream for calendar assessments');
   assert.match(edge,/search_calendar/,'Canonical calendar search must remain available');
 });
@@ -29,14 +30,16 @@ test('90.5: a stream needs explicit successful terminal state before success',()
 });
 
 test('90.5: absence of terminal result cannot quietly start another generation',()=>{
-  const start=ai.indexOf('async function askDirectStream(');
-  const end=ai.indexOf('function messageMentionsKnownProject(',start);
+  // 11.11.2026: the direct stream is gone. The governed turn recovers its own result by receipt
+  // and fails loudly instead of sending the request again.
+  const start=ai.indexOf('async function ask(message,state,options={})');
+  const end=ai.indexOf('async function brief(state)',start);
   assert.ok(start>0&&end>start);
   const client=ai.slice(start,end);
-  assert.match(client,/missing_result_event|stream_interrupted|missing_completion|final_result_required/);
-  assert.match(client,/throw new Error\(String\(streamError\|\|transportError/,'A missing terminal event must fail instead of returning null');
-  assert.match(client,/if\(streamedText\.trim\(\)\)/,'Keep any received partial response');
-  assert.match(client,/if\(result\)return result/,'Only explicit terminal results count as full streaming receipts');
+  assert.ok(!ai.includes('async function askDirectStream('));
+  assert.match(client,/if\(data\?\.pending\)data=await recover\(\)/);
+  assert.match(client,/throw new Error\('No pude recuperar el resultado de este turno\.'\)/,'A missing result must fail instead of starting another generation');
+  assert.match(client,/NEVER re-submit the model or replay any action\/proposal/);
 });
 
 test('90.5: partial responses must be visible and never silently represented as complete',()=>{
@@ -55,21 +58,17 @@ test('90.5: Threads and Chat both persist partial status and require explicit co
 });
 
 test('90.5: exact reported weekly question requires calendar access on both sides',()=>{
-  const clientStart=ai.indexOf('function needsCalendarAssessment(');
-  const clientEnd=ai.indexOf('async function askDirectStream(',clientStart);
-  assert.ok(clientStart>=0&&clientEnd>clientStart);
-  const client=new Function(ai.slice(clientStart,clientEnd)+';return needsCalendarAssessment;')();
+  // The app no longer recognises questions by their wording (11.11.2026).
+  assert.ok(!ai.includes('function needsCalendarAssessment('));
   const serverStart=edge.indexOf('function calendarAssessmentIntent(');
   const serverEnd=edge.indexOf('function simpleAgendaMutation(',serverStart);
   assert.ok(serverStart>=0&&serverEnd>serverStart);
   const source=edge.slice(serverStart,serverEnd).replace('message:string','message');
   const server=new Function('normalizeText',source+';return calendarAssessmentIntent;')(s=>String(s||'').trim().toLowerCase());
   for(const question of ['que tal pinta la siguiente semana?','¿Cómo pinta la próxima semana?','Qué tengo el lunes?']){
-    assert.equal(client(question),true,'Client must recognize: '+question);
     assert.equal(server(question),true,'Server must recognize: '+question);
   }
   for(const smallTalk of ['Qué tal?', 'Cuéntame algo bonito']){
-    assert.equal(client(smallTalk),false);
     assert.equal(server(smallTalk),false);
   }
   assert.match(edge,/scheduleAssessment&&round===0\?\{tool_choice:\{type:"function",name:"search_calendar"\}\}/,'Schedule must force a canonical calendar lookup before evaluating the week');
