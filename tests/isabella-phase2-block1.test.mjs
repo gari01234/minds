@@ -48,7 +48,7 @@ test('Work core restores exact legacy documentary paragraphs while preserving ro
   const sizes=promptComponentSizes({instructions:s,context:{},input:[],tools:[]});
   assert.ok(sizes.instructions_chars<32000,'Work instructions exceed target');
   assert.ok(sizes.instructions_chars<original.length,'Work core is not cheaper than legacy template');
-  assert.equal(ISABELLA_CORE_VERSION,'isabella-core-v4');
+  assert.equal(ISABELLA_CORE_VERSION,'isabella-core-v5');
 });
 test('Work retains all source context but exposes only three central autobiographical pages',()=>{
   const fixture={routed_work_context:{sources:[{id:'fixture',status:'proposed'}]},
