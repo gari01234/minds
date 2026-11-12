@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {runInNewContext} from 'node:vm';
-import {exactOwnerTitle,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch}
+import {ownerAsked,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch}
   from '../supabase/functions/_shared/direct-calendar-contract.mjs';
 import {promptComponentSizes} from '../supabase/functions/_shared/light-conversation-context.mjs';
 
@@ -11,24 +11,24 @@ const server=read('supabase/functions/isabella-chat/index.ts');
 const client=read('apps/isabella/app.js');
 const migration=read('supabase/migrations/20261108101000_isabella_direct_calendar_safe_undo_v02.sql');
 
-test('Owner-only direct evidence is quoted, title-normalized and not supplied by retrieved content',()=>{
-  assert.equal(exactOwnerTitle('Anota: Revisar EL informe!','revisar el informe'),true);
-  assert.equal(exactOwnerTitle('Anota enviar informe','Preparar un diseño nuevo'),false);
-  assert.equal(directToolHistorySafe(['search_calendar','search_routines','create_task'],2),true);
-  assert.equal(directToolHistorySafe(['search_calendar','search_work','create_task'],2),false);
-  assert.equal(directToolHistorySafe(['create_task','search_memory','create_task'],1),false);
-  assert.equal(directToolHistorySafe(['search_calendar','search_memory','create_event'],2),true);
-  assert.equal(directToolHistorySafe(['web_search','create_event'],1),false);
-  assert.equal(directToolHistorySafe(['search_calendar','create_task'],100),false);
+// 11.11.2026 (Gari's step 4): the request must be the owner's; the title, day and hour may be read
+// from an attachment or the conversation. Reading his own things no longer blocks; outside text does.
+test('The request is the owner\'s own words; text from outside his material keeps the card',()=>{
+  assert.equal(ownerAsked('Anota: Revisar EL informe!','anota'),true);
+  assert.equal(ownerAsked('Anota enviar informe','Preparar un diseño nuevo'),false);
+  assert.equal(directToolHistorySafe(['search_calendar','search_routines','create_task']),true);
+  assert.equal(directToolHistorySafe(['search_calendar','search_work','create_task']),true);
+  assert.equal(directToolHistorySafe(['create_task','search_memory','create_task']),true);
+  assert.equal(directToolHistorySafe(['web_search','create_event']),false);
+  assert.equal(directToolHistorySafe(['consult_sofia','create_event']),false);
   const id='12345678-1234-4234-8234-123456789abc';
   assert.deepEqual(authorizedDirectBatch([{request_id:id,kind:'task',action:'create'}],[id],
     ['search_calendar','search_memory','create_task']).request_ids,[id]);
   assert.equal(authorizedDirectBatch([{request_id:id,kind:'task',action:'create'}],[id],
-    ['search_work','create_task']),null);
+    ['delegate_specialist','create_task']),null);
   assert.match(server,/direct_owner_source_tainted:/);
-  assert.match(server,/directHistorySafe&&!providerWebSeen|!routedSofia&&!providerWebSeen/);
-  assert.match(server,/ownerTexts\.some\(t=>exactOwnerTitle\(t,proposal\.title\)\)/);
-  assert.match(server,/directToolHistorySafe\(usedTools,roundStartedAt\)/);
+  assert.match(server,/!routedSofia&&!providerWebSeen&&directToolHistorySafe\(usedTools\)/);
+  assert.match(server,/ownerTexts\.some\(t=>ownerAsked\(t,quoted\)\)/);
 });
 test('60-minute fallback is server-generated only, with visible editable mark',()=>{
   const draft={kind:'event',action:'create',date:'2026-12-01',time:'10:00'};
@@ -152,28 +152,27 @@ test('Block 2 keeps existing instruction/context/input budget, with a small expl
   console.log('prompt_component_sizes_block2',JSON.stringify({before,after}));
 });
 
-// Review of PR #307 (08.11.2026): two things that already worked must keep working.
-test('Quotes are literal but not case-sensitive, in the code and in the SQL',async()=>{
-  const {exactOwnerExcerpt,exactFieldExcerpt}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
-  assert.equal(exactOwnerExcerpt('mañana a las 10 reunión con el equipo','Mañana a las 10 reunión'),true);
-  assert.equal(exactFieldExcerpt('Reunión MAÑANA a las 10','a las 10'),true);
-  assert.equal(exactFieldExcerpt('reunión a las 10','A LAS 10'),true);
-  assert.equal(exactOwnerExcerpt('mañana a las 10','mañana a las 11'),false,'still literal');
-  assert.equal(exactFieldExcerpt('a las 10','a'),false,'still a minimum length');
-  for(const s of ['position(lower(v_evidence) in lower(m.content))>0','position(lower(v_event_time_quote) in lower(m.content))>0',
-    'position(lower(v_event_duration_quote) in lower(m.content))>0'])assert.ok(migration.includes(s),s);
-  assert.doesNotMatch(migration,/position\(v_evidence in m\.content\)/);
+// Review of PR #307 (08.11.2026), kept after v03: a copied quote survives case and punctuation,
+// and it is still the owner's text, never a paraphrase.
+test('The request quote is compared without case or punctuation, in the code and in the SQL',async()=>{
+  const {ownerAsked}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
+  const v03=read('supabase/migrations/20261111230000_isabella_direct_create_owner_request_v03.sql');
+  assert.equal(ownerAsked('mañana a las 10 reunión con el equipo','Mañana a las 10 reunión'),true);
+  assert.equal(ownerAsked('Reunión MAÑANA, a las 10.','mañana a las 10'),true);
+  assert.equal(ownerAsked('mañana a las 10','mañana a las 11'),false,'still his words');
+  assert.equal(ownerAsked('a las 10','a'),false,'still a minimum length');
+  assert.match(v03,/lower\(coalesce\(v_decision\.context->>'direct_authorization_excerpt',''\)\),'\[\^\[:alnum:\] \]\+',' ','g'\)/);
+  assert.match(v03,/position\(v_evidence in btrim\(regexp_replace\(regexp_replace\(\s+lower\(m\.content\)/);
 });
 
 test('After «¿a qué hora?», the answer and the clarified message together authorize a direct creation',async()=>{
-  const {directOwnerTexts,exactOwnerExcerpt,exactFieldExcerpt}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
+  const {directOwnerTexts,ownerAsked}=await import('../supabase/functions/_shared/direct-calendar-contract.mjs');
   const continuation={source_message:'Agrega reunión con el Bauamt mañana',source_turn_id:'22222222-2222-4222-8222-222222222222'};
   const texts=directOwnerTexts(continuation,'A las 10');
   assert.deepEqual(texts,['Agrega reunión con el Bauamt mañana','A las 10']);
-  assert.ok(texts.some(t=>exactOwnerExcerpt(t,'agrega reunión con el Bauamt mañana')));
-  assert.ok(texts.some(t=>exactOwnerTitle(t,'Reunión con el Bauamt')));
-  assert.ok(texts.some(t=>exactFieldExcerpt(t,'a las 10')));
-  assert.equal(texts.some(t=>exactOwnerExcerpt(t,'mañana A las 10 con el Bauamt')),false,'a quote never spans two messages');
+  assert.ok(texts.some(t=>ownerAsked(t,'agrega reunión con el Bauamt mañana')));
+  assert.ok(texts.some(t=>ownerAsked(t,'a las 10')));
+  assert.equal(texts.some(t=>ownerAsked(t,'mañana A las 10 con el Bauamt')),false,'a quote never spans two messages');
   assert.deepEqual(directOwnerTexts(null,'Anota llamar a Ana'),['Anota llamar a Ana']);
   assert.deepEqual(directOwnerTexts({source_message:'  '},'x'),['x']);
   // The answering turn authorizes (Undo closes with the next message); the clarified one may hold the title.

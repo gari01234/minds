@@ -14,7 +14,7 @@ import {browserTurnId,canonicalBrowserOwnerRow,sameBrowserOwnerTurn} from "../_s
 import {chatTurnModel,documentModel} from "../_shared/chat-model-routing.mjs";
 const modelEnv=()=>({OPENAI_MODEL:Deno.env.get("OPENAI_MODEL"),OPENAI_DEEP_MODEL:Deno.env.get("OPENAI_DEEP_MODEL")});
 import {makeClarification,validStoredClarification,validContinuationToken,boundedContinuationEvidence} from "../_shared/browser-continuation.mjs";
-import {exactOwnerExcerpt,exactFieldExcerpt,exactOwnerTitle,directOwnerTexts,directToolHistorySafe,withDefaultEventDuration,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
+import {ownerAsked,directOwnerTexts,directToolHistorySafe,directCreatable,withDefaultEventDuration,authorizedDirectBatch} from "../_shared/direct-calendar-contract.mjs";
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
@@ -3295,8 +3295,7 @@ como cita literal de la orden de creación que dio el usuario si es explícita.
 Solo el servidor puede habilitar ejecución directa según permiso vigente.
 Las modificaciones y eliminaciones requieren confirmación en la interfaz:
 no digas "agregado", "actualizado" ni "lo corregí" antes de confirmarse.
-Mantén el proyecto explícito; no inventes horas ni fechas. Una creación directa
-de evento exige una hora citada en direct_event_time_excerpt. Si dijo duración u hora de fin, cítala en direct_event_duration_excerpt. Si no, omite la duración para aplicar una hora editable.
+Mantén el proyecto explícito; no inventes horas ni fechas. Si no dijo duración ni hora de fin, omite la duración para aplicar una hora editable.
 Si falta un dato esencial, pide aclaración. Cuando título, fecha, hora y duración de un evento están expresos y coherentes, llama create_event: no preguntes si te refieres a esos mismos valores. El servidor comprobará temporal_grounding y permisos. No consultes otros ámbitos.
 Si el usuario señala que una fecha de una tarea recién propuesta o creada
 está equivocada, identifica la tarea en los mensajes recientes y la agenda.
@@ -3764,53 +3763,48 @@ pregunta cuál.`;
         const reviewedProposal={...proposal,...(proposal.kind==="commitment"&&proposal.persistent_work?{skill_trace:normalizeSkillTrace(loadedSkillTrace),mission_request_id:crypto.randomUUID()}:{}),request_id:proposal.request_id||crypto.randomUUID()};
         let proposalForReview=reviewedProposal;
         let directAllowed=false;
+        // Events the new one would overlap: she is told, says so, and the owner can undo.
+        let directOverlaps:any[]=[];
         if(mode==="confirm"){
-          // Directness comes exclusively from this owner's current utterance
-          // or its server-verified pending clarification, never from retrieved text.
+          // «Deshacer en lugar de confirmar» (11.11.2026): an own task or timed event that the owner
+          // asked for in this turn is created at once and can be undone. The request must be the
+          // owner's (direct_user_excerpt points at his words, in this turn or in the turn a verified
+          // clarification answers); the title, day and hour may come from an attachment, the
+          // conversation or her own reading. Nothing retrieved can supply the request itself.
           const quoted=String(args?.direct_user_excerpt||"").trim();
-          // Work route prefetch is not independent owner authority. A real tool
-          // read outside the three allowlisted lookups always disqualifies direct creation.
-          const directHistorySafe=!routedSofia&&!providerWebSeen&&
-            directToolHistorySafe(usedTools,roundStartedAt);
-          // Owner words: this turn and, after a server-verified clarification, the turn it answers
-          // («agrega reunión con X mañana» → «¿a qué hora?» → «a las 10»). Each quote must sit whole
-          // inside one of them (review of PR #307).
+          // Text from outside the owner's material (web, Sofía, a specialist) keeps the card.
+          const directHistorySafe=!routedSofia&&!providerWebSeen&&directToolHistorySafe(usedTools);
           const ownerTexts=directOwnerTexts(verifiedContinuation,effectiveMessage);
-          const explicitTime=call.name!=="create_event"||
-            ownerTexts.some(t=>exactFieldExcerpt(t,args?.direct_event_time_excerpt));
-          const explicitDuration=call.name!=="create_event"||
-            (proposal.duration_defaulted===true&&proposal.duration_minutes===60&&!String(args?.direct_event_duration_excerpt||"").trim())||
-            ownerTexts.some(t=>exactFieldExcerpt(t,args?.direct_event_duration_excerpt));
-          if(surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread&&!background&&!attachments.length&&
-             // No review card here: the date must be quoted from the owner's own words.
-             (calendarGrounding.kind!=="verified"||calendarGrounding.ownerEvidence===true||calendarGrounding.basis==="undated_or_unchanged")&&
+          if(surface==="chat_browser"&&!voiceDelegation&&!currentWorkThread&&!background&&
              directHistorySafe&&["create_task","create_event"].includes(String(call.name))&&
-             ownerTexts.some(t=>exactOwnerExcerpt(t,quoted))&&ownerTexts.some(t=>exactOwnerTitle(t,proposal.title))&&
-             explicitTime&&explicitDuration&&
+             directCreatable(proposal)&&ownerTexts.some(t=>ownerAsked(t,quoted))&&
              browserTurnId(clientMessageId)){
             const prefClient=supabaseClient(req);
             const pref=prefClient?await prefClient.from("minds_calendar_execution_preferences")
               .select("create_mode").eq("user_id",(await prefClient.auth.getUser()).data.user?.id||"").maybeSingle():null;
-            directAllowed=!pref?.error&&pref?.data?.create_mode==="direct";
+            // Creating with Undo is the default; «confirmar antes de crear» in the permissions turns it off.
+            directAllowed=!!pref&&!pref.error&&pref.data?.create_mode!=="review";
+            if(directAllowed&&proposal.kind==="event"&&prefClient){
+              const overlap=await prefClient.rpc("minds_direct_event_overlap_v01",{p_date:proposal.date,p_time:proposal.time,
+                p_duration_minutes:Number(proposal.duration_minutes),p_timezone:temporal.timezone});
+              if(!overlap.error&&Array.isArray(overlap.data))directOverlaps=overlap.data.slice(0,5);
+            }
           }
           const admission=await recordShadowDecision(req,String(call.name||""),reviewedProposal,{
             run_id:run?.id||null,conversation_id:conversationInfo.id||null,project:route.project||null,
             source_tainted:sourceTainted,round,background:!!background,
-            // Separate source provenance from authority: direct uses current owner quotes.
-            direct_owner_source_tainted:!(!routedSofia&&!providerWebSeen&&directToolHistorySafe(usedTools,roundStartedAt)),
+            // Separate source provenance from authority: the request is the owner's own words.
+            direct_owner_source_tainted:!(!routedSofia&&!providerWebSeen&&directToolHistorySafe(usedTools)),
             ...(calendarGrounding.kind==="verified"?{temporal_basis:calendarGrounding.basis,temporal_evidence:calendarGrounding.evidence||null,server_local_date:temporal.current_date}:{}),
-            ...(directAllowed?{direct_calendar_authority:"explicit_owner_v1",
+            ...(directAllowed?{direct_calendar_authority:"owner_request_v2",
                direct_authorization_excerpt:quoted,
                // The answering turn authorizes (Undo closes with the next utterance after it);
                // the clarified turn may hold the title (verified by the server, never by the model).
                direct_authorization_turn_id:clientMessageId,
                ...(verifiedContinuation?.source_turn_id&&browserTurnId(verifiedContinuation.source_turn_id)?{direct_source_turn_id:verifiedContinuation.source_turn_id}:{}),
                direct_timezone:temporal.timezone,
-               ...(call.name==="create_event"?{
-                 direct_event_time_excerpt:String(args?.direct_event_time_excerpt||"").trim(),
-                 direct_event_duration_excerpt:String(args?.direct_event_duration_excerpt||"").trim(),
-                  direct_duration_defaulted:proposal.duration_defaulted===true
-               }: {})}: {})
+               ...(call.name==="create_event"?{direct_duration_defaulted:proposal.duration_defaulted===true}:{}),
+               ...(calendarGrounding.kind==="verified"?{direct_date_from_owner_words:calendarGrounding.ownerEvidence===true}:{})}: {})
           });
           if(admission?.status==="suppressed"){
             outputs.push({type:"function_call_output",call_id:call.call_id,output:JSON.stringify({
@@ -3836,8 +3830,10 @@ pregunta cuál.`;
           request_id:proposalForReview.request_id||null,
           // Step 7: her final words are shown next to the app's line, so she must know what is true.
           note:directAuthorizedIds.includes(String(proposalForReview.request_id))
-            ?"La app lo guarda ahora y lo confirma con su propia línea; no repitas los datos."
-            :"Todavía no está aplicado: Gari lo confirma en la tarjeta. No digas que está hecho."
+            ?"La app lo guarda ahora, lo confirma con su propia línea y deja «Deshacer» unos minutos; no repitas los datos."+
+              (directOverlaps.length?" Se solapa con lo que ya hay en overlaps: dilo en una frase.":"")
+            :"Todavía no está aplicado: Gari lo confirma en la tarjeta. No digas que está hecho.",
+          ...(directOverlaps.length&&directAuthorizedIds.includes(String(proposalForReview.request_id))?{overlaps:directOverlaps}:{})
         })});
       }else if(call.name==="read_contextual_autonomy"){
         const sb=supabaseClient(req);

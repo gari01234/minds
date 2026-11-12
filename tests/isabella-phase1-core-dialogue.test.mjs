@@ -53,7 +53,7 @@ test('Step 6: the core keeps the guarantees that matter and drops procedure talk
   assert.doesNotMatch(core,/«Listo/);
   assert.doesNotMatch(core,/sin fingir humanidad ni emociones/);
   const agenda=capabilityNotes(toolNamesOf([fn('create_task')])).join('\n');
-  for(const must of ['temporal_grounding','direct_user_excerpt','siempre pasa por su confirmación','una sola intención'])assert.ok(agenda.includes(must),must);
+  for(const must of ['temporal_grounding','direct_user_excerpt','pasa siempre por su confirmación','una sola intención','«Deshacer»'])assert.ok(agenda.includes(must),must);
   const memory=capabilityNotes(toolNamesOf([fn('remember_information')])).join('\n');
   assert.match(memory,/salud, diagnósticos, religión, política, sexualidad, finanzas/);
 });
@@ -266,6 +266,8 @@ test('11.11.2026: she reads attachments like a person and proposes instead of as
   const core=isabellaCoreInstructions({tools:ALL_TOOLS,light:true});
   assert.match(core,/LO QUE GARI TE ENSEÑA/);
   assert.match(core,/No pidas que te repita o te escriba lo que ya tienes delante\./);
-  assert.match(core,/Propón lo que entendiste aunque el día o la hora vengan de un adjunto/);
+  // 11.11.2026 (step 4): what he asks for is created with Undo; details may come from the attachment.
+  assert.match(core,/El título, el día y la hora no tienen que estar escritos en su mensaje: pueden venir de un adjunto/);
+  assert.match(core,/Lo que se te ocurre a ti, o lo que no estás segura de que haya pedido, va sin direct_user_excerpt/);
   assert.doesNotMatch(core,/cita literal del turno, offset_days/);
 });

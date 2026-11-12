@@ -4211,13 +4211,14 @@ async function contextualAutonomyPanel(){
       sb.from('minds_calendar_execution_preferences').select('create_mode').maybeSingle()
     ]);
     if(error||calendarError)throw error||calendarError;
-    const directCalendar=calendarPref?.create_mode==='direct';
+    // 11.11.2026: crear con «Deshacer» es lo normal; solo una elección explícita de revisar lo apaga.
+    const directCalendar=calendarPref?.create_mode!=='review';
     const directCalendarHTML='<div class="human-permission-case"><div class="human-case-title">Crear tareas y eventos desde el chat</div>'+
-      '<div class="human-state tone-complete"><b>'+(directCalendar?'Ejecución directa activada':'Confirmación previa activada')+'</b>'+
-      '<p>'+(directCalendar?'Cuando tú pidas explícitamente crear algo, Isabella lo guardará y comprobará antes de informarte. Si falta información, la pedirá.':'Isabella seguirá mostrando propuestas para que las apruebes.')+
-      ' Los cambios y las eliminaciones siguen necesitando revisión.</p></div>'+
+      '<div class="human-state tone-complete"><b>'+(directCalendar?'Crea al momento, con «Deshacer»':'Confirmación previa activada')+'</b>'+
+      '<p>'+(directCalendar?'Cuando le pidas apuntar una tarea o una cita tuya, Isabella la crea al momento y te deja «Deshacer» durante 10 minutos. Lo que se le ocurra a ella te lo propone con tarjeta.':'Isabella te mostrará una tarjeta antes de crear cualquier tarea o cita.')+
+      ' Cambiar, mover o borrar sigue pasando por tu confirmación.</p></div>'+
       '<button type="button" id="calendarCreationMode" class="secondary">'+
-      (directCalendar?'Volver a confirmar antes de crear':'Permitir creación directa')+'</button></div>';
+      (directCalendar?'Volver a confirmar antes de crear':'Crear al momento con «Deshacer»')+'</button></div>';
     const units=data?.units||[],permissions=data?.permissions||[];
     const candidates=data?.post_action_candidates||[],outcomeFeedback=data?.outcome_feedback||[];
     const pendingCorrections=candidates.filter(x=>x.status==='pending');

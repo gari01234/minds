@@ -11,15 +11,13 @@ export const CALENDAR_TOOLS = [
   {
     type: "function",
     name: "create_event",
-    description: "Propose creating an event. If the owner supplied a clock time but no duration, OMIT duration_minutes: the server defaults to 60 min and the UI marks it editable. Otherwise use the stated duration. Direct creation requires an exact owner quote and the owner direct-create preference; other mutations require review.",
+    description: "Create an event in the owner's calendar. When the owner asked for it in this turn (in any wording, also «sí» to your own suggestion), set direct_user_excerpt to his words: the app saves it at once and shows Undo for a few minutes. Title, day and hour may come from an attachment, the conversation or your own reading of it; say in half a sentence what you inferred when it is not obvious. Without direct_user_excerpt (your own idea, or you are not sure he asked), and for all-day or recurring events, it goes to a review card. If there is a clock time but no duration, OMIT duration_minutes: the server defaults to 60 min and the UI marks it editable.",
     strict: false,
     parameters: { type: "object", properties: {
       title:{type:"string"}, date:{type:"string"}, time:{type:"string"}, duration_minutes:{type:"number"},
        temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}},
       all_day:{type:"boolean"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
-      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of the user's instruction explicitly requesting this event."},
-      direct_event_time_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event clock time, NOT inferred."},
-      direct_event_duration_excerpt:{type:"string",description:"Exact short quote from the user explicitly specifying event duration, NOT a default."}
+      direct_user_excerpt:{type:"string",description:"The owner's own words, from this turn, that ask for this event (copied as written, e.g. «agrega este Termin», «sí, apúntalo»). Omit when he did not ask for it."}
     }, required:["title","date","time"] }
   },
   {
@@ -44,12 +42,12 @@ export const CALENDAR_TOOLS = [
   {
     type: "function",
     name: "create_task",
-    description: "Propose creating one task. The date is OPTIONAL. If the user knows something must be done but has no date yet, omit date and create it as an undated task; do not force an arbitrary day. reminder_time only makes sense when a date exists.",
+    description: "Create one task. When the owner asked for it in this turn (in any wording, also «sí» to your own suggestion), set direct_user_excerpt to his words: the app saves it at once and shows Undo for a few minutes; without it (your own idea, or you are not sure he asked) it goes to a review card. The date is OPTIONAL. If the user knows something must be done but has no date yet, omit date and create it as an undated task; do not force an arbitrary day. reminder_time only makes sense when a date exists.",
     strict: false,
     parameters: { type:"object", properties:{
       title:{type:"string"}, date:{type:"string",description:"Optional YYYY-MM-DD. Omit for an undated task."},
        temporal_grounding:{type:"object",description:"Semantic grounding for the proposed calendar date. Interpret the user's phrasing, do not use a keyword lookup. When date is provided, include mode:absolute or relative, source_excerpt with the words the date comes from (the user's request when it is there; otherwise the attached file or image, an earlier turn or the context you inferred it from, with mode:absolute and the resolved date), offset_days ONLY for relative (today=0, tomorrow=1, day after tomorrow=2), and weekday 0=Sunday..6=Saturday if the user explicitly named one. The server checks weekday and relative date arithmetic; the owner reviews the proposal. Do not invent a weekday. Propose what you understood; ask only when the date is genuinely ambiguous.",properties:{mode:{type:"string",enum:["absolute","relative"]},source_excerpt:{type:"string"},offset_days:{type:"integer"},weekday:{type:"integer"}}}, reminder_time:{type:"string"}, category:{type:"string"}, project:{type:"string"}, recurrence:{type:"string"}, notes:{type:"string"},
-      direct_user_excerpt:{type:"string",description:"Verbatim excerpt of Gari’s CURRENT explicit instruction to create this item, or the verified pending-clarification source. Omit unless genuinely explicitly requested."}
+      direct_user_excerpt:{type:"string",description:"The owner's own words, from this turn, that ask for this task (copied as written, e.g. «ponme una tarea para eso», «sí»). Omit when he did not ask for it."}
     }, required:["title"] }
   },
   {
