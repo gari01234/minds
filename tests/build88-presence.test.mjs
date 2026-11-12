@@ -36,7 +36,7 @@ test('Build 88.1 Presence carries the exact revision the user saw',()=>{
 
 test('Build 88.1 rejects stale Presence replies before model routing or reasoning',()=>{
   const validateAt=chat.indexOf('minds_validate_presence_reply_v01');
-  const routeAt=chat.indexOf('const route=await routeRequest');
+  const routeAt=chat.indexOf('const route=ownMode?await ownRoute(req,effectiveMessage):await routeRequest(');
   const runAt=chat.indexOf('const run=activeRun=await startAgentRun');
   assert.ok(validateAt>0);
   assert.ok(routeAt>validateAt);

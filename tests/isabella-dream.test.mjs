@@ -133,7 +133,7 @@ test('Chat turns see a small consolidated memory (global turns only) and the pan
   assert.deepEqual(v.paginas.map(p=>[p.tipo,p.nombre,p.resumen.length]),[['gari','Gari',701],['persona','Ana',301]]);
   assert.deepEqual(v.hilos.map(h=>h.id),['q1'],'expired thread not offered');
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.match(chat,/const consolidatedPending=!background&&\(\(!currentWorkThread&&exposureScope\.kind==="global"\)\|\|workCoreEligible\)\?early\.memory:Promise\.resolve\(null\);/);
+  assert.match(chat,/const consolidatedPending=ownMode\|\|\(!background&&\(\(!currentWorkThread&&exposureScope\.kind==="global"\)\|\|workCoreEligible\)\)\?early\.memory:Promise\.resolve\(null\);/);
   assert.match(chat,/memoria_de_isabella:consolidated,/);
   assert.match(chat,/MEMORIA CONSOLIDADA:\n/);
   assert.match(chat,/Sácalas solo cuando haya una apertura natural/);

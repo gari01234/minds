@@ -33,8 +33,8 @@ test("only automatic Work prefetch skips expensive governed Project Model RPC",(
  assert.match(edge,/sourceFirstWorkPrefetchEligible\(\{route,message:effectiveMessage/);
  assert.match(edge,/args\?\._deferProjectModel\?Promise.resolve\(\{data:null,error:null\}\):sb\.rpc\("minds_project_model_snapshot"/);
  assert.match(edge,/_deferProjectModel:sourceFirstWorkPrefetch,_admitSourceRows:/);
- assert.match(edge,/project_model:args\?\._deferProjectModel\?deferredSourceFirstProjectModel\(\):projectModel\|\|null/);
- assert.match(edge,/work_project_model_prefetch=sourceFirstWorkPrefetch\?"deferred_source_first":"full"/);
+ assert.match(edge,/project_model:args\?\._deferProjectModel\?\(args\?\._projectModelNote\|\|deferredSourceFirstProjectModel\(\)\):projectModel\|\|null/);
+ assert.match(edge,/work_project_model_prefetch=ownMode\?"on_demand":sourceFirstWorkPrefetch\?"deferred_source_first":"full"/);
  assert.match(edge,/name:"find_work_occurrences"/);
  assert.match(edge,/name:"browse_work_sources"/);
 });

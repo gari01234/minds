@@ -41,7 +41,10 @@ test('Isabella chat decides once per turn and reads documents with the document 
   assert.match(chat,/const turnModel=chatTurnModel\(\{complexity:route\.complexity,depth:budget\.depth,workThread:!!currentWorkThread,background,env:modelEnv\(\)\}\);/);
   // The decision comes after the last budget change, before the turn starts.
   assert.ok(chat.indexOf('const turnModel=')>chat.indexOf('maxOutput:Math.max(budget.maxOutput,responseContinuation?6200:4400)'));
-  assert.equal((chat.match(/const model=turnModel\.model;/g)||[]).length,3,'durable start, direct stream and the main loop');
+  assert.equal((chat.match(/const model=turnModel\.model;/g)||[]).length,2,'durable start and direct stream');
+  // The main loop can move to the deeper model when she asks for it (think_deeper, 11.11.2026).
+  assert.match(chat,/let model=turnModel\.model;/);
+  assert.match(chat,/deeperModel=chatTurnModel\(\{complexity:"deep",depth:"deep",workThread:!!currentWorkThread,background:false,env:modelEnv\(\)\}\);/);
   assert.match(chat,/exposure_scope:exposureScope,model:turnModel\.model,/);
   for(const fn of ['compareProjectSource','analyzeProjectSource','readWorkFile']){
     const body=chat.slice(chat.indexOf(`async function ${fn}(`));

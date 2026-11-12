@@ -53,7 +53,7 @@ test('The radar reads with the caller\'s client and never breaks a turn',async()
 });
 
 test('Global turns carry the radar (core and light); Work routes keep their own context',()=>{
-  assert.match(chat,/const radarPending=isabellaCoreEligible&&exposureScope\.kind==="global"\?early\.radar:Promise/);
+  assert.match(chat,/const radarPending=ownMode\|\|\(isabellaCoreEligible&&exposureScope\.kind==="global"\)\?early\.radar:Promise/);
   assert.match(chat,/radar_work:radar,/);
   const radar={proyectos:[{proyecto:'Bernried'}]};
   assert.deepEqual(coreConversationContext({radar_work:radar}).radar_work,radar);
@@ -91,7 +91,7 @@ test('Capability: the original detailed guidance returns when the turn needs it'
   assert.doesNotMatch(CORE_DETAILS.continuity,/No finjas emociones/,'no contradiction with the relationship contract');
   const deep=isabellaCoreInstructions({relationship:'R',route:{complexity:'deep'}});
   assert.match(deep,/DETALLE PARA ESTE TURNO/);
-  assert.match(chat,/scheduleAssessment,light:leanSurface,route,context:resolvedContext\}\)/);
+  assert.match(chat,/scheduleAssessment,light:leanSurface,route,context:resolvedContext,details:detailsMode\}\)/);
   // Context back to the full tier's sizes, compact.
   const big=n=>Array.from({length:n},(_,i)=>({id:i,claim:'c'}));
   assert.equal(coreConversationContext({personal_model_claims:big(40)}).personal_model_claims.length,32);
