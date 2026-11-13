@@ -209,7 +209,10 @@ if (dry) {
       for (let i = 0; i < repeat; i++) {
         try {
           const turn = await playTurn(scenario, arm, key);
-          plays.push({ ...scoreTurn(scenario, turn), calls: turn.calls.map((c) => c.name), deep: turn.deep,
+          plays.push({ ...scoreTurn(scenario, turn), calls: turn.calls.map((c) => c.name),
+            // What she did and said, kept so a failure can be read instead of guessed.
+            trace: turn.calls.map((c) => ({ name: c.name, args: trimArgs(c.args) })),
+            said: String(turn.text || "").slice(0, 1200), deep: turn.deep,
             rounds: turn.rounds, latency_ms: turn.latency_ms, usage: turn.usage,
             prompt: { instructions: turn.instructions_chars, context: turn.context_chars, tools: turn.tools_chars } });
         } catch (e) {
@@ -224,8 +227,11 @@ if (dry) {
       }
       const failed = new Map();
       for (const p of plays) for (const c of p.checks || []) if (!c.ok) failed.set(c.name, (failed.get(c.name) || 0) + 1);
+      const worst = plays.find((p) => !p.pass) || plays[0];
       rows.push({
         id: scenario.id, about: scenario.about,
+        // Only a play that did not pass is kept in full: that is the one worth reading.
+        ...(worst && !worst.pass ? { failed_play: { trace: worst.trace, said: worst.said, deep: worst.deep } } : {}),
         pass_all: plays.every((p) => p.pass), passes: plays.filter((p) => p.pass).length, of: plays.length,
         failed_checks: [...failed].map(([name, times]) => ({ name, times })),
         errors: plays.filter((p) => p.error).map((p) => p.error),
@@ -269,6 +275,15 @@ function writeReport() {
   const json = JSON.stringify(report, null, 2);
   if (output) { mkdirSync(output.replace(/\/[^/]+$/, ""), { recursive: true }); writeFileSync(output, json + "\n"); }
   process.stdout.write(json + "\n");
+}
+
+/** Arguments, short enough to read in a report. */
+function trimArgs(args) {
+  const out = {};
+  for (const [k, v] of Object.entries(args || {})) {
+    out[k] = typeof v === "string" ? v.slice(0, 160) : v;
+  }
+  return out;
 }
 
 function avg(xs) { const v = xs.filter((x) => Number.isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
