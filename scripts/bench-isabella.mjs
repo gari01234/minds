@@ -102,7 +102,10 @@ async function call(body, key) {
     if (res.ok) return res.json();
     if (![429, 500, 502, 503, 504].includes(res.status)) {
       const text = await res.text();
-      throw new Error("provider_" + res.status + ": " + text.slice(0, 300));
+      const error = new Error("provider_" + res.status + ": " + text.slice(0, 300));
+      // A key that is missing, expired or refused is not a result about her: stop, do not report.
+      if ([401, 403].includes(res.status)) error.fatal = true;
+      throw error;
     }
     await sleep(1500 * (attempt + 1) ** 2);
   }
@@ -209,7 +212,15 @@ if (dry) {
           plays.push({ ...scoreTurn(scenario, turn), calls: turn.calls.map((c) => c.name), deep: turn.deep,
             rounds: turn.rounds, latency_ms: turn.latency_ms, usage: turn.usage,
             prompt: { instructions: turn.instructions_chars, context: turn.context_chars, tools: turn.tools_chars } });
-        } catch (e) { plays.push({ pass: false, checks: [], error: String(e.message || e).slice(0, 200) }); }
+        } catch (e) {
+          if (e?.fatal) {
+            process.stderr.write("\n" + e.message + "\n");
+            report.error = "provider_rejected_the_bench_key";
+            report.error_detail = String(e.message || e).slice(0, 300);
+            writeReport(); process.exit(2);
+          }
+          plays.push({ pass: false, checks: [], error: String(e.message || e).slice(0, 200) });
+        }
       }
       const failed = new Map();
       for (const p of plays) for (const c of p.checks || []) if (!c.ok) failed.set(c.name, (failed.get(c.name) || 0) + 1);
@@ -226,8 +237,10 @@ if (dry) {
       });
       process.stderr.write((rows.at(-1).pass_all ? "·" : "x"));
     }
+    const errored = rows.filter((r) => r.errors.length).map((r) => r.id);
+    if (errored.length) { report.errored = [...(report.errored || []), ...errored]; process.exitCode = 1; }
     report.results[arm] = {
-      cases: rows,
+      cases: rows, errored,
       pass_rate: rows.filter((r) => r.pass_all).length / (rows.length || 1),
       median_latency_ms: median(rows.map((r) => r.median_latency_ms)),
       mean_input_tokens: Math.round(avg(rows.map((r) => r.input_tokens))),
@@ -252,9 +265,13 @@ if (dry) {
   }
 }
 
+function writeReport() {
+  const json = JSON.stringify(report, null, 2);
+  if (output) { mkdirSync(output.replace(/\/[^/]+$/, ""), { recursive: true }); writeFileSync(output, json + "\n"); }
+  process.stdout.write(json + "\n");
+}
+
 function avg(xs) { const v = xs.filter((x) => Number.isFinite(x)); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : 0; }
 function median(xs) { const v = xs.filter((x) => Number.isFinite(x)).sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 0; }
 
-const json = JSON.stringify(report, null, 2);
-if (output) { mkdirSync(output.replace(/\/[^/]+$/, ""), { recursive: true }); writeFileSync(output, json + "\n"); }
-process.stdout.write(json + "\n");
+writeReport();
