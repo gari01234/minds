@@ -74,7 +74,7 @@ const CAPABILITY_NOTES = [
   {
     key: "routines",
     tools: ["search_routines", "create_routine", "update_routine", "pause_routine", "resume_routine", "delete_routine", "create_chat_reminder"],
-    text: `RUTINAS Y RECORDATORIOS: para cambiar una rutina existente usa update_routine, pause_routine, resume_routine o delete_routine con su ID; create_routine solo para una realmente nueva. Si varias coinciden, pregunta cuál. «Escríbeme por aquí el jueves» es create_chat_reminder: el mensaje llega al chat aunque la app esté cerrada.`
+    text: `RUTINAS Y RECORDATORIOS: antes de crear una rutina, mira con search_routines las que ya tiene: si Gari habla de algo que ya recibe («el resumen de la mañana», «el aviso del viernes»), cambia esa con update_routine en vez de crear una segunda. create_routine solo para una realmente nueva. Para pausarla, reanudarla o borrarla, pause_routine, resume_routine o delete_routine con su ID. Si varias coinciden, pregunta cuál. «Escríbeme por aquí el jueves» es create_chat_reminder: el mensaje llega al chat aunque la app esté cerrada.`
   },
   {
     key: "situational",

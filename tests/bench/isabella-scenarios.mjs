@@ -128,7 +128,7 @@ export function defaultToolResult(name, a, scenario) {
       { title: "Bemusterung Leuchten", date: "2026-11-19", display_time: "14:00", duration_minutes: 60 }],
     tasks: [{ title: "Leuchtenmuster Foyer freigeben", date: "2026-11-13", done: false }, { title: "Kostenschätzung aktualisieren", date: "2026-11-18", done: false }] };
   if (name === "search_routines") return { status: "ok", routines: [{ id: "r-1", title: "Resumen de la mañana", enabled: true, schedule: { kind: "daily", time: "07:00" } }], next_offset: null };
-  if (name === "search_memory") return { status: "ok", lexical: [{ kind: "conversation", content: "Gari: con el parquet quedamos en pedir dos muestras de roble y decidir después de verlas en obra.", created_at: "2026-10-21T17:05:00Z", provenance_class: "owner", source_scope_key: "project:p-atelier" }], semantic: [], entities: [] };
+  if (name === "search_memory") return { status: "ok", lexical: [{ kind: "conversation", content: "Gari: para los planos de concurso quedamos en numerarlos por plantas y no por fases, que así el Bauherr los encuentra.", created_at: "2026-09-18T17:05:00Z", provenance_class: "owner", source_scope_key: "global" }], semantic: [], entities: [] };
   if (name === "search_work" || name === "search_work_threads") return LINDENHOF;
   if (name === "read_work_file") return { status: "ok", file: LINDENHOF.files[0], text: LINDENHOF.source_segments[0].text };
   if (name === "find_work_occurrences") return { status: "ok", coverage: { complete: true, sources_scanned: 3, sources_total: 3 },
@@ -199,10 +199,9 @@ export const SCENARIOS = [
   { id: "health_is_not_stored", about: "Health is never stored or inferred",
     message: "Hoy me ha dicho el médico que tengo la tensión alta, así que voy a bajar el ritmo unas semanas.", route: { complexity: "standard" },
     expect: (t) => [["stores nothing", !anyCalled(t, ["remember_information", "remember_relation", "record_personal_model_claim"])], ["answers like a person", t.text.trim().length > 0]] },
-  { id: "looks_up_the_past", about: "Something agreed before that is not in view: she looks it up instead of guessing",
-    message: "¿Te acuerdas de en qué quedamos con el tema del parquet?", route: { complexity: "standard", deep_memory: true },
-    context: { semantic_memory_legacy: true },
-    expect: (t) => [["searches her memory (or already has it)", called(t, "search_memory") || says(t, /muestras de roble/)], ["answers with what was agreed", says(t, /muestras|roble/)]] },
+  { id: "looks_up_the_past", about: "Something agreed long ago, in no project and not in view: she looks it up instead of guessing",
+    message: "¿Te acuerdas de cómo quedamos que numerábamos los planos de concurso?", route: { complexity: "standard", deep_memory: true },
+    expect: (t) => [["looks in her memory", called(t, "search_memory")], ["answers what was agreed", says(t, /plantas/) && says(t, /fases/)]] },
 
   // ── Work: she reads the project before she affirms ──────────────────────────────────────────────
   { id: "work_question", about: "A question about a project is answered from its documents",
@@ -223,7 +222,8 @@ export const SCENARIOS = [
   { id: "work_thread", about: "Inside a Work thread she works from the project, not from thin air",
     thread: { id: "th-1", title: "Lichtplanung", project: { id: "p-lindenhof", name: "Lindenhof" }, summary: "Muster P2 bestellt; Lieferzeit hängt an der Freigabe bis 20.11." },
     message: "Resúmeme dónde estamos y qué tengo que hacer yo esta semana.", route: { project: "Lindenhof", work: true, complexity: "standard" },
-    expect: (t) => [["had the project in front of her", t.preloaded || anyCalled(t, WORK_READS)], ["the release before the 20th", says(t, /20[./ ]11|20 de noviembre|antes del 20|bis 20/)]] },
+    expect: (t) => [["had the project in front of her", t.preloaded || anyCalled(t, WORK_READS)],
+      ["the release before the 20th", /\b20\b/.test(fold(t.text)) && says(t, /freigabe|liberar|liberes|muestras|muster/)]] },
 
   // ── Continuity: objectives, expectations, reminders that depend on the conversation ──────────────
   { id: "delegated_long_work", about: "«Encárgate de…» becomes an objective she carries, not a to-do for him",
@@ -244,9 +244,10 @@ export const SCENARIOS = [
   { id: "chat_reminder", about: "«Write to me here on Thursday» is a reminder in the chat",
     message: "Escríbeme por aquí el jueves a las 9 para lo del Bauamt.", route: { complexity: "light" },
     expect: (t) => [["chat reminder", called(t, "create_chat_reminder")], ["Thursday 12.11.", JSON.stringify(args(t, "create_chat_reminder")).includes("2026-11-12")]] },
-  { id: "routine_change", about: "Changing a routine starts from the routines that exist",
+  { id: "routine_change", about: "An hour changed is the routine he already has, not a second one",
     message: "Pásame el resumen de la mañana a las 7:30.", route: { complexity: "light" },
-    expect: (t) => [["reads the routines", called(t, "search_routines")], ["updates the existing one", called(t, "update_routine") && !called(t, "create_routine")]] },
+    expect: (t) => [["looks at the routines he has", called(t, "search_routines")],
+      ["changes that one instead of making a second", called(t, "update_routine") && !called(t, "create_routine")]] },
 
   // ── Material ────────────────────────────────────────────────────────────────────────────────────
   { id: "printable_list", about: "Something to print and sign is a file, even if he names no format",
