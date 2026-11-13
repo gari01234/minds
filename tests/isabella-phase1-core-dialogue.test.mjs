@@ -31,9 +31,11 @@ test('Step 6: light and standard turns stay well under the full prompt; deep tur
   const light=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,light:true});
   const all=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'standard'}});
   const deep=isabellaCoreInstructions({relationship,tools:ALL_TOOLS,skills,route:{complexity:'deep'}});
-  assert.ok(light.length<19000,String(light.length)); // +0.9k on 11.11.2026: how she reads attachments
-  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.58,String(all.length));
-  assert.ok(deep.length<FULL_INSTRUCTIONS_CHARS*0.88,String(deep.length));
+  // 11.11.2026: the notes carry what the long blocks used to say, so a light turn grew by about 2k
+  // characters; the engine's default no longer adds any block at all (see the short-notes test below).
+  assert.ok(light.length<22000,String(light.length));
+  assert.ok(all.length<FULL_INSTRUCTIONS_CHARS*0.64,String(all.length));
+  assert.ok(deep.length<FULL_INSTRUCTIONS_CHARS*0.94,String(deep.length));
   assert.ok(light.length<all.length&&all.length<deep.length);
   assert.ok(all.includes(relationship),'her character is the relationship contract, intact');
   // Notes appear only for capabilities the turn offers.
@@ -88,7 +90,7 @@ test('Step 6: core context keeps the agenda whole, trims what the night memory c
 });
 
 test('Step 6: wiring — global turns use the core, Work keeps its prompt, telemetry names the tier',()=>{
-  assert.match(chat,/const isabellaCoreEligible=!background&&!fastAgenda&&!currentWorkThread&&!route\.work;/);
+  assert.match(chat,/const isabellaCoreEligible=ownMode\?!currentWorkThread:!background&&!fastAgenda&&!currentWorkThread&&!route\.work;/);
   assert.match(chat,/const coreSurface=!leanSurface&&isabellaCoreEligible;/);
   assert.match(chat,/\(leanSurface\|\|coreSurface\|\|workCoreEligible\)\?isabellaCoreInstructions\(\{relationship:relationshipPolicy\("conversation"\),tools,/);
   assert.match(chat,/system\+\(scheduleAssessment\?/,'ISABELLA_WORK_CORE=off retains the full Work prompt');

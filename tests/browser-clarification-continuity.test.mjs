@@ -50,7 +50,7 @@ test("source, token, user provenance, replay and recency are mandatory",()=>{
 });
 test("browser continuation is server-validated BEFORE routing and only exact source is read",()=>{
  const lookup=server.indexOf("verifiedContinuation=await resolveBrowserContinuation(");
- const route=server.indexOf("const route=await routeRequest(",lookup);
+ const route=server.indexOf("const route=ownMode?await ownRoute(req,effectiveMessage):await routeRequest(",lookup);
  const ownerPersist=server.indexOf("await persistCanonicalBrowserOwnerTurn(",route);
  assert.ok(lookup>0&&route>lookup&&ownerPersist>route);
  assert.match(server,/source\.metadata\?\.pending_clarification/);

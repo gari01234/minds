@@ -42,7 +42,7 @@ test('Work core restores exact legacy documentary paragraphs while preserving ro
   assert.match(s,/consult_sofia/);
   assert.match(chat,/Deno\.env\.get\("ISABELLA_WORK_CORE"\)!=="off"/);
   assert.match(chat,/contextTier=[^;]*"work_core"/);
-  assert.match(chat,/workCoreEligible\?"\\n\\nDETALLE WORK PARA ESTE TURNO\\n"\+CORE_DETAILS\.work:""/);
+  assert.match(chat,/workCoreEligible&&detailsMode==="legacy"\?"\\n\\nDETALLE WORK PARA ESTE TURNO\\n"\+CORE_DETAILS\.work:""/);
   assert.match(chat,/workCoreEligible\?workCoreConversationContext\(resolvedContext\):resolvedContext/);
   assert.match(chat,/\(footprint as any\)\.core_version=coreSurface\|\|leanSurface\|\|workCoreEligible\?ISABELLA_CORE_VERSION:null/);
   const sizes=promptComponentSizes({instructions:s,context:{},input:[],tools:[]});

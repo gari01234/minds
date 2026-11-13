@@ -11,7 +11,7 @@ test('Isabella discovers Work project from an explicitly named canonical Desktop
   assert.match(code,/projects\.size===1/);
 });
 test('Project inference runs only for explicit Work-source references before exposure scoping',()=>{
-  const route=code.indexOf('const route=await routeRequest(req,effectiveMessage');
+  const route=code.indexOf('const route=ownMode?await ownRoute(req,effectiveMessage):await routeRequest(req,effectiveMessage');
   const infer=code.indexOf('projectFromExplicitWorkFile(req,effectiveMessage)',route);
   const scope=code.indexOf('const exposureScope=await exposureScopeForTurn(req,route',route);
   assert.ok(route>=0&&infer>route&&scope>infer);

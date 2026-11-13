@@ -74,6 +74,12 @@ jobs:
           node -e '
             const r=require("./bench/report.json");
             const pct=v=>(v*100).toFixed(0)+"%";
+            if(r.error){
+              console.log(`The bench could not run: ${r.error}.`);
+              console.log(r.error_detail||"");
+              console.log("Replace MINDS_PARITY_OPENAI_API_KEY in the 'supabase' environment with a working bench key.");
+              process.exit(0);
+            }
             for(const [arm,a] of Object.entries(r.results)){
               console.log(`\n${arm}: ${pct(a.pass_rate)} of the moments, median ${a.median_latency_ms} ms, ${a.mean_input_tokens} input tokens on average`);
               for(const c of a.cases.filter(c=>!c.pass_all))

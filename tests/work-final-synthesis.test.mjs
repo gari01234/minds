@@ -9,7 +9,7 @@ const cycle=src.slice(begin,end);
 
 test("final output cap applies only after multi-tool Work exploration, never by phrase",()=>{
   assert.ok(begin>0&&end>begin);
-  assert.match(cycle,/const finalWorkSynthesis=!background&&route\.work&&round===budget\.rounds&&usedTools\.length>0;/);
+  assert.match(cycle,/const finalWorkSynthesis=!background&&\(ownMode\?usedTools\.some\(t=>WORK_READ_TOOLS\.has\(t\)\):route\.work\)&&round===budget\.rounds&&usedTools\.length>0;/);
   assert.match(cycle,/if\(finalWorkSynthesis\)budget=\{\.\.\.budget,maxOutput:Math\.max\(budget\.maxOutput,8000\)\};/);
   assert.match(cycle,/max_output_tokens:repairingSemantics\?Math\.max\(budget\.maxOutput,2200\):budget\.maxOutput/);
   assert.match(cycle,/tool_choice:"none"/);

@@ -187,9 +187,11 @@ export const CALENDAR_TOOLS = [
   {
     type: "function",
     name: "search_memory",
-    description: "Search Isabella's long-term autobiographical memory, past conversations and entity relationships when older personal context may be relevant.",
+    description: "Search Isabella's long-term autobiographical memory, past conversations and entity relationships when older personal context may be relevant. By default it searches what belongs to this conversation's scope. Set project to also search what was said and remembered about that project. Set everywhere:true when the owner refers to something said or decided before that you cannot see (another project, long ago, «¿te acuerdas…?»): it searches the whole shared history. Results carry their provenance; a summary or something you said yourself is not a fact he confirmed.",
     strict: false,
-    parameters: { type:"object", properties:{ query:{type:"string"} }, required:["query"] }
+    parameters: { type:"object", properties:{ query:{type:"string"},
+      project:{type:"string",description:"Optional project name: include that project's memories and conversation."},
+      everywhere:{type:"boolean",description:"Optional: search the whole history across projects, when he refers to something from before that is not in view."} }, required:["query"] }
   },
   {
     type: "function",
@@ -501,9 +503,9 @@ export const CONVERSATION_TOOLS = [
   {
     type:"function",
     name:"search_work",
-    description:"Search the user's private Work-MINDS project context for Bernried or Schwarz: files, tasks, sourced claims, Threads and the governed Project Model (referents, relations, movements and Perimeter). Use automatically when those projects or their professional context are relevant. Treat Isabella-authored Project Model elements as interpretation, not project truth.",
+    description:"Search the user's private Work-MINDS project context for Bernried or Schwarz: files, tasks, sourced claims, Threads and the governed Project Model (referents, relations, movements and Perimeter). Use automatically when those projects or their professional context are relevant. It returns what matches the query: files, tasks, memory, sourced claims, source excerpts and Threads. The complete Project Model is large: set include_project_model:true when the question is about the structure of the project as a whole (how things relate, what is open, the perimeter) or when the focused results are not enough; ask for it at most once per turn. Treat Isabella-authored Project Model elements as interpretation, not project truth.",
     strict:false,
-    parameters:{type:"object",properties:{project:{type:"string",description:"Project name or key, e.g. Bernried or Schwarz."},query:{type:"string",description:"Topic, person, task, document or issue to find."}},required:["project"]}
+    parameters:{type:"object",properties:{project:{type:"string",description:"Project name or key, e.g. Bernried or Schwarz."},query:{type:"string",description:"Topic, person, task, document or issue to find."},include_project_model:{type:"boolean",description:"Optional: also return the complete Project Model (large)."}},required:["project"]}
   },
   {
     type:"function",
@@ -562,15 +564,21 @@ export const CONVERSATION_TOOLS = [
   },
 ];
 
+// She asks for deeper reasoning herself (11.11.2026): the turn continues on the most capable model.
+export const DEEPER_TOOL = {type:"function",name:"think_deeper",strict:false,
+  description:"Hand this turn to your most capable reasoning before you answer. Call it FIRST and alone when the request needs sustained analysis that a quick pass would get wrong: comparing documents or versions, a plan with many constraints or dependencies, a long and careful text, a judgment with real consequences, a contradiction you cannot resolve at a glance. Do not call it for everyday conversation, agenda operations or simple lookups, and never to stall.",
+  parameters:{type:"object",properties:{reason:{type:"string",description:"One short line: what makes this hard."}},required:["reason"]}};
+
 export const ROUTINE_MUTATION_TOOLS = new Set(["update_routine","pause_routine","resume_routine","delete_routine"]);
 
 /** The tools offered to an interactive turn, in the order the provider sees them.
- * @param {{clarification?:boolean,followUps?:any[],routineReview?:boolean}} [opts] */
-export function interactiveTools({clarification=false,followUps=[],routineReview=true}={}){
+ * @param {{clarification?:boolean,followUps?:any[],routineReview?:boolean,deeper?:boolean}} [opts] */
+export function interactiveTools({clarification=false,followUps=[],routineReview=true,deeper=false}={}){
   return [
     ...(clarification?[CLARIFICATION_TOOL]:[]),
     ...CONVERSATION_TOOLS,
     ...CALENDAR_TOOLS,
-    ...(Array.isArray(followUps)?followUps:[])
+    ...(Array.isArray(followUps)?followUps:[]),
+    ...(deeper?[DEEPER_TOOL]:[])
   ].filter(t=>routineReview||!ROUTINE_MUTATION_TOOLS.has(String(t.name||"")));
 }

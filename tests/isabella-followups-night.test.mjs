@@ -119,7 +119,7 @@ test('The rule travels with the tool: global chat only, never in routines or Wor
   assert.doesNotMatch(isabellaRoutineInstructions({}),/schedule_follow_up/);
   assert.equal(capabilityNotes(new Set(['cancel_follow_up'])).length,0);
   const chat=read('supabase/functions/isabella-chat/index.ts');
-  assert.match(chat,/\.\.\.\(isabellaCoreEligible&&exposureScope\.kind==="global"\?FOLLOWUP_TOOLS:\[\]\)/);
+  assert.match(chat,/\.\.\.\(ownMainChat\|\|\(isabellaCoreEligible&&exposureScope\.kind==="global"\)\?FOLLOWUP_TOOLS:\[\]\)/);
   assert.match(chat,/schedule_follow_up:"allow",cancel_follow_up:"allow"/);
   assert.match(chat,/call\.name==="schedule_follow_up"\|\|call\.name==="cancel_follow_up"/);
   assert.match(chat,/scheduleFollowUp\(sb, \{ userId: user\.id, args, tz, turnId, ownerName \}\)/);

@@ -73,7 +73,7 @@ test("browser uses the capability endpoint directly, no heuristic durable/stream
 });
 test("server rejects both legacy text-only transports; final_round uses governed execution",()=>{
  const gate=server.indexOf('turnContract.lane==="tool_capable"');
- const routing=server.indexOf('const route=await routeRequest(',gate);
+ const routing=server.indexOf('const route=ownMode?await ownRoute(req,effectiveMessage):await routeRequest(',gate);
  assert.ok(gate>0&&routing>gate);
  assert.match(server,/execute:\(emit:\(text:string\)=>void\)=>executeTurn\(req,body,emit\)/);
  assert.match(server.slice(gate,routing),/body\?\.durable===true\|\|body\?\.stream===true/);
