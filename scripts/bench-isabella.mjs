@@ -100,7 +100,7 @@ async function call(body, key) {
       body: JSON.stringify(body)
     });
     if (res.ok) return res.json();
-    if (![429, 500, 502, 503, 504].includes(res.status)) {
+    if (![429, 500, 502, 503, 504, 520, 522, 524].includes(res.status)) {
       const text = await res.text();
       const error = new Error("provider_" + res.status + ": " + text.slice(0, 300));
       // A key that is missing, expired or refused is not a result about her: stop, do not report.
