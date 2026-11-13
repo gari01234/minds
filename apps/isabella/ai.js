@@ -66,149 +66,12 @@ function compact(state){
     }
   };
 }
-function fastCreateCandidate(message){
-  const t=String(message||'').trim().replace(/\s+/g,' ').toLowerCase();
-  if(!t||t.length>320||/[?¿]/.test(t))return false;
-  if(/\b(si|unless|excepto|salvo|depende|cuando tenga sentido|como antes|como hablamos|como dijimos|lo anterior|eso|esto|aquello|lo de)\b/i.test(t))return false;
-  if(/\b(y|además|también|also|und)\s+(agrega|añade|crea|pon|apunta|add|create|erstelle|füge)\b/i.test(t))return false;
-  return /\b(agrega|agregar|añade|añadir|crea|crear|pon|poner|apunta|apuntar|add|create|erstelle|hinzufügen|füge)\b/i.test(t);
-}
-function parseFastSse(buffer,onEvent){
-  let rest=buffer;
-  while(true){
-    const i=rest.indexOf('\n\n');if(i<0)break;
-    const block=rest.slice(0,i);rest=rest.slice(i+2);
-    const data=block.split('\n').filter(x=>x.startsWith('data:')).map(x=>x.slice(5).trim()).join('\n');
-    if(!data||data==='[DONE]')continue;
-    try{onEvent(JSON.parse(data))}catch{}
-  }
-  return rest;
-}
-async function askFastStream(message,state,options={}){
-  const {data:{session}}=await sb.auth.getSession();if(!session)return null;
-  const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
-  const clientRequestId=options.fastRequestId||globalThis.crypto?.randomUUID?.();
-  let lastError=null;
-  for(let attempt=0;attempt<2;attempt++){
-    try{
-      const response=await fetch(cfg.url+'/functions/v1/isabella-fast-stream',{
-        method:'POST',
-        headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
-        body:JSON.stringify({message:String(message),context:compact(state),permission_protocol:'contextual_v1',client_request_id:clientRequestId})
-      });
-      if(response.status===409)return null;
-      if(!response.ok||!response.body)throw new Error('fast_http_'+response.status);
-      const reader=response.body.getReader(),decoder=new TextDecoder();
-      let buffer='',result=null,fallback=false,streamError=null,streamedText='';
-      while(true){
-        const {done,value}=await reader.read();if(done)break;
-        buffer+=decoder.decode(value,{stream:true});
-        buffer=parseFastSse(buffer,event=>{
-          if(event?.type==='status')options.onProgress?.(event);
-          else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
-          else if(event?.type==='result')result={...event,streamed_text:streamedText};
-          else if(event?.type==='fallback')fallback=true;
-          else if(event?.type==='error')streamError=event.message||'fast_stream_error';
-        });
-      }
-      if(result)return result;
-      if(fallback){options.onTextReset?.();return null}
-      if(streamError)throw new Error(streamError);
-      throw new Error('fast_stream_incomplete');
-    }catch(e){
-      lastError=e;
-      options.onTextReset?.();
-      if(attempt===0){options.onProgress?.({type:'status',phase:'retry',label:'Reconectando…'});continue}
-    }
-  }
-  await window.ISABELLA_SYNC_PULL_NOW?.();
-  throw new Error('Perdí la conexión al guardar. Ya comprobé tu agenda; si no aparece la tarea, inténtalo de nuevo.');
-}
-function needsCalendarAssessment(message=''){
-  const t=String(message||'').toLocaleLowerCase('es');
-  return /(semana|week|woche|agenda|calendario|lunes|martes|mi[eé]rcoles|jueves|viernes|pr[oó]xim|siguiente)/i.test(t)
-    && /(qu[eé] tal pinta|c[oó]mo pinta|como pinta|qu[eé] tengo|que tengo|qu[eé] hay|que hay|viene|ocupad|cargad|hueco|conflict|organiza|planifica|disponib|libre|pendiente)/i.test(t);
-}
-/* Informational Chat uses durable background provider execution when the
- * existing server route confirms that no tools or user approvals are involved.
- * No transport error ever triggers an implicit second model invocation.
+/* 11.11.2026: every message goes to Isabella herself. The app no longer decides from lists of
+ * words («agrega», «crea», «pon»…) that a message is a quick creation and sends it down another
+ * path, and the text-only transports that guessed a read-only question from its wording are gone.
+ * She reads the whole message with her tools and decides; what can be created directly is created
+ * with Undo by the server contract (direct-calendar-contract.mjs), not by the wording.
  */
-async function askDurableChat(message,state,options,replyContext){
-  const requestId=String(options?.durableRequestId||"");
-  if(!requestId)return null;
-  const cfg=window.MINDS_SUPABASE_CONFIG;
-  const {data:{session}}=await sb.auth.getSession();
-  if(!session||!cfg?.url||!cfg?.publishableKey)return null;
-  const response=await fetch(cfg.url+'/functions/v1/isabella-chat',{
-    method:'POST',headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},
-    body:JSON.stringify({message:String(message),context:{...compact(state),reply_context:replyContext},
-      background:false,attachments:[],stream:false,durable:true,surface:'chat_browser',client_message_id:requestId})
-  });
-  if(response.status===409)return null; // tool/approval path, nothing was launched
-  const data=await response.json().catch(()=>({}));
-  if(!response.ok)throw new Error(String(data?.message||data?.detail||'No pude confirmar que Isabella recibiera la solicitud.'));
-  if(data?.durable&&data.job_id)return {durable:true,durable_job_id:data.job_id,
-    durable_request_id:requestId,durable_status:data.status||'running'};
-  return null;
-}
-
-async function askDirectStream(message,state,options={},replyContext=''){
-  const {data:{session}}=await sb.auth.getSession();if(!session)return null;
-  const cfg=window.MINDS_SUPABASE_CONFIG;if(!cfg?.url||!cfg?.publishableKey)return null;
-  const streamRequestId=globalThis.crypto?.randomUUID?.()||null;
-  const response=await fetch(cfg.url+'/functions/v1/isabella-chat',{
-    method:'POST',
-    headers:{apikey:cfg.publishableKey,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json',Accept:'text/event-stream'},
-    body:JSON.stringify({
-      message:String(message),
-      context:{...compact(state),reply_context:replyContext},
-      background:false,attachments:[],stream:true,
-      work_thread_id:options.workThread?.id||null,
-      surface:'chat_browser',client_message_id:streamRequestId
-    })
-  });
-  if(response.status===409){options.onTextReset?.();return null}
-  if(!response.ok||!response.body)throw new Error('No pude iniciar la respuesta en streaming.');
-  const reader=response.body.getReader(),decoder=new TextDecoder();
-  let buffer='',result=null,streamError=null,streamedText='',transportError=null;
-  try{
-    while(true){
-      const {done,value}=await reader.read();if(done)break;
-      buffer+=decoder.decode(value,{stream:true});
-      buffer=parseFastSse(buffer,event=>{
-        if(event?.type==='status')options.onProgress?.(event);
-        else if(event?.type==='text_delta'){streamedText+=String(event.delta||'');options.onTextDelta?.(String(event.delta||''),streamedText)}
-        else if(event?.type==='result')result={...event,streamed_text:streamedText};
-        else if(event?.type==='error')streamError=event.message||'stream_error';
-      });
-    }
-  }catch(e){transportError=e}
-  if(result)return result;
-  options.onProgress?.({type:'status',phase:'recovering',label:'Comprobando la respuesta terminada…'});
-  const recovered=await window.MINDS_CHAT_STREAM_RECOVERY?.(streamRequestId);
-  if(recovered)return {...recovered,streamed_text:streamedText};
-  // No terminal result: do not retry the request implicitly.
-  if(streamedText.trim()){
-    options.onProgress?.({type:'status',phase:'incomplete',label:'La respuesta se interrumpió; el texto recibido quedará marcado como parcial.'});
-    return {reply:streamedText.trim(),streamed_text:streamedText,incomplete:true,incomplete_reason:streamError||String(transportError?.message||'missing_result_event')};
-  }
-  options.onTextReset?.();
-  throw new Error(String(streamError||transportError?.message||'missing_result_event'));
-}
-function messageMentionsKnownProject(message,state){
-  const hay=String(message||'').toLowerCase();
-  return (state?.projects||[]).some(p=>{
-    const name=String(p?.name||'').trim().toLowerCase();
-    return name&&name.length>2&&hay.includes(name);
-  });
-}
-
-function readOnlyDailyAgendaIntent(message=''){
-  const t=String(message||'').toLocaleLowerCase('es');
-  if(!/\b(mañana|manana|lunes|martes|mi[eé]rcoles|jueves|viernes|sábado|sabado|domingo)\b/i.test(t))return false;
-  if(!/(qu[eé] tengo|que tengo|qu[eé] hay|que hay|dame una lista|lista de lo que|rev[ií]salo bien|revisalo bien|tengo muchas tareas|tareas tengo|pendientes tengo)/i.test(t))return false;
-  return !/\b(agrega|añade|crea|mueve|cambia|borra|elimina|reprograma|reserva|env[ií]a|manda|agenda|programa|termina|completa)\b/i.test(t);
-}
 async function ask(message,state,options={}){
   if(!sb)throw new Error('Supabase no está disponible.');
   const {data:{session}}=await sb.auth.getSession();
@@ -218,23 +81,6 @@ async function ask(message,state,options={}){
   const dialogueAssistant=officeChat?'Romy':'Isabella';
   const replyContext=options.replyTo?.text?(officeChat?`\n${dialogueOwner} está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?dialogueAssistant:dialogueOwner}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`):'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
-  if(!options.continuation&&!options.workThread&&!options.background&&!attachments.length&&!options.replyTo&&!messageMentionsKnownProject(message,state)&&fastCreateCandidate(message)){
-    const {data:calendarMode,error:modeError}=typeof sb.from==='function'
-      ?await sb.from('minds_calendar_execution_preferences')
-        .select('create_mode').maybeSingle()
-      :{data:null,error:null};
-    if(modeError)throw modeError;
-    if(calendarMode?.create_mode!=='direct')try{
-      const fast=await askFastStream(message,state,{...options,fastRequestId:options.durableRequestId||options.fastRequestId});
-      if(fast)return fast;
-      options.onProgress?.({type:'status',phase:'fallback',label:'Revisando contexto…'});
-    }catch(e){
-      // The fast path already retries idempotently with one client request id and refreshes
-      // canonical state before surfacing an ambiguous transport failure. Never fall through
-      // to full Isabella as a fresh proposal.
-      options.onTextReset?.();throw e;
-    }
-  }
   // P0 turn-capability contract: an unclassified conversational turn must
   // retain access to the governed tools, proposals, and approval receipts.
   // Durable text-only and direct text streaming lack those capabilities.

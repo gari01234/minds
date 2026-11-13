@@ -57,17 +57,17 @@ test('Missing authorization and invalid request ID cause no retry or generation'
 });
 
 test('Browser stream uses an opaque authenticated receipt ID and only falls back to visible partial',()=>{
-  assert.ok(client.includes("const streamRequestId=globalThis.crypto?.randomUUID?.()||null"));
-  assert.ok(client.includes("surface:'chat_browser',client_message_id:streamRequestId"));
-  assert.ok(client.includes('const recovered=await window.MINDS_CHAT_STREAM_RECOVERY?.(streamRequestId)'));
-  assert.ok(client.includes('if(recovered)return {...recovered,streamed_text:streamedText}'));
-  assert.ok(client.includes('if(streamedText.trim()){'));
-  assert.ok(!client.includes('await askDirectStream(message,state,options,replyContext);await askDirectStream'));
+  // 11.11.2026: one governed transport. The turn keeps the id the app gave it and is recovered by
+  // that id; nothing is sent twice.
+  assert.ok(!client.includes('async function askDirectStream('));
+  assert.ok(client.includes("client_message_id:options.durableRequestId||null"));
+  assert.ok(client.includes("await window.MINDS_CHAT_STREAM_RECOVERY(options.durableRequestId,{attempts:85,intervalMs:1400})"));
+  assert.ok(client.includes(".eq('request_id',body.client_message_id).maybeSingle()"));
   assert.doesNotThrow(()=>new Script(client,{filename:'ai.js'}));
   assert.doesNotThrow(()=>new Script(recovery,{filename:'chat-stream-recovery.js'}));
-  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=59'));
+  assert.ok(index.indexOf('chat-stream-recovery.js?v=1') < index.indexOf('ai.js?v=60'));
   assert.ok(sw.includes("'./chat-stream-recovery.js?v=1'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v191'"));
+  assert.ok(sw.includes("const CACHE_NAME = 'isabella-shell-v192'"));
 });
 
 test('Server stores completion before terminal SSE result, never promoting partial to complete',()=>{

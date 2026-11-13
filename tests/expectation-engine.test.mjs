@@ -10,7 +10,7 @@ const reconcile=read('supabase/migrations/20261003113300_expectation_engine_v01.
 const ambient=read('supabase/migrations/20261003113506_expectation_engine_v011_ambient_due.sql');
 const singleDetector=read('supabase/migrations/20261003113943_expectation_engine_v012_heartbeat_single_detector.sql');
 const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 const app=read('apps/isabella/app.js');
 const shell=read('apps/isabella/shell.js');
 

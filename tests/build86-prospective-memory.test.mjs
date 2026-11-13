@@ -9,7 +9,7 @@ const migration=read('supabase/migrations/20261008211500_prospective_memory_v02.
 const channelsMigration=read('supabase/migrations/20261008213500_watch_channel_contracts_v01.sql');
 const heartbeatMigration=read('supabase/migrations/20261008215500_watch_heartbeat_v01.sql');
 const heartbeat=read('supabase/functions/isabella-heartbeat/index.ts');
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 const app=read('apps/isabella/app.js');
 
 test('Build 86.1 reuses the Standing Intent store as one prospective-memory ledger',()=>{

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const read=p=>readFileSync(new URL("../"+p,import.meta.url),"utf8");
 const migration=read("supabase/migrations/20261012215000_minds_task_origin_evidence_v01.sql");
-const chat=read("supabase/functions/isabella-chat/index.ts");
+const chat=(read("supabase/functions/isabella-chat/index.ts")+read("supabase/functions/_shared/isabella-tools.mjs"));
 test("legacy dialogue stays scoped: no migration, no broad memory query",()=>{
   assert.match(migration,/security invoker/i);
   assert.match(migration,/t\.user_id=auth\.uid\(\)/);

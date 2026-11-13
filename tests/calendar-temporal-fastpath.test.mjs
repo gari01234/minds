@@ -25,7 +25,7 @@ test("fast hints must not determine a calendar date, permission, or acceptance",
  assert.match(source,/recordShadowDecision\(req/);
  assert.match(source,/create_event:"confirm"/);
  assert.match(source,/update_task:"confirm"/);
- assert.match(source,/calendarProposalReply\(toolProposals\[0\]\)/);
+ assert.match(source,/calendarProposalReply\(toolProposals\[0\],assistantProfile\.id\)/);
 });
 test("wrong date given by a model is derived from normalized semantic relative claim",()=>{
  const p={kind:"task",action:"create",title:"Besprechungsnotiz",project:"Bernried",date:"2026-10-11"};

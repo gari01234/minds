@@ -6,7 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 
 const migration=read('supabase/migrations/20261008113000_project_model_v01.sql');
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 const corpus=JSON.parse(read('tests/fixtures/bernried-cognitive-integrity-v01.json'));
 
 test('Build 84 adds stable Referents without making inferred identity project truth',()=>{

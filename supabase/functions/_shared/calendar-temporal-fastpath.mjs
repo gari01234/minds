@@ -1,3 +1,4 @@
+import {proposalLine} from "./assistant-voice.mjs";
 /* Optional fast-lane performance hint and proposal wording only.
  * These text patterns NEVER authorize, reject or alter an action. Calendar
  * meaning comes from the model's typed semantic tool arguments, verified
@@ -25,23 +26,7 @@ export function calendarDateReferenceText(message){
    .replace(/\b(?:de|por|en)\s+la\s+(?:mañana|manana)\b/giu," ")
    .replace(/\b(?:esta|esa|aquella)\s+(?:mañana|manana)\b/giu," ");
 }
-export function calendarProposalReply(proposal){
- if(!proposal||!["task","event"].includes(proposal.kind)||
-    !["create","update"].includes(proposal.action))return null;
- const title=String(proposal.title||proposal.target_title||"").trim();
- if(!title)return null;
- const date=String(proposal.date||"");
- let shown="";
- if(/^\d{4}-\d{2}-\d{2}$/.test(date)&&Number.isFinite(Date.parse(date+'T12:00:00Z'))&&
-    new Date(date+'T12:00:00Z').toISOString().slice(0,10)===date){
-  const d=new Date(date+"T12:00:00Z");
-  shown=" para el "+new Intl.DateTimeFormat("es-ES",{
-    timeZone:"UTC",weekday:"long",day:"numeric",month:"long",year:"numeric"
-  }).format(d);
- }
- const noun=proposal.kind==="event"?"evento":"tarea";
- // System voice (Phase 1, step 3): the app states what is pending; it does not speak as Isabella.
- return "Propuesta: "+(proposal.action==="update"?"actualizar ":"")+noun+' «'+title+'»'+shown+
-   (proposal.project?" (proyecto "+String(proposal.project)+")":"")+
-   " · pendiente de tu confirmación.";
+// The line itself lives in assistant-voice.mjs (Spanish for Window, German for the office).
+export function calendarProposalReply(proposal,profile="window"){
+ return proposalLine(proposal,profile);
 }

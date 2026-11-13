@@ -46,7 +46,7 @@ test("empty or middle pages cannot falsely claim whole-corpus completeness",()=>
   assert.equal(workBrowsePage(new Array(8).fill({}),8,0,8).has_more,false);
 });
 test("source version, owner scoping and no raw-text telemetry are enforced in runtime",()=>{
-  const src=readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8");
+  const src=(readFileSync(new URL("../supabase/functions/isabella-chat/index.ts",import.meta.url),"utf8")+readFileSync(new URL("../supabase/functions/_shared/isabella-tools.mjs",import.meta.url),"utf8"));
   const fn=src.slice(src.indexOf("async function browseWorkSources"),src.indexOf("async function compareProjectSource"));
   assert.ok(fn.length>1000);
   for(const s of ['resolveWorkProject(req','sb.auth.getUser()','.eq("project_id",project.id)','.eq("user_id",user.id)','.eq("source_version",currentVersion)','expected_version',"workBrowsePage(","workBrowseTextView(",'_admitSourceRows'])assert.ok(fn.includes(s),s);

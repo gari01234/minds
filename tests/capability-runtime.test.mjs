@@ -6,7 +6,7 @@ const root=new URL('../',import.meta.url);
 const read=p=>readFileSync(new URL(p,root),'utf8');
 const migrations=()=>readdirSync(new URL('supabase/migrations/',root)).filter(x=>x.endsWith('.sql')).map(x=>read('supabase/migrations/'+x)).join('\n');
 
-const chat=read('supabase/functions/isabella-chat/index.ts');
+const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
 const runtime=read('supabase/functions/_shared/capability-runtime.ts');
 const registry=read('supabase/functions/_shared/capability-registry.ts');
 const capability=read('supabase/functions/isabella-capability-runtime/index.ts');
@@ -119,11 +119,11 @@ test('Build 79 PWA assets are aligned',()=>{
   assert.ok(shell.includes('id="currentBuildInfo"'));
   assert.ok(index.includes('app.css?v=70'));
   assert.ok(index.includes('shell.js?v=110'));
-  assert.ok(index.includes('app.js?v=146'));
+  assert.ok(index.includes('app.js?v=147'));
   assert.ok(index.includes('work.js?v=34'));
   assert.ok(index.includes('ambient.js?v=2'));
   assert.ok(index.includes('../shared/human-surface.js?v=2'));
-  assert.ok(sw.includes("isabella-shell-v191"));
+  assert.ok(sw.includes("isabella-shell-v192"));
   assert.ok(sw.includes("'./ambient.js?v=2'"));
 });
 
@@ -131,7 +131,7 @@ test('Build 79.1 hides execution plumbing and treats generated PNGs as previews'
   const app=read('apps/isabella/app.js');
   const work=read('apps/isabella/work.js');
   const ambient=read('apps/isabella/ambient.js');
-  const chat=read('supabase/functions/isabella-chat/index.ts');
+  const chat=(read('supabase/functions/isabella-chat/index.ts')+read('supabase/functions/_shared/isabella-tools.mjs'));
   assert.ok(app.includes('cleanGeneratedDeliverableText'));
   assert.ok(app.includes('artifactSurfaceGroups'));
   assert.ok(app.includes('generated-artifact-preview'));

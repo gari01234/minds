@@ -69,7 +69,7 @@ test("browser uses the capability endpoint directly, no heuristic durable/stream
  assert.doesNotMatch(entry,/askDirectStream\(/);
  assert.match(entry,/sb\.functions\.invoke\('isabella-chat'/);
  assert.match(entry,/surface:options\.background\?'background':'chat_browser'/);
- assert.match(client,/if\(!options\.continuation&&!options\.workThread&&!options\.background&&!attachments\.length/);
+ assert.doesNotMatch(client,/fastCreateCandidate|isabella-fast-stream/);
 });
 test("server rejects both legacy text-only transports; final_round uses governed execution",()=>{
  const gate=server.indexOf('turnContract.lane==="tool_capable"');
