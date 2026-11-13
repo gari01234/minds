@@ -1,0 +1,91 @@
+name: Isabella bench (capability)
+# Gari asked for the engine to depend on fewer control rules «sin que por estos ajustes Isabella o
+# Romy sean menos capaces». This is where that sentence is checked: the same invented moments played
+# twice, by the path with the routing step and the long instruction blocks, and by the one published.
+#
+# Manual on purpose: it calls a real model and costs money, so it never runs on a push or a PR.
+# It uses the dedicated bench key, never a production key, and it reaches no database: every tool
+# answers with synthetic data and nothing is created. The scenarios are invented (no real person,
+# client or project appears in them).
+on:
+  workflow_dispatch:
+    inputs:
+      arms:
+        description: 'Arms to play, separated by spaces: own legacy'
+        required: false
+        default: 'own legacy'
+      repeat:
+        description: 'How many times to play each moment (a model is not deterministic)'
+        required: false
+        default: '2'
+      cases:
+        description: 'Optional: only these case ids, separated by spaces'
+        required: false
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: isabella-bench
+  cancel-in-progress: false
+jobs:
+  assembly:
+    name: Bench assembles without a model
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node scripts/bench-isabella.mjs --dry-run > /dev/null
+  bench:
+    name: Capability, old path against new
+    needs: assembly
+    runs-on: ubuntu-latest
+    # The bench key lives in this environment, so no other workflow can read it.
+    environment: supabase
+    timeout-minutes: 60
+    env:
+      OPENAI_API_KEY: ${{ secrets.MINDS_PARITY_OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Check the bench key is configured
+        run: |
+          if [ -z "$OPENAI_API_KEY" ]; then
+            echo "::error::Add MINDS_PARITY_OPENAI_API_KEY to the 'supabase' environment (a dedicated bench key, never a production one)."
+            exit 1
+          fi
+      - name: Play the moments
+        run: |
+          args=""
+          for arm in ${{ inputs.arms }}; do args="$args --arm $arm"; done
+          for id in ${{ inputs.cases }}; do args="$args --case $id"; done
+          node scripts/bench-isabella.mjs $args --repeat "${{ inputs.repeat }}" --out bench/report.json > /dev/null
+      - name: What the numbers say
+        if: always()
+        run: |
+          [ -f bench/report.json ] || exit 0
+          node -e '
+            const r=require("./bench/report.json");
+            const pct=v=>(v*100).toFixed(0)+"%";
+            for(const [arm,a] of Object.entries(r.results)){
+              console.log(`\n${arm}: ${pct(a.pass_rate)} of the moments, median ${a.median_latency_ms} ms, ${a.mean_input_tokens} input tokens on average`);
+              for(const c of a.cases.filter(c=>!c.pass_all))
+                console.log(`  - ${c.id} (${c.passes}/${c.of}): ${c.failed_checks.map(f=>f.name).join("; ")||c.errors.join("; ")}`);
+            }
+            if(r.comparison){
+              console.log(`\nLost (the old path did it, the new one does not): ${r.comparison.lost.join(", ")||"nothing"}`);
+              console.log(`Gained: ${r.comparison.gained.join(", ")||"nothing"}`);
+            }'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isabella-bench-report
+          path: bench/report.json
+          if-no-files-found: ignore
