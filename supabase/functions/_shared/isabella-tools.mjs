@@ -271,7 +271,7 @@ export const CALENDAR_TOOLS = [
       trigger_text:{type:"string",description:"Human-readable situation that should activate the reminder."},
       reminder_text:{type:"string",description:"What Isabella should remind the user of when the situation occurs."},
       trigger_terms:{type:"array",items:{type:"string"},description:"A few distinctive lexical anchors, excluding generic words such as cuando/tema/proyecto."},
-      project:{type:"string",description:"Optional project name such as Bernried or Schwarz."},
+      project:{type:"string",description:"Optional project name. Use a name the catalogue actually has (search_work lists them); a name it does not have saves the item without a project link."},
       cooldown_hours:{type:"number"},
       max_triggers:{type:"integer"},
       expires_days:{type:"integer"}
@@ -301,7 +301,7 @@ export const CALENDAR_TOOLS = [
       title:{type:"string",description:"Short human-readable name."},
       objective:{type:"string",description:"What MINDS should keep alive over time."},
       scope:{type:"string",enum:["global","personal","project","theory","other"]},
-      project:{type:"string",description:"Optional project name, e.g. Bernried or Schwarz."},
+      project:{type:"string",description:"Optional project name. Use a name the catalogue actually has (search_work lists them); a name it does not have saves the Commitment without a project link."},
       completion_criteria:{type:"string",description:"Condition that makes the objective genuinely complete."},
       persistent_work:{type:"boolean",description:"True only when Gari explicitly delegates ongoing work beyond this turn."},
       continuation_instruction:{type:"string",description:"Concrete bounded instruction Persistent Work should keep advancing after confirmation."},
@@ -503,9 +503,9 @@ export const CONVERSATION_TOOLS = [
   {
     type:"function",
     name:"search_work",
-    description:"Search the user's private Work-MINDS project context for Bernried or Schwarz: files, tasks, sourced claims, Threads and the governed Project Model (referents, relations, movements and Perimeter). Use automatically when those projects or their professional context are relevant. It returns what matches the query: files, tasks, memory, sourced claims, source excerpts and Threads. The complete Project Model is large: set include_project_model:true when the question is about the structure of the project as a whole (how things relate, what is open, the perimeter) or when the focused results are not enough; ask for it at most once per turn. Treat Isabella-authored Project Model elements as interpretation, not project truth.",
+    description:"Search the user's private Work-MINDS project context: files, tasks, sourced claims, Threads and the governed Project Model (referents, relations, movements and Perimeter). Use automatically when a project of the catalogue or its professional context is relevant. It returns what matches the query: files, tasks, memory, sourced claims, source excerpts and Threads. The complete Project Model is large: set include_project_model:true when the question is about the structure of the project as a whole (how things relate, what is open, the perimeter) or when the focused results are not enough; ask for it at most once per turn. Treat Isabella-authored Project Model elements as interpretation, not project truth.",
     strict:false,
-    parameters:{type:"object",properties:{project:{type:"string",description:"Project name or key, e.g. Bernried or Schwarz."},query:{type:"string",description:"Topic, person, task, document or issue to find."},include_project_model:{type:"boolean",description:"Optional: also return the complete Project Model (large)."}},required:["project"]}
+    parameters:{type:"object",properties:{project:{type:"string",description:"Project name or key, as the catalogue spells it. Leave it out to search across the projects there are."},query:{type:"string",description:"Topic, person, task, document or issue to find."},include_project_model:{type:"boolean",description:"Optional: also return the complete Project Model (large)."}},required:["project"]}
   },
   {
     type:"function",
