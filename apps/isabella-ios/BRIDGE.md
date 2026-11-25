@@ -45,7 +45,7 @@ Con `shell.tabs` en `capabilities`, la web entra en modo app: oculta su propia b
 Como cambiar de usuario en GitHub: **Persönlich** (Window, inicio con código por correo) y **Office** (TBA Office, su propio proyecto de Supabase, inicio con correo y contraseña de la oficina). Cada una guarda su sesión y sus datos; no se copia nada entre ellas.
 - En Office, las pestañas son Romy · Heute · Kalender · Work · Tools (secciones `assistant`, `feed`, `calendar`, `work`, `tools`). `projects` y `plans` se abren en Tools.
 - Se cambia desde el menú «•••» de la web ("Cambiar a Office" / "Zu Persönlich wechseln", solo si la app anuncia `account.switch`) o desde la pantalla de inicio de sesión de cada cuenta.
-- El widget, la Share Extension y Siri siguen usando solo la cuenta Persönlich.
+- Las dos sesiones viven en el Llavero bajo la App Group (Office desde el 25.11.2026), para que la Share Extension, el widget y Siri puedan servir también a Office. Las extensiones leen; solo la app renueva.
 - **Los dos calendarios en las dos cuentas** (`calendar.other`): Tiempo (Window) muestra los eventos de Office y el Kalender de Office muestra los de Persönlich, rayados en gris y solo para leer.
   - La página los dibuja y nada más: no entran en su estado, no se guardan ni se sincronizan, y el asistente no los recibe.
   - En el navegador cada calendario se queda solo con lo suyo.

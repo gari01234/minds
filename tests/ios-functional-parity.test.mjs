@@ -154,10 +154,17 @@ test("two accounts like GitHub users: the office has its own sign-in, session an
   assert.match(office, /request\("auth\/v1\/token", method: "POST",\s*query: \[URLQueryItem\(name: "grant_type", value: "password"\)\]/);
   assert.match(office, /guard let member, member\["is_active"\] as\? Bool == true/);
   assert.match(office, /member\["must_change_password"\] as\? Bool == true/);
-  // Its own Keychain item, outside the App Group: the widget, the Share Extension and Siri stay personal.
+  // Its own Keychain item, since 25.11.2026 under the App Group like the personal one, so the
+  // Share Extension, the widget and Siri can serve the office (Gari uses Office far more).
   assert.match(office, /static let key = "tba\.office\.native\.session"/);
-  assert.doesNotMatch(office, /kSecAttrAccessGroup|MINDSAppGroupID/);
+  assert.match(office, /if shared, let group \{ query\[kSecAttrAccessGroup as String\] = group \}/);
+  assert.match(office, /forInfoDictionaryKey: "MINDSAppGroupID"/);
+  assert.match(office, /SecItemUpdate\(selector\(shared: true\) as CFDictionary/);
+  // A session saved before the shared group moves once; only the old item is deleted.
+  assert.match(office, /if let current = read\(shared: true\) \{ return current \}/);
+  assert.match(office, /if let oldGroup = item\[kSecAttrAccessGroup as String\] as\? String, oldGroup != group,\s*\(try\? save\(legacy\)\) != nil/);
   assert.match(office, /kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly/);
+  assert.doesNotMatch(office, /kSecAttrAccessibleAlways\b|kSecAttrSynchronizable/);
   // The page gets the access token only.
   assert.match(office, /return BridgeSession\(accessToken: stored\.accessToken, expiresAt: stored\.expiresAt,/);
   assert.match(plist, /<key>OFFICE_SUPABASE_URL<\/key>\s*<string>https:\/\/ynzsbemisjvfgbqcqliq\.supabase\.co<\/string>/);

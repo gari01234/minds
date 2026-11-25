@@ -1,0 +1,8 @@
+/* Window en español. Con alemán y español, iOS muestra sus propios menús y botones en el idioma del iPhone (#333). */
+"CFBundleDisplayName" = "Window";
+"NSMicrophoneUsageDescription" = "Isabella usa el micrófono cuando hablas con ella.";
+"NSSpeechRecognitionUsageDescription" = "Isabella puede transcribir tu voz para convertirla en mensajes.";
+"NSCameraUsageDescription" = "Window usa la cámara cuando haces una foto para adjuntarla.";
+"NSPhotoLibraryUsageDescription" = "Window abre tus fotos cuando eliges una para adjuntarla.";
+"NSPhotoLibraryAddUsageDescription" = "Window guarda en Fotos las imágenes que decides guardar.";
+"NSLocationWhenInUseUsageDescription" = "Window usa tu ubicación para el tiempo de Ahora, solo si lo permites.";

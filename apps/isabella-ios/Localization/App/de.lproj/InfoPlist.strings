@@ -1,0 +1,8 @@
+/* Window auf Deutsch. Mit Deutsch und Spanisch zeigt iOS seine eigenen Menüs und Knöpfe in der Sprache des iPhones (#333). */
+"CFBundleDisplayName" = "Window";
+"NSMicrophoneUsageDescription" = "Window nutzt das Mikrofon, wenn du mit der KI sprichst.";
+"NSSpeechRecognitionUsageDescription" = "Window wandelt deine Sprache in Text um, damit daraus Nachrichten werden.";
+"NSCameraUsageDescription" = "Window nutzt die Kamera, wenn du ein Foto zum Anhängen aufnimmst.";
+"NSPhotoLibraryUsageDescription" = "Window öffnet deine Fotos, wenn du eines zum Anhängen auswählst.";
+"NSPhotoLibraryAddUsageDescription" = "Window speichert Bilder in Fotos, wenn du sie speichern möchtest.";
+"NSLocationWhenInUseUsageDescription" = "Window nutzt deinen Standort für das Wetter, nur wenn du es erlaubst.";

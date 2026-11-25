@@ -93,3 +93,23 @@ test("native task review shows changed fields and refuses unrecognized proposals
   assert.match(ui, /ForEach\(proposal\.reviewDetails\)/);
   assert.match(ui, /if proposal\.reviewable/);
 });
+
+test("iOS speaks the iPhone's language, German for the office (#333): Spanish and German are localized", () => {
+  const keys = ["CFBundleDisplayName", "NSMicrophoneUsageDescription", "NSSpeechRecognitionUsageDescription",
+    "NSCameraUsageDescription", "NSPhotoLibraryUsageDescription", "NSPhotoLibraryAddUsageDescription",
+    "NSLocationWhenInUseUsageDescription"];
+  for (const lang of ["es", "de"]) {
+    const strings = read(`Localization/App/${lang}.lproj/InfoPlist.strings`);
+    for (const key of keys) assert.match(strings, new RegExp(`^"${key}" = "[^"]+";$`, "m"), `${lang}: ${key}`);
+    for (const target of ["Share", "Widget"])
+      assert.match(read(`Localization/${target}/${lang}.lproj/InfoPlist.strings`), /^"CFBundleDisplayName" = "Window";$/m);
+  }
+  // Every permission text the app declares has its translation; the German one never says Romy.
+  for (const key of keys.slice(1)) assert.match(project, new RegExp(`INFOPLIST_KEY_${key}:`));
+  assert.doesNotMatch(read("Localization/App/de.lproj/InfoPlist.strings"), /Romy|Isabella/);
+  assert.match(project, /- Assets\.xcassets\n\s*- Localization\/App\n/);
+  assert.match(project, /- CaptureShared\n\s*- Localization\/Share\n/);
+  assert.match(project, /- Sources\/Features\/Continuity\/ContinuityItem\.swift\n\s*- Localization\/Widget\n/);
+  // Siri keeps matching the Spanish phrases.
+  assert.match(project, /developmentLanguage: es/);
+});

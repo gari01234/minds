@@ -7,7 +7,8 @@
 - **Dos cuentas (desde el 07.11.2026):** como cambiar de usuario en GitHub.
   - **Persönlich** es Window; **Office** es TBA Office, con su propio proyecto de Supabase, su inicio con correo y contraseña, su sesión en el Llavero y su propio almacén web.
   - Se cambia desde el menú «•••» de la web o desde la pantalla de inicio de sesión. Ver `BRIDGE.md`.
-  - El widget, la Share Extension y Siri siguen siendo solo de Persönlich.
+  - Desde el 25.11.2026 la sesión de Office también vive en el Llavero bajo la App Group, como la de Persönlich: Compartir, el widget y Siri podrán servir a Office (fases 2–4; Gari usa Office mucho más). Solo la app renueva las sesiones.
+  - **Idioma (#333):** la app está localizada en español y alemán (`Localization/*/xx.lproj`). iOS muestra sus propios menús, botones y textos de permisos en el idioma del iPhone; se puede elegir por app en Ajustes › Window › Idioma.
 - **Builds automáticos:** `ios-testflight-auto.yml` sube un build a TestFlight cuando cambia la app en `main` y cada dos meses (TestFlight caduca a los 90 días).
 - **MINDS completo:** puente `WKWebView` hacia la PWA existente para navegar la superficie más avanzada (Chat, Work, Agenda/planificación, Lecturas, etc.) sin reescribir su lógica. Los enlaces principales permanecen en `/minds/`; enlaces externos abren Safari. El inicio de sesión web es **separado** del inicio de sesión nativo: usar la misma cuenta. No se inyecta el token Keychain en JavaScript. Logout nativo limpia también el estado web embebido.
 - **Continuidad SwiftUI:** proyección owner-scoped de revisiones, Attention, Missions y Commitments, con estados/huecos honestos. No concede permisos ni ejecuta decisiones.
