@@ -113,10 +113,11 @@ final class ShareModel {
     // Apple's temporary URL lives only inside the completion block: copy there.
     nonisolated private static func copyFile(_ provider: NSItemProvider, identifier: String,
                                              into directory: URL) async -> SharedFile? {
-        await withCheckedContinuation { continuation in
+        let suggested = provider.suggestedName
+        return await withCheckedContinuation { continuation in
             provider.loadFileRepresentation(forTypeIdentifier: identifier) { url, _ in
                 guard let url else { continuation.resume(returning: nil); return }
-                let original = provider.suggestedName.flatMap { name -> String? in
+                let original = suggested.flatMap { name -> String? in
                     let ext = url.pathExtension
                     return name.isEmpty ? nil : (ext.isEmpty || name.lowercased().hasSuffix("." + ext.lowercased()) ? name : name + "." + ext)
                 } ?? url.lastPathComponent

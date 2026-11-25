@@ -97,14 +97,20 @@ def validate_metadata(info, target):
         rule = info.get("NSExtension", {}).get("NSExtensionAttributes", {}).get("NSExtensionActivationRule")
         require(isinstance(rule, dict), "MINDSShare: missing activation rule dictionary")
         require(rule.get("NSExtensionActivationSupportsText") is True, "MINDSShare: missing text support")
-        for kind in ("WebURL", "Image", "File"):
+        # One link; up to ten images or files (an Outlook mail with its attachments), since 25.11.2026.
+        for kind, limit in (("WebURL", 1), ("Image", 10), ("File", 10)):
             value = rule.get(f"NSExtensionActivationSupports{kind}WithMaxCount")
-            require(type(value) is int and value == 1, f"MINDSShare: unexpected {kind} activation limit")
+            require(type(value) is int and value == limit, f"MINDSShare: unexpected {kind} activation limit")
 
 
 def validate_runtime_config(info, target, bundle_id):
     # Build 7 shipped without these keys and could not reach MINDS.
     require(info.get("MINDSAppGroupID") == f"group.{bundle_id}", f"{target}: missing MINDSAppGroupID")
+    if target == "MINDSShare":
+        # «Teilen → Desktop of an office project» needs the office's public address and publishable key.
+        url, key = info.get("OFFICE_SUPABASE_URL", ""), info.get("OFFICE_SUPABASE_KEY", "")
+        require(isinstance(url, str) and url.startswith("https://"), "MINDSShare: missing OFFICE_SUPABASE_URL")
+        require(isinstance(key, str) and key.startswith("sb_publishable_"), "MINDSShare: missing OFFICE_SUPABASE_KEY")
     if target == "MINDS":
         url, key = info.get("SUPABASE_URL", ""), info.get("SUPABASE_ANON_KEY", "")
         require(isinstance(url, str) and url.startswith("https://") and "$(" not in url, "MINDS: missing SUPABASE_URL")
