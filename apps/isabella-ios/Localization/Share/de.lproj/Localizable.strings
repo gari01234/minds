@@ -1,0 +1,20 @@
+/* Teilen-Blatt von Window, auf Deutsch. */
+"share.title" = "In Window sichern";
+"share.account" = "Konto";
+"share.content" = "Inhalt";
+"share.name" = "Dateiname";
+"share.project" = "Projekt";
+"share.folder" = "Ordner";
+"share.folder.root" = "Desktop (oberste Ebene)";
+"share.save" = "Sichern";
+"share.cancel" = "Abbrechen";
+"share.office.reads" = "Die Datei kommt auf den Desktop des Projekts. Die KI des Office liest sie in wenigen Minuten.";
+"share.office.filesonly" = "In ein Office-Projekt lassen sich Dateien sichern, keine Texte oder Links.";
+"share.office.open" = "Öffne Window einmal in Office, dann stehen hier deine Projekte.";
+"share.office.noprojects" = "Du bist in keinem aktiven Projekt im Team.";
+"share.office.saved" = "Gespeichert in %@.";
+"share.office.staged" = "Gesichert. Hochgeladen wird, sobald du Window öffnest.";
+"share.personal.note" = "Der Inhalt wartet in Isabella auf Prüfung.";
+"share.personal.saved" = "Gesichert. Prüfe ihn in Isabella.";
+"share.error" = "Nicht gespeichert: %@";
+"share.unsupported" = "Dieses Format wird noch nicht unterstützt.";

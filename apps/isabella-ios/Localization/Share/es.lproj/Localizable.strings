@@ -1,0 +1,20 @@
+/* Hoja de compartir de Window, en español. */
+"share.title" = "Guardar en Window";
+"share.account" = "Cuenta";
+"share.content" = "Contenido";
+"share.name" = "Nombre del archivo";
+"share.project" = "Proyecto";
+"share.folder" = "Carpeta";
+"share.folder.root" = "Desktop (nivel superior)";
+"share.save" = "Guardar";
+"share.cancel" = "Cancelar";
+"share.office.reads" = "El archivo va al Desktop del proyecto. La IA del Office lo leerá en unos minutos.";
+"share.office.filesonly" = "En un proyecto de Office se guardan archivos, no textos ni enlaces.";
+"share.office.open" = "Abre Window una vez en Office y aquí estarán tus proyectos.";
+"share.office.noprojects" = "No estás en el equipo de ningún proyecto activo.";
+"share.office.saved" = "Guardado en %@.";
+"share.office.staged" = "Guardado. Se subirá en cuanto abras Window.";
+"share.personal.note" = "El original quedará pendiente de revisión en Isabella.";
+"share.personal.saved" = "Guardado. Revísalo en Isabella.";
+"share.error" = "No se guardó: %@";
+"share.unsupported" = "Este formato todavía no está admitido.";

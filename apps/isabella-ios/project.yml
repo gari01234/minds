@@ -24,6 +24,7 @@ targets:
       - CaptureShared
       - SharedGlance
       - Assets.xcassets
+      - OfficeShared
       - Localization/App
     configFiles:
       Debug: Config/Base.xcconfig
@@ -66,6 +67,7 @@ targets:
     sources:
       - ShareExtension
       - CaptureShared
+      - OfficeShared
       - Localization/Share
     info:
       path: Config/Share-Info.plist
@@ -74,6 +76,9 @@ targets:
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         MINDSAppGroupID: "group.$(MINDS_BUNDLE_ID)"
+        # TBA Office for «Teilen → Desktop of a project»: public address and publishable key (RLS decides).
+        OFFICE_SUPABASE_URL: https://ynzsbemisjvfgbqcqliq.supabase.co
+        OFFICE_SUPABASE_KEY: sb_publishable_A59RSOlLQ71V8hEnexaLZA_GFSyMIgR
         NSExtension:
           NSExtensionPointIdentifier: com.apple.share-services
           NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).ShareViewController"
@@ -81,8 +86,8 @@ targets:
             NSExtensionActivationRule:
               NSExtensionActivationSupportsText: true
               NSExtensionActivationSupportsWebURLWithMaxCount: 1
-              NSExtensionActivationSupportsImageWithMaxCount: 1
-              NSExtensionActivationSupportsFileWithMaxCount: 1
+              NSExtensionActivationSupportsImageWithMaxCount: 10
+              NSExtensionActivationSupportsFileWithMaxCount: 10
     entitlements:
       path: Config/Share.entitlements
       properties:

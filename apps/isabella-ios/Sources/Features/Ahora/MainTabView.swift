@@ -40,7 +40,7 @@ struct MainTabView: View {
         .tint(Color(red: 0.090, green: 0.090, blue: 0.090))
         .onChange(of: model.tab) { _, _ in model.showWebSection() }
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { Task { await model.refreshBadge() } }
+            if phase == .active { Task { await model.refreshBadge(); await model.syncOfficeShare() } }
         }
     }
 

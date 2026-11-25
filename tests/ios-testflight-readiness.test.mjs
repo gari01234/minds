@@ -108,7 +108,7 @@ test('Bundle metadata rejects the three omissions reported by Apple in run #4', 
 import copy, importlib.util
 spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Config/verify-testflight-signing.py')
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-rule = {'NSExtensionActivationSupportsText': True, **{'NSExtensionActivationSupports' + kind + 'WithMaxCount': 1 for kind in ('WebURL', 'Image', 'File')}}
+rule = {'NSExtensionActivationSupportsText': True, **{'NSExtensionActivationSupports' + kind + 'WithMaxCount': limit for kind, limit in (('WebURL', 1), ('Image', 10), ('File', 10))}}
 share = {'CFBundleDisplayName': 'Window', 'NSExtension': {'NSExtensionAttributes': {'NSExtensionActivationRule': rule}}}
 for target in m.TARGETS:
     info = share if target == 'MINDSShare' else {'CFBundleDisplayName': 'Window'}

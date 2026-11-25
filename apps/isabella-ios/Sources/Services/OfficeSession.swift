@@ -253,6 +253,13 @@ actor OfficeSession {
         return fresh
     }
 
+    // For the share sheet's files: the app uploads with its own, refreshed session.
+    func shareAccess() async throws -> OfficeShareAccess? {
+        guard isSignedIn else { return nil }
+        let stored = try await valid()
+        return OfficeShareAccess(accessToken: stored.accessToken, userID: stored.userID.lowercased())
+    }
+
     // For the office web page, through the bridge: never the refresh token.
     func bridgeSession() async throws -> BridgeSession? {
         guard isSignedIn else { return nil }
