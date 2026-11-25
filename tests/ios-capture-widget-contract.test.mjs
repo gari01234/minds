@@ -20,7 +20,9 @@ test("Share and Widget are real app extensions, not mock UI screens",()=>{
 });
 
 test("capture is explicit, durable, size-bounded, original preserving, and unclassified",()=>{
-  assert.match(share,/Guardar fuente/);
+  // Persönlich keeps the explicit, private capture; the button is localized («Guardar» / «Sichern»).
+  assert.match(share,/Button\(L\("share\.save"\)\)/);
+  assert.match(share,/case \.personal: savePersonal\(\)/);
   assert.match(share,/loadFileRepresentation/);
   assert.match(share,/CaptureInboxStore\.stageFile/);
   assert.match(share,/CaptureInboxStore\.stageText/);

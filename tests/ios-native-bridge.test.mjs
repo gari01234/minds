@@ -107,8 +107,8 @@ test("iOS speaks the iPhone's language, German for the office (#333): Spanish an
   // Every permission text the app declares has its translation; the German one never says Romy.
   for (const key of keys.slice(1)) assert.match(project, new RegExp(`INFOPLIST_KEY_${key}:`));
   assert.doesNotMatch(read("Localization/App/de.lproj/InfoPlist.strings"), /Romy|Isabella/);
-  assert.match(project, /- Assets\.xcassets\n\s*- Localization\/App\n/);
-  assert.match(project, /- CaptureShared\n\s*- Localization\/Share\n/);
+  assert.match(project, /- Assets\.xcassets\n(\s*- \w+\n)*\s*- Localization\/App\n/);
+  assert.match(project, /- CaptureShared\n(\s*- \w+\n)*\s*- Localization\/Share\n/);
   assert.match(project, /- Sources\/Features\/Continuity\/ContinuityItem\.swift\n\s*- Localization\/Widget\n/);
   // Siri keeps matching the Spanish phrases.
   assert.match(project, /developmentLanguage: es/);

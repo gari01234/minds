@@ -102,6 +102,7 @@ final class AppModel {
             officeError = nil
             officeAuthenticated = true
             officePortal.reloadIfStarted()
+            await syncOfficeShare()
         } catch {
             officePassword = ""
             officeError = error.localizedDescription
@@ -110,6 +111,8 @@ final class AppModel {
 
     func logoutOffice() async {
         await office.logout()
+        // Nothing of this person stays for the share sheet: not their projects, not their files.
+        OfficeShareStore.clearAll()
         await officePortal.clearForLogout()
         officeAuthenticated = false
         officePassword = ""
@@ -164,6 +167,31 @@ final class AppModel {
         open(section: "work", extra: key.map { ["project": $0] } ?? [:])
     }
 
+    // The share sheet's side of the office (Teilen → Desktop of a project):
+    // 1. files it staged because its access had expired go up now, with the app's refreshed session,
+    //    and only for the person who shared them;
+    // 2. the projects and folders it may offer are kept for when its own access has expired.
+    func syncOfficeShare() async {
+        guard await office.isSignedIn, let access = try? await office.shareAccess() else { return }
+        let uploader = OfficeShareUploader(access: access)
+        for item in OfficeShareStore.pending() {
+            guard item.userID == access.userID else { OfficeShareStore.remove(item); continue }
+            guard let file = try? OfficeShareStore.payloadURL(item) else { break }
+            do {
+                try await uploader.upload(fileAt: file, name: item.name, mime: item.mime, target: item.target)
+                OfficeShareStore.remove(item)
+            } catch OfficeShareError.tooLarge {
+                OfficeShareStore.remove(item)
+            } catch {
+                break  // offline or refused: it stays and goes up next time
+            }
+        }
+        if let projects = try? await uploader.projects() {
+            let folders = (try? await uploader.folders(projectIDs: projects.map(\.id))) ?? [:]
+            OfficeShareStore.saveCache(.init(userID: access.userID, projects: projects, folders: folders, savedAt: Date()))
+        }
+    }
+
     func refreshBadge() async {
         guard account == .personal else { return }
         guard isAuthenticated else { openProposals = 0; return }
@@ -175,6 +203,7 @@ final class AppModel {
         isAuthenticated = await backend.isSignedIn
         officeAuthenticated = await office.isSignedIn
         isLoading = false
+        await syncOfficeShare()
         if isAuthenticated {
             await reloadContinuity()
             await refreshBadge()
