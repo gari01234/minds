@@ -1,0 +1,7 @@
+/* Office-Widget auf Deutsch. */
+"widget.office.name" = "Office: Heute";
+"widget.office.description" = "Heute, die nächste Frist und was zu bestätigen ist.";
+"widget.office.today" = "Heute: %d";
+"widget.office.deadline" = "Frist";
+"widget.office.toconfirm" = "%d zu bestätigen";
+"widget.office.open" = "Öffne Window in Office, dann steht hier dein Tag.";

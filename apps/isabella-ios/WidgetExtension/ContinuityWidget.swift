@@ -62,6 +62,8 @@ struct IsabellaContinuityWidget: Widget {
 @main
 struct MINDSWidgets: WidgetBundle {
     var body: some Widget {
+        // Office first (Gari, 25.11.2026: he uses Office far more than Persönlich).
+        OfficeTodayWidget()
         IsabellaContinuityWidget()
     }
 }
