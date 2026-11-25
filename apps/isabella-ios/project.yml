@@ -105,6 +105,7 @@ targets:
       - WidgetExtension
       - SharedGlance
       - Sources/Features/Continuity/ContinuityItem.swift
+      - OfficeShared
       - Localization/Widget
     info:
       path: Config/Widget-Info.plist

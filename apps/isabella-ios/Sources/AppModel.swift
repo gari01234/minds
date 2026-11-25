@@ -111,8 +111,10 @@ final class AppModel {
 
     func logoutOffice() async {
         await office.logout()
-        // Nothing of this person stays for the share sheet: not their projects, not their files.
+        // Nothing of this person stays for the share sheet or the widget: not their projects, not their files, not their day.
         OfficeShareStore.clearAll()
+        OfficeGlanceStore.clear()
+        WidgetCenter.shared.reloadTimelines(ofKind: "WindowOffice")
         await officePortal.clearForLogout()
         officeAuthenticated = false
         officePassword = ""
@@ -189,6 +191,11 @@ final class AppModel {
         if let projects = try? await uploader.projects() {
             let folders = (try? await uploader.folders(projectIDs: projects.map(\.id))) ?? [:]
             OfficeShareStore.saveCache(.init(userID: access.userID, projects: projects, folders: folders, savedAt: Date()))
+        }
+        // The office widget's day (Heute, next Frist, zu bestätigen): it only shows this snapshot.
+        if let glance = try? await OfficeGlanceLoader(access: access).load() {
+            OfficeGlanceStore.save(glance)
+            WidgetCenter.shared.reloadTimelines(ofKind: "WindowOffice")
         }
     }
 
