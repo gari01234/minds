@@ -3,8 +3,9 @@ import Security
 
 // The two accounts of Window, like switching users on GitHub: each one has its own sign-in,
 // its own session and its own data. Persönlich is Window (MINDS); Office is TBA Office, a
-// separate Supabase project. Nothing is copied between them. The widget, the Share Extension
-// and Siri stay with the personal account.
+// separate Supabase project. Nothing is copied between them. Since 25.11.2026 both sessions
+// live under the App Group, so the Share Extension, the widget and Siri can serve the office
+// too (Gari uses Office far more than Persönlich); only the app refreshes them.
 enum WindowAccount: String {
     case personal, office
 }
@@ -63,17 +64,26 @@ private struct OfficeStoredSession: Codable {
     var email: String?
 }
 
-// The office session lives in the app's own Keychain (not in the App Group: the extensions
-// never use it). Readable after the first unlock, on this device only.
+// The office session lives in the Keychain under the App Group, like the personal one, so the
+// Share Extension, the widget and App Intents can work for the office as well. Readable after
+// the first unlock (widgets and notification actions run while locked), on this device only.
+// The app stays the only owner of the refresh token: extensions read, they never refresh.
 private enum OfficeKeychain {
     static let key = "tba.office.native.session"
-    static var selector: [String: Any] {
-        [kSecClass as String: kSecClassGenericPassword,
-         kSecAttrService as String: key,
-         kSecAttrAccount as String: key]
+    static var group: String? {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "MINDSAppGroupID") as? String,
+              value.hasPrefix("group.") else { return nil }
+        return value
     }
-    static func load() -> OfficeStoredSession? {
-        var query = selector
+    static func selector(shared: Bool) -> [String: Any] {
+        var query: [String: Any] = [kSecClass as String: kSecClassGenericPassword,
+                                    kSecAttrService as String: key,
+                                    kSecAttrAccount as String: key]
+        if shared, let group { query[kSecAttrAccessGroup as String] = group }
+        return query
+    }
+    private static func read(shared: Bool) -> OfficeStoredSession? {
+        var query = selector(shared: shared)
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         var value: CFTypeRef?
@@ -81,13 +91,35 @@ private enum OfficeKeychain {
               let data = value as? Data else { return nil }
         return try? JSONDecoder().decode(OfficeStoredSession.self, from: data)
     }
+    static func load() -> OfficeStoredSession? {
+        if let current = read(shared: true) { return current }
+        guard let group else { return nil }
+        // A session saved by a build before the shared group (07.11 to 25.11.2026): move it
+        // once. Delete only that old item (by its own access group), never the new one.
+        var query = selector(shared: false)
+        query[kSecReturnAttributes as String] = true
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        var value: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
+              let item = value as? [String: Any],
+              let data = item[kSecValueData as String] as? Data,
+              let legacy = try? JSONDecoder().decode(OfficeStoredSession.self, from: data) else { return nil }
+        if let oldGroup = item[kSecAttrAccessGroup as String] as? String, oldGroup != group,
+           (try? save(legacy)) != nil {
+            var old = selector(shared: false)
+            old[kSecAttrAccessGroup as String] = oldGroup
+            SecItemDelete(old as CFDictionary)
+        }
+        return legacy
+    }
     static func save(_ session: OfficeStoredSession) throws {
         let data = try JSONEncoder().encode(session)
         let attributes: [String: Any] = [kSecValueData as String: data,
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly]
-        let status = SecItemUpdate(selector as CFDictionary, attributes as CFDictionary)
+        let status = SecItemUpdate(selector(shared: true) as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
-            var new = selector
+            var new = selector(shared: true)
             attributes.forEach { new[$0.key] = $0.value }
             guard SecItemAdd(new as CFDictionary, nil) == errSecSuccess else {
                 throw BackendError.rejected("Die Office-Anmeldung konnte nicht gespeichert werden.")
@@ -97,7 +129,8 @@ private enum OfficeKeychain {
         }
     }
     static func clear() {
-        SecItemDelete(selector as CFDictionary)
+        SecItemDelete(selector(shared: true) as CFDictionary)
+        SecItemDelete(selector(shared: false) as CFDictionary)
     }
 }
 

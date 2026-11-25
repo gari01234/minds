@@ -2,6 +2,8 @@ name: MINDS
 options:
   createIntermediateGroups: true
   # The app speaks Spanish: Siri matches the App Shortcut phrases in this language.
+  # German and Spanish are both localized (Localization/*/xx.lproj): iOS shows its own menus,
+  # buttons and permission texts in the iPhone's language, German for the office (#333).
   developmentLanguage: es
   xcodeVersion: "15.4"
   projectFormat: xcode15_3
@@ -22,6 +24,7 @@ targets:
       - CaptureShared
       - SharedGlance
       - Assets.xcassets
+      - Localization/App
     configFiles:
       Debug: Config/Base.xcconfig
       Release: Config/Base.xcconfig
@@ -63,6 +66,7 @@ targets:
     sources:
       - ShareExtension
       - CaptureShared
+      - Localization/Share
     info:
       path: Config/Share-Info.plist
       properties:
@@ -96,6 +100,7 @@ targets:
       - WidgetExtension
       - SharedGlance
       - Sources/Features/Continuity/ContinuityItem.swift
+      - Localization/Widget
     info:
       path: Config/Widget-Info.plist
       properties:
