@@ -25,6 +25,7 @@ targets:
       - SharedGlance
       - Assets.xcassets
       - OfficeShared
+      - OfficePush
       - Localization/App
     configFiles:
       Debug: Config/Base.xcconfig
@@ -34,6 +35,11 @@ targets:
       properties:
         com.apple.security.application-groups:
           - "group.$(MINDS_BUNDLE_ID)"
+        # Romy's notifications (TBA Office): APNs, and the Keychain group the notification extension reads the
+        # iPhone's key from. TestFlight and the App Store use the production APNs environment.
+        aps-environment: production
+        keychain-access-groups:
+          - "$(DEVELOPMENT_TEAM).$(MINDS_BUNDLE_ID).push"
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID)"
@@ -58,6 +64,8 @@ targets:
       - target: MINDSShare
         embed: true
       - target: MINDSWidget
+        embed: true
+      - target: MINDSNotifications
         embed: true
     scheme:
       testTargets: []
@@ -124,5 +132,33 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).widget"
+        SWIFT_VERSION: 5.10
+        APPLICATION_EXTENSION_API_ONLY: YES
+  # Romy's notifications (TBA Office, 27.11.2026): opens the text sealed with this iPhone's key. No App Group:
+  # it only reads the key from the shared Keychain group, which needs no App ID configuration.
+  MINDSNotifications:
+    type: app-extension
+    platform: iOS
+    sources:
+      - NotificationExtension
+      - OfficePush
+    info:
+      path: Config/Notifications-Info.plist
+      properties:
+        CFBundleDisplayName: Window
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        MINDSKeychainGroup: "$(DEVELOPMENT_TEAM).$(MINDS_BUNDLE_ID).push"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.usernotifications.service
+          NSExtensionPrincipalClass: "$(PRODUCT_MODULE_NAME).OfficeNotificationService"
+    entitlements:
+      path: Config/Notifications.entitlements
+      properties:
+        keychain-access-groups:
+          - "$(DEVELOPMENT_TEAM).$(MINDS_BUNDLE_ID).push"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).notifications"
         SWIFT_VERSION: 5.10
         APPLICATION_EXTENSION_API_ONLY: YES

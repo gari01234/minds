@@ -11,9 +11,24 @@ import sys
 import unicodedata
 from pathlib import Path
 
-TARGETS = {"MINDS": "", "MINDSShare": ".share", "MINDSWidget": ".widget"}
+TARGETS = {"MINDS": "", "MINDSShare": ".share", "MINDSWidget": ".widget", "MINDSNotifications": ".notifications"}
+# Romy's notifications (27.11.2026): the notification extension shares no App Group (an App Group cannot be assigned
+# to a new App ID through the App Store Connect API); it reads the iPhone's key from a Keychain group with the app.
+GROUP_TARGETS = {"MINDS", "MINDSShare", "MINDSWidget"}
+KEYCHAIN_TARGETS = {"MINDS", "MINDSNotifications"}
 GROUPS = "com.apple.security.application-groups"
+KEYCHAIN = "keychain-access-groups"
+PUSH = "aps-environment"
 TEAM = "com.apple.developer.team-identifier"
+
+
+def push_group(bundle_id, team):
+    return f"{team}.{bundle_id}.push"
+
+
+def keychain_allowed(group, patterns):
+    # App Store profiles grant "<Team ID>.*": any group of the team.
+    return any(p == group or (p.endswith("*") and group.startswith(p[:-1])) for p in patterns or [])
 
 
 def require(condition, message):
@@ -22,7 +37,7 @@ def require(condition, message):
 
 
 def validate_settings(rows, bundle_id, team):
-    require({row["target"] for row in rows} == set(TARGETS), "Expected exactly three targets")
+    require({row["target"] for row in rows} == set(TARGETS), "Expected exactly four targets")
     for row in rows:
         target, values = row["target"], row["buildSettings"]
         expected = {"PRODUCT_BUNDLE_IDENTIFIER": bundle_id + TARGETS[target],
@@ -37,7 +52,7 @@ def validate_settings(rows, bundle_id, team):
         print(f"{target}: {json.dumps(expected, sort_keys=True)}; entitlements={values['CODE_SIGN_ENTITLEMENTS']}")
 
 
-def validate_distribution(profile, entitlements, bundle_id, group, team):
+def validate_distribution(profile, entitlements, bundle_id, group, team, target="MINDSWidget", app_bundle=None):
     require(profile.get("TeamIdentifier") == [team], "Profile team mismatch")
     require("ProvisionedDevices" not in profile, "Device-based profile is not App Store Connect")
     require(not profile.get("ProvisionsAllDevices"), "Enterprise profile is not App Store Connect")
@@ -45,8 +60,18 @@ def validate_distribution(profile, entitlements, bundle_id, group, team):
     for label, values in (("profile", profile.get("Entitlements", {})), ("signature", entitlements)):
         require(values.get("application-identifier") == f"{team}.{bundle_id}", f"{label}: app identifier mismatch")
         require(values.get(TEAM) == team, f"{label}: team mismatch")
-        require(values.get(GROUPS) == [group], f"{label}: App Group mismatch")
+        if target in GROUP_TARGETS:
+            require(values.get(GROUPS) == [group], f"{label}: App Group mismatch")
+        else:
+            require(not values.get(GROUPS), f"{label}: unexpected App Group")
         require(values.get("get-task-allow") is False, f"{label}: distribution must disable debugging")
+    if target in KEYCHAIN_TARGETS:
+        expected = push_group(app_bundle or bundle_id, team)
+        require(entitlements.get(KEYCHAIN) == [expected], "signature: Keychain group mismatch")
+        require(keychain_allowed(expected, profile["Entitlements"].get(KEYCHAIN)), "profile: Keychain group not granted")
+    if target == "MINDS":
+        require(entitlements.get(PUSH) == "production", "signature: APNs environment must be production")
+        require(profile["Entitlements"].get(PUSH) == "production", "profile: Push Notifications not enabled for the App ID")
     require(profile["Entitlements"].get("beta-reports-active") is True, "Missing App Store beta entitlement")
 
 
@@ -101,11 +126,21 @@ def validate_metadata(info, target):
         for kind, limit in (("WebURL", 1), ("Image", 10), ("File", 10)):
             value = rule.get(f"NSExtensionActivationSupports{kind}WithMaxCount")
             require(type(value) is int and value == limit, f"MINDSShare: unexpected {kind} activation limit")
+    if target == "MINDSNotifications":
+        extension = info.get("NSExtension", {})
+        require(extension.get("NSExtensionPointIdentifier") == "com.apple.usernotifications.service",
+                "MINDSNotifications: not a notification service extension")
+        require(str(extension.get("NSExtensionPrincipalClass", "")).endswith(".OfficeNotificationService"),
+                "MINDSNotifications: unexpected principal class")
 
 
-def validate_runtime_config(info, target, bundle_id):
+def validate_runtime_config(info, target, bundle_id, team=None):
     # Build 7 shipped without these keys and could not reach MINDS.
-    require(info.get("MINDSAppGroupID") == f"group.{bundle_id}", f"{target}: missing MINDSAppGroupID")
+    if target in GROUP_TARGETS:
+        require(info.get("MINDSAppGroupID") == f"group.{bundle_id}", f"{target}: missing MINDSAppGroupID")
+    if target in KEYCHAIN_TARGETS and team:
+        # The app and the notification extension must look for the iPhone's key in the same Keychain group.
+        require(info.get("MINDSKeychainGroup") == push_group(bundle_id, team), f"{target}: missing MINDSKeychainGroup")
     if target == "MINDSShare":
         # «Teilen → Desktop of an office project» needs the office's public address and publishable key.
         url, key = info.get("OFFICE_SUPABASE_URL", ""), info.get("OFFICE_SUPABASE_KEY", "")
@@ -122,14 +157,14 @@ def validate_bundles(mode, root, bundle_id, team):
     apps = list(root.glob("*.app"))
     require(len(apps) == 1, "Expected one app")
     app = apps[0]
-    require({p.name for p in (app / "PlugIns").glob("*.appex")} == {"MINDSShare.appex", "MINDSWidget.appex"}, "Missing or unexpected extensions")
+    require({p.name for p in (app / "PlugIns").glob("*.appex")} == {"MINDSShare.appex", "MINDSWidget.appex", "MINDSNotifications.appex"}, "Missing or unexpected extensions")
     version = None
     signature_errors = []
     for target, suffix in TARGETS.items():
         path = app if not suffix else app / "PlugIns" / f"{target}.appex"
         info = plistlib.loads((path / "Info.plist").read_bytes())
         validate_metadata(info, target)
-        validate_runtime_config(info, target, bundle_id)
+        validate_runtime_config(info, target, bundle_id, team)
         require(info.get("CFBundleIdentifier") == bundle_id + suffix, f"{target}: bundle ID mismatch")
         current = (info.get("CFBundleShortVersionString"), info.get("CFBundleVersion"))
         require(all(current), f"{target}: missing version/build")
@@ -141,14 +176,22 @@ def validate_bundles(mode, root, bundle_id, team):
             signature_errors.append(str(error))
             continue
         entitlements = plistlib.loads(output("codesign", "-d", "--entitlements", ":-", str(path)))
-        require(entitlements.get(GROUPS) == [f"group.{bundle_id}"], f"{target}: signed App Group missing")
+        if target in GROUP_TARGETS:
+            require(entitlements.get(GROUPS) == [f"group.{bundle_id}"], f"{target}: signed App Group missing")
+        else:
+            require(not entitlements.get(GROUPS), f"{target}: unexpected App Group")
+        if target in KEYCHAIN_TARGETS:
+            require(entitlements.get(KEYCHAIN) == [push_group(bundle_id, team)], f"{target}: signed Keychain group missing")
+        if target == "MINDS":
+            require(entitlements.get(PUSH) == "production", "MINDS: signed APNs environment missing")
         if mode == "distribution":
             profile = plistlib.loads(output("security", "cms", "-D", "-i", str(path / "embedded.mobileprovision")))
-            validate_distribution(profile, entitlements, bundle_id + suffix, f"group.{bundle_id}", team)
+            validate_distribution(profile, entitlements, bundle_id + suffix, f"group.{bundle_id}", team, target, bundle_id)
             authority = signing_authority(path)
             require(authority, f"{target}: codesign did not report a signing authority")
             require(authority.startswith(("Apple Distribution:", "iPhone Distribution:")), f"{target}: no distribution signing authority")
-        print(f"{target}: {mode} verified; bundle={bundle_id + suffix}; App Group verified; version={current[0]} ({current[1]})")
+        shared = "App Group" if target in GROUP_TARGETS else "Keychain group"
+        print(f"{target}: {mode} verified; bundle={bundle_id + suffix}; {shared} verified; version={current[0]} ({current[1]})")
     require(not signature_errors, "\n".join(signature_errors))
 
 

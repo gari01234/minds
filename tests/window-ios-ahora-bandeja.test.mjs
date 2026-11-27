@@ -35,7 +35,7 @@ test('The Bandeja badge counts exactly what the web counts as «Por confirmar»'
   assert.match(work, /r\.memory_type==='commitment'&&r\.status==='proposed'&&r\.metadata\?\.kind==='aufgabe'/);
   // The page's count wins while it is open; the app counts on launch and when it comes back.
   assert.match(model, /webPortal\.onBadge = \{ \[weak self\] count in self\?\.openProposals = count \}/);
-  assert.match(tabs, /if phase == \.active \{ Task \{ await model\.refreshBadge\(\); await model\.syncOfficeShare\(\) \} \}/);
+  assert.match(tabs, /if phase == \.active \{ Task \{ await model\.refreshBadge\(\); await model\.syncOfficeShare\(\); await model\.syncOfficePush\(\) \} \}/);
   assert.match(model, /openProposals = 0/);
 });
 

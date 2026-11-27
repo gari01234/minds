@@ -43,7 +43,7 @@ jobs:
         run: |
           brew list --versions xcodegen >/dev/null 2>&1 || brew install xcodegen
           xcodegen generate
-      - name: Compile all three targets without Apple credentials
+      - name: Compile all four targets without Apple credentials
         working-directory: apps/isabella-ios
         shell: bash
         run: |
@@ -137,7 +137,7 @@ jobs:
             -authenticationKeyPath "$RUNNER_TEMP/isabella-apple/AuthKey_$ASC_KEY_ID.p8" \
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-      - name: Verify distribution signing and App Group for all three targets
+      - name: Verify distribution signing, App Group, Keychain group and Push for all four targets
         shell: bash
         run: |
           set -euo pipefail
@@ -218,9 +218,9 @@ jobs:
         run: '"$WINDOW_PY" apps/isabella-ios/Config/asc-local-signing.py retire-previous "$RUNNER_TEMP/window-local"'
       - name: Create Apple Distribution identity and App Store profiles
         run: '"$WINDOW_PY" apps/isabella-ios/Config/asc-local-signing.py prepare "$RUNNER_TEMP/window-local" "$APPLE_TEAM_ID" "$APP_BUNDLE_ID" "$GITHUB_RUN_NUMBER"'
-      - name: Sign app, Share and Widget on the runner
+      - name: Sign app, Share, Widget and Notifications on the runner
         run: bash apps/isabella-ios/Config/resign-for-testflight.sh
-      - name: Verify distribution signing and App Group for all three targets
+      - name: Verify distribution signing, App Group, Keychain group and Push for all four targets
         run: python3 apps/isabella-ios/Config/verify-testflight-signing.py distribution "$WINDOW_PAYLOAD" "$APP_BUNDLE_ID" "$APPLE_TEAM_ID"
       - name: Upload verified IPA to TestFlight
         shell: bash
