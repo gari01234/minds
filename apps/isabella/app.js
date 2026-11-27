@@ -202,7 +202,9 @@ function load(){try{
   x.feedThreads=x.feedThreads&&typeof x.feedThreads==='object'&&!Array.isArray(x.feedThreads)?x.feedThreads:{};
   x.feedSignals=Array.isArray(x.feedSignals)?x.feedSignals:[];
   x.memory=(Array.isArray(x.memory)?x.memory:[]).map((m,i)=>{if(typeof m!=='object')return {id:'memory-'+i,kind:'context',content:String(m),status:'active',confidence:1,source:'local'};return {...m,kind:normalizeMemoryKind(m.kind),status:m.status==='deleted'?'deleted':(m.status||'active')}});
-  x.messages=normalizeMessages(x.messages);return x
+  x.messages=normalizeMessages(x.messages);
+  // The calendar always opens on today (Gari, 27.11.2026), not on the last day looked at; the view stays.
+  x.date=today();return x
 }catch{return JSON.parse(JSON.stringify(base))}}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{} window.ISABELLA_STATE=state;try{window.dispatchEvent(new CustomEvent('isabella:state',{detail:JSON.parse(JSON.stringify(state))}))}catch{} renderToday();}
 function pretty(s,opt={weekday:'long',day:'numeric',month:'long'}){return fromIso(s).toLocaleDateString('es-ES',opt)}
@@ -320,9 +322,12 @@ function init(){
   const reviewId=reviewRequestIdFromUrl();
   show(reviewId?'assistant':state.screen);
   if(reviewId)setTimeout(()=>void handleReviewDeepLink(),0);
+  let calendarToday=today();
   void markPresenceSeen();
   document.addEventListener('visibilitychange',()=>{
     if(document.visibilityState==='visible'){
+      // Left open past midnight: if the calendar showed «today», it shows the new day when looked at again.
+      const now=today();if(now!==calendarToday){const wasToday=state.date===calendarToday;calendarToday=now;if(wasToday){state.date=now;save();if(state.screen==='calendar')renderCalendar()}}
       void markPresenceSeen();
       void syncDurableChatJobs();
       void recoverReviewedTaskReceipts();
