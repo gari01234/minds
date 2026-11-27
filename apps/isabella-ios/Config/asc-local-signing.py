@@ -7,8 +7,9 @@ Apple's 90035 check. Signing on the runner with /usr/bin/codesign lets codesign
 derive the requirement from the certificate itself.
 
 Commands (run with the job's App Store Connect key in the environment):
-  prepare  <workdir> <team> <bundle> <run>  create key + CSR, an Apple Distribution
-           certificate, a temporary keychain and App Store profiles for the three targets
+  prepare  <workdir> <team> <bundle> <run>  register the notification extension's App ID and enable Push
+           Notifications on the app if missing, then create key + CSR, an Apple Distribution
+           certificate, a temporary keychain and App Store profiles for the four targets
   entitlements <archived-bundle> <profile> <team> <out.plist>
   retire-previous <workdir>                 revoke certificates of earlier Window CI runs
 
@@ -29,7 +30,10 @@ from pathlib import Path
 
 API = "https://api.appstoreconnect.apple.com/v1"
 PROFILE_PREFIX = "Window CI "
-SUFFIXES = ("", ".share", ".widget")
+SUFFIXES = ("", ".share", ".widget", ".notifications")
+# Registered here when missing. The notification extension needs no App Group (the API cannot assign one); the
+# app, Share and Widget were registered by hand with their App Group (TESTFLIGHT-SIN-MAC.md, B.2).
+REGISTERED_BY_CI = (".notifications",)
 WWDR_G3 = "https://www.apple.com/certificateauthority/AppleWWDRCAG3.cer"
 
 
@@ -54,6 +58,20 @@ def distribution_entitlements(archived, profile_entitlements, team, bundle_id):
     if groups is not None:
         if not isinstance(allowed, list) or not set(groups) <= set(allowed):
             fail(f"{bundle_id}: App Group not granted by the profile")
+    # Romy's notifications: APNs as the profile grants it (production for App Store / TestFlight).
+    if "aps-environment" in ent:
+        granted = profile_entitlements.get("aps-environment")
+        if granted not in ("production", "development"):
+            fail(f"{bundle_id}: Push Notifications not granted by the profile")
+        ent["aps-environment"] = granted
+    # The Keychain group shared with the notification extension: one of the team's, as the profile allows.
+    keychain = ent.get("keychain-access-groups")
+    if keychain is not None:
+        patterns = profile_entitlements.get("keychain-access-groups") or []
+        for group in keychain:
+            if not str(group).startswith(team + ".") or not any(
+                    p == group or (p.endswith("*") and str(group).startswith(p[:-1])) for p in patterns):
+                fail(f"{bundle_id}: Keychain group not granted by the profile")
     return ent
 
 
@@ -115,6 +133,31 @@ def list_all(path):
 
 # ---------- commands ----------
 
+def ensure_identifiers(bundle):
+    """The notification extension's App ID and Push Notifications on the app, through the API, only if missing."""
+    wanted = {bundle + s for s in SUFFIXES}
+    found = {b["attributes"]["identifier"]: b["id"]
+             for b in list_all("/bundleIds?limit=200&filter[identifier]=" + ",".join(sorted(wanted)))
+             if b["attributes"].get("identifier") in wanted}
+    registered = []
+    for suffix in REGISTERED_BY_CI:
+        identifier = bundle + suffix
+        if identifier not in found:
+            data = call("POST", "/bundleIds", {"data": {"type": "bundleIds", "attributes": {
+                "identifier": identifier, "name": "Window Notifications", "platform": "IOS"}}})["data"]
+            found[identifier] = data["id"]
+            registered.append(identifier)
+    if bundle not in found:
+        fail("App ID not registered: " + bundle)
+    capabilities = list_all(f"/bundleIds/{found[bundle]}/bundleIdCapabilities")
+    had_push = any(c.get("attributes", {}).get("capabilityType") == "PUSH_NOTIFICATIONS" for c in capabilities)
+    if not had_push:
+        call("POST", "/bundleIdCapabilities", {"data": {"type": "bundleIdCapabilities",
+             "attributes": {"capabilityType": "PUSH_NOTIFICATIONS"},
+             "relationships": {"bundleId": {"data": {"type": "bundleIds", "id": found[bundle]}}}}})
+    print(json.dumps({"registered": registered, "push_enabled_now": not had_push}))
+
+
 def prepare(workdir, team, bundle, run):
     from cryptography import x509
     from cryptography.hazmat.primitives import hashes, serialization
@@ -125,6 +168,7 @@ def prepare(workdir, team, bundle, run):
     work = Path(workdir)
     work.mkdir(parents=True, exist_ok=True)
     os.chmod(work, 0o700)
+    ensure_identifiers(bundle)
     key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
     csr = (x509.CertificateSigningRequestBuilder()
            .subject_name(x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, "Window CI"),
@@ -169,7 +213,7 @@ def prepare(workdir, team, bundle, run):
     if fingerprint not in identities:
         fail("the new identity is not usable for code signing (missing chain?)")
 
-    # App Store profiles for the app and both extensions, with this certificate.
+    # App Store profiles for the app and its three extensions, with this certificate.
     wanted = {bundle + s for s in SUFFIXES}
     bundle_ids = {b["attributes"]["identifier"]: b["id"]
                   for b in list_all("/bundleIds?limit=200&filter[identifier]=" + ",".join(sorted(wanted)))

@@ -148,6 +148,8 @@ actor OfficeSession {
 
     var email: String? { session?.email }
 
+    var userID: String? { session?.userID }
+
     private func request(_ path: String, method: String = "GET", query: [URLQueryItem] = [],
                          json: [String: Any]? = nil, token: String? = nil) async throws -> Data {
         let key = OfficeConfig.publishableKey
@@ -274,6 +276,25 @@ actor OfficeSession {
         guard let query = CalendarRange.query(from: from, to: to) else { throw BackendError.invalidResponse }
         let token = try await valid().accessToken
         return CalendarRange.clean(try await request("rest/v1/isabella_events", query: query, token: token))
+    }
+
+    // Romy's notifications: this iPhone's APNs token and its key, with the person's own session. The office function
+    // checks the active membership; the token and the key are only read by the office's sender (office-push).
+    func registerPushDevice(deviceID: String, token: String, environment: String, bundleID: String,
+                            key: String, appVersion: String) async throws {
+        guard isSignedIn else { return }
+        let access = try await valid().accessToken
+        _ = try await request("rest/v1/rpc/office_push_geraet_anmelden", method: "POST",
+                              json: ["p_geraet_id": deviceID, "p_token": token, "p_umgebung": environment,
+                                     "p_bundle_id": bundleID, "p_schluessel": key, "p_app_version": appVersion],
+                              token: access)
+    }
+
+    // Before signing out of Office: no more notifications for this person on this iPhone.
+    func unregisterPushDevice(deviceID: String) async {
+        guard isSignedIn, let access = try? await valid().accessToken else { return }
+        _ = try? await request("rest/v1/rpc/office_push_geraet_abmelden", method: "POST",
+                               json: ["p_geraet_id": deviceID], token: access)
     }
 
     func logout() async {

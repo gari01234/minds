@@ -16,6 +16,9 @@
 	<string>sb_publishable_A59RSOlLQ71V8hEnexaLZA_GFSyMIgR</string>
 	<key>MINDSAppGroupID</key>
 	<string>group.$(MINDS_BUNDLE_ID)</string>
+	<!-- Romy's notifications (TBA Office): the Keychain group shared with the notification extension. -->
+	<key>MINDSKeychainGroup</key>
+	<string>$(DEVELOPMENT_TEAM).$(MINDS_BUNDLE_ID).push</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<!-- Siri also understands the app as "Isabella": "Mis tareas de hoy en Isabella". -->

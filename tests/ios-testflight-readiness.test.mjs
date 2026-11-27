@@ -34,10 +34,11 @@ test('Signing secrets remain environment-scoped and never enter build artifacts'
   assert.ok(validator.includes('"MINDSShare.appex", "MINDSWidget.appex"'));
 });
 
-test('Native App, Share and Widget have distinct IDs and consistent App Group', () => {
+test('Native App, Share, Widget and Notifications have distinct IDs; App Group in the first three', () => {
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID)"'));
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).share"'));
   assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).widget"'));
+  assert.ok(project.includes('PRODUCT_BUNDLE_IDENTIFIER: "$(MINDS_BUNDLE_ID).notifications"'));
   assert.equal(project.split('group.$(MINDS_BUNDLE_ID)').length - 1, 5);
   const appInfo = read('apps/isabella-ios/Config/App-Info.plist');
   for (const key of ['SUPABASE_URL', 'SUPABASE_ANON_KEY', 'MINDSAppGroupID', 'ITSAppUsesNonExemptEncryption'])
@@ -48,9 +49,10 @@ test('Native App, Share and Widget have distinct IDs and consistent App Group', 
   assert.ok(validator.includes('def validate_runtime_config('));
   assert.ok(project.includes('      - target: MINDSShare\n        embed: true'));
   assert.ok(project.includes('      - target: MINDSWidget\n        embed: true'));
+  assert.ok(project.includes('      - target: MINDSNotifications\n        embed: true'));
   assert.ok(archive.includes('MINDS_BUNDLE_ID="$APP_BUNDLE_ID"'));
-  assert.equal(project.split('CFBundleShortVersionString: "$(MARKETING_VERSION)"').length - 1, 2);
-  assert.equal(project.split('CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"').length - 1, 2);
+  assert.equal(project.split('CFBundleShortVersionString: "$(MARKETING_VERSION)"').length - 1, 3);
+  assert.equal(project.split('CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"').length - 1, 3);
 });
 
 test('Device archive preserves entitlements offline; verified distribution export must precede upload', () => {
@@ -110,8 +112,10 @@ spec = importlib.util.spec_from_file_location('signing', 'apps/isabella-ios/Conf
 m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 rule = {'NSExtensionActivationSupportsText': True, **{'NSExtensionActivationSupports' + kind + 'WithMaxCount': limit for kind, limit in (('WebURL', 1), ('Image', 10), ('File', 10))}}
 share = {'CFBundleDisplayName': 'Window', 'NSExtension': {'NSExtensionAttributes': {'NSExtensionActivationRule': rule}}}
+notifications = {'CFBundleDisplayName': 'Window', 'NSExtension': {'NSExtensionPointIdentifier': 'com.apple.usernotifications.service',
+                 'NSExtensionPrincipalClass': 'MINDSNotifications.OfficeNotificationService'}}
 for target in m.TARGETS:
-    info = share if target == 'MINDSShare' else {'CFBundleDisplayName': 'Window'}
+    info = share if target == 'MINDSShare' else notifications if target == 'MINDSNotifications' else {'CFBundleDisplayName': 'Window'}
     m.validate_metadata(info, target)
     bad = copy.deepcopy(info); del bad['CFBundleDisplayName']
     try: m.validate_metadata(bad, target)
@@ -283,7 +287,7 @@ test('simulator smoke test drives the real app without touching production or th
   assert.ok(smoke.includes('xcodegen generate --spec project-uitests.yml'));
   assert.ok(!smoke.includes('secrets.'), 'the smoke test needs no Apple or MINDS secrets');
   assert.ok(spec.includes('- project.yml') && spec.includes('type: bundle.ui-testing'));
-  assert.ok(!project.includes('MINDSUITests'), 'the App Store project keeps exactly three targets');
+  assert.ok(!project.includes('MINDSUITests'), 'the App Store project keeps exactly four targets');
   // It may look for the buttons but never presses them: no code is ever requested.
   assert.doesNotMatch(uiTest, /\["(Enviar código|Entrar)"\]\.tap|isabellaSendCode|isabellaVerifyCode/);
   assert.match(uiTest, /XCTAssertEqual\(app\.state, \.runningForeground/);

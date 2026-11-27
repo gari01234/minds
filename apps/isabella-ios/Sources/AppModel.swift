@@ -1,5 +1,7 @@
 import Foundation
 import Observation
+import UIKit
+import UserNotifications
 import WidgetKit
 
 @MainActor
@@ -68,6 +70,9 @@ final class AppModel {
         // Each page sees the other account's calendar, read-only, through the app's own sessions.
         webPortal.otherCalendar = { [office] from, to in try await office.calendarEvents(from: from, to: to) }
         officePortal.otherCalendar = { [backend] from, to in try await backend.calendarEvents(from: from, to: to) }
+        // Romy's notifications: the APNs token goes to the office; a tap opens Romy.
+        WindowAppDelegate.onDeviceToken = { [weak self] token in Task { await self?.registerPush(token: token) } }
+        WindowAppDelegate.onOpenOffice = { [weak self] in self?.openOfficeFromNotification() }
     }
 
     private static func initialAccount() -> WindowAccount {
@@ -103,6 +108,7 @@ final class AppModel {
             officeAuthenticated = true
             officePortal.reloadIfStarted()
             await syncOfficeShare()
+            await syncOfficePush()
         } catch {
             officePassword = ""
             officeError = error.localizedDescription
@@ -110,6 +116,10 @@ final class AppModel {
     }
 
     func logoutOffice() async {
+        // No more notifications for this person here, and nothing sealed for them can be opened any more.
+        await office.unregisterPushDevice(deviceID: OfficePushRegistration.deviceID)
+        OfficePushKey.delete()
+        OfficePushRegistration.forget()
         await office.logout()
         // Nothing of this person stays for the share sheet or the widget: not their projects, not their files, not their day.
         OfficeShareStore.clearAll()
@@ -205,12 +215,53 @@ final class AppModel {
         if let count = try? await backend.openProposalCount() { openProposals = count }
     }
 
+    // MARK: Romy's notifications (TBA Office)
+
+    // iOS asks the person once; then the app asks APNs for this iPhone's token (registerPush receives it).
+    // Only while the office account is signed in and the build knows its Keychain group.
+    func syncOfficePush() async {
+        guard await office.isSignedIn, OfficePushKey.group != nil else { return }
+        let center = UNUserNotificationCenter.current()
+        var status = await center.notificationSettings().authorizationStatus
+        if status == .notDetermined {
+            _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
+            status = await center.notificationSettings().authorizationStatus
+        }
+        guard status == .authorized || status == .provisional || status == .ephemeral else { return }
+        UIApplication.shared.registerForRemoteNotifications()
+    }
+
+    func registerPush(token: Data) async {
+        guard await office.isSignedIn, let user = await office.userID, let key = OfficePushKey.loadOrCreate() else { return }
+        let hex = OfficePushRegistration.hex(token)
+        let stamp = OfficePushRegistration.stamp(token: hex, key: OfficePushKey.fingerprint(key), user: user)
+        guard !OfficePushRegistration.isCurrent(stamp) else { return }
+        do {
+            try await office.registerPushDevice(deviceID: OfficePushRegistration.deviceID, token: hex,
+                                                environment: OfficePushRegistration.environment,
+                                                bundleID: Bundle.main.bundleIdentifier ?? "",
+                                                key: OfficePushKey.base64(key), appVersion: OfficePushRegistration.appVersion)
+            OfficePushRegistration.remember(stamp)
+        } catch {
+            // Offline or refused: the next start tries again.
+        }
+    }
+
+    // A tap on one of Romy's notifications: the office account, on Romy's chat.
+    func openOfficeFromNotification() {
+        if account != .office { switchAccount(to: .office) }
+        open(section: "assistant")
+    }
+
     func bootstrap() async {
         isLoading = true
         isAuthenticated = await backend.isSignedIn
         officeAuthenticated = await office.isSignedIn
         isLoading = false
         await syncOfficeShare()
+        await syncOfficePush()
+        if let token = WindowAppDelegate.takePendingToken() { await registerPush(token: token) }
+        if WindowAppDelegate.takePendingOpen() { openOfficeFromNotification() }
         if isAuthenticated {
             await reloadContinuity()
             await refreshBadge()
