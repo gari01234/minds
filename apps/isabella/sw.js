@@ -1,4 +1,4 @@
-const CACHE_NAME = 'isabella-shell-v192';
+const CACHE_NAME = 'isabella-shell-v193';
 const SHELL = [
   './',
   './index.html',
@@ -40,7 +40,7 @@ const SHELL = [
     './calendar-plan.js?v=2',
   './day-layout.js?v=1',
 './voice-output.js?v=2',
-  './app.js?v=147',
+  './app.js?v=148',
   './work-team.js?v=1',
   './work.js?v=34',
   './ahora.js?v=1',
@@ -59,7 +59,7 @@ const SHELL = [
   './credit.js?v=1',
   './akte-skills.js?v=1',
   './calendar-colors.js?v=1',
-  './dashboard.js?v=7',
+  './dashboard.js?v=8',
   './manifest.webmanifest?v=2',
   './icon.svg?v=2',
   './apple-touch-icon.png?v=2',
