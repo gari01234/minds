@@ -9,7 +9,7 @@
 import {clip,localDay,TZ,addDays} from './window-tools.mjs';
 import {readOfficeTerminplanMilestones} from './office-terminplan.mjs';
 
-export const RADAR_LIMITS={projects:4,topicsPerProject:4,topicDays:30,standChars:200,questions:2,fristenDays:21,fristen:4,proposedTasks:3,contradictions:2};
+export const RADAR_LIMITS={projects:4,topicsPerProject:4,topicDays:30,standChars:200,questions:2,fristenDays:21,fristen:4,proposedTasks:3,contradictions:2,waitingDays:2,waiting:2};
 const list=v=>Array.isArray(v)?v.filter(x=>typeof x==='string'&&x.trim()):[];
 
 /** Pure: rows → radar. Exported for tests. */
@@ -17,7 +17,9 @@ export function buildRadar({projects=[],threads=[],memos=[],today}){
   const L=RADAR_LIMITS,name=new Map(projects.filter(p=>!p.archived).map(p=>[p.id,p.name]));
   const until=addDays(today,L.fristenDays);
   const byProject=new Map();
-  const slot=id=>{if(!name.has(id))return null;if(!byProject.has(id))byProject.set(id,{proyecto:name.get(id),temas:[],fristen:[],por_confirmar:0,tareas_propuestas:[],contradicciones:[],_last:''});return byProject.get(id)};
+  const slot=id=>{if(!name.has(id))return null;if(!byProject.has(id))byProject.set(id,{proyecto:name.get(id),temas:[],fristen:[],por_confirmar:0,esperan:[],tareas_propuestas:[],contradicciones:[],_last:''});return byProject.get(id)};
+  // A proposed decision waiting for more than two days is a reason to bring it up (Gari, 28.11.2026, P2).
+  const waitingSince=addDays(today,-L.waitingDays);
   for(const t of threads){
     const s=slot(t.project_id);if(!s||s.temas.length>=L.topicsPerProject)continue;
     const tb=t.metadata&&t.metadata.themenblatt||null;
@@ -31,14 +33,16 @@ export function buildRadar({projects=[],threads=[],memos=[],today}){
     const day=String(m.occurred_at||'').slice(0,10);
     if(m.memory_type==='deadline'&&day&&day>=today&&day<=until&&s.fristen.length<L.fristen)s.fristen.push({que:clip(m.title,140),fecha:day,confirmada:m.status==='confirmed'});
     if(m.status==='proposed'&&(m.memory_type==='decision'||m.memory_type==='deadline'))s.por_confirmar++;
+    const since=String(m.created_at||'').slice(0,10);
+    if(m.memory_type==='decision'&&m.status==='proposed'&&since&&since<=waitingSince&&s.esperan.length<L.waiting)s.esperan.push({que:clip(m.title,140),desde:since});
     if(m.memory_type==='commitment'&&m.status==='proposed'&&m.metadata&&m.metadata.kind==='aufgabe'&&s.tareas_propuestas.length<L.proposedTasks)s.tareas_propuestas.push(clip(m.title,140));
     if(m.memory_type==='open_question'&&m.status==='proposed'&&m.metadata&&m.metadata.kind==='widerspruch'&&s.contradicciones.length<L.contradictions)s.contradicciones.push(clip(m.title,160));
   }
   const out=[...byProject.values()]
-    .filter(s=>s.temas.length||s.fristen.length||s.por_confirmar||s.tareas_propuestas.length||s.contradicciones.length)
+    .filter(s=>s.temas.length||s.fristen.length||s.por_confirmar||s.esperan.length||s.tareas_propuestas.length||s.contradicciones.length)
     .sort((a,b)=>String(b._last).localeCompare(String(a._last))).slice(0,L.projects)
     .map(({_last,...s})=>{
-      for(const k of ['fristen','tareas_propuestas','contradicciones'])if(!s[k].length)delete s[k];
+      for(const k of ['fristen','esperan','tareas_propuestas','contradicciones'])if(!s[k].length)delete s[k];
       if(!s.por_confirmar)delete s.por_confirmar;
       s.fristen?.sort((a,b)=>a.fecha.localeCompare(b.fecha));
       return s;
