@@ -321,6 +321,49 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
   return {conversationId,created:true,userId:user.id};
 }
 
+/* Office (Romy, «un solo motor», 28.11.2026): a Work thread runs on this engine too. Office browsers may only
+ * insert their own user turns and never an answer, so for Romy the server writes the thread turn here and its
+ * reply later (persistServerAssistantTurn), like in the main chat. Only into the thread's own conversation,
+ * owned by the caller; the browser supplies the request UUID, never the conversation or the scope.
+ */
+async function persistCanonicalThreadOwnerTurn(req:Request,requestId:string,message:string,scope:any,thread:any){
+  const sb=supabaseClient(req);
+  if(!sb)throw new Error("supabase_unavailable");
+  const {data:{user},error:authError}=await sb.auth.getUser();
+  if(authError||!user?.id)throw new Error("unauthorized");
+  const conversationId=String(thread?.conversation_id||"");
+  if(!conversationId||scope?.kind!=="work_thread"||String(scope?.ref||"")!==String(thread?.id||""))
+    throw new Error("thread_turn_scope_invalid");
+  const owned=await sb.from("conversations").select("id").eq("id",conversationId)
+    .eq("user_id",user.id).eq("app_scope","work_thread").maybeSingle();
+  if(owned.error||owned.data?.id!==conversationId)throw new Error("thread_conversation_not_owned");
+  const canonical=canonicalBrowserOwnerRow({userId:user.id,conversationId,requestId,message,scope});
+  canonical.metadata={...canonical.metadata,app:"work_thread",work_thread_id:String(thread.id),project_id:thread.project_id||null};
+  const getExisting=()=>sb.from("conversation_messages")
+    .select("role,content,exposure_scope_version,exposure_scope_kind,exposure_scope_ref,exposure_scope_key")
+    .eq("user_id",user.id).eq("conversation_id",conversationId)
+    .eq("client_key",requestId).maybeSingle();
+  const existing=await getExisting();
+  if(existing.error)throw existing.error;
+  if(existing.data){
+    if(!sameBrowserOwnerTurn(existing.data,canonical))throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false,userId:user.id};
+  }
+  const insert=await sb.from("conversation_messages").insert(canonical);
+  if(insert.error){
+    if(insert.error.code!=="23505")throw insert.error;
+    const raced=await getExisting();
+    if(raced.error||!sameBrowserOwnerTurn(raced.data,canonical))
+      throw new Error("browser_turn_id_conflict");
+    return {conversationId,created:false,userId:user.id};
+  }
+  const updated=await sb.from("conversations")
+    .update({updated_at:new Date().toISOString()})
+    .eq("id",conversationId).eq("user_id",user.id).eq("app_scope","work_thread");
+  if(updated.error)throw updated.error;
+  return {conversationId,created:true,userId:user.id};
+}
+
 async function recordBrowserClarification(req:Request,sourceTurnId:string,question:string,capability:string){
   if(!browserTurnId(sourceTurnId))throw Error("clarification_source_id_required");
   const sb=supabaseClient(req);if(!sb)throw Error("supabase_unavailable");
@@ -2762,8 +2805,9 @@ async function persistServerAssistantTurn(req:Request,row:any){
     if(profile.multi_user){
       const owner=(await sb.auth.getUser()).data.user;
       if(!owner||owner.id!==row.user_id)return false;
+      // The main chat, or (Romy) the caller's own Work thread.
       const checked=await sb.from("conversations").select("id").eq("user_id",owner.id)
-        .eq("id",row.conversation_id).eq("app_scope","isabella").maybeSingle();
+        .eq("id",row.conversation_id).in("app_scope",["isabella","work_thread"]).maybeSingle();
       if(checked.error||checked.data?.id!==row.conversation_id)return false;
       const url=Deno.env.get("SUPABASE_URL")||"",key=Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")||"";
       if(!url||!key)return false;
@@ -2970,6 +3014,14 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     }catch(e){
       return json({error:"browser_turn_persistence_failed",message:voice.turn_persist,detail:String(e)},409);
     }
+  }
+  // Romy's Work threads (Office only): the server writes the thread turn and, at the end, the reply. Window's
+  // threads stay as they are: there the app writes both.
+  if(surface==="chat_browser"&&!background&&currentWorkThread&&assistantProfile.multi_user&&!voiceDelegation){
+    if(!browserTurnId(clientMessageId))
+      return json({error:"browser_turn_id_required",message:voice.turn_identity},400);
+    try{browserTurn=await persistCanonicalThreadOwnerTurn(req,clientMessageId,effectiveMessage,exposureScope,currentWorkThread)}
+    catch(e){return json({error:"browser_turn_persistence_failed",message:voice.turn_persist,detail:String(e)},409)}
   }
   const situationWeather=background?null:await currentWeatherFromSituation(req,effectiveMessage);
   const wantsStream=body?.stream===true;
