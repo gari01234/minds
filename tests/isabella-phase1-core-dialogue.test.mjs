@@ -190,7 +190,7 @@ test('Step 8: now, later or nothing; no profile questions; a thread is cited onl
   assert.match(PRESENCE_INSTRUCTIONS,/algo de su trabajo que probablemente no ha visto/);
   assert.match(PRESENCE_INSTRUCTIONS,/No hagas preguntas para conocerle «en general»/);
   assert.match(PRESENCE_INSTRUCTIONS,/No inventes urgencia/);
-  assert.deepEqual(PRESENCE_SCHEMA.required,['decision','message','basis','thread_id','reason']);
+  assert.deepEqual(PRESENCE_SCHEMA.required,['decision','message','basis','thread_id','reason','motivos_usados']);
   const material={hilos:[{id:'h1'}]};
   assert.equal(presenceMessage({decision:'nada',message:'x'},material),null);
   assert.equal(presenceMessage({decision:'mas_tarde',message:'x'},material),null);

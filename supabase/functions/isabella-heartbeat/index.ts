@@ -196,7 +196,9 @@ Deno.serve(async(req:Request)=>{
           source:{task_ids:overdue.map((t:any)=>t.id),due_dates:overdue.map((t:any)=>t.due_date)},ttl_hours:18
         });
       }
-      for(const e of (events.data||[]).slice(0,2))candidates.push({event_type:"upcoming_event",fingerprint:`event_upcoming:${e.id}:${e.starts_at}`,severity:"attention",title:assistantProfile.multi_user?`Demnächst: ${e.title}`:`Próximo: ${e.title}`,body:assistantProfile.multi_user?`Beginnt um ${new Intl.DateTimeFormat("de-DE",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`:`Empieza a las ${new Intl.DateTimeFormat("es-ES",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`, project_id:e.project_id||null,source:{event_id:e.id,starts_at:e.starts_at},ttl_hours:2});
+      // Romy (Gari, 28.11.2026): no reminder lines in the chat or as a push; the desk calendar already shows what comes
+      // next. The event is still recorded, routed silent; after a meeting she may speak at a natural moment (presence).
+      for(const e of (events.data||[]).slice(0,2))candidates.push({...(assistantProfile.multi_user?{silent_requested:true}:{}),event_type:"upcoming_event",fingerprint:`event_upcoming:${e.id}:${e.starts_at}`,severity:"attention",title:assistantProfile.multi_user?`Demnächst: ${e.title}`:`Próximo: ${e.title}`,body:assistantProfile.multi_user?`Beginnt um ${new Intl.DateTimeFormat("de-DE",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`:`Empieza a las ${new Intl.DateTimeFormat("es-ES",{timeZone:routineTz,hour:"2-digit",minute:"2-digit"}).format(new Date(e.starts_at))}.`, project_id:e.project_id||null,source:{event_id:e.id,starts_at:e.starts_at},ttl_hours:2});
       for(const r of routines.data||[]){
         const failures=Math.max(1,Number(r?.metadata?.failure_retries||1));
         candidates.push({
