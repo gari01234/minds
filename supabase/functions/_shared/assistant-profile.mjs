@@ -68,7 +68,9 @@ const cleanLabel = (value, max) => {
   const s = String(value ?? "").normalize("NFC").replace(/\s+/gu, " ").trim();
   return s && s.length <= max && /^[\p{L}\p{M}][\p{L}\p{M}\p{N}' .-]*$/u.test(s) ? s : null;
 };
-/** Pure. @returns {{name:string,nickname:string|null,callme:string|null}} */
+/** @typedef {string|ReturnType<typeof resolveAssistantProfile>} ProfileRef */
+/** @typedef {{name:string,nickname:string|null,callme:string|null}} AssistantIdentity */
+/** Pure. @param {any} value @param {ProfileRef} [profile] @returns {AssistantIdentity} */
 export function assistantIdentity(value, profile = "window") {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (!p.multi_user) return { name: p.assistant_name, nickname: null, callme: null };
@@ -77,7 +79,8 @@ export function assistantIdentity(value, profile = "window") {
   const nickname = cleanLabel(v.spitzname, 24);
   return { name, nickname: nickname && nickname !== name ? nickname : null, callme: cleanLabel(v.rufname, 40) };
 }
-/** The member's own choice, read with the caller's client; any failure falls back to the default. */
+/** The member's own choice, read with the caller's client; any failure falls back to the default.
+ * @param {any} sb @param {string|null|undefined} userId @param {ProfileRef} [profile] @returns {Promise<AssistantIdentity>} */
 export async function profileAssistantForUser(sb, userId, profile = "window") {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (!p.multi_user || !sb || !userId) return assistantIdentity(null, p);
@@ -105,6 +108,7 @@ export function personaText(text, { profile = "window", owner = null, assistant 
 }
 // Read only the active member belonging to the authenticated/conversation owner.
 // Do not accept names from client payloads or infer them from other members.
+/** @param {any} sb @param {string|null|undefined} userId @param {ProfileRef} [profile] */
 export async function profileOwnerForUser(sb, userId, profile = "window") {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (!p.multi_user) return p.owner_name;
@@ -118,7 +122,7 @@ export async function profileOwnerForUser(sb, userId, profile = "window") {
   const who = await profileAssistantForUser(sb, userId, p);
   return profileFirstName(who.callme) || first;
 }
-/** @param {string} text @param {string} [profile] @param {string|null} [owner]
+/** @param {string} text @param {ProfileRef} [profile] @param {string|null} [owner]
  * @param {string|{name?:string,nickname?:string|null}|null} [assistant] the member's name for the assistant */
 export function profileInstructions(text, profile = "window", owner = null, assistant = null) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
@@ -142,7 +146,7 @@ function withProfiledDescriptions(value, profile, owner, assistant = null) {
       ? personaText(field, { profile, owner, assistant })
       : withProfiledDescriptions(field, profile, owner, assistant)]));
 }
-/** @param {any[]} tools @param {string} [profile] @param {string|null} [owner] @param {string|null} [assistant] */
+/** @param {any[]} tools @param {ProfileRef} [profile] @param {string|null} [owner] @param {string|null} [assistant] */
 export function profileTools(tools, profile = "window", owner = null, assistant = null) {
   const p = typeof profile === "string" ? resolveAssistantProfile(profile) : profile;
   if (p.id === "window") return tools; // Preserve array identity and all descriptions.
