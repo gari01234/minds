@@ -80,6 +80,8 @@ async function ask(message,state,options={}){
   const dialogueOwner=officeChat?(String(window.TBA_OFFICE_MEMBER?.display_name||'').trim().split(/\s+/)[0]||'Die Person'):'Gari';
   // Office: the name the member gave the assistant (28.11.2026), «KI-Assistent» until they do.
   const officeName=()=>{try{return (typeof window.MINDS_ASSISTANT_NAME==='function'&&window.MINDS_ASSISTANT_NAME())||'KI-Assistent'}catch{return 'KI-Assistent'}};
+  // In a sentence (assistant-i18n.js): «Der KI-Assistent arbeitet noch», «Samantha arbeitet noch».
+  const officeText=t=>{try{if(typeof window.MINDS_ASSISTANT_TEXT==='function')return String(window.MINDS_ASSISTANT_TEXT(t))}catch{}return String(t).replace(/\{(name|Wer|wer|wem|wen)\}/g,officeName())};
   const dialogueAssistant=officeChat?officeName():'Isabella';
   const replyContext=options.replyTo?.text?(officeChat?`\n${dialogueOwner} está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?dialogueAssistant:dialogueOwner}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`:`\nGari está respondiendo específicamente a este mensaje previo de ${options.replyTo.role==='assistant'?'Isabella':'Gari'}:\n“${String(options.replyTo.text).slice(0,1200)}”\nInterpreta su nuevo mensaje como respuesta a ese fragmento, no como un turno aislado.\n`):'';
   const attachments=Array.isArray(options.attachments)?options.attachments.slice(0,3):[];
@@ -120,7 +122,7 @@ async function ask(message,state,options={}){
     // NEVER re-submit the model or replay any action/proposal.
     const transportFailure=error.name==='FunctionsFetchError'||error.name==='FunctionsRelayError';
     if(transportFailure&&options.durableRequestId&&typeof window.MINDS_CHAT_STREAM_RECOVERY==='function'){
-      options.onProgress?.({type:'status',phase:'recovering',label:officeChat?officeName()+' arbeitet noch. Die Antwort wird wiederhergestellt, ohne die Anfrage zu wiederholen.':'Isabella está terminando. Recuperando la respuesta sin repetir la consulta…'});
+      options.onProgress?.({type:'status',phase:'recovering',label:officeChat?officeText('{Wer} arbeitet noch. Die Antwort wird wiederhergestellt, ohne die Anfrage zu wiederholen.'):'Isabella está terminando. Recuperando la respuesta sin repetir la consulta…'});
       const recovered=await window.MINDS_CHAT_STREAM_RECOVERY(options.durableRequestId,{attempts:85,intervalMs:1400});
       if(recovered?.reply)return {...recovered,proposal:null,proposals:[],question:null,memory_candidates:[]};
     }

@@ -76,10 +76,10 @@
       review_discard: "Verwerfen",
       undo: "Rückgängig",
       undo_done: "Rückgängig gemacht.",
-      memory_title: "Was {name} über mich weiß",
-      presence_enabled: "{name} darf mir zuerst schreiben",
+      memory_title: "Was {wer} über mich weiß",
+      presence_enabled: "{Wer} darf mir zuerst schreiben",
       listening: "Ich höre zu…",
-      sending: "Wird an {name} gesendet…",
+      sending: "Wird an {wen} gesendet…",
       voice_error: "Die Spracheingabe konnte nicht transkribiert werden.",
       save_unverified: "Die Speicherung konnte nicht bestätigt werden; keine Änderung wird als ausgeführt angezeigt.",
       saved: "Gespeichert.",
@@ -103,13 +103,13 @@
       source: "Quelle",
       review_cancelled: "Vorschlag verworfen. Keine Änderung ausgeführt.",
       review_locally: "Erledigt. Bitte prüfe, ob das Ergebnis stimmt.",
-      chat_thinking: "{name} denkt nach…",
-      chat_preparing: "{name} bereitet die Antwort vor…",
-      chat_answering: "{name} antwortet…",
-      chat_working: "{name} arbeitet noch…",
-      chat_failed: "{name} konnte diese Antwort nicht abschließen. Du kannst es erneut versuchen.",
+      chat_thinking: "{Wer} denkt nach…",
+      chat_preparing: "{Wer} bereitet die Antwort vor…",
+      chat_answering: "{Wer} antwortet…",
+      chat_working: "{Wer} arbeitet noch…",
+      chat_failed: "{Wer} konnte diese Antwort nicht abschließen. Du kannst es erneut versuchen.",
       memory_night: "Nächtlicher Rückblick",
-      memory_understands: "Was {name} verstanden hat",
+      memory_understands: "Was {wer} verstanden hat",
       memory_threads: "Themen für später",
       memory_empty: "Noch nichts.",
       memory_own_none: "Gerade keine.",
@@ -118,7 +118,7 @@
       memory_recap_empty: "Noch kein nächtlicher Rückblick vorhanden.",
       memory_self: "Wie es mir ging",
       memory_clear: "Diese Notizen löschen",
-      presence_switch: "{name} darf mir zuerst schreiben (höchstens einmal täglich, nur wenn sinnvoll)",
+      presence_switch: "{Wer} darf mir zuerst schreiben (höchstens dreimal am Tag, werktags von 7:30 bis 19 Uhr, nur wenn es sich lohnt)",
       focus_review: "Transkription überprüfen",
       focus_send: "Senden",
       focus_repeat: "Wiederholen",
@@ -140,15 +140,33 @@
     })
   });
   const locale = root.APP_PROFILE === "office" ? "de" : "es";
+  // Office: each member names the assistant (28.11.2026); «KI-Assistent» until they do. In a sentence that default
+  // is a noun and takes its article («mit dem KI-Assistenten»); a chosen name does not («mit Samantha»).
+  // Templates: {name} the bare name (labels), {Wer}/{wer} who (at the start / inside a sentence), {wem} to whom,
+  // {wen} whom. office-personal.js keeps the name (MINDS_ASSISTANT_NAME and, for other pages, the cached copy).
+  const DEFAULT_NAME = "KI-Assistent";
+  const DEFAULT_FORMS = Object.freeze({name: DEFAULT_NAME, Wer: "Der KI-Assistent", wer: "der KI-Assistent",
+    wem: "dem KI-Assistenten", wen: "den KI-Assistenten"});
+  const NAME_TOKENS = /\{(name|Wer|wer|wem|wen)\}/g;
+  const cleanName = (value) => {
+    const s = String(value ?? "").normalize("NFC").replace(/\s+/gu, " ").trim();
+    return s && s.length <= 40 && /^[\p{L}\p{M}][\p{L}\p{M}\p{N}' .-]*$/u.test(s) ? s : "";
+  };
+  const chosenName = () => {
+    try { if (typeof root.MINDS_ASSISTANT_NAME === "function") return cleanName(root.MINDS_ASSISTANT_NAME()); } catch {}
+    try { return cleanName(JSON.parse(root.localStorage?.getItem("minds-assistant-name") || "null")?.name); } catch { return ""; }
+  };
+  const assistantText = (template) => {
+    const name = chosenName(), own = !!name && name !== DEFAULT_NAME;
+    return String(template ?? "").replace(NAME_TOKENS, (_, k) => own ? name : DEFAULT_FORMS[k]);
+  };
+  if (root.APP_PROFILE === "office") root.MINDS_ASSISTANT_TEXT = assistantText;
   root.ASSISTANT_I18N = Object.freeze({
     locale,
     t(key) {
       const text = dictionary[locale][key] ?? dictionary.es[key] ?? String(key);
-      // Office: each member names the assistant (28.11.2026); «KI-Assistent» until they do.
-      if (typeof text !== "string" || !text.includes("{name}")) return text;
-      let name = "";
-      try { name = typeof root.MINDS_ASSISTANT_NAME === "function" ? String(root.MINDS_ASSISTANT_NAME() || "") : ""; } catch {}
-      return text.replace(/\{name\}/g, name || "KI-Assistent");
+      if (typeof text !== "string" || !text.includes("{")) return text;
+      return root.APP_PROFILE === "office" ? assistantText(text) : text;
     }
   });
 })(typeof window !== "undefined" ? window : globalThis);

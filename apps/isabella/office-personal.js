@@ -2,7 +2,8 @@
 // 28.11.2026 (Gari): «a todos por default KI-Assistent y que cada quien pueda escoger el suyo». Each member names
 // the assistant here (name, nickname, how it calls them); the engine reads the same preference (assistant_name).
 // window.MINDS_ASSISTANT_NAME() gives the name to the whole page; elements marked with data-assistant-name,
-// -placeholder, -aria or -title follow it.
+// -text, -placeholder, -aria or -title follow it. Their templates are filled by MINDS_ASSISTANT_TEXT
+// (assistant-i18n.js: {name}, {Wer}, {wer}, {wem}, {wen}, so the default keeps its article in a sentence).
 // The Window profile exits without side effects. Only authenticated owner rows
 // are read; forgetting uses a server-side RPC with independent owner checks.
 (()=>{
@@ -17,9 +18,12 @@ const cleanLabel=(value,max)=>{const s=String(value??'').normalize('NFC').replac
 let identity=(()=>{try{const v=JSON.parse(localStorage.getItem(CACHE)||'null');return v&&typeof v==='object'?v:{}}catch{return {}}})();
 const assistantName=()=>cleanLabel(identity.name,40)||DEFAULT_NAME;
 window.MINDS_ASSISTANT_NAME=assistantName;
+const assistantText=v=>{try{if(typeof window.MINDS_ASSISTANT_TEXT==='function')return String(window.MINDS_ASSISTANT_TEXT(v))}catch{}
+  return String(v||'').replace(/\{(name|Wer|wer|wem|wen)\}/g,assistantName())};
 function applyName(){
-  const name=assistantName(),fill=v=>String(v||'').replace(/\{name\}/g,name);
+  const name=assistantName(),fill=assistantText;
   document.querySelectorAll('[data-assistant-name]').forEach(e=>{e.textContent=name});
+  document.querySelectorAll('[data-assistant-text]').forEach(e=>{e.textContent=fill(e.dataset.assistantText)});
   document.querySelectorAll('[data-assistant-placeholder]').forEach(e=>{e.setAttribute('placeholder',fill(e.dataset.assistantPlaceholder))});
   document.querySelectorAll('[data-assistant-aria]').forEach(e=>{e.setAttribute('aria-label',fill(e.dataset.assistantAria))});
   document.querySelectorAll('[data-assistant-title]').forEach(e=>{e.setAttribute('title',fill(e.dataset.assistantTitle))});
@@ -138,7 +142,7 @@ async function openPanel(){
     };
     field('name','Wie soll dein Assistent heißen?',DEFAULT_NAME,40);
     field('spitzname','Spitzname (optional)','z. B. Sam',24);
-    field('rufname','Wie soll er dich nennen? (optional)','dein Vorname',40);
+    field('rufname','Wie soll dein Assistent dich nennen? (optional)','dein Vorname',40);
     const save=t('button','Speichern');save.type='submit';form.appendChild(save);
     const note=t('p','');note.setAttribute('role','status');form.appendChild(note);
     form.addEventListener('submit',async e=>{
@@ -149,9 +153,9 @@ async function openPanel(){
     });
     body.appendChild(form);
     const heading=t('h3','Meine persönlichen Einstellungen');body.appendChild(heading);
-    const label=t('label',assistantName()+' darf mir von sich aus schreiben');
+    const label=t('label',assistantText('{Wer} darf mir von sich aus schreiben'));
     const toggle=t('input');toggle.type='checkbox';toggle.checked=value.curiosityEnabled!==false;
-    toggle.setAttribute('aria-label',assistantName()+' darf mir von sich aus schreiben');
+    toggle.setAttribute('aria-label',assistantText('{Wer} darf mir von sich aus schreiben'));
     label.prepend(toggle);
     body.appendChild(label);
     body.appendChild(t('p','Höchstens drei Nachrichten am Tag, werktags zwischen 7:30 und 19 Uhr.'));
@@ -162,7 +166,7 @@ async function openPanel(){
       }catch(e){toggle.checked=!toggle.checked;body.appendChild(t('p','Nicht gespeichert: '+String(e?.message||e)));}
       finally{toggle.disabled=false}
     });
-    body.appendChild(t('h3','Was '+assistantName()+' sich gemerkt hat'));
+    body.appendChild(t('h3',assistantText('Was {wer} sich gemerkt hat')));
     if(!items.length)body.appendChild(t('p','Noch keine gespeicherten Einträge.'));
     for(const item of items){
       const line=t('div',null,'office-personal-memory-row');

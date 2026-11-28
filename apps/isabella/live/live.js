@@ -17,10 +17,17 @@
   const IDLE_MS=120000,ICE_WAIT_MS=9000;
   const OFFICE_LIVE=window.APP_PROFILE==='office';
   const lv=(spanish,german)=>OFFICE_LIVE?german:spanish;
-  // Office: the name the member gave the assistant (28.11.2026); the page may run in a frame over the chat.
+  // Office: the name the member gave the assistant (28.11.2026); the page may run in a frame over the chat (Live
+  // keeps no storage of its own: on its own page it says «KI-Assistent»). say() fills {Wer}, {wem}, {wen} like the
+  // chat (assistant-i18n.js): the default keeps its article in a sentence («an den KI-Assistenten»).
   const who=()=>{
     for(const w of [window,window.parent]){try{const n=typeof w?.MINDS_ASSISTANT_NAME==='function'&&w.MINDS_ASSISTANT_NAME();if(n)return String(n)}catch{}}
     return "KI-Assistent";
+  };
+  const say=template=>{
+    for(const w of [window,window.parent]){try{if(typeof w?.MINDS_ASSISTANT_TEXT==='function')return String(w.MINDS_ASSISTANT_TEXT(template))}catch{}}
+    const name=who(),forms={name,Wer:"Der KI-Assistent",wer:"der KI-Assistent",wem:"dem KI-Assistenten",wen:"den KI-Assistenten"};
+    return String(template).replace(/\{(name|Wer|wer|wem|wen)\}/g,(_,k)=>name!=="KI-Assistent"?name:forms[k]);
   };
   // Live inside the chat (V2, 28.11.2026): the same page runs in a sheet over the chat. The chat hears about every
   // saved turn and the end of a session, so it can show the conversation at once; review links open the chat itself.
@@ -80,7 +87,7 @@
   }
   function stop(message=lv("Conversación finalizada.","Gespräch beendet.")){
     if(reviewTurn?.busy){
-      message=lv("La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.","Die Anfrage ist schon an "+who()+" gegangen. Schau bitte zuerst in den Chat, bevor du sie wiederholst.");
+      message=lv("La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.",say("Die Anfrage ist schon an {wen} gegangen. Schau bitte zuerst in den Chat, bevor du sie wiederholst."));
     }
     clearTimeout(delegationTimer);waitingDelegation=null;
     if(transcript)void transcript.finish();
@@ -125,7 +132,7 @@
     review.classList.remove("hidden");
     reviewAnswer.textContent="";reviewAnswer.classList.add("hidden");
     reviewChat.classList.add("hidden");reviewChat.href="../";
-    reviewChat.textContent=lv("Abrir chat de Isabella para revisar el resultado","Im Chat mit "+who()+" prüfen");
+    reviewChat.textContent=lv("Abrir chat de Isabella para revisar el resultado",say("Im Chat mit {wem} prüfen"));
     reviewStatus.textContent=lv("Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.","Prüf die Transkription. Ohne deine Bestätigung wird nichts gesendet.");
     reviewSend.disabled=false;reviewDismiss.disabled=false;
     consult.classList.add("hidden");
@@ -142,7 +149,7 @@
     }
     turn.busy=true;turn.requestId=crypto.randomUUID();
     reviewSend.disabled=true;reviewDismiss.disabled=true;
-    reviewStatus.textContent=lv("Consultando a Isabella en MINDS…",who()+" wird gefragt …");
+    reviewStatus.textContent=lv("Consultando a Isabella en MINDS…",say("{Wer} wird gefragt …"));
     const token=epoch;
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
@@ -192,10 +199,10 @@
         if(specificReview)reviewChat.href=specificReview;
       }
       reviewStatus.textContent=outcome.hasReview
-        ?lv("MINDS preparó una propuesta pendiente de revisión; no se ha aplicado.",who()+" hat einen Vorschlag vorbereitet. Er ist noch nicht ausgeführt.")
+        ?lv("MINDS preparó una propuesta pendiente de revisión; no se ha aplicado.",say("{Wer} hat einen Vorschlag vorbereitet. Er ist noch nicht ausgeführt."))
         :outcome.outcome==="action_applied"
           ?lv("MINDS confirmó la acción con comprobantes válidos.","Die Aktion wurde mit gültigem Ausführungsbeleg bestätigt.")
-          :lv("Respuesta de Isabella confirmada por MINDS.","Die Antwort von "+who()+" ist bestätigt.");
+          :lv("Respuesta de Isabella confirmada por MINDS.","Die Antwort ist bestätigt.");
       // A verified canonical result can be paraphrased by GPT-Live; a transcript
       // fragment, inferred intent or model claim never becomes an action receipt.
       if(!send({type:"session.commentary.append",
@@ -354,7 +361,7 @@
     keepAlive();
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
-      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zu "+who()+"."));
+      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zum Office."));
       const {data:{session},error}=await sb.auth.getSession();
       if(error||!session?.access_token)throw new Error(lv("Inicia sesión primero en el chat de Isabella.","Melde dich bitte zuerst im Office an."));
       if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw new Error(lv("Este navegador no admite la conexión de audio necesaria.","Dieser Browser unterstützt die benötigte Audioverbindung nicht."));

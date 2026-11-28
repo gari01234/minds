@@ -35,3 +35,21 @@ Pruebas: `tests/asistente-nombre-propio.test.mjs` y las de las fases de Romy, ac
 - **Akte-Pflege compartida:** «Du bist die KI-Assistenz …». La lee todo el equipo del proyecto y cada uno tiene su propio asistente, así que no lleva el nombre de nadie.
 - **`officeVoiceInstructions`** (hoy sin uso) recibe el nombre y tutea. **`OFFICE_RELATIONSHIP_POLICY`** (solo de referencia) habla en segunda persona.
 - **Tipos:** `profileAssistantForUser` y las demás aceptan el perfil como nombre o como objeto, para que pase `deno check`.
+
+## El nombre dentro de una frase
+
+«KI-Assistent» es un sustantivo, no un nombre: en una frase lleva artículo. «Samantha» no. Por eso las plantillas alemanas tienen cinco marcas, y `MINDS_ASSISTANT_TEXT` (en `assistant-i18n.js`) las rellena:
+
+| Marca | Por defecto | Con nombre propio |
+|---|---|---|
+| `{name}` (rótulos) | KI-Assistent | Samantha |
+| `{Wer}` (al empezar la frase) | Der KI-Assistent | Samantha |
+| `{wer}` (dentro de la frase) | der KI-Assistent | Samantha |
+| `{wem}` | dem KI-Assistenten | Samantha |
+| `{wen}` | den KI-Assistenten | Samantha |
+
+Ejemplos: «Der KI-Assistent denkt nach…» o «Samantha denkt nach…»; «Wird an den KI-Assistenten gesendet…» o «Wird an Samantha gesendet…».
+
+- `office-personal.js` rellena también los elementos marcados con `data-assistant-text`.
+- Live usa `say()` con las mismas marcas. Live no guarda nada en el dispositivo; si se abre sola, dice «KI-Assistent».
+- De paso: el interruptor de la presencia ya no dice «höchstens einmal täglich». Dice lo que hace desde el 28.11: «höchstens dreimal am Tag, werktags von 7:30 bis 19 Uhr».
