@@ -76,10 +76,10 @@
       review_discard: "Verwerfen",
       undo: "Rückgängig",
       undo_done: "Rückgängig gemacht.",
-      memory_title: "Was Romy über mich weiß",
-      presence_enabled: "Romy darf mir zuerst schreiben",
+      memory_title: "Was {name} über mich weiß",
+      presence_enabled: "{name} darf mir zuerst schreiben",
       listening: "Ich höre zu…",
-      sending: "Wird an Romy gesendet…",
+      sending: "Wird an {name} gesendet…",
       voice_error: "Die Spracheingabe konnte nicht transkribiert werden.",
       save_unverified: "Die Speicherung konnte nicht bestätigt werden; keine Änderung wird als ausgeführt angezeigt.",
       saved: "Gespeichert.",
@@ -90,7 +90,7 @@
       event: "der Termin",
       change: "die Änderung",
       system_notice_short: "Hinweis",
-      assistant_label: "Romy",
+      assistant_label: "{name}",
       you: "Du",
       replying_to: "Antwort an",
       cancel_reply: "Antwort abbrechen",
@@ -103,13 +103,13 @@
       source: "Quelle",
       review_cancelled: "Vorschlag verworfen. Keine Änderung ausgeführt.",
       review_locally: "Erledigt. Bitte prüfe, ob das Ergebnis stimmt.",
-      chat_thinking: "Romy denkt nach…",
-      chat_preparing: "Romy bereitet die Antwort vor…",
-      chat_answering: "Romy antwortet…",
-      chat_working: "Romy arbeitet noch…",
-      chat_failed: "Romy konnte diese Antwort nicht abschließen. Du kannst es erneut versuchen.",
+      chat_thinking: "{name} denkt nach…",
+      chat_preparing: "{name} bereitet die Antwort vor…",
+      chat_answering: "{name} antwortet…",
+      chat_working: "{name} arbeitet noch…",
+      chat_failed: "{name} konnte diese Antwort nicht abschließen. Du kannst es erneut versuchen.",
       memory_night: "Nächtlicher Rückblick",
-      memory_understands: "Was Romy verstanden hat",
+      memory_understands: "Was {name} verstanden hat",
       memory_threads: "Themen für später",
       memory_empty: "Noch nichts.",
       memory_own_none: "Gerade keine.",
@@ -118,7 +118,7 @@
       memory_recap_empty: "Noch kein nächtlicher Rückblick vorhanden.",
       memory_self: "Wie es mir ging",
       memory_clear: "Diese Notizen löschen",
-      presence_switch: "Romy darf mir zuerst schreiben (höchstens einmal täglich, nur wenn sinnvoll)",
+      presence_switch: "{name} darf mir zuerst schreiben (höchstens einmal täglich, nur wenn sinnvoll)",
       focus_review: "Transkription überprüfen",
       focus_send: "Senden",
       focus_repeat: "Wiederholen",
@@ -143,7 +143,12 @@
   root.ASSISTANT_I18N = Object.freeze({
     locale,
     t(key) {
-      return dictionary[locale][key] ?? dictionary.es[key] ?? String(key);
+      const text = dictionary[locale][key] ?? dictionary.es[key] ?? String(key);
+      // Office: each member names the assistant (28.11.2026); «KI-Assistent» until they do.
+      if (typeof text !== "string" || !text.includes("{name}")) return text;
+      let name = "";
+      try { name = typeof root.MINDS_ASSISTANT_NAME === "function" ? String(root.MINDS_ASSISTANT_NAME() || "") : ""; } catch {}
+      return text.replace(/\{name\}/g, name || "KI-Assistent");
     }
   });
 })(typeof window !== "undefined" ? window : globalThis);

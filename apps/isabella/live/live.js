@@ -17,6 +17,11 @@
   const IDLE_MS=120000,ICE_WAIT_MS=9000;
   const OFFICE_LIVE=window.APP_PROFILE==='office';
   const lv=(spanish,german)=>OFFICE_LIVE?german:spanish;
+  // Office: the name the member gave the assistant (28.11.2026); the page may run in a frame over the chat.
+  const who=()=>{
+    for(const w of [window,window.parent]){try{const n=typeof w?.MINDS_ASSISTANT_NAME==='function'&&w.MINDS_ASSISTANT_NAME();if(n)return String(n)}catch{}}
+    return "KI-Assistent";
+  };
   // Live inside the chat (V2, 28.11.2026): the same page runs in a sheet over the chat. The chat hears about every
   // saved turn and the end of a session, so it can show the conversation at once; review links open the chat itself.
   const EMBEDDED=(()=>{try{return window.self!==window.top}catch{return true}})();
@@ -45,13 +50,13 @@
       const receipt=await response.json();
       if(!response.ok||receipt.saved!==true||receipt.turn_id!==turn.turn_id)throw Error("voice_write_failed");
       notifyHost("turn");
-    },onError:()=>{status.textContent=lv("Quedó una transcripción sin comprobar. Revisa el chat.","Eine Sprachtranskription konnte nicht bestätigt werden. Bitte im Chat prüfen.")}});
+    },onError:()=>{status.textContent=lv("Quedó una transcripción sin comprobar. Revisa el chat.","Eine Transkription ließ sich nicht bestätigen. Schau bitte im Chat nach.")}});
   }
   if(EMBEDDED)reviewChat.target="_top";
   const seenDelegations=new Set();
   const shownError={
-    auth_required:lv("Inicia sesión en el chat de Isabella antes de usar Live.","Bitte zuerst im TBA Office anmelden."),
-    invalid_session:lv("La sesión ha caducado. Vuelve a iniciar sesión en Isabella.","Die Anmeldung ist abgelaufen. Bitte erneut im Office anmelden."),
+    auth_required:lv("Inicia sesión en el chat de Isabella antes de usar Live.","Melde dich bitte zuerst im TBA Office an."),
+    invalid_session:lv("La sesión ha caducado. Vuelve a iniciar sesión en Isabella.","Deine Anmeldung ist abgelaufen. Melde dich bitte neu im Office an."),
     live_not_configured:lv("Live todavía no está configurado en el servidor.","Live ist im Office noch nicht konfiguriert."),
     live_capacity_unavailable:lv("Live no está disponible por capacidad del proveedor.","Der Sprachdienst ist derzeit ausgelastet."),
     live_provider_unavailable:lv("El proveedor no ha permitido iniciar esta sesión de voz.","Der Sprachdienst hat die Sitzung abgelehnt."),
@@ -75,7 +80,7 @@
   }
   function stop(message=lv("Conversación finalizada.","Gespräch beendet.")){
     if(reviewTurn?.busy){
-      message=lv("La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.","Die Anfrage wurde bereits an Romy gesendet. Vor einer Wiederholung bitte den Chat prüfen.");
+      message=lv("La consulta ya se envió a MINDS y puede continuar. Comprueba el chat antes de repetirla.","Die Anfrage ist schon an "+who()+" gegangen. Schau bitte zuerst in den Chat, bevor du sie wiederholst.");
     }
     clearTimeout(delegationTimer);waitingDelegation=null;
     if(transcript)void transcript.finish();
@@ -120,8 +125,8 @@
     review.classList.remove("hidden");
     reviewAnswer.textContent="";reviewAnswer.classList.add("hidden");
     reviewChat.classList.add("hidden");reviewChat.href="../";
-    reviewChat.textContent=lv("Abrir chat de Isabella para revisar el resultado","Romy-Chat zur Prüfung öffnen");
-    reviewStatus.textContent=lv("Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.","Bitte die Transkription prüfen. Ohne Bestätigung wird nichts gesendet.");
+    reviewChat.textContent=lv("Abrir chat de Isabella para revisar el resultado","Im Chat mit "+who()+" prüfen");
+    reviewStatus.textContent=lv("Revisa y corrige la transcripción. Nada se enviará sin pulsar Consultar MINDS.","Prüf die Transkription. Ohne deine Bestätigung wird nichts gesendet.");
     reviewSend.disabled=false;reviewDismiss.disabled=false;
     consult.classList.add("hidden");
     return true;
@@ -132,12 +137,12 @@
     if(!active||!turn||turn.busy||turn.done||turn.epoch!==epoch)return;
     const message=String(reviewText.value||"").trim();
     if(!message||message.length>2000){
-      reviewStatus.textContent=lv("Comprueba la frase: debe tener entre 1 y 2000 caracteres.","Bitte einen Text zwischen 1 und 2000 Zeichen eingeben.");
+      reviewStatus.textContent=lv("Comprueba la frase: debe tener entre 1 y 2000 caracteres.","Schreib bitte zwischen 1 und 2000 Zeichen.");
       return;
     }
     turn.busy=true;turn.requestId=crypto.randomUUID();
     reviewSend.disabled=true;reviewDismiss.disabled=true;
-    reviewStatus.textContent=lv("Consultando a Isabella en MINDS…","Romy wird gefragt …");
+    reviewStatus.textContent=lv("Consultando a Isabella en MINDS…",who()+" wird gefragt …");
     const token=epoch;
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
@@ -162,7 +167,7 @@
       const result=await response.json().catch(()=>null);
       if(token!==epoch||turn!==reviewTurn)return;
       if(!response.ok||result?.error){
-        reviewStatus.textContent=String(result?.message||lv("No pude confirmar el resultado. Revisa el chat antes de repetir la petición.","Das Ergebnis ist nicht bestätigt. Vor einer Wiederholung bitte den Chat prüfen.")).slice(0,240);
+        reviewStatus.textContent=String(result?.message||lv("No pude confirmar el resultado. Revisa el chat antes de repetir la petición.","Das Ergebnis ist nicht bestätigt. Schau bitte in den Chat, bevor du es wiederholst.")).slice(0,240);
         reviewChat.classList.remove("hidden");turn.done=true;return;
       }
       const outcome=canonical?.admission?.(result,integrity?.validate,integrity?.summary);
@@ -183,14 +188,14 @@
           Array.isArray(result.proposals)?result.proposals:[];
         const specificReview=canonical?.reviewLink?.(result,window.location.href);
         reviewChat.textContent=specificReview
-          ?lv("Revisar propuesta en Isabella","Vorschlag im Romy-Chat prüfen"):lv("Revisar propuestas en Isabella","Vorschläge im Romy-Chat prüfen");
+          ?lv("Revisar propuesta en Isabella","Vorschlag im Chat prüfen"):lv("Revisar propuestas en Isabella","Vorschläge im Chat prüfen");
         if(specificReview)reviewChat.href=specificReview;
       }
       reviewStatus.textContent=outcome.hasReview
-        ?lv("MINDS preparó una propuesta pendiente de revisión; no se ha aplicado.","Romy hat einen Vorschlag vorbereitet. Er ist noch nicht ausgeführt.")
+        ?lv("MINDS preparó una propuesta pendiente de revisión; no se ha aplicado.",who()+" hat einen Vorschlag vorbereitet. Er ist noch nicht ausgeführt.")
         :outcome.outcome==="action_applied"
           ?lv("MINDS confirmó la acción con comprobantes válidos.","Die Aktion wurde mit gültigem Ausführungsbeleg bestätigt.")
-          :lv("Respuesta de Isabella confirmada por MINDS.","Die Antwort von Romy wurde bestätigt.");
+          :lv("Respuesta de Isabella confirmada por MINDS.","Die Antwort von "+who()+" ist bestätigt.");
       // A verified canonical result can be paraphrased by GPT-Live; a transcript
       // fragment, inferred intent or model claim never becomes an action receipt.
       if(!send({type:"session.commentary.append",
@@ -201,7 +206,7 @@
     }catch{
       if(token!==epoch||turn!==reviewTurn)return;
       // The request may already have reached the backend. Do NOT retry it.
-      reviewStatus.textContent=lv("No pude confirmar el resultado. MINDS podría haber recibido la petición. Comprueba el chat antes de volver a intentarlo.","Das Ergebnis konnte nicht bestätigt werden. Die Anfrage könnte bereits angekommen sein. Bitte zuerst den Chat prüfen.");
+      reviewStatus.textContent=lv("No pude confirmar el resultado. MINDS podría haber recibido la petición. Comprueba el chat antes de volver a intentarlo.","Das Ergebnis ließ sich nicht bestätigen. Die Anfrage könnte schon angekommen sein. Schau bitte zuerst in den Chat.");
       reviewChat.classList.remove("hidden");turn.done=true;
     }finally{
       if(token===epoch&&turn===reviewTurn){
@@ -234,7 +239,7 @@
       delegationTimer=setTimeout(()=>{
         if(waitingDelegation!==waiting)return;
         waitingDelegation=null;
-        send({type:"session.commentary.append",delegation_id:waiting.id,content:lv("No recibí una frase completa. ¿Me la repites?","Ich habe keinen vollständigen Satz gehört. Bitte wiederholen.")});
+        send({type:"session.commentary.append",delegation_id:waiting.id,content:lv("No recibí una frase completa. ¿Me la repites?","Ich habe keinen ganzen Satz gehört. Sagst du es noch einmal?")});
       },1800);
       return;
     }
@@ -243,7 +248,7 @@
     if(!showReview(id)){
       send({type:"session.commentary.append",delegation_id:id,content:lv("Hay otra consulta en curso.","Eine andere Anfrage läuft bereits.")});return;
     }
-    if(manualReview?.checked)reviewStatus.textContent=lv("Confirma o corrige el texto antes de enviarlo.","Bitte den Text vor dem Senden prüfen oder korrigieren.");
+    if(manualReview?.checked)reviewStatus.textContent=lv("Confirma o corrige el texto antes de enviarlo.","Prüf den Text oder korrigier ihn, bevor du ihn schickst.");
     else void sendToCanonical();
   }
   function handleEvent(raw,token){
@@ -252,7 +257,7 @@
     try{event=JSON.parse(raw)}catch{return}
     if(event?.type==="session.started"){
       sessionReady=true;keepAlive();
-      state("active",lv("Te escucho. Habla con naturalidad.","Ich höre zu. Bitte sprechen Sie ganz normal."));
+      state("active",lv("Te escucho. Habla con naturalidad.","Ich höre zu. Sprich ganz normal."));
     }else if(event?.type==="session.input_transcript.delta"){
       keepAlive();
       // A completed review belongs to the previous turn. Never merge its
@@ -290,7 +295,7 @@
     }else if(event?.type==="session.closed"){
       stop(lv("La sesión terminó.","Die Sitzung wurde beendet."));
     }else if(event?.type==="error"||event?.type==="session.error"){
-      state("active",lv("El proveedor informó de un error de voz. Puedes finalizar y probar otra vez.","Beim Sprachdienst ist ein Fehler aufgetreten. Bitte die Sitzung beenden."));
+      state("active",lv("El proveedor informó de un error de voz. Puedes finalizar y probar otra vez.","Beim Sprachdienst ist ein Fehler aufgetreten. Beende das Gespräch und versuch es noch einmal."));
     }
   }
 
@@ -318,19 +323,19 @@
     if(attempt&&typeof attempt.catch==="function")attempt.catch(()=>{
       if(!active)return;
       unlock.classList.remove("hidden");
-      playback.textContent=lv("Safari bloqueó la reproducción automática. Pulsa «Activar altavoz» o el control de reproducción.","Die automatische Wiedergabe wurde blockiert. Bitte »Lautsprecher aktivieren« wählen.");
+      playback.textContent=lv("Safari bloqueó la reproducción automática. Pulsa «Activar altavoz» o el control de reproducción.","Die automatische Wiedergabe wurde blockiert. Tipp auf »Lautsprecher aktivieren«.");
     });
   }
   audio.addEventListener("playing",()=>{
     if(!active||!remoteTrack)return;
     playbackStarted=true;
     unlock.classList.add("hidden");
-    playback.textContent=lv("Safari ha iniciado la reproducción del audio. Confirma si lo escuchas realmente.","Die Audioausgabe wurde gestartet. Bitte prüfen, ob Ton zu hören ist.");
+    playback.textContent=lv("Safari ha iniciado la reproducción del audio. Confirma si lo escuchas realmente.","Die Wiedergabe läuft. Hörst du etwas?");
   });
   audio.addEventListener("error",()=>{
     if(!active)return;
     unlock.classList.remove("hidden");
-    playback.textContent=lv("No se pudo reproducir el audio remoto. Prueba «Activar altavoz».","Die Audioausgabe funktioniert nicht. Bitte »Lautsprecher aktivieren« versuchen.");
+    playback.textContent=lv("No se pudo reproducir el audio remoto. Prueba «Activar altavoz».","Die Wiedergabe klappt nicht. Versuch »Lautsprecher aktivieren«.");
   });
   unlock.addEventListener("click",tryPlay);
 
@@ -349,9 +354,9 @@
     keepAlive();
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
-      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zu Romy."));
+      if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zu "+who()+"."));
       const {data:{session},error}=await sb.auth.getSession();
-      if(error||!session?.access_token)throw new Error(lv("Inicia sesión primero en el chat de Isabella.","Bitte zuerst im Office anmelden."));
+      if(error||!session?.access_token)throw new Error(lv("Inicia sesión primero en el chat de Isabella.","Melde dich bitte zuerst im Office an."));
       if(!navigator.mediaDevices?.getUserMedia||!window.RTCPeerConnection)throw new Error(lv("Este navegador no admite la conexión de audio necesaria.","Dieser Browser unterstützt die benötigte Audioverbindung nicht."));
       if(token!==epoch)return;
 

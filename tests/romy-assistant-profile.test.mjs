@@ -83,7 +83,7 @@ test("German fixed app notices are identical server/browser patterns", () => {
 test("Shared chat dictionary chooses Spanish by default, German only for Office", () => {
   for(const [profile,locale,undo,assistant] of [
     [undefined,"es","Deshacer","Isabella"],["window","es","Deshacer","Isabella"],
-    ["office","de","Rückgängig","Romy"]
+    ["office","de","Rückgängig","KI-Assistent"]
   ]) {
     const root = {APP_PROFILE:profile};
     vm.runInNewContext(read("apps/isabella/assistant-i18n.js"), {window:root, globalThis:root});
@@ -91,6 +91,11 @@ test("Shared chat dictionary chooses Spanish by default, German only for Office"
     assert.equal(root.ASSISTANT_I18N.t("undo"),undo);
     assert.ok(root.ASSISTANT_I18N.t("presence_enabled").includes(assistant));
   }
+  // 28.11.2026: in the Office the German texts carry the name the member gave the assistant.
+  const named = {APP_PROFILE:"office",MINDS_ASSISTANT_NAME:()=>"Samantha"};
+  vm.runInNewContext(read("apps/isabella/assistant-i18n.js"), {window:named, globalThis:named});
+  assert.equal(named.ASSISTANT_I18N.t("presence_enabled"),"Samantha darf mir zuerst schreiben");
+  assert.doesNotMatch(read("apps/isabella/assistant-i18n.js"),/\bRomy\b/);
 });
 
 test("Prompt-component budget: Office transformation is measured without live services", () => {
@@ -138,7 +143,7 @@ test("Office review notices are German while the Window summaries remain identic
   vm.runInNewContext(read("apps/isabella/turn-integrity.js"),{window:rootWindow,globalThis:rootWindow,Date,Intl});
   assert.match(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"proposal_created",proposals:[p]}),/^Propuesta: añadir/);
   assert.equal(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"action_applied",applied_count:1}),"Guardado.");
-  assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=1/);
+  assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=2/);
 });
 
 

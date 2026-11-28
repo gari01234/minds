@@ -26,7 +26,7 @@ test('Live is a separate user-initiated surface with its own button next to the 
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=9/);
+  assert.match(page,/\.\/live\.js\?v=10/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 

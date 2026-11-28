@@ -19,3 +19,12 @@ Gari: «propongo ponerle a todos por default KI-Assistent y que cada quien pueda
 - **Páginas del sueño:** las páginas de la persona, de ella y de los dos se buscan por tipo, no por nombre. Así, un nombre nuevo renombra la página en lugar de crear otra.
 
 Pruebas: `tests/asistente-nombre-propio.test.mjs` y las de las fases de Romy, actualizadas. Desplegar: `isabella-chat isabella-live-session isabella-heartbeat isabella-presence isabella-dream isabella-routine-runner`.
+
+## En la página (app compartida con el Office)
+
+- **`office-personal.js`** (solo se carga en el Office):
+  - el menú tiene «Mein Assistent», con tres campos: «Wie soll dein Assistent heißen?», «Spitzname» y «Wie soll er dich nennen?»;
+  - guarda en `isabella_preferences` (`assistant_name`) del propio miembro;
+  - da el nombre a toda la página con `window.MINDS_ASSISTANT_NAME()` y rellena los elementos marcados con `data-assistant-name`, `-placeholder`, `-aria` y `-title`;
+  - recuerda el último nombre en el dispositivo y lo borra al cerrar sesión.
+- **`assistant-i18n.js`, `ai.js` y `live/live.js`** usan ese nombre. El alemán de Live tutea: Gari, «Quiero que tutee, es más natural».
