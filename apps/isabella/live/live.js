@@ -12,7 +12,9 @@
   const reviewDismiss=$("liveMindsDismiss"),reviewStatus=$("liveMindsStatus");
   const reviewAnswer=$("liveMindsAnswer"),reviewChat=$("liveMindsChat");
   const canonical=window.ISABELLA_LIVE_CANONICAL,integrity=window.MINDS_TURN_INTEGRITY;
-  const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
+  // No fixed length (28.11.2026, like Claude's voice mode): a conversation runs until Stop. Every second is billed,
+  // so it ends by itself after two minutes in which nobody spoke, unless an answer is still on its way.
+  const IDLE_MS=120000,ICE_WAIT_MS=9000;
   const OFFICE_LIVE=window.APP_PROFILE==='office';
   const lv=(spanish,german)=>OFFICE_LIVE?german:spanish;
   // Live inside the chat (V2, 28.11.2026): the same page runs in a sheet over the chat. The chat hears about every
@@ -27,7 +29,7 @@
   const updateVoiceHint=()=>originalNote.classList.toggle("hidden",voicePicker.value!==ORIGINAL_VOICE);
   voicePicker.addEventListener("change",updateVoiceHint);
   updateVoiceHint();
-  let peer=null,microphone=null,channel=null,timeoutId=null;
+  let peer=null,microphone=null,channel=null,idleTimer=null;
   let active=false,epoch=0,sessionReady=false,remoteTrack=false,playbackStarted=false;
   let reviewTurn=null,reviewEdited=false;
   const manualReview=$("liveManualReview");
@@ -81,7 +83,7 @@
     epoch++;active=false;sessionReady=false;remoteTrack=false;playbackStarted=false;
     reviewTurn=null;reviewEdited=false;
     review.classList.add("hidden");consult.classList.add("hidden");
-    clearTimeout(timeoutId);timeoutId=null;
+    clearTimeout(idleTimer);idleTimer=null;
     const oldChannel=channel;channel=null;
     try{oldChannel?.close()}catch{}
     const oldPeer=peer;peer=null;
@@ -98,6 +100,16 @@
     if(channel?.readyState!=="open")return false;
     try{channel.send(JSON.stringify({...obj,event_id:crypto.randomUUID()}));return true}
     catch{return false}
+  }
+  function keepAlive(){
+    clearTimeout(idleTimer);idleTimer=null;
+    if(!active)return;
+    const token=epoch;
+    idleTimer=setTimeout(()=>{
+      if(token!==epoch||!active)return;
+      if(reviewTurn?.busy||waitingDelegation){keepAlive();return}
+      stop(lv("Conversación cerrada tras 2 minutos sin hablar.","Nach 2 Minuten ohne Gespräch beendet."));
+    },IDLE_MS);
   }
   function showReview(delegationId=null){
     if(!active)return false;
@@ -193,12 +205,12 @@
       reviewChat.classList.remove("hidden");turn.done=true;
     }finally{
       if(token===epoch&&turn===reviewTurn){
-        turn.busy=false;
+        turn.busy=false;keepAlive();
         reviewSend.disabled=true;reviewDismiss.disabled=false;
       }
     }
   }
-  reviewText.addEventListener("input",()=>{reviewEdited=true});
+  reviewText.addEventListener("input",()=>{reviewEdited=true;keepAlive()});
   reviewSend.addEventListener("click",()=>void sendToCanonical());
   reviewDismiss.addEventListener("click",()=>{
     if(reviewTurn?.busy)return;
@@ -239,9 +251,10 @@
     let event;
     try{event=JSON.parse(raw)}catch{return}
     if(event?.type==="session.started"){
-      sessionReady=true;
-      state("active",lv("Te escucho. Habla con naturalidad.","Ich höre zu. Bitte sprich ganz normal."));
+      sessionReady=true;keepAlive();
+      state("active",lv("Te escucho. Habla con naturalidad.","Ich höre zu. Bitte sprechen Sie ganz normal."));
     }else if(event?.type==="session.input_transcript.delta"){
+      keepAlive();
       // A completed review belongs to the previous turn. Never merge its
       // transcript into a subsequent utterance or hide manual consultation.
       if(reviewTurn?.done){
@@ -257,9 +270,11 @@
       if(!reviewTurn&&input.textContent!=="—")consult.classList.remove("hidden");
       if(waitingDelegation){clearTimeout(delegationTimer);delegationTimer=setTimeout(tryDelegation,250)}
     }else if(event?.type==="session.output_transcript.delta"){
+      keepAlive();
       const part=transcript?.add("isabella",event);
       if(part?.author==="isabella")output.textContent=part.text;else appendCaption(output,event.delta);
     }else if(event?.type==="session.delegation.created"){
+      keepAlive();
       // Delegation metadata does not contain the user's utterance. Its text
       // must be reviewed by the owner before invoking the existing MINDS backend.
       const id=event?.delegation?.id;
@@ -331,7 +346,7 @@
     playback.textContent=lv("Esperando audio remoto…","Warte auf die Audioantwort …");
     unlock.classList.add("hidden");
     state("connecting",lv("Conectando el micrófono…","Mikrofon wird verbunden …"));
-    timeoutId=setTimeout(()=>stop(lv("Tiempo de prueba agotado (90 segundos).","Die 90 Sekunden sind abgelaufen.")),MAX_DURATION_MS);
+    keepAlive();
     try{
       const sb=window.MINDS_SUPABASE,cfg=window.MINDS_SUPABASE_CONFIG;
       if(!sb||!cfg?.url||!cfg.publishableKey)throw new Error(lv("No hay conexión con MINDS.","Keine Verbindung zu Romy."));
@@ -405,15 +420,15 @@
     }catch(error){
       if(token!==epoch)return;
       const name=error instanceof Error?error.message:"unknown";
-      const label=name==="ice_timeout"?"Safari no pudo negociar el canal de audio.":name;
-      stop(label||"No se pudo iniciar Live.");
+      const label=name==="ice_timeout"?lv("Safari no pudo negociar el canal de audio.","Der Browser konnte die Audioverbindung nicht aufbauen."):name;
+      stop(label||lv("No se pudo iniciar Live.","Live konnte nicht gestartet werden."));
     }
   }
   startButton.addEventListener("click",()=>void start());
   stopButton.addEventListener("click",()=>stop());
   window.addEventListener("pagehide",()=>stop());
   document.addEventListener("visibilitychange",()=>{
-    if(document.hidden&&active)stop("Sesión detenida al salir de la pantalla.");
+    if(document.hidden&&active)stop(lv("Sesión detenida al salir de la pantalla.","Beim Verlassen des Bildschirms beendet."));
   });
   window.ISABELLA_LIVE_DIAGNOSTIC=Object.freeze({
     getState:()=>({active,sessionReady,remoteTrack,playbackStarted}),
