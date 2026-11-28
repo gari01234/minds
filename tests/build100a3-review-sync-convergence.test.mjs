@@ -59,9 +59,9 @@ test('every successful sync rechecks owner receipts without executing an action'
  assert.doesNotMatch(segment,/\.rpc\(|applyProposal\(|applyVerifiedTaskUpdate\(/);
  assert.match(segment,/r\.action==='update_task'&&accepted\.has\(r\.request_id\)/);
  assert.match(segment,/Date\.parse\(t\.updated_at\)!==Date\.parse\(r\.after_state\.updated_at\)/);
- assert.match(html,/app\.js\?v=148/);
- assert.match(html,/sync\.js\?v=pwa40/);
- assert.match(sw,/isabella-shell-v193/);
- assert.match(sw,/app\.js\?v=148/);
- assert.match(sw,/sync\.js\?v=pwa40/);
+ assert.match(html,/app\.js\?v=149/);
+ assert.match(html,/sync\.js\?v=pwa41/);
+ assert.match(sw,/isabella-shell-v194/);
+ assert.match(sw,/app\.js\?v=149/);
+ assert.match(sw,/sync\.js\?v=pwa41/);
 });

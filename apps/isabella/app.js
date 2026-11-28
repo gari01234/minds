@@ -2902,10 +2902,31 @@ function initVoice(){
   };
   $('#micButton').onclick=()=>{if(window.ISABELLA_VOICE_OUTPUT?.isSpeaking()){window.ISABELLA_VOICE_OUTPUT.stop();return;}void start()};
   $('#focusClose').onclick=cancel;primary.onclick=stop;secondary.onclick=secondaryAction;
-  // Same mic/Focus surface: close dictation before navigating to continuous Live.
-  // The real link remains navigable without JavaScript and preserves the old flow.
-  $('#focusLiveLink').onclick=()=>{cancel();window.ISABELLA_VOICE_OUTPUT?.stop();};
+  // Same mic/Focus surface: close dictation, then continuous Live opens in a sheet over the chat (V2, 28.11.2026).
+  // The real link remains navigable without JavaScript and preserves the old flow (a page of its own).
+  $('#focusLiveLink').onclick=e=>{cancel();window.ISABELLA_VOICE_OUTPUT?.stop();if(openLiveSheet())e.preventDefault()};
+  $('#liveSheetClose').onclick=closeLiveSheet;
 }
+// Live inside the chat: the Live page runs in a frame over the chat; what is said is saved to this chat turn by turn
+// (save_transcript), and every saved turn and the end of a session pull the conversation, so it appears right away.
+function openLiveSheet(){
+  const sheet=$('#liveSheet'),frame=$('#liveFrame');
+  if(!sheet||!frame)return false;
+  if(sheet.classList.contains('hidden')){frame.src='./live/?embed=1';sheet.classList.remove('hidden');document.body.classList.add('live-open')}
+  return true;
+}
+function closeLiveSheet(){
+  const sheet=$('#liveSheet'),frame=$('#liveFrame');
+  if(!sheet||sheet.classList.contains('hidden'))return;
+  try{frame.contentWindow?.ISABELLA_LIVE_DIAGNOSTIC?.stop()}catch{}
+  frame.src='about:blank';sheet.classList.add('hidden');document.body.classList.remove('live-open');
+  void window.ISABELLA_SYNC_PULL_NOW?.();
+}
+window.addEventListener('message',e=>{
+  if(e.origin!==location.origin||e.data?.type!=='isabella-live')return;
+  const sheet=$('#liveSheet');if(sheet&&e.data.state)sheet.dataset.state=String(e.data.state);
+  if(e.data.event==='turn'||(e.data.event==='state'&&e.data.state==='idle'))void window.ISABELLA_SYNC_PULL_NOW?.();
+});
 function openFocus(){$('#focusMode').classList.remove('hidden');$('#focusStatus').textContent='Escuchando…';const t=$('#focusTranscript');if(t){t.value='';t.textContent='';t.readOnly=true}}function closeFocus(){$('#focusMode').classList.add('hidden');orb()}
 function startWeek(d){const x=new Date(d);const day=(x.getDay()+6)%7;return addDays(x,-day)} function weekNo(d){const x=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));const n=x.getUTCDay()||7;x.setUTCDate(x.getUTCDate()+4-n);const y=new Date(Date.UTC(x.getUTCFullYear(),0,1));return Math.ceil((((x-y)/86400000)+1)/7)}
 function move(dir){let d=fromIso(state.date);if(state.view==='day')d=addDays(d,dir);else if(state.view==='week')d=addDays(d,dir*7);else d=new Date(d.getFullYear(),d.getMonth()+dir,1);state.date=iso(d);save();renderCalendar()}

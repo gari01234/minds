@@ -8,3 +8,11 @@
 /* Access continuous GPT-Live from the existing Focus surface; no second mic. */
 .focus-live-link{display:flex;align-items:center;justify-content:center;width:min(100%,520px);min-height:49px;margin:0 auto 14px;border:1px solid #dedee0;border-radius:99px;background:#fff;color:#202020;text-decoration:none;font-size:15px;font-weight:500}
 .focus-live-link:focus-visible{outline:2px solid #171717;outline-offset:3px}
+
+/* Live inside the chat (V2, 28.11.2026): a sheet above the composer; the chat stays visible and fills as you talk. */
+.live-sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100vw - 24px));height:min(470px,calc(100dvh - 150px));
+  background:var(--m-paper,#fff);border:1px solid var(--m-border,#e3e3e3);border-radius:20px;box-shadow:0 18px 50px rgba(0,0,0,.16);z-index:70;display:flex;flex-direction:column;overflow:hidden}
+.live-sheet-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px 2px 18px}
+.live-sheet-title{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--m-ink-soft,#6b6b6b)}
+.live-sheet[data-state="active"] .live-sheet-title::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--m-error,#d33);margin-right:8px;vertical-align:1px}
+.live-frame{flex:1;width:100%;border:0;background:var(--m-paper,#fff)}

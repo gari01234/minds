@@ -73,10 +73,10 @@ test('90.8: Push diagnostic is explicitly requested, owner-scoped and rate-limit
 });
 test('90.8: asset update is PWA-cache coherent',()=>{
   const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
-  assert.ok(html.includes('app.js?v=148'));
+  assert.ok(html.includes('app.js?v=149'));
   assert.ok(html.includes('ai.js?v=60'));
-  assert.ok(sw.includes('isabella-shell-v193'));
-  assert.ok(sw.includes('app.js?v=148'));
+  assert.ok(sw.includes('isabella-shell-v194'));
+  assert.ok(sw.includes('app.js?v=149'));
   assert.ok(sw.includes('ai.js?v=60'));
 });
 

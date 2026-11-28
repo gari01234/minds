@@ -63,7 +63,7 @@ test('native writes remain intentionally limited to native fields',()=>{
 });
 
 test('the updated PWA caches a matching Work/Time bridge',()=>{
-  assert.ok(html.includes('sync.js?v=pwa40'));
-  assert.ok(sw.includes('sync.js?v=pwa40'));
-  assert.ok(sw.includes('isabella-shell-v193'));
+  assert.ok(html.includes('sync.js?v=pwa41'));
+  assert.ok(sw.includes('sync.js?v=pwa41'));
+  assert.ok(sw.includes('isabella-shell-v194'));
 });

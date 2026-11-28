@@ -15,6 +15,13 @@
   const MAX_DURATION_MS=90000,ICE_WAIT_MS=9000;
   const OFFICE_LIVE=window.APP_PROFILE==='office';
   const lv=(spanish,german)=>OFFICE_LIVE?german:spanish;
+  // Live inside the chat (V2, 28.11.2026): the same page runs in a sheet over the chat. The chat hears about every
+  // saved turn and the end of a session, so it can show the conversation at once; review links open the chat itself.
+  const EMBEDDED=(()=>{try{return window.self!==window.top}catch{return true}})();
+  function notifyHost(event,extra={}){
+    if(!EMBEDDED)return;
+    try{window.parent.postMessage({type:"isabella-live",event,...extra},window.location.origin)}catch{}
+  }
   const ORIGINAL_VOICE="isabella-original-v1";
   const originalNote=$("liveOriginalNote");
   const updateVoiceHint=()=>originalNote.classList.toggle("hidden",voicePicker.value!==ORIGINAL_VOICE);
@@ -35,8 +42,10 @@
         body:JSON.stringify({action:"save_transcript",conversation_id:conversation,...turn})});
       const receipt=await response.json();
       if(!response.ok||receipt.saved!==true||receipt.turn_id!==turn.turn_id)throw Error("voice_write_failed");
+      notifyHost("turn");
     },onError:()=>{status.textContent=lv("Quedó una transcripción sin comprobar. Revisa el chat.","Eine Sprachtranskription konnte nicht bestätigt werden. Bitte im Chat prüfen.")}});
   }
+  if(EMBEDDED)reviewChat.target="_top";
   const seenDelegations=new Set();
   const shownError={
     auth_required:lv("Inicia sesión en el chat de Isabella antes de usar Live.","Bitte zuerst im TBA Office anmelden."),
@@ -57,6 +66,7 @@
 
   function state(value,message){
     shell.dataset.state=value;status.textContent=message;
+    notifyHost("state",{state:value});
     startButton.disabled=value==="connecting"||value==="active";
     stopButton.disabled=value!=="connecting"&&value!=="active";
     voicePicker.disabled=value==="connecting"||value==="active";
