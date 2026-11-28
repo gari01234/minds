@@ -28,3 +28,10 @@ Pruebas: `tests/asistente-nombre-propio.test.mjs` y las de las fases de Romy, ac
   - da el nombre a toda la página con `window.MINDS_ASSISTANT_NAME()` y rellena los elementos marcados con `data-assistant-name`, `-placeholder`, `-aria` y `-title`;
   - recuerda el último nombre en el dispositivo y lo borra al cerrar sesión.
 - **`assistant-i18n.js`, `ai.js` y `live/live.js`** usan ese nombre. El alemán de Live tutea: Gari, «Quiero que tutee, es más natural».
+
+## Textos que aún decían «Romy» (repaso antes de unir)
+
+- **Live:** las dos frases fijas de `live/canonical.js` pasan a primera persona y tutean: «Ich habe dir den Vorschlag im Chat zur Bestätigung vorbereitet.» y «Ich konnte keine Änderung bestätigen. Schau dir das Ergebnis bitte im Chat an.» (`canonical.js?v=4`).
+- **Akte-Pflege compartida:** «Du bist die KI-Assistenz …». La lee todo el equipo del proyecto y cada uno tiene su propio asistente, así que no lleva el nombre de nadie.
+- **`officeVoiceInstructions`** (hoy sin uso) recibe el nombre y tutea. **`OFFICE_RELATIONSHIP_POLICY`** (solo de referencia) habla en segunda persona.
+- **Tipos:** `profileAssistantForUser` y las demás aceptan el perfil como nombre o como objeto, para que pase `deno check`.
