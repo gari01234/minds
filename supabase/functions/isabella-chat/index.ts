@@ -18,7 +18,7 @@ import {ownerAsked,directOwnerTexts,directToolHistorySafe,directCreatable,withDe
 import {leanConversationEligible,leanConversationContext,lightWorkConversationContext,LIGHT_CONVERSATION_INSTRUCTIONS,promptComponentSizes,contextFootprintSignal} from "../_shared/light-conversation-context.mjs";
 import {isabellaCoreInstructions,coreConversationContext,workCoreConversationContext,ISABELLA_CORE_VERSION} from "../_shared/isabella-core.mjs";
 import {CORE_DETAILS} from "../_shared/isabella-core-details.mjs";
-import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileFirstName,profileInstructions,profileTools,officeToolAllowed,profileAssistantForUser,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
 import {verifiedPendingProse} from "../_shared/reply-verification.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {readOfficeTerminplanMilestones} from "../_shared/office-terminplan.mjs";
@@ -284,10 +284,12 @@ async function persistCanonicalBrowserOwnerTurn(req:Request,requestId:string,mes
   if(conversationError)throw conversationError;
   let conversationId=conversations?.[0]?.id;
   if(!conversationId){
+    // The conversation carries the name the member gave the assistant (Office); Window: Isabella.
+    const named=await profileAssistantForUser(sb,user.id,resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window"));
     const created=await sb.from("conversations").insert({
       user_id:user.id,app_scope:"isabella",origin_kind:"global",
-      origin_anchor:{type:"assistant",id:"isabella",label:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").assistant_name},
-      title:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").assistant_name,
+      origin_anchor:{type:"assistant",id:"isabella",label:named.name},
+      title:named.name,
       mode:"memory",metadata:{app:resolveAssistantProfile(Deno.env.get("ASSISTANT_PROFILE")||"window").multi_user?"romy":"isabella"}
     }).select("id").single();
     if(created.error||!created.data?.id)throw created.error||new Error("conversation_create_failed");
@@ -2880,6 +2882,8 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
   const voice=appVoice(assistantProfile);
   let assistantOwner: string | null=assistantProfile.owner_name;
   let assistantUserId: string | null=null;
+  // The name this member gave the assistant, its nickname and how it calls them (Office; Window: Isabella).
+  let assistantIdentity:any=null;
   if(assistantProfile.multi_user){
     // Office identity comes only from a verified session and an active membership.
     const authenticated=(await supabaseClient(req)?.auth.getUser())?.data?.user;
@@ -2888,7 +2892,8 @@ async function executeTurn(req:Request,body:any,emit?: (text:string)=>void){
     const membership=await supabaseClient(req)?.from("office_members")
       .select("display_name,is_active").eq("user_id",authenticated.id).maybeSingle();
     if(membership?.error||!membership?.data?.is_active)return json({error:"office_member_required"},403);
-    assistantOwner=profileFirstName(membership.data.display_name);
+    assistantIdentity=await profileAssistantForUser(supabaseClient(req),authenticated.id,assistantProfile);
+    assistantOwner=profileFirstName(assistantIdentity?.callme)||profileFirstName(membership.data.display_name);
     if(!assistantOwner)return json({error:"office_member_display_name_required"},403);
   }
 
@@ -3626,7 +3631,7 @@ pregunta cuál.`;
     ...(ownMode?[DEEPER_TOOL]:[])
   ]).filter((t:any)=>routineReviewSupported||!routineMutationTools.has(String(t.name||"")));
   if(assistantProfile.multi_user){
-    tools.splice(0,tools.length,...profileTools(tools,assistantProfile.id,assistantOwner));
+    tools.splice(0,tools.length,...profileTools(tools,assistantProfile.id,assistantOwner,assistantIdentity?.name||null));
   }
   const toolProposals:any[]=[];
   const temporalGroundingIssues:string[]=[];
@@ -3679,7 +3684,7 @@ pregunta cuál.`;
     system+(scheduleAssessment?"\nPara una evaluación de agenda por días, consulta search_calendar con el intervalo pertinente antes de concluir, distingue eventos de tareas y no inventes ocupaciones. Si faltan datos, indica el límite.":""));
   // Same relationship contract for Romy (review 08.11.2026); profileInstructions adapts the names.
   const safeModelInstructions=modelInstructions;
-  const providerInstructions=profileInstructions(safeModelInstructions,assistantProfile.id,assistantOwner);
+  const providerInstructions=profileInstructions(safeModelInstructions,assistantProfile.id,assistantOwner,assistantIdentity);
   const turnText=effectiveMessage;
   const continuationEvidence=verifiedContinuation?boundedContinuationEvidence({
     sourceMessage:verifiedContinuation.source_message,question:verifiedContinuation.question,
@@ -4273,7 +4278,7 @@ pregunta cuál.`;
     const card=canonicalAssistantRow({
       userId:browserTurn.userId,conversationId:browserTurn.conversationId,requestId:clientMessageId,
       content:reply,scope:exposureScope,sources:webSources,model,
-      author:assistantProfile.assistant_name.toLocaleLowerCase('de-DE'),
+      author:assistantProfile.assistant_id,
       outcome:toolProposals.length?'proposal_created':outcomeReceipt.outcome
     });
     // Her own words travel with the card (Office rebuilds the chat from this row).

@@ -1,4 +1,9 @@
-// Source-of-truth: Window repo; Office-only per-member controls for Romy.
+// Source-of-truth: Window repo; Office-only per-member controls for the assistant.
+// 28.11.2026 (Gari): «a todos por default KI-Assistent y que cada quien pueda escoger el suyo». Each member names
+// the assistant here (name, nickname, how it calls them); the engine reads the same preference (assistant_name).
+// window.MINDS_ASSISTANT_NAME() gives the name to the whole page; elements marked with data-assistant-name,
+// -text, -placeholder, -aria or -title follow it. Their templates are filled by MINDS_ASSISTANT_TEXT
+// (assistant-i18n.js: {name}, {Wer}, {wer}, {wem}, {wen}, so the default keeps its article in a sentence).
 // The Window profile exits without side effects. Only authenticated owner rows
 // are read; forgetting uses a server-side RPC with independent owner checks.
 (()=>{
@@ -7,12 +12,53 @@ if(typeof window==='undefined'||window.APP_PROFILE!=='office')return;
 const sb=window.MINDS_SUPABASE;
 if(!sb)return;
 let ownerId=null,serial=0,busy=false;
+const NAME_KEY='assistant_name',DEFAULT_NAME='KI-Assistent',CACHE='minds-assistant-name';
+const cleanLabel=(value,max)=>{const s=String(value??'').normalize('NFC').replace(/\s+/gu,' ').trim();
+  return s&&s.length<=max&&/^[\p{L}\p{M}][\p{L}\p{M}\p{N}' .-]*$/u.test(s)?s:null};
+let identity=(()=>{try{const v=JSON.parse(localStorage.getItem(CACHE)||'null');return v&&typeof v==='object'?v:{}}catch{return {}}})();
+const assistantName=()=>cleanLabel(identity.name,40)||DEFAULT_NAME;
+window.MINDS_ASSISTANT_NAME=assistantName;
+const assistantText=v=>{try{if(typeof window.MINDS_ASSISTANT_TEXT==='function')return String(window.MINDS_ASSISTANT_TEXT(v))}catch{}
+  return String(v||'').replace(/\{(name|Wer|wer|wem|wen)\}/g,assistantName())};
+function applyName(){
+  const name=assistantName(),fill=assistantText;
+  document.querySelectorAll('[data-assistant-name]').forEach(e=>{e.textContent=name});
+  document.querySelectorAll('[data-assistant-text]').forEach(e=>{e.textContent=fill(e.dataset.assistantText)});
+  document.querySelectorAll('[data-assistant-placeholder]').forEach(e=>{e.setAttribute('placeholder',fill(e.dataset.assistantPlaceholder))});
+  document.querySelectorAll('[data-assistant-aria]').forEach(e=>{e.setAttribute('aria-label',fill(e.dataset.assistantAria))});
+  document.querySelectorAll('[data-assistant-title]').forEach(e=>{e.setAttribute('title',fill(e.dataset.assistantTitle))});
+  try{window.dispatchEvent(new CustomEvent('minds-assistant-name',{detail:{name}}))}catch{}
+}
+async function loadAssistantName(){
+  const id=await activeOwner();if(!id)return;
+  const {data,error}=await sb.from('isabella_preferences').select('value').eq('user_id',id).eq('preference_key',NAME_KEY).maybeSingle();
+  if(error)return;
+  identity=data?.value&&typeof data.value==='object'&&!Array.isArray(data.value)?data.value:{};
+  try{localStorage.setItem(CACHE,JSON.stringify(identity))}catch{}
+  applyName();
+}
+async function saveAssistantName(next){
+  const value={};
+  for(const [key,max] of [['name',40],['spitzname',24],['rufname',40]]){
+    const raw=String(next?.[key]??'').trim();if(!raw)continue;
+    const clean=cleanLabel(raw,max);if(!clean)throw new Error('Bitte nur Buchstaben, Ziffern, Leerzeichen, Punkt, Apostroph oder Bindestrich (höchstens '+max+' Zeichen).');
+    value[key]=clean;
+  }
+  const id=await assertOwner();
+  const {error}=await sb.from('isabella_preferences').upsert({
+    user_id:id,preference_key:NAME_KEY,value,
+    status:'confirmed',confidence:1,evidence:[{source:'explicit_user_setting',kind:'assistant_name'}],updated_at:new Date().toISOString()
+  },{onConflict:'user_id,preference_key'});
+  if(error)throw error;
+  identity=value;try{localStorage.setItem(CACHE,JSON.stringify(identity))}catch{}
+  applyName();return assistantName();
+}
 const t=(tag,label='',className='')=>{
   const e=document.createElement(tag);if(label)e.textContent=String(label);
   if(className)e.className=className;return e;
 };
 function container(){
-  window.ISABELLA_APP?.openModal?.('Was Romy über mich weiß','');
+  window.ISABELLA_APP?.openModal?.('Mein Assistent','');
   const body=document.getElementById('modalBody');
   if(body)body.replaceChildren();
   return body;
@@ -87,13 +133,32 @@ async function openPanel(){
     const [value,items]=await Promise.all([readOwnerPreference(id),ownerMemories(id)]);
     if(seq!==serial||await activeOwner()!==id)return;
     body.replaceChildren();
+    // Name, nickname and how it calls you. Empty name: «KI-Assistent».
+    body.appendChild(t('h3','Name'));
+    const form=t('form',null,'office-personal-name');
+    const field=(key,labelText,hint,max)=>{
+      const l=t('label',labelText);const input=t('input');input.type='text';input.name=key;input.maxLength=max;
+      input.value=String(identity[key]||'');input.placeholder=hint;input.autocomplete='off';l.appendChild(input);form.appendChild(l);return input;
+    };
+    field('name','Wie soll dein Assistent heißen?',DEFAULT_NAME,40);
+    field('spitzname','Spitzname (optional)','z. B. Sam',24);
+    field('rufname','Wie soll dein Assistent dich nennen? (optional)','dein Vorname',40);
+    const save=t('button','Speichern');save.type='submit';form.appendChild(save);
+    const note=t('p','');note.setAttribute('role','status');form.appendChild(note);
+    form.addEventListener('submit',async e=>{
+      e.preventDefault();save.disabled=true;note.textContent='';
+      try{const name=await saveAssistantName(Object.fromEntries(new FormData(form)));note.textContent='Gespeichert. Dein Assistent heißt jetzt '+name+'.';}
+      catch(err){note.textContent='Nicht gespeichert: '+String(err?.message||err);}
+      finally{save.disabled=false}
+    });
+    body.appendChild(form);
     const heading=t('h3','Meine persönlichen Einstellungen');body.appendChild(heading);
-    const label=t('label','Romy darf mir von sich aus schreiben');
+    const label=t('label',assistantText('{Wer} darf mir von sich aus schreiben'));
     const toggle=t('input');toggle.type='checkbox';toggle.checked=value.curiosityEnabled!==false;
-    toggle.setAttribute('aria-label','Romy darf mir von sich aus schreiben');
+    toggle.setAttribute('aria-label',assistantText('{Wer} darf mir von sich aus schreiben'));
     label.prepend(toggle);
     body.appendChild(label);
-    body.appendChild(t('p','Die Begrenzung und Ruhezeiten gelten pro Person. Keine Office-Push-Mitteilungen.'));
+    body.appendChild(t('p','Höchstens drei Nachrichten am Tag, werktags zwischen 7:30 und 19 Uhr.'));
     toggle.addEventListener('change',async()=>{
       toggle.disabled=true;
       try{
@@ -101,7 +166,7 @@ async function openPanel(){
       }catch(e){toggle.checked=!toggle.checked;body.appendChild(t('p','Nicht gespeichert: '+String(e?.message||e)));}
       finally{toggle.disabled=false}
     });
-    body.appendChild(t('h3','Was Romy sich gemerkt hat'));
+    body.appendChild(t('h3',assistantText('Was {wer} sich gemerkt hat')));
     if(!items.length)body.appendChild(t('p','Noch keine gespeicherten Einträge.'));
     for(const item of items){
       const line=t('div',null,'office-personal-memory-row');
@@ -127,7 +192,7 @@ function menu(){
   if(document.getElementById('officePersonalMemory'))return;
   const signout=document.getElementById('officeSignOut');
   if(!signout?.parentNode)return;
-  const b=t('button','Was Romy über mich weiß','office-assistant-menu-action');
+  const b=t('button','Mein Assistent','office-assistant-menu-action');
   b.id='officePersonalMemory';b.type='button';
   b.addEventListener('click',()=>{document.getElementById('closeDrawer')?.click();void openPanel()});
   signout.parentNode.insertBefore(b,signout);
@@ -137,7 +202,12 @@ sb.auth.onAuthStateChange?.((_event,session)=>{
     ++serial;ownerId=null;
     window.ISABELLA_APP?.closeModal?.();
   }
+  // Another person on this device: never show the previous person's name for the assistant.
+  if(!session?.user?.id){identity={};try{localStorage.removeItem(CACHE)}catch{};applyName();}
+  else void loadAssistantName();
 });
-window.TBA_OFFICE_PERSONAL=Object.freeze({openPanel,setPresence,forget,ownerMemories,activeOwner});
+window.TBA_OFFICE_PERSONAL=Object.freeze({openPanel,setPresence,forget,ownerMemories,activeOwner,loadAssistantName,saveAssistantName,assistantName});
 menu();
+applyName();
+void loadAssistantName();
 })();

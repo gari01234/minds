@@ -121,7 +121,9 @@ test('Romy greets on a Monday morning with its own key, in her words; the motive
   const {sb,ops}=fakeSb({
     conversations:(st)=>st.filters.some(f=>f[0]==='select'&&f[1]==='user_id')?[{user_id:'u'}]:[{id:'c1'}],
     office_members:()=>({display_name:'Ana Beispiel',is_active:true}),
-    isabella_preferences:[{value:{curiosityEnabled:true}}],
+    // Her name is the member's choice (28.11.2026): Gari's is «Samantha», «Sam» for short.
+    isabella_preferences:(st)=>st.filters.some(f=>f[0]==='eq'&&f[1]==='preference_key'&&f[2]==='assistant_name')
+      ?{value:{name:'Samantha',spitzname:'Sam'}}:[{value:{curiosityEnabled:true}}],
     conversation_messages:[],
     isabella_return_queue:[],isabella_entities:[],isabella_tasks:[],isabella_events:[],minds_work_threads:[],
     isabella_projects:[{id:'p1',name:'Bernried'}],
@@ -134,7 +136,8 @@ test('Romy greets on a Monday morning with its own key, in her words; the motive
   assert.deepEqual(out.report,[{spoke:true,reason:'agenda',moment:'buenos_dias',push_sent:0}]);
   assert.equal(seen.input.momento.kind,'buenos_dias');
   assert.deepEqual(seen.input.motivos.plazos.map(x=>[x.proyecto,x.que,x.dias_laborables]),[['Bernried','Abgabe TWP',2]]);
-  assert.match(seen.instructions,/Romy/);assert.doesNotMatch(seen.instructions,/\bIsabella\b/);
+  assert.match(seen.instructions,/Samantha/);assert.match(seen.instructions,/Ana a veces te dice Sam\./);
+  assert.doesNotMatch(seen.instructions,/\bIsabella\b|\bRomy\b/);
   const deliver=ops.find(o=>o.table==='conversation_messages'&&o.op==='upsert');
   assert.equal(deliver.payload.client_key,morningKey('2026-11-30'),'the morning does not use up the day\'s own messages');
   assert.equal(deliver.payload.metadata.moment,'buenos_dias');

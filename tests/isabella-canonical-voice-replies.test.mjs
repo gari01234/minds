@@ -131,5 +131,5 @@ test('PWA includes new scripts and keeps existing transcription and canonical ru
   assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=150'));
   assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.match(app,/window\.ISABELLA_AI\.ask\(/);
-  assert.match(sw,/isabella-shell-v195/);
+  assert.match(sw,/isabella-shell-v196/);
 });

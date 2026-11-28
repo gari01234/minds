@@ -26,7 +26,7 @@ test('Live is a separate user-initiated surface with its own button next to the 
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=9/);
+  assert.match(page,/\.\/live\.js\?v=10/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -150,7 +150,7 @@ test('delegation supports optional transcript review and requires typed receipts
   assert.match(page,/id="liveMindsText"/);
   assert.match(page,/id="liveMindsReview" class="live-minds-review hidden"/);
   assert.match(page,/id="liveMindsSend"/);
-  assert.match(page,/src="\.\/canonical\.js\?v=3"/);
+  assert.match(page,/src="\.\/canonical\.js\?v=4"/);
   assert.match(page,/src="\.\.\/turn-integrity\.js"/);
   assert.match(client,/session\.thinking\.append/);
   assert.match(client,/if\(!showReview\(id\)\)/);

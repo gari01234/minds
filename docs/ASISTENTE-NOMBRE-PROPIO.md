@@ -1,0 +1,55 @@
+# Cada uno nombra a su asistente (28.11.2026)
+
+Gari: «propongo ponerle a todos por default KI-Assistent y que cada quien pueda escoger el suyo o dejarlo así». El suyo se llama **Samantha**, y a veces le dice **Sam**. Además: el asistente tutea en todo, a todos.
+
+## En el motor (solo perfil `office`; Window no cambia)
+
+- **Nombre por defecto:** «KI-Assistent» (`assistant_name`). El id interno de las filas guardadas sigue siendo `romy` (`assistant_id`), para no romper nada de lo ya guardado.
+- **Elección de cada miembro:** está en sus propias preferencias (`isabella_preferences`, clave `assistant_name`) y tiene tres campos:
+  - `name`: el nombre;
+  - `spitzname`: un apodo opcional;
+  - `rufname`: cómo quiere que le llame el asistente; si no lo pone, se usa su nombre de pila.
+
+  Lo lee `profileAssistantForUser` con el cliente del que llama. Si falla la lectura, se usa «KI-Assistent».
+- **Dónde se usa:**
+  - las instrucciones del chat, de Live, de la presencia, del sueño y de las rutinas, con la línea «Te llamas …; … a veces te dice …»;
+  - las descripciones de herramientas;
+  - el título de las conversaciones nuevas.
+- **Tuteo:** `OFFICE_LANGUAGE_RULE` añade «en alemán tuteas («du»)». La línea fija «… beendet gerade …» pasa a primera persona.
+- **Páginas del sueño:** las páginas de la persona, de ella y de los dos se buscan por tipo, no por nombre. Así, un nombre nuevo renombra la página en lugar de crear otra.
+
+Pruebas: `tests/asistente-nombre-propio.test.mjs` y las de las fases de Romy, actualizadas. Desplegar: `isabella-chat isabella-live-session isabella-heartbeat isabella-presence isabella-dream isabella-routine-runner`.
+
+## En la página (app compartida con el Office)
+
+- **`office-personal.js`** (solo se carga en el Office):
+  - el menú tiene «Mein Assistent», con tres campos: «Wie soll dein Assistent heißen?», «Spitzname» y «Wie soll er dich nennen?»;
+  - guarda en `isabella_preferences` (`assistant_name`) del propio miembro;
+  - da el nombre a toda la página con `window.MINDS_ASSISTANT_NAME()` y rellena los elementos marcados con `data-assistant-name`, `-placeholder`, `-aria` y `-title`;
+  - recuerda el último nombre en el dispositivo y lo borra al cerrar sesión.
+- **`assistant-i18n.js`, `ai.js` y `live/live.js`** usan ese nombre. El alemán de Live tutea: Gari, «Quiero que tutee, es más natural».
+
+## Textos que aún decían «Romy» (repaso antes de unir)
+
+- **Live:** las dos frases fijas de `live/canonical.js` pasan a primera persona y tutean: «Ich habe dir den Vorschlag im Chat zur Bestätigung vorbereitet.» y «Ich konnte keine Änderung bestätigen. Schau dir das Ergebnis bitte im Chat an.» (`canonical.js?v=4`).
+- **Akte-Pflege compartida:** «Du bist die KI-Assistenz …». La lee todo el equipo del proyecto y cada uno tiene su propio asistente, así que no lleva el nombre de nadie.
+- **`officeVoiceInstructions`** (hoy sin uso) recibe el nombre y tutea. **`OFFICE_RELATIONSHIP_POLICY`** (solo de referencia) habla en segunda persona.
+- **Tipos:** `profileAssistantForUser` y las demás aceptan el perfil como nombre o como objeto, para que pase `deno check`.
+
+## El nombre dentro de una frase
+
+«KI-Assistent» es un sustantivo, no un nombre: en una frase lleva artículo. «Samantha» no. Por eso las plantillas alemanas tienen cinco marcas, y `MINDS_ASSISTANT_TEXT` (en `assistant-i18n.js`) las rellena:
+
+| Marca | Por defecto | Con nombre propio |
+|---|---|---|
+| `{name}` (rótulos) | KI-Assistent | Samantha |
+| `{Wer}` (al empezar la frase) | Der KI-Assistent | Samantha |
+| `{wer}` (dentro de la frase) | der KI-Assistent | Samantha |
+| `{wem}` | dem KI-Assistenten | Samantha |
+| `{wen}` | den KI-Assistenten | Samantha |
+
+Ejemplos: «Der KI-Assistent denkt nach…» o «Samantha denkt nach…»; «Wird an den KI-Assistenten gesendet…» o «Wird an Samantha gesendet…».
+
+- `office-personal.js` rellena también los elementos marcados con `data-assistant-text`.
+- Live usa `say()` con las mismas marcas. Live no guarda nada en el dispositivo; si se abre sola, dice «KI-Assistent».
+- De paso: el interruptor de la presencia ya no dice «höchstens einmal täglich». Dice lo que hace desde el 28.11: «höchstens dreimal am Tag, werktags von 7:30 bis 19 Uhr».

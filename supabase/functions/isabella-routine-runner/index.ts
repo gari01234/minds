@@ -9,7 +9,7 @@ import {consolidatedMemoryView} from "../_shared/isabella-dream.mjs";
 import {workRadar} from "../_shared/isabella-radar.mjs";
 import {taskResponsibles,responsibleField} from "../_shared/task-responsibles.mjs";
 import {promptComponentSizes} from "../_shared/light-conversation-context.mjs";
-import {resolveAssistantProfile,profileOwnerForUser,profileInstructions,personaText,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileOwnerForUser,profileInstructions,personaText,profileAssistantForUser,OFFICE_RELATIONSHIP_POLICY} from "../_shared/assistant-profile.mjs";
 
 function json(data: unknown,status=200){
   return new Response(JSON.stringify(data),{status,headers:{"Content-Type":"application/json; charset=utf-8"}});
@@ -113,6 +113,7 @@ Deno.serve(async(req:Request)=>{
   for(const routine of routines||[]){
     // Office identity is always resolved against the owner of the claimed routine.
     const assistantOwner=await profileOwnerForUser(sb,routine.user_id,assistantProfile.id);
+    const assistantName=await profileAssistantForUser(sb,routine.user_id,assistantProfile.id);
     const agentRun=await startRun(sb,routine.user_id,routine);
     const deliveryId=routine.metadata?.delivery_id;
     const attentionDigest=Boolean(routine?.metadata?.attention_digest)||/\b(resumen diario|briefing|morning brief)\b/i.test(String(routine?.title||"")+" "+String(routine?.instruction||""));
@@ -185,7 +186,7 @@ Deno.serve(async(req:Request)=>{
         "\n\nRelationship policy: "+ISABELLA_RELATIONSHIP_POLICY_VERSION;
       // Same relationship contract for Romy (review 08.11.2026); profileInstructions adapts the names.
       const profiledOriginalSystem=originalSystem;
-      const system=profileInstructions(profiledOriginalSystem,assistantProfile.id,assistantOwner);
+      const system=profileInstructions(profiledOriginalSystem,assistantProfile.id,assistantOwner,assistantName);
       const prompt=`RUTINA: ${routine.title}
 INSTRUCCIÓN: ${routine.instruction}
 HORA LOCAL ACTUAL: ${localNow}
@@ -227,7 +228,7 @@ Genera únicamente el mensaje que Isabella debe enviar ahora como resultado de e
 
       phase="generating";
       const routineTools=[{type:"web_search",search_context_size:"low"}];
-      const routinePrompt=assistantProfile.multi_user?personaText(prompt,{profile:assistantProfile.id,owner:assistantOwner}):prompt;
+      const routinePrompt=assistantProfile.multi_user?personaText(prompt,{profile:assistantProfile.id,owner:assistantOwner,assistant:assistantName.name}):prompt;
       const routineInput=[{role:"user",content:[{type:"input_text",text:routinePrompt}]}];
       routineFootprint=promptComponentSizes({instructions:system,context:{},input:routineInput,tools:routineTools});
       const response=await fetch("https://api.openai.com/v1/responses",{

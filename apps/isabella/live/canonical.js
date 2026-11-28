@@ -27,7 +27,7 @@
       case 'needs_clarification':
         spoken=textForVoice(reply);break;
       case 'proposal_created':
-        spoken=voiceLabel('Te dejé la propuesta en el chat para que la confirmes.','Ich habe den Vorschlag im Romy-Chat zur Bestätigung vorbereitet.');break;
+        spoken=voiceLabel('Te dejé la propuesta en el chat para que la confirmes.','Ich habe dir den Vorschlag im Chat zur Bestätigung vorbereitet.');break;
       case 'action_applied':
         if(!(check.applied_count>0))return {ok:false,reason:'missing_action_receipts'};
         spoken=typeof summary==='function'?textForVoice(summary(check)):'';
@@ -37,7 +37,7 @@
     if(!spoken)return {ok:false,reason:'missing_verified_action_summary'};
         break;
       case 'failed':
-        spoken=voiceLabel('MINDS no ha confirmado ningún cambio. Revisa el resultado en el chat de Isabella.','Romy hat keine Änderung bestätigt. Bitte das Ergebnis im Chat prüfen.');break;
+        spoken=voiceLabel('MINDS no ha confirmado ningún cambio. Revisa el resultado en el chat de Isabella.','Ich konnte keine Änderung bestätigen. Schau dir das Ergebnis bitte im Chat an.');break;
       default:return {ok:false,reason:'unknown_canonical_outcome'};
     }
     let short='',bytes=0;

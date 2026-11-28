@@ -37,7 +37,7 @@ const DE = Object.freeze({
   unregistered: "Für diese Anfrage konnte kein prüfbarer Vorschlag angelegt werden. Es wurde nichts geändert. Bitte die Angaben prüfen oder die Anfrage genauer formulieren.",
   voice_card: "Ein Vorschlag wartet auf deine Bestätigung.",
   reminder_prefix: "Du wolltest daran erinnert werden: ",
-  busy: "Romy beendet gerade die vorherige Antwort. Bitte kurz warten, bevor du die nächste Nachricht sendest.",
+  busy: "Ich beende gerade die vorherige Antwort. Warte bitte kurz, bevor du die nächste Nachricht sendest.",
   stale_binding: "Die Anfrage passt nicht mehr zu einer offenen Entscheidung.",
   stale_decision: "Die Entscheidung hat sich geändert oder braucht keine Antwort mehr.",
   unverified_continuation: "Es ließ sich nicht prüfen, auf welche Anfrage du antwortest. Es wurde nichts vorbereitet oder geändert.",

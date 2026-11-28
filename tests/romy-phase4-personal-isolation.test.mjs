@@ -58,7 +58,8 @@ test('Office nightly model: individual prompts while Window instructions remain 
   await caller({},{profile:'office',owner:'Alex Beispiel'});
   await caller({},{profile:'office',owner:'Mara Muster'});
   assert.equal(requests[0].instructions,DREAM_INSTRUCTIONS);
-  assert.match(requests[1].instructions,/Romy/);
+  // 28.11.2026: «KI-Assistent» unless the member named the assistant.
+  assert.match(requests[1].instructions,/KI-Assistent/);
   assert.match(requests[1].instructions,/Alex/);
   assert.doesNotMatch(requests[1].instructions,/\bGari\b|\bIsabella\b|Mara Muster/);
   assert.match(requests[2].instructions,/Mara/);
@@ -82,7 +83,8 @@ test('Office keeps the same relationship contract, adapted to the member; Window
   assert.equal(profileRelationshipPolicy(individual,'office'),individual);
   assert.equal(profileInstructions(individual,'window'),individual);
   const office=profileInstructions(individual,'office','Persona Ejemplo');
-  assert.match(office,/^Romy existe exclusivamente para Persona\. Adapta el idioma al de Persona\./);
+  assert.match(office,/^KI-Assistent existe exclusivamente para Persona\. Adapta el idioma al de Persona\./);
+  assert.match(profileInstructions(individual,'office','Persona Ejemplo',{name:'Samantha'}),/^Samantha existe exclusivamente para Persona\./);
   assert.doesNotMatch(office,/Gari|Isabella/);
   assert.ok(typeof OFFICE_RELATIONSHIP_POLICY==='string');
 });

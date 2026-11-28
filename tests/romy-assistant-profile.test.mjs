@@ -36,11 +36,18 @@ test("Office owner is taken from authenticated member display name, not client i
   assert.equal(profileFirstName(""), null);
   assert.throws(() => personaText("Gari", {profile: p}), /office_owner_name_required/);
   const context = isabellaCoreInstructions({relationship: "Isabella habla con Gari."});
+  // 28.11.2026: without a name of their own, the assistant is «KI-Assistent»; each member can name it
+  // (Gari: «Samantha», «Sam» for short) and it speaks German with «du».
   const result = profileInstructions(context, p, "Alex Beispiel");
-  assert.match(result, /Eres Romy/);
+  assert.match(result, /Eres KI-Assistent/);
   assert.match(result, /Alex/);
-  assert.doesNotMatch(result, /\bGari\b|\bIsabella\b/);
+  assert.doesNotMatch(result, /\bGari\b|\bIsabella\b|\bRomy\b/);
   assert.ok(result.endsWith(OFFICE_LANGUAGE_RULE));
+  assert.match(OFFICE_LANGUAGE_RULE, /en alemán tuteas \(«du»\)/);
+  const named = profileInstructions(context, p, "Alex Beispiel", {name: "Samantha", nickname: "Sam"});
+  assert.match(named, /Eres Samantha/);
+  assert.match(named, /Te llamas Samantha; Alex a veces te dice Sam\./);
+  assert.doesNotMatch(named, /KI-Assistent/);
 });
 
 test("Office strips excluded tools and localizes only descriptions, not schema keys", () => {
@@ -76,7 +83,7 @@ test("German fixed app notices are identical server/browser patterns", () => {
 test("Shared chat dictionary chooses Spanish by default, German only for Office", () => {
   for(const [profile,locale,undo,assistant] of [
     [undefined,"es","Deshacer","Isabella"],["window","es","Deshacer","Isabella"],
-    ["office","de","Rückgängig","Romy"]
+    ["office","de","Rückgängig","KI-Assistent"]
   ]) {
     const root = {APP_PROFILE:profile};
     vm.runInNewContext(read("apps/isabella/assistant-i18n.js"), {window:root, globalThis:root});
@@ -84,6 +91,11 @@ test("Shared chat dictionary chooses Spanish by default, German only for Office"
     assert.equal(root.ASSISTANT_I18N.t("undo"),undo);
     assert.ok(root.ASSISTANT_I18N.t("presence_enabled").includes(assistant));
   }
+  // 28.11.2026: in the Office the German texts carry the name the member gave the assistant.
+  const named = {APP_PROFILE:"office",MINDS_ASSISTANT_NAME:()=>"Samantha"};
+  vm.runInNewContext(read("apps/isabella/assistant-i18n.js"), {window:named, globalThis:named});
+  assert.equal(named.ASSISTANT_I18N.t("presence_enabled"),"Samantha darf mir zuerst schreiben");
+  assert.doesNotMatch(read("apps/isabella/assistant-i18n.js"),/\bRomy\b/);
 });
 
 test("Prompt-component budget: Office transformation is measured without live services", () => {
@@ -110,10 +122,12 @@ test("Chat does not resolve Office identity in Window and never accepts a client
   assert.match(source,/office_members/);
   assert.match(source,/\.eq\("user_id",authenticated\.id\)/);
   assert.match(source,/const safeModelInstructions=modelInstructions;/);
-  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner\)/);
+  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner,assistantIdentity\)/);
+  // The member's own choice is read with the caller's client, never from the request body.
+  assert.match(source,/assistantIdentity=await profileAssistantForUser\(supabaseClient\(req\),authenticated\.id,assistantProfile\);/);
   assert.doesNotMatch(source,/body\?\.owner_name|body\?\.assistant_profile/);
   assert.match(source,/instructions:transientInstructions\(providerInstructions,/);
-  assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner\)\)/);
+  assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner,assistantIdentity\?\.name\|\|null\)\)/);
   assert.ok(relationshipPolicy("conversation").length>0);
 });
 
@@ -129,7 +143,7 @@ test("Office review notices are German while the Window summaries remain identic
   vm.runInNewContext(read("apps/isabella/turn-integrity.js"),{window:rootWindow,globalThis:rootWindow,Date,Intl});
   assert.match(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"proposal_created",proposals:[p]}),/^Propuesta: añadir/);
   assert.equal(rootWindow.MINDS_TURN_INTEGRITY.summary({ok:true,outcome:"action_applied",applied_count:1}),"Guardado.");
-  assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=1/);
+  assert.match(read("apps/isabella/index.html"),/assistant-i18n\.js\?v=2/);
 });
 
 
@@ -168,8 +182,10 @@ test("Dreaming uses an identical Window prompt but a member-specific Office prom
   await caller({transcripcion_nueva:[]});
   await caller({transcripcion_nueva:[]},{profile:"office",owner:"Alex Beispiel"});
   assert.equal(recorded[0].instructions,DREAM_INSTRUCTIONS);
-  assert.match(recorded[1].instructions,/Romy/);
+  assert.match(recorded[1].instructions,/KI-Assistent/);
   assert.match(recorded[1].instructions,/Alex/);
+  await caller({transcripcion_nueva:[]},{profile:"office",owner:"Alex Beispiel",assistant:{name:"Samantha",nickname:"Sam"}});
+  assert.match(recorded[2].instructions,/Samantha/);
   assert.ok(recorded[1].instructions.endsWith(OFFICE_LANGUAGE_RULE));
   assert.doesNotMatch(recorded[1].instructions,/\\bGari\\b|\\bIsabella\\b/);
 });

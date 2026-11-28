@@ -80,5 +80,5 @@ test('Sunsama-like estimates and work sessions are distinct with no new data sto
  assert.match(html,/app\.js\?v=150/);
  assert.match(html,/dashboard-model\.js\?v=5/);
  assert.match(html,/dashboard\.js\?v=8/);
- assert.match(sw,/isabella-shell-v195/);
+ assert.match(sw,/isabella-shell-v196/);
 });
