@@ -1,6 +1,6 @@
 // Profile-safe Live voice admission. This module has no credentials, network,
 // browser globals, or side effects and is shared by the Window and Office broker.
-import {resolveAssistantProfile,profileFirstName} from './assistant-profile.mjs';
+import {resolveAssistantProfile,profileFirstName,profileAssistantForUser} from './assistant-profile.mjs';
 export const WINDOW_LIVE_ORIGIN='https://gari01234.github.io';
 export const OFFICE_LIVE_ORIGIN='https://tbarchitekten.github.io';
 export function liveOriginAllowed(origin,profile='window'){
@@ -23,7 +23,8 @@ export async function liveOwner(sb,userId,profile='window'){
     .eq('user_id',userId).maybeSingle();
   if(error||data?.is_active!==true||data.must_change_password!==false)
     return null;
-  return profileFirstName(data.display_name);
+  const who=await profileAssistantForUser(sb,userId,p);
+  return profileFirstName(who.callme)||profileFirstName(data.display_name);
 }
 export function liveOriginalVoiceAllowed(profile='window'){
   return !resolveAssistantProfile(profile).multi_user;

@@ -36,11 +36,18 @@ test("Office owner is taken from authenticated member display name, not client i
   assert.equal(profileFirstName(""), null);
   assert.throws(() => personaText("Gari", {profile: p}), /office_owner_name_required/);
   const context = isabellaCoreInstructions({relationship: "Isabella habla con Gari."});
+  // 28.11.2026: without a name of their own, the assistant is «KI-Assistent»; each member can name it
+  // (Gari: «Samantha», «Sam» for short) and it speaks German with «du».
   const result = profileInstructions(context, p, "Alex Beispiel");
-  assert.match(result, /Eres Romy/);
+  assert.match(result, /Eres KI-Assistent/);
   assert.match(result, /Alex/);
-  assert.doesNotMatch(result, /\bGari\b|\bIsabella\b/);
+  assert.doesNotMatch(result, /\bGari\b|\bIsabella\b|\bRomy\b/);
   assert.ok(result.endsWith(OFFICE_LANGUAGE_RULE));
+  assert.match(OFFICE_LANGUAGE_RULE, /en alemán tuteas \(«du»\)/);
+  const named = profileInstructions(context, p, "Alex Beispiel", {name: "Samantha", nickname: "Sam"});
+  assert.match(named, /Eres Samantha/);
+  assert.match(named, /Te llamas Samantha; Alex a veces te dice Sam\./);
+  assert.doesNotMatch(named, /KI-Assistent/);
 });
 
 test("Office strips excluded tools and localizes only descriptions, not schema keys", () => {
@@ -110,10 +117,12 @@ test("Chat does not resolve Office identity in Window and never accepts a client
   assert.match(source,/office_members/);
   assert.match(source,/\.eq\("user_id",authenticated\.id\)/);
   assert.match(source,/const safeModelInstructions=modelInstructions;/);
-  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner\)/);
+  assert.match(source,/profileInstructions\(safeModelInstructions,assistantProfile\.id,assistantOwner,assistantIdentity\)/);
+  // The member's own choice is read with the caller's client, never from the request body.
+  assert.match(source,/assistantIdentity=await profileAssistantForUser\(supabaseClient\(req\),authenticated\.id,assistantProfile\);/);
   assert.doesNotMatch(source,/body\?\.owner_name|body\?\.assistant_profile/);
   assert.match(source,/instructions:transientInstructions\(providerInstructions,/);
-  assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner\)\)/);
+  assert.match(source,/tools\.splice\(0,tools\.length,\.\.\.profileTools\(tools,assistantProfile\.id,assistantOwner,assistantIdentity\?\.name\|\|null\)\)/);
   assert.ok(relationshipPolicy("conversation").length>0);
 });
 
@@ -168,8 +177,10 @@ test("Dreaming uses an identical Window prompt but a member-specific Office prom
   await caller({transcripcion_nueva:[]});
   await caller({transcripcion_nueva:[]},{profile:"office",owner:"Alex Beispiel"});
   assert.equal(recorded[0].instructions,DREAM_INSTRUCTIONS);
-  assert.match(recorded[1].instructions,/Romy/);
+  assert.match(recorded[1].instructions,/KI-Assistent/);
   assert.match(recorded[1].instructions,/Alex/);
+  await caller({transcripcion_nueva:[]},{profile:"office",owner:"Alex Beispiel",assistant:{name:"Samantha",nickname:"Sam"}});
+  assert.match(recorded[2].instructions,/Samantha/);
   assert.ok(recorded[1].instructions.endsWith(OFFICE_LANGUAGE_RULE));
   assert.doesNotMatch(recorded[1].instructions,/\\bGari\\b|\\bIsabella\\b/);
 });

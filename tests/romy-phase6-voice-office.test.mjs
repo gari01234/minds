@@ -27,7 +27,9 @@ test('Window Live keeps original CORS, prompt and voice admission; Office opts i
   assert.equal(original.instructions,withinBytes([ISABELLA_CORE,VOICE_GUIDE].join('\n\n'),15500));
   assert.match(JSON.stringify(original),/Contexto de Window/);
   const office=buildVoiceSessionContext(data,recent,'',{profile:'office',owner:'Alex Beispiel'});
-  assert.match(office.instructions,/Romy/);
+  assert.match(office.instructions,/KI-Assistent/);
+  const named=buildVoiceSessionContext(data,recent,'',{profile:'office',owner:'Alex Beispiel',assistant:{name:'Samantha',nickname:'Sam'}});
+  assert.match(named.instructions,/Te llamas Samantha; Alex a veces te dice Sam\./);
   assert.match(office.instructions,/Alex/);
   assert.doesNotMatch(office.instructions,/\bGari\b|\bIsabella\b/);
   assert.match(JSON.stringify(office),/TBA Office Kontext|Kontext aus TBA Office/);
@@ -47,9 +49,11 @@ test('Live identity belongs to active signed-in Office member, never client-supp
   assert.equal(await liveOwner(sb,B,'office'),null);
   assert.equal(await liveOwner(sb,A,'window'),'Gari');
 });
-test('New Office conversation is titled Romy, without changing Window conversation metadata',async()=>{
+test('A new Office conversation carries the member\'s name for the assistant, without changing Window conversation metadata',async()=>{
   const inserted=[];
   const sb={from(table){
+    // The member's own name for the assistant (28.11.2026); Window never reads it.
+    if(table==='isabella_preferences')return {select(){return {eq(){return this},async maybeSingle(){return {data:{value:{name:'Samantha',spitzname:'Sam'}},error:null}}}}};
     assert.equal(table,'conversations');
     return {
       select(cols){assert.equal(cols,'id');return {
@@ -65,7 +69,7 @@ test('New Office conversation is titled Romy, without changing Window conversati
   await liveConversation(sb,B,null,'office');
   assert.equal(inserted[0].title,'Isabella');
   assert.equal(inserted[0].metadata.app,'isabella');
-  assert.equal(inserted[1].title,'Romy');
+  assert.equal(inserted[1].title,'Samantha');
   assert.equal(inserted[1].metadata.app,'romy');
   assert.equal(inserted[1].user_id,B);
 });

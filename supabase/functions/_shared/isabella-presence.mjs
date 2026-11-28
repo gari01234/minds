@@ -22,7 +22,7 @@ import {localStamp} from './turn-capability-contract.mjs';
 import {workRadar} from './isabella-radar.mjs';
 import {splitFollowUps} from './isabella-followups.mjs';
 
-import {resolveAssistantProfile,profileInstructions,profileOwnerForUser,profileFirstName,personaText,OFFICE_RELATIONSHIP_POLICY} from './assistant-profile.mjs';
+import {resolveAssistantProfile,profileInstructions,profileOwnerForUser,profileFirstName,personaText,profileAssistantForUser,OFFICE_RELATIONSHIP_POLICY} from './assistant-profile.mjs';
 
 export const PRESENCE_AUDIENCE='minds-isabella-presence';
 export const PRESENCE_REPOSITORY='gari01234/minds';
@@ -221,6 +221,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ,profile='w
     rows(sb.from('isabella_preferences').select('preference_key,value').eq('user_id',userId).in('preference_key',continuityKeys),'continuidad'),
     rows(sb.from('isabella_projects').select('id,name').eq('user_id',userId).limit(80),'projects').catch(()=>[])
   ]);
+  const assistant=await profileAssistantForUser(sb,userId,p);
   const value=prefValue(prefs),seenValue=prefValue(seen),stateValue=prefValue(state);
   const sent=past.slice(0,PRESENCE_LIMITS.pastProactive);
   const ownToday=past.filter(x=>x.client_key===presenceKey(today)||String(x.client_key||'').startsWith(presenceKey(today)+':')).length;
@@ -234,7 +235,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ,profile='w
   const chrono=msgs.slice().reverse();
   const lastUser=msgs.find(m=>m.role==='user');
   const conversation=chrono.filter(m=>!isSystemAuthored(m)).slice(-PRESENCE_LIMITS.messages)
-    .map(m=>localStamp(m.created_at,tz)+(m.role==='user'?person+': ':p.assistant_name+': ')+clip(String(m.content||'').trim(),PRESENCE_LIMITS.messageChars));
+    .map(m=>localStamp(m.created_at,tz)+(m.role==='user'?person+': ':assistant.name+': ')+clip(String(m.content||'').trim(),PRESENCE_LIMITS.messageChars));
   const views=events.map(e=>({raw:e,view:localEventView(e,tz)}));
   const dayName=d=>d===today?'hoy':d===tomorrow?'mañana':d===afterTomorrow?'pasado mañana':d;
   const ev=views.filter(x=>x.view.local_date>=today).map(({view:e})=>({title:e.title,dia:dayName(e.local_date),hora:e.all_day?'todo el día':e.local_start_time||null,hasta:e.local_end_time||undefined}));
@@ -257,7 +258,7 @@ export async function collectPresence(sb,userId,{now=new Date(),tz=TZ,profile='w
   };
   return {
     today,conversationId:ids[0]||null,enabled:value.curiosityEnabled!==false,
-    sentToday:ownToday>=rhythm.ownPerDay,ownToday,rhythm,
+    sentToday:ownToday>=rhythm.ownPerDay,ownToday,rhythm,assistant,
     sentMorning:past.some(x=>x.client_key===morningKey(today)),
     motiveIds:[...motivos.plazos,...motivos.decisiones].map(x=>x.id),
     lastUserAt:lastUser?lastUser.created_at:null,lastAnyAt:msgs[0]?msgs[0].created_at:null,
@@ -349,8 +350,8 @@ export async function runIsabellaPresence({sb,callModel,relationship='',now=new 
         :{...state,day:ctx.today,calls:Number(state.calls||0)+1,moments:[...(state.moments||[]),moment.kind].slice(-8),last_call_at:at};
       await writeState(sb,userId,nextState,at);
       const material={...ctx.material,hilos:ctx.material.hilos.filter(h=>h.kind!=='seguimiento'||['app_abierta','cierre_del_dia'].includes(moment.kind))};
-      const momentForModel=assistantProfile.multi_user?{...moment,detail:personaText(moment.detail,{profile:assistantProfile,owner})}:moment;
-      const {value,payload}=await callModel({instructions:profileInstructions(PRESENCE_INSTRUCTIONS+(relationship?'\n\n'+relationship:''),assistantProfile,owner),input:{momento:momentForModel,...material}});
+      const momentForModel=assistantProfile.multi_user?{...moment,detail:personaText(moment.detail,{profile:assistantProfile,owner,assistant:ctx.assistant?.name})}:moment;
+      const {value,payload}=await callModel({instructions:profileInstructions(PRESENCE_INSTRUCTIONS+(relationship?'\n\n'+relationship:''),assistantProfile,owner,ctx.assistant),input:{momento:momentForModel,...material}});
       const usage=payload&&payload.usage||{};
       await sb.from('minds_ai_usage').insert({user_id:userId,feature:'isabella_presence',model,input_tokens:usage.input_tokens||0,
         cached_input_tokens:usage.input_tokens_details&&usage.input_tokens_details.cached_tokens||0,output_tokens:usage.output_tokens||0,total_tokens:usage.total_tokens||0}).then(()=>{},()=>{});

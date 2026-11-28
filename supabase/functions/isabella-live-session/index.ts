@@ -1,5 +1,5 @@
 import {liveConversation,loadVoiceContext,buildVoiceSessionContext,persistVoiceTurn} from "../_shared/live-context.mjs";
-import {resolveAssistantProfile} from "../_shared/assistant-profile.mjs";
+import {resolveAssistantProfile,profileAssistantForUser} from "../_shared/assistant-profile.mjs";
 import {liveOriginAllowed,liveCorsOrigin,liveOwner,liveOriginalVoiceAllowed} from "../_shared/office-live-contract.mjs";
 // Isabella Live · owner-authenticated WebRTC SDP broker.
 // Window conserva los turnos de voz en su conversación global.
@@ -168,7 +168,8 @@ Deno.serve(async(req:Request)=>{
   try{
     conversationId=await liveConversation(id.client,user.id,null,ASSISTANT_PROFILE.id);
     const context=await loadVoiceContext(id.client,user.id,conversationId);
-    voiceContext=buildVoiceSessionContext(context.data,context.recent,voice===ORIGINAL_ALIAS?ORIGINAL_PROMPT:"",{profile:ASSISTANT_PROFILE.id,owner:ownerName});
+    const assistant=await profileAssistantForUser(id.client,user.id,ASSISTANT_PROFILE);
+    voiceContext=buildVoiceSessionContext(context.data,context.recent,voice===ORIGINAL_ALIAS?ORIGINAL_PROMPT:"",{profile:ASSISTANT_PROFILE.id,owner:ownerName,assistant});
   }catch{return json({error:"live_context_unavailable"},503,origin)}
   const session={
     model:"gpt-live-1",

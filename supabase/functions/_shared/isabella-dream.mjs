@@ -15,7 +15,7 @@ import {splitFollowUps,FOLLOWUP_KIND,FOLLOWUP_LIMITS} from './isabella-followups
 // Only the owner's global, scoped (version 1) chat turns are read: project and Work-thread turns
 // stay in their scope, and legacy rows (before exposure scopes) are never promoted.
 import {clip,localDay,TZ} from './window-tools.mjs';
-import {resolveAssistantProfile,profileInstructions,profileFirstName,profileOwnerForUser} from './assistant-profile.mjs';
+import {resolveAssistantProfile,profileInstructions,profileFirstName,profileOwnerForUser,profileAssistantForUser} from './assistant-profile.mjs';
 import {isSystemNotice,isSystemAuthored} from './system-notice.mjs';
 
 export const DREAM_AUDIENCE='minds-isabella-dream';
@@ -97,7 +97,7 @@ export async function writeDreamState(sb,userId,state,at){
 }
 
 // The new transcript: the owner's global, scoped turns in the Isabella chats, without app texts.
-export async function collectTranscript(sb,userId,since,{profile='window',owner=null}={}){
+export async function collectTranscript(sb,userId,since,{profile='window',owner=null,assistant=null}={}){
   const p=typeof profile==='string'?resolveAssistantProfile(profile):profile;
   const person=p.multi_user?profileFirstName(owner):p.owner_name;
   const convQ=await sb.from('conversations').select('id').eq('user_id',userId).eq('app_scope','isabella').limit(20);
@@ -115,7 +115,7 @@ export async function collectTranscript(sb,userId,since,{profile='window',owner=
   const forgotten=new Set((tomb.data||[]).map(t=>String(t.source_id)));
   return {
     messages:page.filter(m=>!forgotten.has(String(m.id))&&!isSystemAuthored(m)).map(m=>({id:m.id,at:m.created_at,cuando:localStamp(m.created_at),
-      autor:m.role==='user'?person:p.assistant_name,texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
+      autor:m.role==='user'?person:(assistant||p.assistant_name),texto:clip(String(m.content||'').trim(),LIMITS.messageChars)})).filter(m=>m.texto),
     last_at:page.length?page[page.length-1].created_at:null,more
   };
 }
@@ -146,25 +146,31 @@ const nonEmpty=v=>String(v||'').trim();
 const day=v=>/^\d{4}-\d{2}-\d{2}$/.test(String(v||''))?String(v):null;
 
 // Applies one night's result. Pages are versioned (last 3 kept) so nothing is lost.
-export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],reviewDate=beforeToday(now),transcript=[],profile='window',owner=null}={}){
+export async function applyDream(sb,userId,value,now,{log=()=>{},events=[],reviewDate=beforeToday(now),transcript=[],profile='window',owner=null,assistant=null}={}){
   const p=typeof profile==='string'?resolveAssistantProfile(profile):profile;
   const person=p.multi_user?profileFirstName(owner):p.owner_name;
+  // Her own name: the one the member gave her (Office), else the profile's.
+  const self=assistant||p.assistant_name;
   if(!person)throw new TypeError('office_owner_name_required');
   const at=iso(now),out={paginas:[],hipotesis:0,hilos:[],correcciones:0};
   for(const p of (value&&value.paginas||[]).slice(0,LIMITS.pages)){
-    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?person:p&&p.tipo==='relacion'?person+' e '+(typeof profile==='string'?resolveAssistantProfile(profile):profile).assistant_name:p&&p.tipo==='isabella'?(typeof profile==='string'?resolveAssistantProfile(profile):profile).assistant_name:'');
+    const type=PAGE_TYPES[p&&p.tipo],name=nonEmpty(p&&p.nombre)||(p&&p.tipo==='gari'?person:p&&p.tipo==='relacion'?person+' e '+self:p&&p.tipo==='isabella'?self:'');
     if(!type||!name)continue;
     const hechos=(Array.isArray(p.hechos)?p.hechos:[]).filter(h=>nonEmpty(h&&h.texto)).slice(0,LIMITS.factsPerPage)
       .map(h=>({texto:clip(nonEmpty(h.texto),400),fecha:day(h.fecha),fuente:clip(nonEmpty(h.fuente),160),estado:h.estado||'vigente'}));
     const page={resumen:clip(nonEmpty(p.resumen),900),hechos,updated_at:at,source:'isabella_dream'};
     const normalized=normalizeName(name);
-    const ex=await sb.from('isabella_entities').select('id,metadata').eq('user_id',userId).eq('entity_type',type).eq('normalized_name',normalized).maybeSingle();
+    // One page about the person, one about her and one about the two of them: found by type, so a new name for
+    // either of them (28.11.2026: each Office member names the assistant) renames the page instead of adding one.
+    const single=['gari','relacion','isabella'].includes(p&&p.tipo);
+    const exQuery=sb.from('isabella_entities').select('id,metadata').eq('user_id',userId).eq('entity_type',type);
+    const ex=await (single?exQuery.order('updated_at',{ascending:false}).limit(1):exQuery.eq('normalized_name',normalized)).maybeSingle();
     if(ex.error)throw ex.error;
     if(ex.data&&ex.data.metadata&&ex.data.metadata.forgotten_at)continue; // forgotten by Gari: never rebuilt
     if(ex.data&&ex.data.id){
       const meta=ex.data.metadata&&typeof ex.data.metadata==='object'?ex.data.metadata:{};
       const history=[meta.page,...(Array.isArray(meta.page_history)?meta.page_history:[])].filter(Boolean).slice(0,3);
-      const r=await sb.from('isabella_entities').update({name,metadata:{...meta,page:{...page,version:Number(meta.page&&meta.page.version||0)+1},page_history:history},updated_at:at})
+      const r=await sb.from('isabella_entities').update({name,...(single?{normalized_name:normalized}:{}),metadata:{...meta,page:{...page,version:Number(meta.page&&meta.page.version||0)+1},page_history:history},updated_at:at})
         .eq('id',ex.data.id).eq('user_id',userId);
       if(r.error)throw r.error;
     }else{
@@ -231,10 +237,10 @@ async function recordUsage(sb,userId,payload,model){
 
 // Default model caller: OpenAI Responses API with a strict JSON schema.
 export function dreamCaller(apiKey,model=DREAM_MODEL,fetchImpl=fetch){
-  return async(input,{profile='window',owner=null}={})=>{
+  return async(input,{profile='window',owner=null,assistant=null}={})=>{
     const res=await fetchImpl('https://api.openai.com/v1/responses',{method:'POST',signal:AbortSignal.timeout(240000),
       headers:{Authorization:'Bearer '+apiKey,'Content-Type':'application/json'},
-      body:JSON.stringify({model,reasoning:{effort:'medium'},max_output_tokens:8000,instructions:profileInstructions(DREAM_INSTRUCTIONS,profile,owner),store:false,
+      body:JSON.stringify({model,reasoning:{effort:'medium'},max_output_tokens:8000,instructions:profileInstructions(DREAM_INSTRUCTIONS,profile,owner,assistant),store:false,
         text:{format:{type:'json_schema',name:'isabella_dream',strict:true,schema:DREAM_SCHEMA}},
         input:[{role:'user',content:[{type:'input_text',text:JSON.stringify(input)}]}]})});
     let payload={};try{payload=await res.json()}catch{}
@@ -282,7 +288,8 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
     const settled=more=>night?{more,nightly:{...state.nightly,attempts:0,running_at:null,done:!more}}:{more};
     const since=state.last_message_at||iso(now.getTime()-FIRST_RUN_DAYS*864e5);
     try{
-      const t=await collectTranscript(sb,userId,since,{profile:assistantProfile,owner});
+      const assistant=await profileAssistantForUser(sb,userId,assistantProfile);
+      const t=await collectTranscript(sb,userId,since,{profile:assistantProfile,owner,assistant:assistant.name});
       const date=beforeToday(now);
       const events=await reviewedEvents(sb,userId,date);
       if(!t.messages.length&&(!events.length||state.reviewed_day===date)){
@@ -293,11 +300,11 @@ export async function runIsabellaDream({sb,callModel,now=new Date(),model=DREAM_
       const memory=await currentMemory(sb,userId,now);
       const {transcript,quotes}=splitDreamEvidence(t.messages);
       const input={fecha_repasada:date,eventos_repasados:events,hoy:localDay(now,TZ),ultimo_repaso:String(since).slice(0,10),memoria_actual:memory,transcripcion_nueva:transcript};
-      const {value:raw,payload}=await callModel(input,{profile:assistantProfile.id,owner});
+      const {value:raw,payload}=await callModel(input,{profile:assistantProfile.id,owner,assistant});
       await saveTransient(sb,userId,raw,{date,now,quotes,transcript});
       const value=durableDream(raw);
       await recordUsage(sb,userId,payload,model);
-      const applied=await applyDream(sb,userId,value,now,{log,events,reviewDate:date,transcript,profile:assistantProfile,owner});
+      const applied=await applyDream(sb,userId,value,now,{log,events,reviewDate:date,transcript,profile:assistantProfile,owner,assistant:assistant.name});
       const diario=clip(nonEmpty(value&&value.diario),1200);
       await sb.from('minds_agent_runs').insert({user_id:userId,feature:'isabella_dream',status:'success',route:{model,since,more:t.more},
         metadata:{diario,mensajes:t.messages.length,paginas:applied.paginas,hipotesis:applied.hipotesis,hilos:applied.hilos,
