@@ -17,6 +17,6 @@ test('past midnight «today» follows, a chosen day stays',()=>{
   assert.match(dash,/const wasToday = prefs\.selectedDate === todayKey;\n    todayKey = now;\n    if \(!wasToday\) return;/);
   assert.match(app,/const now=today\(\);if\(now!==calendarToday\)\{const wasToday=state\.date===calendarToday;calendarToday=now;if\(wasToday\)\{state\.date=now;save\(\);if\(state\.screen==='calendar'\)renderCalendar\(\)\}\}/);
   const html=read('apps/isabella/index.html'),sw=read('apps/isabella/sw.js');
-  for(const v of ['app.js?v=149','dashboard.js?v=8'])assert.ok(html.includes(v)&&sw.includes(v),v);
-  assert.match(sw,/isabella-shell-v194/);
+  for(const v of ['app.js?v=150','dashboard.js?v=8'])assert.ok(html.includes(v)&&sw.includes(v),v);
+  assert.match(sw,/isabella-shell-v195/);
 });

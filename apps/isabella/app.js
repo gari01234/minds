@@ -2902,10 +2902,10 @@ function initVoice(){
   };
   $('#micButton').onclick=()=>{if(window.ISABELLA_VOICE_OUTPUT?.isSpeaking()){window.ISABELLA_VOICE_OUTPUT.stop();return;}void start()};
   $('#focusClose').onclick=cancel;primary.onclick=stop;secondary.onclick=secondaryAction;
-  // Same mic/Focus surface: close dictation, then continuous Live opens in a sheet over the chat (V2, 28.11.2026).
-  // The real link remains navigable without JavaScript and preserves the old flow (a page of its own).
-  $('#focusLiveLink').onclick=e=>{cancel();window.ISABELLA_VOICE_OUTPUT?.stop();if(openLiveSheet())e.preventDefault()};
-  $('#liveSheetClose').onclick=closeLiveSheet;
+  // Two buttons, like Claude (28.11.2026): the microphone dictates; the sound wave next to it opens the live
+  // conversation in a sheet over the chat (V2). Without the sheet it opens Live on a page of its own.
+  const liveButton=$('#liveButton');if(liveButton)liveButton.onclick=()=>{window.ISABELLA_VOICE_OUTPUT?.stop();if(!openLiveSheet())location.href='./live/'};
+  const liveClose=$('#liveSheetClose');if(liveClose)liveClose.onclick=closeLiveSheet;
 }
 // Live inside the chat: the Live page runs in a frame over the chat; what is said is saved to this chat turn by turn
 // (save_transcript), and every saved turn and the end of a session pull the conversation, so it appears right away.

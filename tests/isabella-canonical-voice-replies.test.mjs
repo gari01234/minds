@@ -113,9 +113,10 @@ test('voice belongs only to the existing canonical chat turn',()=>{
   assert.doesNotMatch(voiceSource,/openai\.com|supabase\.co|fetch\(|localStorage|sessionStorage/);
   assert.match(shell,/id="focusSpeakReply" type="checkbox"/);
   assert.match(shell,/id="micButton"/);
-  assert.match(shell,/id="focusLiveLink"/);
-  assert.match(shell,/href="\.\/live\/"[^>]*>Conversar en vivo · Nuri/);
-  assert.match(app,/\$\('#focusLiveLink'\)\.onclick=e=>\{cancel\(\);window\.ISABELLA_VOICE_OUTPUT\?\.stop\(\);if\(openLiveSheet\(\)\)e\.preventDefault\(\)\}/);
+  // 28.11.2026, like Claude: the microphone dictates, the sound wave next to it opens Live; no link inside dictation.
+  assert.doesNotMatch(shell,/id="focusLiveLink"/);
+  assert.match(shell,/id="micButton" class="mic" aria-label="Dictar"[^>]*>[\s\S]*?<\/button>\s*<button id="liveButton" class="mic mic-live" type="button" aria-label="Conversar en vivo"/);
+  assert.match(app,/liveButton\.onclick=\(\)=>\{window\.ISABELLA_VOICE_OUTPUT\?\.stop\(\);if\(!openLiveSheet\(\)\)location\.href='\.\/live\/'\}/);
   assert.match(app,/fallbackRec\.lang='es-MX'/);
   assert.match(voiceSource,/voice-speaking/);
   assert.doesNotMatch(shell,/id="voiceStopButton"/);
@@ -124,11 +125,11 @@ test('voice belongs only to the existing canonical chat turn',()=>{
 });
 
 test('PWA includes new scripts and keeps existing transcription and canonical runtime',()=>{
-  for(const src of ["./voice-output.js?v=2","./app.js?v=149","./shell.js?v=111"])
+  for(const src of ["./voice-output.js?v=2","./app.js?v=150","./shell.js?v=112"])
     assert.ok(html.includes(src)&&sw.includes(src),src);
-  assert.ok(html.includes('./voice-output.css?v=4')&&sw.includes('./voice-output.css?v=4'));
-  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=149'));
+  assert.ok(html.includes('./voice-output.css?v=5')&&sw.includes('./voice-output.css?v=5'));
+  assert.ok(html.indexOf('voice-output.js?v=2')<html.indexOf('app.js?v=150'));
   assert.match(app,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.match(app,/window\.ISABELLA_AI\.ask\(/);
-  assert.match(sw,/isabella-shell-v194/);
+  assert.match(sw,/isabella-shell-v195/);
 });

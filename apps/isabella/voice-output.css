@@ -5,9 +5,7 @@
 #micButton.voice-speaking .chat-ui-icon{display:none}
 #micButton.voice-speaking::after{content:"";display:block;width:12px;height:12px;border-radius:2px;background:currentColor;margin:auto}
 
-/* Access continuous GPT-Live from the existing Focus surface; no second mic. */
-.focus-live-link{display:flex;align-items:center;justify-content:center;width:min(100%,520px);min-height:49px;margin:0 auto 14px;border:1px solid #dedee0;border-radius:99px;background:#fff;color:#202020;text-decoration:none;font-size:15px;font-weight:500}
-.focus-live-link:focus-visible{outline:2px solid #171717;outline-offset:3px}
+/* Live has its own button next to the microphone, like Claude (28.11.2026): the microphone dictates, the sound wave talks. */
 
 /* Live inside the chat (V2, 28.11.2026): a sheet above the composer; the chat stays visible and fills as you talk. */
 .live-sheet{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));width:min(560px,calc(100vw - 24px));height:min(540px,calc(100dvh - 130px));

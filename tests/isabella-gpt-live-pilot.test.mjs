@@ -13,19 +13,20 @@ const build=read('scripts/build.mjs');
 const original=read('apps/isabella/app.js');
 const shell=read('apps/isabella/shell.js');
 
-test('Live is a separate user-initiated surface, not another microphone in canonical chat',()=>{
+test('Live is a separate user-initiated surface with its own button next to the microphone',()=>{
   assert.match(page,/id="liveStart"/);
   assert.match(page,/id="liveStop"[^>]*disabled/);
   assert.match(page,/id="liveAudio"[^>]*autoplay[^>]*playsinline[^>]*controls/);
   assert.match(page,/id="liveUnlock"[^>]*hidden/);
   assert.match(page,/Las propuestas se confirman en el chat/i);
   assert.match(shell,/id="micButton"/);
-  assert.match(shell,/id="focusLiveLink"/);
+  assert.match(shell,/id="liveButton" class="mic mic-live"/);
+  assert.doesNotMatch(shell,/id="focusLiveLink"/);
   assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"/);
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=8/);
+  assert.match(page,/\.\/live\.js\?v=9/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -106,9 +107,17 @@ test('broker authenticates owner, hides credentials, rejects oversized SDP and f
   assert.doesNotMatch(client,/minds_commit_|confirmProposals|create_task|applyProposal|localStorage|sessionStorage/);
 });
 
-test('browser starts a session only on an explicit gesture and hard-stops at 90 seconds',()=>{
+test('browser starts a session only on an explicit gesture; no fixed length, it ends after two silent minutes',()=>{
   assert.match(client,/startButton\.addEventListener\("click"/);
-  assert.match(client,/MAX_DURATION_MS=90000/);
+  // 28.11.2026: like Claude's voice mode there is no fixed limit; every second is billed, so silence ends it.
+  assert.doesNotMatch(client,/MAX_DURATION_MS|90000/);
+  assert.match(client,/IDLE_MS=120000/);
+  for(const event of ['session.input_transcript.delta','session.output_transcript.delta','session.delegation.created']){
+    const branch=client.slice(client.indexOf('"'+event+'"'));
+    assert.match(branch.slice(0,120),/keepAlive\(\)/,event+' keeps the conversation open');
+  }
+  assert.match(client,/if\(reviewTurn\?\.busy\|\|waitingDelegation\)\{keepAlive\(\);return\}/);
+  assert.match(client,/Nach 2 Minuten ohne Gespräch beendet\./);
   assert.match(client,/await navigator\.mediaDevices\.getUserMedia/);
   assert.match(client,/new RTCPeerConnection\(\)/);
   assert.match(client,/createDataChannel\("oai-events"\)/);

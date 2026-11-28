@@ -16,16 +16,19 @@ test('the chat has a Live sheet with a frame for the Live page; Live keeps its o
   assert.match(shell,/<div id="liveSheet" class="live-sheet hidden" role="dialog"[^>]*>/);
   assert.match(shell,/<iframe id="liveFrame" class="live-frame" title="[^"]+" allow="microphone; autoplay"><\/iframe>/);
   assert.match(shell,/id="liveSheetClose"/);
-  // Still no second microphone and no Live controls in the chat itself (the frame has them).
-  assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"|id="liveButton"/);
-  assert.match(shell,/href="\.\/live\/"[^>]*>Conversar en vivo · Nuri/,'the link still works without JavaScript');
+  // No Live controls in the chat itself (the frame has them). Since 28.11.2026 Live has its own button next to the
+  // microphone, like Claude; the link inside dictation is gone.
+  assert.doesNotMatch(shell,/id="liveStart"|id="voiceStopButton"|id="focusLiveLink"/);
+  assert.match(shell,/id="liveButton" class="mic mic-live" type="button"/);
   assert.match(sheetCss,/\.live-sheet\{position:fixed;/);
 });
 
 test('opening and closing: the frame loads the Live page, closing stops the session and pulls the conversation',()=>{
   assert.match(app,/function openLiveSheet\(\)\{[\s\S]*?frame\.src='\.\/live\/\?embed=1'/);
   assert.match(app,/function closeLiveSheet\(\)\{[\s\S]*?ISABELLA_LIVE_DIAGNOSTIC\?\.stop\(\)[\s\S]*?frame\.src='about:blank'[\s\S]*?ISABELLA_SYNC_PULL_NOW\?\.\(\)/);
-  assert.match(app,/\$\('#liveSheetClose'\)\.onclick=closeLiveSheet;/);
+  assert.match(app,/const liveClose=\$\('#liveSheetClose'\);if\(liveClose\)liveClose\.onclick=closeLiveSheet;/);
+  // Without the sheet the button still opens Live, on a page of its own.
+  assert.match(app,/if\(!openLiveSheet\(\)\)location\.href='\.\/live\/'/);
   // Only messages from the same origin and of the Live type count.
   assert.match(app,/if\(e\.origin!==location\.origin\|\|e\.data\?\.type!=='isabella-live'\)return;/);
   assert.match(app,/if\(e\.data\.event==='turn'\|\|\(e\.data\.event==='state'&&e\.data\.state==='idle'\)\)void window\.ISABELLA_SYNC_PULL_NOW\?\.\(\);/);
