@@ -1,7 +1,12 @@
 import {normalizeSkillTrace} from "./skill-registry.ts";
 
 export const CAPABILITY_RUNTIME_VERSION="capability-runtime-v0.3.0";
-export const GENERAL_EXECUTION_MODEL="gpt-6-astra";
+// Which model builds files and evaluations. Romy's capabilities run with GPT-6.2 Sol (Gari, 27.11.2026: «no solo
+// conmigo, haz el cambio para todos»; a fifth of Astra's price, like her former engine); Isabella keeps Astra.
+// The secret OPENAI_CAPABILITY_MODEL overrides both.
+const envValue=(key:string)=>{try{return String((globalThis as any).Deno?.env?.get?.(key)||"").trim()}catch{return ""}};
+export const GENERAL_EXECUTION_MODEL=envValue("OPENAI_CAPABILITY_MODEL")||
+  (envValue("ASSISTANT_PROFILE").toLowerCase()==="office"?"gpt-6.2-sol":"gpt-6-astra");
 
 const KIND_BY_EXT:Record<string,{kind:string,mime:string}>={
   docx:{kind:"docx",mime:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"},

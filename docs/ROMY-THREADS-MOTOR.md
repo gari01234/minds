@@ -19,3 +19,12 @@ En Window no cambia nada: ahí la app sigue escribiendo los turnos del Thread.
 - `app/work.js`: el Thread envía con el mismo cliente que el chat y deja que el servidor guarde.
 
 Prueba: `tests/office-threads-im-motor.test.mjs`. Desplegar `isabella-chat`.
+
+## Modelo de las capacidades (28.11.2026)
+
+Romy hacía sus archivos y evaluaciones con GPT-6.2 Sol en el motor viejo, por la decisión de Gari del 27.11 («no solo conmigo, haz el cambio para todos»). En este motor estaba fijo `gpt-6-astra`. Ahora decide el perfil:
+
+- `office`: `gpt-6.2-sol`;
+- `window`: `gpt-6-astra`, como antes.
+
+El secret `OPENAI_CAPABILITY_MODEL` sustituye a los dos. Desplegar `isabella-capability-runner`, `isabella-capability-runtime` e `isabella-mission-runner`.
