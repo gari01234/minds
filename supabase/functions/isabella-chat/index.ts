@@ -338,7 +338,7 @@ async function persistCanonicalThreadOwnerTurn(req:Request,requestId:string,mess
     .eq("user_id",user.id).eq("app_scope","work_thread").maybeSingle();
   if(owned.error||owned.data?.id!==conversationId)throw new Error("thread_conversation_not_owned");
   const canonical=canonicalBrowserOwnerRow({userId:user.id,conversationId,requestId,message,scope});
-  canonical.metadata={...canonical.metadata,app:"work_thread",work_thread_id:String(thread.id),project_id:thread.project_id||null};
+  const row:any={...canonical,metadata:{...canonical.metadata,app:"work_thread",work_thread_id:String(thread.id),project_id:thread.project_id||null}};
   const getExisting=()=>sb.from("conversation_messages")
     .select("role,content,exposure_scope_version,exposure_scope_kind,exposure_scope_ref,exposure_scope_key")
     .eq("user_id",user.id).eq("conversation_id",conversationId)
@@ -349,7 +349,7 @@ async function persistCanonicalThreadOwnerTurn(req:Request,requestId:string,mess
     if(!sameBrowserOwnerTurn(existing.data,canonical))throw new Error("browser_turn_id_conflict");
     return {conversationId,created:false,userId:user.id};
   }
-  const insert=await sb.from("conversation_messages").insert(canonical);
+  const insert=await sb.from("conversation_messages").insert(row);
   if(insert.error){
     if(insert.error.code!=="23505")throw insert.error;
     const raced=await getExisting();
