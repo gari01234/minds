@@ -150,7 +150,7 @@ test('delegation supports optional transcript review and requires typed receipts
   assert.match(page,/id="liveMindsText"/);
   assert.match(page,/id="liveMindsReview" class="live-minds-review hidden"/);
   assert.match(page,/id="liveMindsSend"/);
-  assert.match(page,/src="\.\/canonical\.js\?v=3"/);
+  assert.match(page,/src="\.\/canonical\.js\?v=4"/);
   assert.match(page,/src="\.\.\/turn-integrity\.js"/);
   assert.match(client,/session\.thinking\.append/);
   assert.match(client,/if\(!showReview\(id\)\)/);

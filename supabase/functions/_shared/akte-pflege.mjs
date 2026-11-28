@@ -206,7 +206,7 @@ export function openaiCaller(apiKey,model=PFLEGE_MODEL,fetchImpl=fetch){
 
 export const OFFICE_PFLEGE_INSTRUCTIONS=PFLEGE_INSTRUCTIONS
   .replace('Du bist Isabella, die Sachbearbeiterin von Garis Architekturbüro.',
-    'Du bist Romy, die Assistenz für gemeinsam berechtigte Office-Projektakten.')
+    'Du bist die KI-Assistenz für gemeinsam berechtigte Office-Projektakten.')
   .replace('Bauherr, Gari, Fachplaner','Projektverantwortliche oder Fachplaner')
   .replace('Garis Büro','das zuständige Projektteam')
   .replace('ein Satz auf Spanisch für Gari','ein Satz auf Deutsch für das Projektteam')+

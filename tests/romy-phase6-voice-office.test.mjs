@@ -92,7 +92,7 @@ test('Phase 6: canonical spoken outcomes remain Spanish in Window and German in 
   const personal=make('window').admission(payload,validator,()=>null);
   const office=make('office').admission(payload,validator,()=>null);
   assert.match(personal.spoken,/propuesta en el chat/);
-  assert.match(office.spoken,/Vorschlag im Romy-Chat/);
+  assert.match(office.spoken,/Vorschlag im Chat/);
 });
 
 test('Phase 6: measured voice prompt footprint, Window no-op and Office profile',()=>{

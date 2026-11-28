@@ -63,7 +63,7 @@ test('Only explicitly dated, source-grounded claims become unconfirmed proposals
 });
 test('Office Pflege uses German-neutral instructions and its own OIDC, Window untouched',()=>{
   assert.match(PFLEGE_INSTRUCTIONS,/Isabella/);
-  assert.match(OFFICE_PFLEGE_INSTRUCTIONS,/Romy/);
+  assert.match(OFFICE_PFLEGE_INSTRUCTIONS,/KI-Assistenz für gemeinsam berechtigte Office-Projektakten/);
   assert.doesNotMatch(OFFICE_PFLEGE_INSTRUCTIONS,/Gari|Isabella|Spanisch/);
   const office={repository:'TBArchitekten/tbarchitekten.github.io',ref:'refs/heads/main',
     workflow_ref:'TBArchitekten/tbarchitekten.github.io/.github/workflows/romy-akte-pflege.yml@refs/heads/main',event_name:'schedule',run_id:'12345'};

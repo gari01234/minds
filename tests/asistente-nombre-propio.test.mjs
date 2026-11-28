@@ -53,3 +53,19 @@ test('a new name renames her pages instead of adding new ones; her fixed lines c
   const chat=read('supabase/functions/isabella-chat/index.ts');
   assert.match(chat,/author:assistantProfile\.assistant_id,/);
 });
+
+test('no Office text still calls the assistant «Romy»: the voice, the Live lines, the shared Akte-Pflege and the policy',async()=>{
+  const {officeVoiceInstructions}=await import('../supabase/functions/_shared/office-live-policy.mjs');
+  const {OFFICE_PFLEGE_INSTRUCTIONS}=await import('../supabase/functions/_shared/akte-pflege.mjs');
+  const {OFFICE_RELATIONSHIP_POLICY}=await import('../supabase/functions/_shared/assistant-profile.mjs');
+  assert.match(officeVoiceInstructions('Alex','Samantha'),/^Du heißt Samantha und bist die virtuelle Assistenz im TBA Office\./);
+  assert.match(officeVoiceInstructions('Alex'),/^Du heißt KI-Assistent /);
+  assert.match(officeVoiceInstructions('Alex'),/duze sie/);
+  // Shared project data stays neutral: every member reads it, each with an assistant of their own.
+  assert.match(OFFICE_PFLEGE_INSTRUCTIONS,/Du bist die KI-Assistenz für gemeinsam berechtigte Office-Projektakten\./);
+  for(const text of [officeVoiceInstructions('Alex'),OFFICE_PFLEGE_INSTRUCTIONS,OFFICE_RELATIONSHIP_POLICY,read('apps/isabella/live/canonical.js')])
+    assert.doesNotMatch(text,/\bRomy\b/);
+  const canonical=read('apps/isabella/live/canonical.js');
+  assert.match(canonical,/'Ich habe dir den Vorschlag im Chat zur Bestätigung vorbereitet\.'/);
+  assert.match(canonical,/'Ich konnte keine Änderung bestätigen\. Schau dir das Ergebnis bitte im Chat an\.'/);
+});
