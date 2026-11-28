@@ -25,7 +25,7 @@ test('Live is a separate user-initiated surface, not another microphone in canon
   assert.match(original,/ISABELLA_AI\.transcribe\(blob\)/);
   assert.ok(build.includes("cpSync(new URL(`apps/${app}/`,root)"));
   assert.match(css,/\.live-shell/);
-  assert.match(page,/\.\/live\.js\?v=7/);
+  assert.match(page,/\.\/live\.js\?v=8/);
   assert.match(page,/\.\.\/\.\.\/shared\/supabase-client\.js/);
 });
 
@@ -51,7 +51,7 @@ test('Live voice choices are exactly the documented server allowlist',()=>{
   assert.match(page,/value="isabella-original-v1"/);
   assert.match(page,/id="liveOriginalNote"/);
   assert.match(page,/id="liveVoice"/);
-  assert.match(page,/\.\/live\.css\?v=4/);
+  assert.match(page,/\.\/live\.css\?v=5/);
   assert.match(broker,/typeof voice!=="string"/);
   assert.match(broker,/voice!==ORIGINAL_ALIAS/);
   assert.match(broker,/error:"invalid_voice"/);

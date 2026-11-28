@@ -20,3 +20,20 @@ Las pruebas `isabella-live-continuity`, `isabella-live-canonical-delegation` e `
 D5 sigue pendiente. Falta comparar `gpt-6-luna` y `service_tier: "priority"` en los 13 momentos antes de decidir. Este bloque mantiene los modelos y el nivel de servicio vigentes.
 
 Referencias técnicas de OpenAI: [sesiones e historial](https://developers.openai.com/api/docs/guides/live-conversations) y [delegaciones y transcripciones](https://developers.openai.com/api/docs/guides/live-delegation).
+
+## V2 · Live dentro del chat (28.11.2026)
+
+Gari aprobó V2: la conversación en vivo ya no abre una página aparte. «Conversar en vivo» abre la misma página de Live en una hoja sobre el chat (`#liveSheet`, un marco con `allow="microphone; autoplay"`). El chat sigue visible y se llena mientras se habla:
+
+- Cada turno se guarda con `save_transcript`. Después del recibo comprobado, la página de Live avisa al chat (`postMessage`, solo al mismo origen). El chat vuelve a leer la conversación.
+- El final de la sesión hace lo mismo.
+- Además, la suscripción en tiempo real del chat lee los turnos con `source: 'isabella_live'`.
+- Si la página de Live va dentro de un marco, se ve compacta: sin cabecera ni título, con la onda más baja y la voz en una línea.
+- Los enlaces para revisar una propuesta abren el chat completo (`target="_top"`).
+- Cerrar la hoja detiene la sesión.
+
+El enlace `./live/` sigue funcionando sin JavaScript, como página propia. En el chat no hay un segundo micrófono: Live se abre desde la superficie del dictado, como antes.
+
+La duración máxima de una sesión sigue en 90 segundos. Si se usa a diario, conviene subirla (decisión de Gari: coste por minuto de audio).
+
+Prueba: `tests/isabella-live-im-chat.test.mjs`. Publicar la PWA; no cambia ninguna función ni hay migración.

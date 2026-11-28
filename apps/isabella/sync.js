@@ -33,7 +33,9 @@ function startRealtime(){
       // because the app that asked was closed (Phase 1, steps 8 and 3a).
       const runtimeAssistant=row.role==='assistant'&&['mission_runtime','attention_runtime','isabella_presence','isabella_chat_server'].includes(source);
       const sharedSurface=source==='presence';
-      if(!runtimeAssistant&&!sharedSurface)return;
+      // Live inside the chat (V2): every saved voice turn, Gari's and Isabella's, appears in the conversation at once.
+      const voiceTurn=source==='isabella_live';
+      if(!runtimeAssistant&&!sharedSurface&&!voiceTurn)return;
       clearTimeout(realtimeTimer);
       realtimeTimer=setTimeout(()=>syncNow({pullOnly:true}),120);
     })

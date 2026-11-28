@@ -48,3 +48,23 @@ button:disabled{opacity:.45}
 #liveMindsStatus{color:#707070;font-size:12px;line-height:1.5;margin:9px 0 0}
 #liveMindsAnswer{font-size:14px;line-height:1.45;margin:10px 0 0;white-space:pre-wrap;max-height:130px;overflow-y:auto}
 #liveMindsChat{display:inline-block;margin-top:8px;font-size:12px;color:#333;text-decoration:underline}
+/* Live inside the chat (V2, 28.11.2026): the page runs in a sheet over the chat, compact and without page chrome. */
+.live-embedded .live-shell{min-height:0;max-width:none;padding:6px 16px 14px}
+.live-embedded .live-header,.live-embedded h1,.live-embedded .live-subtitle,.live-embedded .live-disclaimer,.live-embedded .live-voice-picker p{display:none}
+.live-embedded .live-main{min-height:0;justify-content:flex-start}
+.live-embedded .live-wave{height:48px;margin:2px 0}
+.live-embedded .live-wave span{height:12px}
+.live-embedded .live-wave span:nth-child(2),.live-embedded .live-wave span:nth-child(6){height:22px}
+.live-embedded .live-wave span:nth-child(3),.live-embedded .live-wave span:nth-child(5){height:32px}
+.live-embedded .live-wave span:nth-child(4){height:40px}
+.live-embedded .live-status{font-size:20px;margin:2px 0 4px}
+.live-embedded .live-playback{min-height:0;margin:0 0 2px;font-size:11px}
+.live-embedded .live-audio{height:28px;margin:2px 0}
+.live-embedded .live-captions{margin:8px 0 4px;gap:8px}
+.live-embedded .live-captions p{font-size:14px;margin:4px 0;max-height:4.6em;overflow-y:auto}
+.live-embedded .live-footer{padding-top:6px}
+.live-embedded .live-voice-picker{grid-template-columns:auto 1fr;align-items:center;gap:10px;margin:0 0 10px}
+.live-embedded .live-voice-picker select{min-height:40px;padding:8px 10px;font-size:14px;border-radius:10px}
+.live-embedded .live-actions button{min-height:46px;padding:11px 12px}
+.live-embedded .live-footer>label{display:flex;gap:8px;align-items:flex-start;font-size:13px;line-height:1.35;margin:0 0 10px;color:#555}
+.live-embedded .live-captions>div{padding-top:6px}
